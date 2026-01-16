@@ -6,7 +6,7 @@ import { QuickActions } from '@/components/dashboard/QuickActions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { ContactModal } from '@/components/contacts/ContactModal';
 
 interface Stats {
   contacts: number;
@@ -17,9 +17,9 @@ interface Stats {
 
 export default function Dashboard() {
   const { director } = useAuth();
-  const navigate = useNavigate();
   const [stats, setStats] = useState<Stats>({ contacts: 0, todayMeetings: 0, pendingTasks: 0, activeNeeds: 0 });
   const [loading, setLoading] = useState(true);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('pl-PL', {
@@ -133,13 +133,18 @@ export default function Dashboard() {
             <p className="text-muted-foreground mb-4 max-w-md">
               Twoja sieć kontaktów jest pusta. Dodaj pierwszy kontakt, aby zacząć korzystać z AI Network Assistant.
             </p>
-            <Button onClick={() => navigate('/contacts')} className="gap-2">
+            <Button onClick={() => setIsContactModalOpen(true)} className="gap-2">
               <UserPlus className="h-4 w-4" />
               Dodaj kontakt
             </Button>
           </CardContent>
         </Card>
       )}
+
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+      />
     </div>
   );
 }

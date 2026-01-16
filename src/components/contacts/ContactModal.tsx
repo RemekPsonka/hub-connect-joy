@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { X } from 'lucide-react';
 import {
   Form,
   FormControl,
@@ -72,8 +74,32 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
   const { data: groups = [] } = useContactGroups();
   const createContact = useCreateContact();
   const updateContact = useUpdateContact();
+  const [tagInput, setTagInput] = useState('');
 
   const isEditing = !!contact;
+
+  const addTag = () => {
+    const trimmedTag = tagInput.trim();
+    if (!trimmedTag) return;
+    
+    const currentTags = form.getValues('tags') || [];
+    if (!currentTags.includes(trimmedTag)) {
+      form.setValue('tags', [...currentTags, trimmedTag]);
+    }
+    setTagInput('');
+  };
+
+  const removeTag = (indexToRemove: number) => {
+    const currentTags = form.getValues('tags') || [];
+    form.setValue('tags', currentTags.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag();
+    }
+  };
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
@@ -332,6 +358,50 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tagi</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          {/* Display existing tags */}
+                          {field.value && field.value.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {field.value.map((tag, index) => (
+                                <Badge key={index} variant="secondary" className="gap-1 pr-1">
+                                  {tag}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeTag(index)}
+                                    className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          {/* Input for new tags */}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Dodaj tag..."
+                              value={tagInput}
+                              onChange={(e) => setTagInput(e.target.value)}
+                              onKeyDown={handleTagKeyDown}
+                            />
+                            <Button type="button" variant="outline" onClick={addTag}>
+                              Dodaj
+                            </Button>
+                          </div>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
