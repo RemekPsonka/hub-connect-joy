@@ -7,9 +7,9 @@ const corsHeaders = {
 };
 
 interface EmbeddingRequest {
-  type: "contact" | "need" | "offer";
-  id: string;
-  text?: string; // Optional: if not provided, will be constructed from entity data
+  type?: "contact" | "need" | "offer";
+  id?: string;
+  text?: string; // For direct text embedding (query mode)
 }
 
 serve(async (req) => {
@@ -29,17 +29,23 @@ serve(async (req) => {
 
     const { type, id, text: providedText } = await req.json() as EmbeddingRequest;
 
-    if (!type || !id) {
+    // Query mode: just generate embedding for text and return it
+    const isQueryMode = !type && !id && providedText;
+    
+    // Entity mode: generate and save embedding for an entity
+    const isEntityMode = type && id;
+    
+    if (!isQueryMode && !isEntityMode) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: type and id" }),
+        JSON.stringify({ error: "Provide either 'text' for query mode, or 'type' and 'id' for entity mode" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     let textToEmbed = providedText;
 
-    // If text not provided, fetch entity and construct text
-    if (!textToEmbed) {
+    // If in entity mode and text not provided, fetch entity and construct text
+    if (isEntityMode && !textToEmbed) {
       if (type === "contact") {
         const { data: contact, error } = await supabase
           .from("contacts")
@@ -203,7 +209,20 @@ serve(async (req) => {
     // Format as pgvector string
     const embeddingStr = `[${embedding.join(",")}]`;
 
-    // Update the entity with the embedding
+    // Query mode: just return the embedding without saving
+    if (isQueryMode) {
+      console.log(`Generated query embedding for: "${textToEmbed.substring(0, 50)}..."`);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          embedding: embedding,
+          embeddingLength: embedding.length 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Entity mode: Update the entity with the embedding
     let updateError: any = null;
     
     if (type === "contact") {
