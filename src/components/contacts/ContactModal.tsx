@@ -1,0 +1,355 @@
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useContactGroups, useCreateContact, useUpdateContact, type ContactWithGroup } from '@/hooks/useContacts';
+
+const contactSchema = z.object({
+  full_name: z.string().min(1, 'Imię i nazwisko jest wymagane').max(100, 'Maksymalnie 100 znaków'),
+  email: z.string().email('Nieprawidłowy adres email').max(255).optional().or(z.literal('')),
+  phone: z.string().max(20, 'Maksymalnie 20 znaków').optional().or(z.literal('')),
+  company: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
+  position: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
+  linkedin_url: z.string().url('Nieprawidłowy adres URL').optional().or(z.literal('')),
+  primary_group_id: z.string().optional().or(z.literal('')),
+  city: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
+  source: z.string().optional().or(z.literal('')),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().max(2000, 'Maksymalnie 2000 znaków').optional().or(z.literal('')),
+});
+
+type ContactFormData = z.infer<typeof contactSchema>;
+
+interface ContactModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  contact?: ContactWithGroup | null;
+}
+
+const sourceOptions = [
+  { value: 'manual', label: 'Ręcznie' },
+  { value: 'business_card', label: 'Wizytówka' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'referral', label: 'Polecenie' },
+  { value: 'import', label: 'Import' },
+];
+
+export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
+  const { data: groups = [] } = useContactGroups();
+  const createContact = useCreateContact();
+  const updateContact = useUpdateContact();
+
+  const isEditing = !!contact;
+
+  const form = useForm<ContactFormData>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      full_name: '',
+      email: '',
+      phone: '',
+      company: '',
+      position: '',
+      linkedin_url: '',
+      primary_group_id: '',
+      city: '',
+      source: '',
+      tags: [],
+      notes: '',
+    },
+  });
+
+  useEffect(() => {
+    if (contact) {
+      form.reset({
+        full_name: contact.full_name || '',
+        email: contact.email || '',
+        phone: contact.phone || '',
+        company: contact.company || '',
+        position: contact.position || '',
+        linkedin_url: contact.linkedin_url || '',
+        primary_group_id: contact.primary_group_id || '',
+        city: contact.city || '',
+        source: contact.source || '',
+        tags: contact.tags || [],
+        notes: contact.notes || '',
+      });
+    } else {
+      form.reset({
+        full_name: '',
+        email: '',
+        phone: '',
+        company: '',
+        position: '',
+        linkedin_url: '',
+        primary_group_id: '',
+        city: '',
+        source: '',
+        tags: [],
+        notes: '',
+      });
+    }
+  }, [contact, form]);
+
+  const onSubmit = async (data: ContactFormData) => {
+    const submitData = {
+      full_name: data.full_name,
+      email: data.email || null,
+      phone: data.phone || null,
+      company: data.company || null,
+      position: data.position || null,
+      linkedin_url: data.linkedin_url || null,
+      primary_group_id: data.primary_group_id || null,
+      city: data.city || null,
+      source: data.source || null,
+      notes: data.notes || null,
+      tags: data.tags || [],
+    };
+
+    if (isEditing && contact) {
+      await updateContact.mutateAsync({ id: contact.id, ...submitData });
+    } else {
+      await createContact.mutateAsync(submitData);
+    }
+    onClose();
+  };
+
+  const isPending = createContact.isPending || updateContact.isPending;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Edytuj kontakt' : 'Dodaj kontakt'}</DialogTitle>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <Tabs defaultValue="basic" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="basic">Podstawowe</TabsTrigger>
+                <TabsTrigger value="additional">Dodatkowe</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basic" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="full_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Imię i nazwisko *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jan Kowalski" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="jan@firma.pl" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Telefon</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+48 123 456 789" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="company"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Firma</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nazwa firmy" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Stanowisko</FormLabel>
+                        <FormControl>
+                          <Input placeholder="CEO" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="linkedin_url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>LinkedIn URL</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://linkedin.com/in/jankowalski" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="primary_group_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Grupa główna</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Wybierz grupę" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {groups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: group.color || '#6366f1' }}
+                                />
+                                {group.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </TabsContent>
+
+              <TabsContent value="additional" className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Miasto</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Warszawa" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="source"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Źródło</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Wybierz źródło" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sourceOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notatki</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Dodatkowe informacje o kontakcie..."
+                          className="min-h-[120px]"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </TabsContent>
+            </Tabs>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Anuluj
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? 'Zapisywanie...' : 'Zapisz'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}

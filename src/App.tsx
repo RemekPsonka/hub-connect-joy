@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
+import ContactDetail from "./pages/ContactDetail";
 import Consultations from "./pages/Consultations";
 import Meetings from "./pages/Meetings";
 import Tasks from "./pages/Tasks";
@@ -37,6 +38,7 @@ const App = () => (
             <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/contacts" element={<Contacts />} />
+              <Route path="/contacts/:id" element={<ContactDetail />} />
               <Route path="/consultations" element={<Consultations />} />
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/tasks" element={<Tasks />} />
