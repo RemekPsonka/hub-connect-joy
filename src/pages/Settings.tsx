@@ -48,6 +48,8 @@ export default function Settings() {
     fetchTenantId();
   }, [user]);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Fetch embedding stats
   useEffect(() => {
     async function fetchStats() {
@@ -88,7 +90,7 @@ export default function Settings() {
     }
     
     fetchStats();
-  }, [tenantId]);
+  }, [tenantId, refreshKey]);
 
   // Get records missing embeddings
   async function getMissingEmbeddings(): Promise<MissingEmbeddings> {
@@ -188,8 +190,8 @@ export default function Settings() {
         toast.warning(`Wygenerowano ${successCount} embeddingów, ${errorCount} błędów.`, { id: toastId });
       }
 
-      // Refresh stats
-      setTenantId(prev => prev); // Trigger re-fetch
+      // Refresh stats by incrementing refresh key
+      setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Regeneration failed:', error);
       toast.error('Błąd podczas regeneracji embeddingów', { id: toastId });

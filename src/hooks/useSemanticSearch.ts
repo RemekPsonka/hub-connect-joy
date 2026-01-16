@@ -56,19 +56,9 @@ export function useSemanticSearch() {
     setError(null);
     
     try {
-      // Generate embedding for the query
-      const embedding = await generateQueryEmbedding(query);
-      
-      if (!embedding) {
-        setError('Nie udało się przetworzyć zapytania');
-        setResults([]);
-        return [];
-      }
-      
-      const embeddingString = JSON.stringify(embedding);
       const allResults: SearchResult[] = [];
       
-      // Get current tenant_id
+      // Get current tenant_id first
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setError('Wymagane zalogowanie');
@@ -90,6 +80,20 @@ export function useSemanticSearch() {
       }
       
       const tenantId = director.tenant_id;
+      
+      // Generate embedding for the query
+      const embedding = await generateQueryEmbedding(query);
+      
+      // If embedding generation fails, immediately use text fallback
+      if (!embedding) {
+        console.log('Embedding generation failed, falling back to text search');
+        await performTextSearchFallback(query, types, tenantId, allResults, limit);
+        allResults.sort((a, b) => b.similarity - a.similarity);
+        setResults(allResults);
+        return allResults;
+      }
+      
+      const embeddingString = JSON.stringify(embedding);
       
       // Search in parallel
       const searchPromises: Promise<void>[] = [];
