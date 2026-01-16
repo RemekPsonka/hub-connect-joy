@@ -266,24 +266,42 @@ export type Database = {
           connection_reason: string | null
           contact_a_id: string | null
           contact_b_id: string | null
+          discussed_with_a: boolean | null
+          discussed_with_a_at: string | null
+          discussed_with_b: boolean | null
+          discussed_with_b_at: string | null
           id: string
           intro_made: boolean | null
+          intro_made_at: string | null
+          suggested_intro: string | null
           task_id: string | null
         }
         Insert: {
           connection_reason?: string | null
           contact_a_id?: string | null
           contact_b_id?: string | null
+          discussed_with_a?: boolean | null
+          discussed_with_a_at?: string | null
+          discussed_with_b?: boolean | null
+          discussed_with_b_at?: string | null
           id?: string
           intro_made?: boolean | null
+          intro_made_at?: string | null
+          suggested_intro?: string | null
           task_id?: string | null
         }
         Update: {
           connection_reason?: string | null
           contact_a_id?: string | null
           contact_b_id?: string | null
+          discussed_with_a?: boolean | null
+          discussed_with_a_at?: string | null
+          discussed_with_b?: boolean | null
+          discussed_with_b_at?: string | null
           id?: string
           intro_made?: boolean | null
+          intro_made_at?: string | null
+          suggested_intro?: string | null
           task_id?: string | null
         }
         Relationships: [
