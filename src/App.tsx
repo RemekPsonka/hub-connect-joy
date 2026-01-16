@@ -16,6 +16,7 @@ import ContactDetail from "./pages/ContactDetail";
 import Consultations from "./pages/Consultations";
 import ConsultationDetail from "./pages/ConsultationDetail";
 import Meetings from "./pages/Meetings";
+import MeetingDetail from "./pages/MeetingDetail";
 import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/consultations" element={<Consultations />} />
               <Route path="/consultations/:id" element={<ConsultationDetail />} />
               <Route path="/meetings" element={<Meetings />} />
+              <Route path="/meetings/:id" element={<MeetingDetail />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />
