@@ -65,12 +65,16 @@ export type Database = {
       }
       consultations: {
         Row: {
+          agenda: string | null
           ai_summary: string | null
           contact_id: string
           created_at: string | null
           director_id: string
           duration_minutes: number | null
           id: string
+          is_virtual: boolean | null
+          location: string | null
+          meeting_url: string | null
           notes: string | null
           preparation_brief: string | null
           scheduled_at: string
@@ -78,12 +82,16 @@ export type Database = {
           tenant_id: string
         }
         Insert: {
+          agenda?: string | null
           ai_summary?: string | null
           contact_id: string
           created_at?: string | null
           director_id: string
           duration_minutes?: number | null
           id?: string
+          is_virtual?: boolean | null
+          location?: string | null
+          meeting_url?: string | null
           notes?: string | null
           preparation_brief?: string | null
           scheduled_at: string
@@ -91,12 +99,16 @@ export type Database = {
           tenant_id: string
         }
         Update: {
+          agenda?: string | null
           ai_summary?: string | null
           contact_id?: string
           created_at?: string | null
           director_id?: string
           duration_minutes?: number | null
           id?: string
+          is_virtual?: boolean | null
+          location?: string | null
+          meeting_url?: string | null
           notes?: string | null
           preparation_brief?: string | null
           scheduled_at?: string
@@ -566,6 +578,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          consultation_id: string | null
           created_at: string | null
           description: string | null
           due_date: string | null
@@ -577,6 +590,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
@@ -588,6 +602,7 @@ export type Database = {
           title: string
         }
         Update: {
+          consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
@@ -599,6 +614,13 @@ export type Database = {
           title?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_tenant_id_fkey"
             columns: ["tenant_id"]

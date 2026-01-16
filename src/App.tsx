@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
 import Consultations from "./pages/Consultations";
+import ConsultationDetail from "./pages/ConsultationDetail";
 import Meetings from "./pages/Meetings";
 import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/contacts/:id" element={<ContactDetail />} />
               <Route path="/consultations" element={<Consultations />} />
+              <Route path="/consultations/:id" element={<ConsultationDetail />} />
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/ai" element={<AIChat />} />

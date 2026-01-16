@@ -1,27 +1,55 @@
-import { Calendar } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useMemo } from 'react';
+import { useConsultations } from '@/hooks/useConsultations';
+import { ConsultationsHeader } from '@/components/consultations/ConsultationsHeader';
+import { ConsultationsList } from '@/components/consultations/ConsultationsList';
+import { ConsultationsCalendar } from '@/components/consultations/ConsultationsCalendar';
+import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 
 export default function Consultations() {
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const filters = useMemo(
+    () => ({
+      status: statusFilter as 'all' | 'scheduled' | 'completed' | 'cancelled' | 'no_show',
+      search: searchQuery || undefined,
+      pageSize: 50,
+    }),
+    [statusFilter, searchQuery]
+  );
+
+  const { data, isLoading } = useConsultations(filters);
+
+  const consultations = data?.consultations || [];
+  const upcomingCount = consultations.filter(
+    (c) => new Date(c.scheduled_at) >= new Date() && c.status === 'scheduled'
+  ).length;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Konsultacje</h1>
-        <p className="text-muted-foreground">Planuj i zarządzaj konsultacjami</p>
-      </div>
-      
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Moduł w budowie
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Ta sekcja zostanie wkrótce zaimplementowana.
-          </p>
-        </CardContent>
-      </Card>
+      <ConsultationsHeader
+        upcomingCount={upcomingCount}
+        view={view}
+        onViewChange={setView}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onAddClick={() => setIsModalOpen(true)}
+      />
+
+      {view === 'list' ? (
+        <ConsultationsList consultations={consultations} isLoading={isLoading} />
+      ) : (
+        <ConsultationsCalendar consultations={consultations} />
+      )}
+
+      <ConsultationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }
