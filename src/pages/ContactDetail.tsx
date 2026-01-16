@@ -6,6 +6,7 @@ import { useContact } from '@/hooks/useContacts';
 import { ContactDetailHeader } from '@/components/contacts/ContactDetailHeader';
 import { ContactOverviewTab } from '@/components/contacts/ContactOverviewTab';
 import { ContactNeedsOffersTab } from '@/components/contacts/ContactNeedsOffersTab';
+import { ContactConsultationsTab } from '@/components/contacts/ContactConsultationsTab';
 import { ContactHistoryTab } from '@/components/contacts/ContactHistoryTab';
 import { ContactTasksTab } from '@/components/contacts/ContactTasksTab';
 import { ContactNotesTab } from '@/components/contacts/ContactNotesTab';
@@ -47,9 +48,10 @@ export default function ContactDetail() {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Przegląd</TabsTrigger>
           <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
+          <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
           <TabsTrigger value="history">Historia</TabsTrigger>
           <TabsTrigger value="tasks">Zadania</TabsTrigger>
           <TabsTrigger value="notes">Notatki</TabsTrigger>
@@ -61,6 +63,10 @@ export default function ContactDetail() {
 
         <TabsContent value="needs-offers" className="mt-6">
           <ContactNeedsOffersTab contactId={contact.id} />
+        </TabsContent>
+
+        <TabsContent value="consultations" className="mt-6">
+          <ContactConsultationsTab contactId={contact.id} contactName={contact.full_name} />
         </TabsContent>
 
         <TabsContent value="history" className="mt-6">
