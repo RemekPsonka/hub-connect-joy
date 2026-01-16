@@ -20,6 +20,7 @@ import MeetingDetail from "./pages/MeetingDetail";
 import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
+import Search from "./pages/Search";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
