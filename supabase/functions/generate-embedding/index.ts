@@ -12,6 +12,10 @@ interface EmbeddingRequest {
   text?: string; // For direct text embedding (query mode)
 }
 
+// Valid embedding sizes from common models
+const VALID_EMBEDDING_SIZES = [384, 512, 768, 1024, 1536, 3072];
+const TARGET_EMBEDDING_SIZE = 1536; // Our database expects this size
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -117,10 +121,9 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating embedding for ${type} ${id}: "${textToEmbed.substring(0, 100)}..."`);
+    console.log(`Generating embedding for ${type || 'query'} ${id || ''}: "${textToEmbed.substring(0, 100)}..."`);
 
     // Generate embedding using Lovable AI Gateway
-    // Using a model that can generate embeddings via chat completion
     const embeddingResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -128,11 +131,11 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
           {
             role: "system",
-            content: `You are an embedding generator. Generate a semantic representation of the following text as a JSON array of 1536 floating-point numbers between -1 and 1. The numbers should capture the semantic meaning of the text. Return ONLY the JSON array, no other text.`
+            content: `You are an embedding generator. Generate a semantic vector representation of the following text as a JSON array of exactly ${TARGET_EMBEDDING_SIZE} floating-point numbers between -1 and 1. The numbers should capture the semantic meaning of the text for similarity search. Return ONLY the JSON array, no other text.`
           },
           {
             role: "user",
@@ -151,7 +154,7 @@ serve(async (req) => {
                   embedding: {
                     type: "array",
                     items: { type: "number" },
-                    description: "Array of 1536 floating point numbers representing the embedding"
+                    description: `Array of ${TARGET_EMBEDDING_SIZE} floating point numbers representing the semantic embedding`
                   }
                 },
                 required: ["embedding"]
@@ -184,7 +187,7 @@ serve(async (req) => {
     }
 
     const embeddingData = await embeddingResponse.json();
-    console.log("Embedding response:", JSON.stringify(embeddingData).substring(0, 500));
+    console.log("Embedding response structure:", Object.keys(embeddingData));
 
     // Extract embedding from tool call response
     let embedding: number[] = [];
@@ -193,18 +196,55 @@ serve(async (req) => {
     if (toolCall?.function?.arguments) {
       try {
         const args = JSON.parse(toolCall.function.arguments);
-        embedding = args.embedding;
+        if (Array.isArray(args.embedding)) {
+          embedding = args.embedding;
+          console.log(`Extracted embedding from tool_calls, size: ${embedding.length}`);
+        }
       } catch (e) {
         console.error("Failed to parse tool call arguments:", e);
       }
     }
 
-    // Validate embedding
-    if (!Array.isArray(embedding) || embedding.length !== 1536) {
-      // Generate a deterministic pseudo-embedding based on text hash as fallback
-      console.warn("Invalid embedding from AI, generating fallback based on text hash");
-      embedding = generateFallbackEmbedding(textToEmbed);
+    // Also check direct content response
+    if (embedding.length === 0) {
+      const content = embeddingData.choices?.[0]?.message?.content;
+      if (content) {
+        try {
+          // Try to parse as JSON array
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            embedding = parsed;
+            console.log(`Extracted embedding from content, size: ${embedding.length}`);
+          }
+        } catch (e) {
+          console.log("Content is not JSON array:", content?.substring(0, 100));
+        }
+      }
     }
+
+    // Validate embedding - accept various sizes and resize if needed
+    const isValidSize = VALID_EMBEDDING_SIZES.includes(embedding.length) || embedding.length === TARGET_EMBEDDING_SIZE;
+    const isValidArray = Array.isArray(embedding) && embedding.every(n => typeof n === 'number');
+    
+    if (!isValidArray || embedding.length === 0) {
+      console.error(`Invalid embedding: not an array of numbers. Got: ${typeof embedding}, length: ${embedding?.length}`);
+      return new Response(
+        JSON.stringify({ 
+          error: "Failed to generate valid embedding",
+          details: "AI did not return a valid number array"
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Resize embedding to target size if necessary
+    if (embedding.length !== TARGET_EMBEDDING_SIZE) {
+      console.log(`Resizing embedding from ${embedding.length} to ${TARGET_EMBEDDING_SIZE}`);
+      embedding = resizeEmbedding(embedding, TARGET_EMBEDDING_SIZE);
+    }
+
+    // Normalize the embedding
+    embedding = normalizeEmbedding(embedding);
 
     // Format as pgvector string
     const embeddingStr = `[${embedding.join(",")}]`;
@@ -253,7 +293,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Successfully stored embedding for ${type} ${id}`);
+    console.log(`Successfully stored embedding for ${type} ${id}, size: ${embedding.length}`);
 
     return new Response(
       JSON.stringify({ 
@@ -274,24 +314,28 @@ serve(async (req) => {
   }
 });
 
-// Generate a deterministic fallback embedding based on text
-function generateFallbackEmbedding(text: string): number[] {
-  const embedding: number[] = new Array(1536).fill(0);
+// Resize embedding to target size using interpolation
+function resizeEmbedding(embedding: number[], targetSize: number): number[] {
+  if (embedding.length === targetSize) return embedding;
   
-  // Simple hash-based embedding generation
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
-    const idx = (i * 7 + charCode * 13) % 1536;
-    embedding[idx] = (embedding[idx] + (charCode / 255) * 2 - 1) / 2;
+  const result: number[] = new Array(targetSize);
+  const ratio = embedding.length / targetSize;
+  
+  for (let i = 0; i < targetSize; i++) {
+    const srcIdx = i * ratio;
+    const srcIdxFloor = Math.floor(srcIdx);
+    const srcIdxCeil = Math.min(srcIdxFloor + 1, embedding.length - 1);
+    const weight = srcIdx - srcIdxFloor;
+    
+    result[i] = embedding[srcIdxFloor] * (1 - weight) + embedding[srcIdxCeil] * weight;
   }
   
-  // Normalize
+  return result;
+}
+
+// Normalize embedding to unit length
+function normalizeEmbedding(embedding: number[]): number[] {
   const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-  if (magnitude > 0) {
-    for (let i = 0; i < embedding.length; i++) {
-      embedding[i] = embedding[i] / magnitude;
-    }
-  }
-  
-  return embedding;
+  if (magnitude === 0) return embedding;
+  return embedding.map(val => val / magnitude);
 }
