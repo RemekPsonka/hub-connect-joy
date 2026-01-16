@@ -81,16 +81,26 @@ export function useSemanticSearch() {
       
       const tenantId = director.tenant_id;
       
-      // Generate embedding for the query
-      const embedding = await generateQueryEmbedding(query);
+      // PHASE 1: Always do text search first (fast and reliable)
+      console.log('Starting text search for:', query);
+      await performTextSearchFallback(query, types, tenantId, allResults, limit);
       
-      // If embedding generation fails, immediately use text fallback
-      if (!embedding) {
-        console.log('Embedding generation failed, falling back to text search');
-        await performTextSearchFallback(query, types, tenantId, allResults, limit);
+      // If text search found results, return them immediately
+      if (allResults.length > 0) {
+        console.log(`Text search found ${allResults.length} results`);
         allResults.sort((a, b) => b.similarity - a.similarity);
         setResults(allResults);
         return allResults;
+      }
+      
+      // PHASE 2: Only try semantic search if text search found nothing
+      console.log('Text search found nothing, trying semantic search...');
+      const embedding = await generateQueryEmbedding(query);
+      
+      if (!embedding) {
+        console.log('Embedding generation also failed, returning empty results');
+        setResults([]);
+        return [];
       }
       
       const embeddingString = JSON.stringify(embedding);
