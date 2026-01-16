@@ -44,9 +44,12 @@ export default function ConsultationDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
-          <ConsultationPreparationSection
-            consultationId={consultation.id}
+          <ConsultationPreparationSection 
+            consultationId={consultation.id} 
             preparationBrief={consultation.preparation_brief}
+            contactId={consultation.contact_id}
+            contactName={consultation.contacts.full_name}
+            contactCompany={consultation.contacts.company}
           />
           <ConsultationAgendaSection
             consultationId={consultation.id}

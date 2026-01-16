@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { generateEmbeddingInBackground } from './useEmbeddings';
 
 export type Contact = Tables<'contacts'>;
 export type ContactInsert = TablesInsert<'contacts'>;
@@ -135,9 +136,12 @@ export function useCreateContact() {
 
       return data as ContactWithGroup;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Kontakt został dodany');
+      
+      // Generate embedding in background
+      generateEmbeddingInBackground('contact', data.id);
     },
     onError: (error) => {
       console.error('Error creating contact:', error);
@@ -165,6 +169,9 @@ export function useUpdateContact() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['contact', data.id] });
+      
+      // Regenerate embedding in background
+      generateEmbeddingInBackground('contact', data.id);
       toast.success('Kontakt został zaktualizowany');
     },
     onError: (error) => {
