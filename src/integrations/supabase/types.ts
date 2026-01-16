@@ -366,6 +366,57 @@ export type Database = {
           },
         ]
       }
+      group_meetings: {
+        Row: {
+          actual_participant_count: number | null
+          city: string | null
+          created_at: string | null
+          description: string | null
+          duration_minutes: number | null
+          expected_participant_count: number | null
+          id: string
+          location: string | null
+          name: string
+          recommendations_generated: boolean | null
+          scheduled_at: string
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          actual_participant_count?: number | null
+          city?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          expected_participant_count?: number | null
+          id?: string
+          location?: string | null
+          name: string
+          recommendations_generated?: boolean | null
+          scheduled_at: string
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          actual_participant_count?: number | null
+          city?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          expected_participant_count?: number | null
+          id?: string
+          location?: string | null
+          name?: string
+          recommendations_generated?: boolean | null
+          scheduled_at?: string
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       matches: {
         Row: {
           ai_explanation: string | null
@@ -417,6 +468,115 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_participants: {
+        Row: {
+          attendance_status: string | null
+          contact_id: string
+          created_at: string | null
+          id: string
+          is_member: boolean | null
+          is_new: boolean | null
+          meeting_id: string
+          notes: string | null
+        }
+        Insert: {
+          attendance_status?: string | null
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          is_member?: boolean | null
+          is_new?: boolean | null
+          meeting_id: string
+          notes?: string | null
+        }
+        Update: {
+          attendance_status?: string | null
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          is_member?: boolean | null
+          is_new?: boolean | null
+          meeting_id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_participants_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_participants_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_recommendations: {
+        Row: {
+          created_at: string | null
+          for_contact_id: string
+          id: string
+          match_type: string | null
+          meeting_id: string
+          rank: number
+          reasoning: string | null
+          recommended_contact_id: string
+          status: string | null
+          talking_points: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          for_contact_id: string
+          id?: string
+          match_type?: string | null
+          meeting_id: string
+          rank: number
+          reasoning?: string | null
+          recommended_contact_id: string
+          status?: string | null
+          talking_points?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          for_contact_id?: string
+          id?: string
+          match_type?: string | null
+          meeting_id?: string
+          rank?: number
+          reasoning?: string | null
+          recommended_contact_id?: string
+          status?: string | null
+          talking_points?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_recommendations_for_contact_id_fkey"
+            columns: ["for_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recommendations_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recommendations_recommended_contact_id_fkey"
+            columns: ["recommended_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -522,6 +682,74 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      one_on_one_meetings: {
+        Row: {
+          contact_a_id: string
+          contact_b_id: string
+          created_at: string | null
+          follow_up_needed: boolean | null
+          group_meeting_id: string
+          id: string
+          notes: string | null
+          outcome: string | null
+          recommendation_id: string | null
+          was_recommended: boolean | null
+        }
+        Insert: {
+          contact_a_id: string
+          contact_b_id: string
+          created_at?: string | null
+          follow_up_needed?: boolean | null
+          group_meeting_id: string
+          id?: string
+          notes?: string | null
+          outcome?: string | null
+          recommendation_id?: string | null
+          was_recommended?: boolean | null
+        }
+        Update: {
+          contact_a_id?: string
+          contact_b_id?: string
+          created_at?: string | null
+          follow_up_needed?: boolean | null
+          group_meeting_id?: string
+          id?: string
+          notes?: string | null
+          outcome?: string | null
+          recommendation_id?: string | null
+          was_recommended?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "one_on_one_meetings_contact_a_id_fkey"
+            columns: ["contact_a_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "one_on_one_meetings_contact_b_id_fkey"
+            columns: ["contact_b_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "one_on_one_meetings_group_meeting_id_fkey"
+            columns: ["group_meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "one_on_one_meetings_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_recommendations"
             referencedColumns: ["id"]
           },
         ]

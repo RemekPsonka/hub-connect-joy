@@ -1,27 +1,34 @@
-import { UsersRound } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import { MeetingsHeader } from '@/components/meetings/MeetingsHeader';
+import { MeetingsList } from '@/components/meetings/MeetingsList';
+import { MeetingModal } from '@/components/meetings/MeetingModal';
+import { useMeetings, type MeetingsFilter } from '@/hooks/useMeetings';
 
 export default function Meetings() {
+  const [filter, setFilter] = useState<MeetingsFilter>('upcoming');
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const { data: meetings = [], isLoading } = useMeetings(filter);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Spotkania</h1>
-        <p className="text-muted-foreground">Historia spotkań grupowych</p>
-      </div>
-      
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UsersRound className="h-5 w-5" />
-            Moduł w budowie
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Ta sekcja zostanie wkrótce zaimplementowana.
-          </p>
-        </CardContent>
-      </Card>
+      <MeetingsHeader
+        filter={filter}
+        onFilterChange={setFilter}
+        onNewMeeting={() => setModalOpen(true)}
+        meetingCount={meetings.length}
+      />
+
+      <MeetingsList
+        meetings={meetings}
+        filter={filter}
+        isLoading={isLoading}
+      />
+
+      <MeetingModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
     </div>
   );
 }
