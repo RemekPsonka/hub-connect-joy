@@ -1,1 +1,10 @@
 project_id = "smuaroosnsrqfjsbpxpa"
+
+[functions.generate-embedding]
+verify_jwt = false
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.find-matches]
+verify_jwt = false
