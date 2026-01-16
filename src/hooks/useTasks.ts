@@ -293,12 +293,27 @@ export function useCreateTask() {
 
   return useMutation({
     mutationFn: async (input: {
-      task: TaskInsert;
+      task: Omit<TaskInsert, 'tenant_id'>;
       contactId?: string;
     }) => {
+      // Get tenant_id from director
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: director, error: directorError } = await supabase
+        .from('directors')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (directorError) throw directorError;
+
       const { data: task, error: taskError } = await supabase
         .from('tasks')
-        .insert(input.task)
+        .insert({
+          ...input.task,
+          tenant_id: director.tenant_id,
+        })
         .select()
         .single();
 
