@@ -905,7 +905,92 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_relationship_health: {
+        Args: { p_contact_id: string }
+        Returns: number
+      }
+      find_connection_path: {
+        Args: {
+          p_end_contact: string
+          p_max_depth?: number
+          p_start_contact: string
+          p_tenant_id: string
+        }
+        Returns: {
+          depth: number
+          path: string[]
+          path_types: string[]
+        }[]
+      }
+      find_mutual_connections: {
+        Args: { p_contact_a: string; p_contact_b: string; p_tenant_id: string }
+        Returns: {
+          connection_to_a_type: string
+          connection_to_b_type: string
+          mutual_contact_id: string
+          mutual_contact_name: string
+        }[]
+      }
+      find_need_offer_matches: {
+        Args: { p_limit?: number; p_tenant_id: string; p_threshold?: number }
+        Returns: {
+          match_need_contact_id: string
+          match_need_id: string
+          match_need_title: string
+          match_offer_contact_id: string
+          match_offer_id: string
+          match_offer_title: string
+          similarity: number
+        }[]
+      }
       get_current_tenant_id: { Args: never; Returns: string }
+      search_contacts_semantic: {
+        Args: {
+          p_limit?: number
+          p_query_embedding: string
+          p_tenant_id: string
+          p_threshold?: number
+        }
+        Returns: {
+          company: string
+          contact_id: string
+          full_name: string
+          job_position: string
+          similarity: number
+        }[]
+      }
+      search_needs_semantic: {
+        Args: {
+          p_limit?: number
+          p_query_embedding: string
+          p_tenant_id: string
+          p_threshold?: number
+        }
+        Returns: {
+          contact_name: string
+          need_contact_id: string
+          need_description: string
+          need_id: string
+          need_title: string
+          similarity: number
+        }[]
+      }
+      search_offers_semantic: {
+        Args: {
+          p_limit?: number
+          p_query_embedding: string
+          p_tenant_id: string
+          p_threshold?: number
+        }
+        Returns: {
+          contact_name: string
+          offer_contact_id: string
+          offer_description: string
+          offer_id: string
+          offer_title: string
+          similarity: number
+        }[]
+      }
       text2ltree: { Args: { "": string }; Returns: unknown }
     }
     Enums: {
