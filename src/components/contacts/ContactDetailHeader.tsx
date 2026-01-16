@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft } from 'lucide-react';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +19,7 @@ import { GroupBadge } from './GroupBadge';
 import { useDeleteContact, type ContactWithGroup } from '@/hooks/useContacts';
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 
 interface ContactDetailHeaderProps {
   contact: ContactWithGroup;
@@ -27,6 +29,7 @@ interface ContactDetailHeaderProps {
 export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProps) {
   const navigate = useNavigate();
   const deleteContact = useDeleteContact();
+  const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
 
   const getInitials = (name: string) => {
     return name
@@ -104,6 +107,10 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
               </a>
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
+            <CalendarPlus className="h-4 w-4 mr-2" />
+            Konsultacja
+          </Button>
           <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit className="h-4 w-4 mr-2" />
             Edytuj
@@ -146,6 +153,12 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
           <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>
         </div>
       </div>
+
+      <ConsultationModal
+        isOpen={isConsultationModalOpen}
+        onClose={() => setIsConsultationModalOpen(false)}
+        prefilledContactId={contact.id}
+      />
     </div>
   );
 }

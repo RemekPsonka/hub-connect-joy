@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserPlus, CalendarPlus, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ContactModal } from '@/components/contacts/ContactModal';
+import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 
 export function QuickActions() {
   const navigate = useNavigate();
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
 
   return (
     <>
@@ -20,7 +22,7 @@ export function QuickActions() {
             <UserPlus className="h-4 w-4" />
             Dodaj kontakt
           </Button>
-          <Button onClick={() => navigate('/consultations')} variant="outline" className="gap-2">
+          <Button onClick={() => setIsConsultationModalOpen(true)} variant="outline" className="gap-2">
             <CalendarPlus className="h-4 w-4" />
             Nowa konsultacja
           </Button>
@@ -34,6 +36,10 @@ export function QuickActions() {
       <ContactModal
         isOpen={isContactModalOpen}
         onClose={() => setIsContactModalOpen(false)}
+      />
+      <ConsultationModal
+        isOpen={isConsultationModalOpen}
+        onClose={() => setIsConsultationModalOpen(false)}
       />
     </>
   );
