@@ -30,13 +30,21 @@ import {
 } from '@/components/ui/select';
 import { useContactGroups, useCreateContact, useUpdateContact, type ContactWithGroup } from '@/hooks/useContacts';
 
+const linkedinUrlPattern = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w-]+\/?$/i;
+
 const contactSchema = z.object({
   full_name: z.string().min(1, 'Imię i nazwisko jest wymagane').max(100, 'Maksymalnie 100 znaków'),
   email: z.string().email('Nieprawidłowy adres email').max(255).optional().or(z.literal('')),
   phone: z.string().max(20, 'Maksymalnie 20 znaków').optional().or(z.literal('')),
   company: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
   position: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
-  linkedin_url: z.string().url('Nieprawidłowy adres URL').optional().or(z.literal('')),
+  linkedin_url: z.string()
+    .refine((val) => {
+      if (!val || val === '') return true;
+      return linkedinUrlPattern.test(val);
+    }, 'Nieprawidłowy adres LinkedIn (np. linkedin.com/in/jankowalski)')
+    .optional()
+    .or(z.literal('')),
   primary_group_id: z.string().optional().or(z.literal('')),
   city: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
   source: z.string().optional().or(z.literal('')),
@@ -117,13 +125,19 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
   }, [contact, form]);
 
   const onSubmit = async (data: ContactFormData) => {
+    // Normalize LinkedIn URL - add https:// if missing
+    let normalizedLinkedinUrl = data.linkedin_url || null;
+    if (normalizedLinkedinUrl && !normalizedLinkedinUrl.startsWith('http')) {
+      normalizedLinkedinUrl = `https://${normalizedLinkedinUrl}`;
+    }
+
     const submitData = {
       full_name: data.full_name,
       email: data.email || null,
       phone: data.phone || null,
       company: data.company || null,
       position: data.position || null,
-      linkedin_url: data.linkedin_url || null,
+      linkedin_url: normalizedLinkedinUrl,
       primary_group_id: data.primary_group_id || null,
       city: data.city || null,
       source: data.source || null,
