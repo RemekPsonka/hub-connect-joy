@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { useContacts } from '@/hooks/useContacts';
 import { useCreateConsultation, useUpdateConsultation, Consultation } from '@/hooks/useConsultations';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const consultationSchema = z.object({
   contact_id: z.string().min(1, 'Wybierz kontakt'),
@@ -76,6 +77,7 @@ export function ConsultationModal({
 }: ConsultationModalProps) {
   const [contactOpen, setContactOpen] = useState(false);
   const { toast } = useToast();
+  const { director } = useAuth();
   const { data: contactsData } = useContacts({ pageSize: 100 });
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
@@ -125,6 +127,15 @@ export function ConsultationModal({
   }, [consultation, prefilledContactId, form, isOpen]);
 
   const onSubmit = async (data: ConsultationFormData) => {
+    if (!director) {
+      toast({
+        title: 'Błąd',
+        description: 'Brak danych użytkownika. Zaloguj się ponownie.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const payload = {
         contact_id: data.contact_id,
@@ -135,6 +146,8 @@ export function ConsultationModal({
         meeting_url: data.is_virtual ? data.meeting_url : null,
         agenda: data.agenda || null,
         status: data.status,
+        tenant_id: director.tenant_id,
+        director_id: director.id,
       };
 
       if (isEditing && consultation) {
@@ -144,7 +157,7 @@ export function ConsultationModal({
           description: 'Konsultacja została zaktualizowana.',
         });
       } else {
-        await createConsultation.mutateAsync(payload as any);
+        await createConsultation.mutateAsync(payload);
         toast({
           title: 'Utworzono',
           description: 'Nowa konsultacja została zaplanowana.',
@@ -153,6 +166,7 @@ export function ConsultationModal({
 
       onClose();
     } catch (error) {
+      console.error('Failed to save consultation:', error);
       toast({
         title: 'Błąd',
         description: 'Nie udało się zapisać konsultacji.',
