@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { generateEmbeddingInBackground } from '@/hooks/useEmbeddings';
 
 interface ContactNeedsOffersTabProps {
   contactId: string;
@@ -46,11 +47,11 @@ export function ContactNeedsOffersTab({ contactId }: ContactNeedsOffersTabProps)
   const handleAddNeed = async () => {
     if (!newNeedTitle.trim() || !director?.tenant_id) return;
 
-    const { error } = await supabase.from('needs').insert({
+    const { data: newNeed, error } = await supabase.from('needs').insert({
       title: newNeedTitle.trim(),
       contact_id: contactId,
       tenant_id: director.tenant_id,
-    });
+    }).select('id').single();
 
     if (error) {
       toast.error('Nie udało się dodać potrzeby');
@@ -60,17 +61,22 @@ export function ContactNeedsOffersTab({ contactId }: ContactNeedsOffersTabProps)
       setIsAddingNeed(false);
       queryClient.invalidateQueries({ queryKey: ['contact_needs', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contact_stats', contactId] });
+      
+      // Generate embedding in background
+      if (newNeed) {
+        generateEmbeddingInBackground('need', newNeed.id);
+      }
     }
   };
 
   const handleAddOffer = async () => {
     if (!newOfferTitle.trim() || !director?.tenant_id) return;
 
-    const { error } = await supabase.from('offers').insert({
+    const { data: newOffer, error } = await supabase.from('offers').insert({
       title: newOfferTitle.trim(),
       contact_id: contactId,
       tenant_id: director.tenant_id,
-    });
+    }).select('id').single();
 
     if (error) {
       toast.error('Nie udało się dodać oferty');
@@ -80,6 +86,11 @@ export function ContactNeedsOffersTab({ contactId }: ContactNeedsOffersTabProps)
       setIsAddingOffer(false);
       queryClient.invalidateQueries({ queryKey: ['contact_offers', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contact_stats', contactId] });
+      
+      // Generate embedding in background
+      if (newOffer) {
+        generateEmbeddingInBackground('offer', newOffer.id);
+      }
     }
   };
 
