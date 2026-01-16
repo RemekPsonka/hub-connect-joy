@@ -1,0 +1,151 @@
+import { useNavigate } from 'react-router-dom';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { RelationshipStrengthBar } from './RelationshipStrengthBar';
+import { GroupBadge } from './GroupBadge';
+import { useDeleteContact, type ContactWithGroup } from '@/hooks/useContacts';
+import { formatDistanceToNow } from 'date-fns';
+import { pl } from 'date-fns/locale';
+
+interface ContactDetailHeaderProps {
+  contact: ContactWithGroup;
+  onEdit: () => void;
+}
+
+export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProps) {
+  const navigate = useNavigate();
+  const deleteContact = useDeleteContact();
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const handleDelete = async () => {
+    await deleteContact.mutateAsync(contact.id);
+    navigate('/contacts');
+  };
+
+  const formatLastContact = (date: string | null) => {
+    if (!date) return 'Brak kontaktu';
+    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: pl });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Back button */}
+      <Button variant="ghost" size="sm" onClick={() => navigate('/contacts')} className="gap-2">
+        <ArrowLeft className="h-4 w-4" />
+        Powrót do kontaktów
+      </Button>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+        {/* Left side - Avatar and info */}
+        <div className="flex items-start gap-4">
+          <Avatar className="h-16 w-16">
+            <AvatarFallback className="text-xl bg-primary text-primary-foreground">
+              {getInitials(contact.full_name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold text-foreground">{contact.full_name}</h1>
+            {(contact.company || contact.position) && (
+              <p className="text-muted-foreground">
+                {contact.position}
+                {contact.position && contact.company && ' • '}
+                {contact.company}
+              </p>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <GroupBadge group={contact.contact_groups} />
+            </div>
+          </div>
+        </div>
+
+        {/* Right side - Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          {contact.email && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={`mailto:${contact.email}`}>
+                <Mail className="h-4 w-4 mr-2" />
+                Email
+              </a>
+            </Button>
+          )}
+          {contact.phone && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={`tel:${contact.phone}`}>
+                <Phone className="h-4 w-4 mr-2" />
+                Telefon
+              </a>
+            </Button>
+          )}
+          {contact.linkedin_url && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
+                <Linkedin className="h-4 w-4 mr-2" />
+                LinkedIn
+              </a>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onEdit}>
+            <Edit className="h-4 w-4 mr-2" />
+            Edytuj
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Usuń
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Usunąć kontakt?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Czy na pewno chcesz usunąć kontakt {contact.full_name}? Ta operacja jest nieodwracalna.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>Usuń</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="flex flex-wrap items-center gap-6 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Siła relacji:</span>
+          <RelationshipStrengthBar 
+            value={contact.relationship_strength || 5} 
+            className="w-24" 
+            showLabel 
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Ostatni kontakt:</span>
+          <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
