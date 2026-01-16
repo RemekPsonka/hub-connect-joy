@@ -183,6 +183,7 @@ export type Database = {
           company: string | null
           created_at: string | null
           email: string | null
+          fts: unknown
           full_name: string
           id: string
           is_active: boolean | null
@@ -195,6 +196,7 @@ export type Database = {
           profile_embedding: string | null
           profile_summary: string | null
           relationship_strength: number | null
+          search_text: string | null
           source: string | null
           tags: string[] | null
           tenant_id: string
@@ -205,6 +207,7 @@ export type Database = {
           company?: string | null
           created_at?: string | null
           email?: string | null
+          fts?: unknown
           full_name: string
           id?: string
           is_active?: boolean | null
@@ -217,6 +220,7 @@ export type Database = {
           profile_embedding?: string | null
           profile_summary?: string | null
           relationship_strength?: number | null
+          search_text?: string | null
           source?: string | null
           tags?: string[] | null
           tenant_id: string
@@ -227,6 +231,7 @@ export type Database = {
           company?: string | null
           created_at?: string | null
           email?: string | null
+          fts?: unknown
           full_name?: string
           id?: string
           is_active?: boolean | null
@@ -239,6 +244,7 @@ export type Database = {
           profile_embedding?: string | null
           profile_summary?: string | null
           relationship_strength?: number | null
+          search_text?: string | null
           source?: string | null
           tags?: string[] | null
           tenant_id?: string
@@ -588,8 +594,10 @@ export type Database = {
           created_at: string | null
           description: string | null
           embedding: string | null
+          fts: unknown
           id: string
           priority: string | null
+          search_text: string | null
           status: string | null
           tenant_id: string
           title: string
@@ -600,8 +608,10 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           embedding?: string | null
+          fts?: unknown
           id?: string
           priority?: string | null
+          search_text?: string | null
           status?: string | null
           tenant_id: string
           title: string
@@ -612,8 +622,10 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           embedding?: string | null
+          fts?: unknown
           id?: string
           priority?: string | null
+          search_text?: string | null
           status?: string | null
           tenant_id?: string
           title?: string
@@ -642,7 +654,9 @@ export type Database = {
           created_at: string | null
           description: string | null
           embedding: string | null
+          fts: unknown
           id: string
+          search_text: string | null
           status: string | null
           tenant_id: string
           title: string
@@ -653,7 +667,9 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           embedding?: string | null
+          fts?: unknown
           id?: string
+          search_text?: string | null
           status?: string | null
           tenant_id: string
           title: string
@@ -664,7 +680,9 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           embedding?: string | null
+          fts?: unknown
           id?: string
+          search_text?: string | null
           status?: string | null
           tenant_id?: string
           title?: string
@@ -944,6 +962,23 @@ export type Database = {
         }[]
       }
       get_current_tenant_id: { Args: never; Returns: string }
+      immutable_unaccent: { Args: { "": string }; Returns: string }
+      search_all_fts: {
+        Args: {
+          p_limit?: number
+          p_query: string
+          p_tenant_id: string
+          p_types?: string[]
+        }
+        Returns: {
+          description: string
+          id: string
+          similarity: number
+          subtitle: string
+          title: string
+          type: string
+        }[]
+      }
       search_contacts_semantic: {
         Args: {
           p_limit?: number
@@ -991,7 +1026,10 @@ export type Database = {
           similarity: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
