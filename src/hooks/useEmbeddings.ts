@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 type EmbeddingType = 'contact' | 'need' | 'offer';
 
@@ -9,6 +9,12 @@ interface GenerateEmbeddingParams {
   id: string;
   showToast?: boolean;
 }
+
+const typeLabels: Record<EmbeddingType, string> = {
+  contact: 'kontaktu',
+  need: 'potrzeby',
+  offer: 'oferty',
+};
 
 export function useGenerateEmbedding() {
   return useMutation({
@@ -23,8 +29,7 @@ export function useGenerateEmbedding() {
       }
       
       if (showToast) {
-        toast({
-          title: 'Embedding wygenerowany',
+        toast.success('Embedding wygenerowany', {
           description: 'Profil został zaktualizowany dla wyszukiwania AI.',
         });
       }
@@ -33,13 +38,16 @@ export function useGenerateEmbedding() {
     },
     onError: (error) => {
       console.warn('Embedding generation failed silently:', error);
-      // Don't show error toast - embedding generation is background task
     }
   });
 }
 
-// Helper function to generate embedding in background without blocking UI
-export async function generateEmbeddingInBackground(type: EmbeddingType, id: string) {
+// Helper function to generate embedding in background with toast notifications
+export async function generateEmbeddingInBackground(type: EmbeddingType, id: string, showNotifications = true) {
+  const toastId = showNotifications 
+    ? toast.loading(`Indeksowanie ${typeLabels[type]} dla wyszukiwania AI...`)
+    : undefined;
+  
   try {
     const { error } = await supabase.functions.invoke('generate-embedding', {
       body: { type, id }
@@ -47,10 +55,26 @@ export async function generateEmbeddingInBackground(type: EmbeddingType, id: str
     
     if (error) {
       console.warn(`Background embedding generation failed for ${type}:${id}:`, error);
+      if (toastId) {
+        toast.error('Nie udało się zaindeksować dla AI', {
+          id: toastId,
+          description: 'Wyszukiwanie semantyczne może nie działać poprawnie.',
+        });
+      }
     } else {
       console.log(`Embedding generated for ${type}:${id}`);
+      if (toastId) {
+        toast.success('Zaindeksowano dla wyszukiwania AI', {
+          id: toastId,
+        });
+      }
     }
   } catch (e) {
     console.warn(`Background embedding generation error for ${type}:${id}:`, e);
+    if (toastId) {
+      toast.error('Błąd indeksowania AI', {
+        id: toastId,
+      });
+    }
   }
 }
