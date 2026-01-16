@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Settings,
   Network,
+  Search,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -28,6 +29,7 @@ const navigationItems = [
   { title: 'Konsultacje', url: '/consultations', icon: Calendar },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
+  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },
   { title: 'Ustawienia', url: '/settings', icon: Settings },
 ];
