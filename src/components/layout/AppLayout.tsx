@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
@@ -5,8 +6,24 @@ import { UserMenu } from './UserMenu';
 import { Bell, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SemanticSearchModal } from '@/components/search/SemanticSearchModal';
 
 export function AppLayout() {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -26,8 +43,10 @@ export function AppLayout() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Szukaj..."
-                  className="pl-8 bg-muted/50"
+                  placeholder="Szukaj... (⌘K)"
+                  className="pl-8 bg-muted/50 cursor-pointer"
+                  onClick={() => setIsSearchOpen(true)}
+                  readOnly
                 />
               </div>
             </div>
@@ -47,6 +66,11 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      
+      <SemanticSearchModal 
+        open={isSearchOpen} 
+        onOpenChange={setIsSearchOpen} 
+      />
     </SidebarProvider>
   );
 }
