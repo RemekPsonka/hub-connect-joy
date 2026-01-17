@@ -3,14 +3,14 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, Phone, Building, MapPin, Linkedin, Tag, Globe, Users, 
   Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw 
 } from 'lucide-react';
 import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
-import { useCompanyContacts, useRegenerateCompanyAI } from '@/hooks/useCompanies';
+import { useCompanyContacts, useRegenerateCompanyAI, getCompanyLogoUrl } from '@/hooks/useCompanies';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
 import { CompanyModal } from './CompanyModal';
 
@@ -280,11 +280,29 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle>{company.name}</CardTitle>
-                  {company.industry && (
-                    <Badge variant="secondary">{company.industry}</Badge>
-                  )}
+                <div className="flex items-center gap-3">
+                  {/* Company Logo */}
+                  <Avatar className="h-12 w-12">
+                    {(company.logo_url || getCompanyLogoUrl(company.website)) ? (
+                      <AvatarImage 
+                        src={company.logo_url || getCompanyLogoUrl(company.website) || ''} 
+                        alt={company.name}
+                        onError={(e) => {
+                          // Hide image on error, fallback will show
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                      <Building className="h-6 w-6" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1">
+                    <CardTitle>{company.name}</CardTitle>
+                    {company.industry && (
+                      <Badge variant="secondary">{company.industry}</Badge>
+                    )}
+                  </div>
                 </div>
                 <Button 
                   variant="ghost" 
