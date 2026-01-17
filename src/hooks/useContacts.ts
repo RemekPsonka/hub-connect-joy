@@ -9,6 +9,7 @@ export type Contact = Tables<'contacts'>;
 export type ContactInsert = TablesInsert<'contacts'>;
 export type ContactUpdate = TablesUpdate<'contacts'>;
 export type ContactGroup = Tables<'contact_groups'>;
+export type Company = Tables<'companies'>;
 
 export interface ContactsFilters {
   search?: string;
@@ -21,6 +22,11 @@ export interface ContactsFilters {
 
 export interface ContactWithGroup extends Contact {
   contact_groups: ContactGroup | null;
+}
+
+export interface ContactWithDetails extends Contact {
+  contact_groups: ContactGroup | null;
+  companies: Company | null;
 }
 
 export function useContacts(filters: ContactsFilters = {}) {
@@ -83,14 +89,14 @@ export function useContact(id: string | undefined) {
 
       const { data, error } = await supabase
         .from('contacts')
-        .select('*, contact_groups(*)')
+        .select('*, contact_groups(*), companies(*)')
         .eq('id', id)
         .eq('tenant_id', director.tenant_id)
         .single();
 
       if (error) throw error;
 
-      return data as ContactWithGroup;
+      return data as ContactWithDetails;
     },
     enabled: !!id && !!director?.tenant_id,
   });

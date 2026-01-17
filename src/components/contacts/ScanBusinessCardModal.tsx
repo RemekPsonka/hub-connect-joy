@@ -52,6 +52,7 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
     city: null,
     linkedin_url: null,
     notes: null,
+    profile_summary: null,
   });
 
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +126,7 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
           linkedin_url: formData.linkedin_url || undefined,
           city: formData.city || undefined,
           notes: formData.notes || undefined,
+          profile_summary: formData.profile_summary || undefined,
         },
         company: formData.company ? {
           name: formData.company,
@@ -163,6 +165,7 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
       city: null,
       linkedin_url: null,
       notes: null,
+      profile_summary: null,
     });
     onClose();
   };

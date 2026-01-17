@@ -44,7 +44,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie wizytówek. Twoim zadaniem jest wyekstrahowanie wszystkich danych kontaktowych z obrazu wizytówki.
+            content: `Jesteś ekspertem w analizie wizytówek i tworzeniu profili biznesowych. Twoim zadaniem jest wyekstrahowanie wszystkich danych kontaktowych z obrazu wizytówki oraz wygenerowanie krótkiego profilu osoby.
 
 WAŻNE: Rozdziel dane osobowe na tytuł naukowy/zawodowy, imię i nazwisko.
             
@@ -62,12 +62,16 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi pol
 - city: Samo miasto (string lub null)
 - linkedin_url: URL profilu LinkedIn jeśli widoczny (string lub null)
 - notes: Inne informacje z wizytówki, np. slogan, specjalizacje (string lub null)
+- profile_summary: Krótkie profesjonalne podsumowanie osoby (2-3 zdania) na podstawie stanowiska, firmy i tytułów. Opisz kim jest ta osoba zawodowo i jaką wartość może wnieść do sieci kontaktów. (string, wymagane)
 
 PRZYKŁADY rozdzielania:
 - "dr hab. n. med. Jan Kowalski, prof. UJ" → title: "dr hab. n. med., prof. UJ", first_name: "Jan", last_name: "Kowalski"
 - "mgr inż. Anna Nowak" → title: "mgr inż.", first_name: "Anna", last_name: "Nowak"
 - "Piotr Wiśniewski MBA" → title: "MBA", first_name: "Piotr", last_name: "Wiśniewski"
 - "Jan Kowalski" → title: null, first_name: "Jan", last_name: "Kowalski"
+
+PRZYKŁAD profile_summary:
+- Dla "dr hab. n. med. Bartłomiej Guzik, prof. UJ, Dyrektor Szpitala Wojskowego" → "Doświadczony lekarz i naukowiec z tytułem profesora UJ. Jako Dyrektor Szpitala Wojskowego łączy kompetencje medyczne z zarządczymi. Potencjalny partner w projektach zdrowotnych i edukacji medycznej."
 
 Jeśli jakieś pole nie jest widoczne na wizytówce, ustaw null.
 Normalizuj numery telefonów do formatu międzynarodowego (+48...).
