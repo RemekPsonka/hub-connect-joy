@@ -59,7 +59,7 @@ export function AppLayout() {
           </header>
           
           {/* Main content */}
-          <main className="flex-1 overflow-auto p-6 bg-muted/30">
+          <main className="flex-1 overflow-hidden p-6 bg-muted/30">
             <Outlet />
           </main>
         </div>
