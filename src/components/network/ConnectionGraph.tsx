@@ -1,6 +1,6 @@
-import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import Graph from 'graphology';
-import { SigmaContainer, useRegisterEvents, useSigma } from '@react-sigma/core';
+import { SigmaContainer, useRegisterEvents, useSigma, useLoadGraph } from '@react-sigma/core';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { ContactNode, Connection } from '@/hooks/useConnections';
 
@@ -22,6 +22,85 @@ interface ConnectionGraphProps {
   highlightedPath: string[] | null;
   onNodeClick: (nodeId: string | null) => void;
   searchTerm: string;
+}
+
+// Inner component to load graph data
+function GraphDataLoader({ 
+  nodes, 
+  edges 
+}: { 
+  nodes: ContactNode[]; 
+  edges: Connection[] 
+}) {
+  const loadGraph = useLoadGraph();
+  const sigma = useSigma();
+
+  useEffect(() => {
+    const graph = new Graph();
+
+    // Dodaj węzły
+    nodes.forEach((node) => {
+      const baseSize = 8 + (node.connection_count || 0) * 2;
+      const size = Math.min(baseSize, 30);
+      const color = node.group_color || '#6366f1';
+
+      graph.addNode(node.id, {
+        label: node.full_name,
+        size,
+        color,
+        originalColor: color,
+        originalSize: size,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        company: node.company,
+        position: node.position,
+      });
+    });
+
+    // Dodaj krawędzie
+    edges.forEach((edge) => {
+      if (graph.hasNode(edge.contact_a_id) && graph.hasNode(edge.contact_b_id)) {
+        try {
+          const typeColor = CONNECTION_TYPE_COLORS[edge.connection_type || 'knows'] || '#6b7280';
+          const edgeSize = Math.max(0.5, (edge.strength || 5) / 2);
+          
+          graph.addEdge(edge.contact_a_id, edge.contact_b_id, {
+            size: edgeSize,
+            color: typeColor,
+            originalColor: typeColor,
+            originalSize: edgeSize,
+            connectionType: edge.connection_type,
+          });
+        } catch (e) {
+          // Edge might already exist
+        }
+      }
+    });
+
+    // Zastosuj layout PRZED załadowaniem do Sigma
+    if (graph.order > 0) {
+      forceAtlas2.assign(graph, {
+        iterations: 100,
+        settings: {
+          gravity: 1,
+          scalingRatio: 10,
+          strongGravityMode: true,
+          slowDown: 5,
+          barnesHutOptimize: graph.order > 100,
+        },
+      });
+    }
+
+    // Załaduj graf do Sigma
+    loadGraph(graph);
+
+    // Dopasuj widok do grafu po krótkim opóźnieniu
+    setTimeout(() => {
+      sigma.getCamera().animatedReset();
+    }, 100);
+  }, [nodes, edges, loadGraph, sigma]);
+
+  return null;
 }
 
 // Inner component to handle Sigma events
@@ -54,10 +133,11 @@ function GraphEvents({
   useEffect(() => {
     const graph = sigma.getGraph();
     
+    if (graph.order === 0) return;
+
     graph.forEachNode((node, attributes) => {
       let color = attributes.originalColor || '#6366f1';
       let size = attributes.originalSize || 10;
-      let hidden = false;
 
       // Check if node matches search
       if (searchTerm) {
@@ -89,7 +169,6 @@ function GraphEvents({
 
       graph.setNodeAttribute(node, 'color', color);
       graph.setNodeAttribute(node, 'size', size);
-      graph.setNodeAttribute(node, 'hidden', hidden);
     });
 
     // Update edge colors - zachowuj oryginalne kolory typu połączenia
@@ -133,78 +212,6 @@ export function ConnectionGraph({
   onNodeClick,
   searchTerm,
 }: ConnectionGraphProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isLayoutDone, setIsLayoutDone] = useState(false);
-
-  // Build the graph
-  const graph = useMemo(() => {
-    const g = new Graph();
-
-    // Add nodes
-    nodes.forEach((node) => {
-      const baseSize = 8 + (node.connection_count || 0) * 2;
-      const size = Math.min(baseSize, 30);
-      const color = node.group_color || '#6366f1';
-
-      g.addNode(node.id, {
-        label: node.full_name,
-        size,
-        color,
-        originalColor: color,
-        originalSize: size,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        company: node.company,
-        position: node.position,
-      });
-    });
-
-    // Add edges
-    edges.forEach((edge) => {
-      // Only add edge if both nodes exist
-      if (g.hasNode(edge.contact_a_id) && g.hasNode(edge.contact_b_id)) {
-        try {
-          const typeColor = CONNECTION_TYPE_COLORS[edge.connection_type || 'knows'] || '#6b7280';
-          // Siła 1-10 → grubość 0.5-5
-          const edgeSize = Math.max(0.5, (edge.strength || 5) / 2);
-          
-          g.addEdge(edge.contact_a_id, edge.contact_b_id, {
-            size: edgeSize,
-            color: typeColor,
-            originalColor: typeColor,
-            originalSize: edgeSize,
-            connectionType: edge.connection_type,
-          });
-        } catch (e) {
-          // Edge might already exist
-        }
-      }
-    });
-
-    return g;
-  }, [nodes, edges]);
-
-  // Apply force layout
-  useEffect(() => {
-    if (graph.order > 0) {
-      setIsLayoutDone(false);
-      
-      // Apply ForceAtlas2 layout
-      forceAtlas2.assign(graph, {
-        iterations: 100,
-        settings: {
-          gravity: 1,
-          scalingRatio: 10,
-          strongGravityMode: true,
-          slowDown: 5,
-          barnesHutOptimize: graph.order > 100,
-        },
-      });
-
-      setIsLayoutDone(true);
-    }
-  }, [graph]);
-
   const handleNodeClick = useCallback((nodeId: string | null) => {
     onNodeClick(nodeId);
   }, [onNodeClick]);
@@ -223,32 +230,30 @@ export function ConnectionGraph({
   }
 
   return (
-    <div ref={containerRef} className="w-full h-[500px] bg-background rounded-lg border">
-      {isLayoutDone && (
-        <SigmaContainer
-          graph={graph}
-          style={{ height: '500px', width: '100%' }}
-          settings={{
-            renderLabels: true,
-            labelSize: 12,
-            labelColor: { color: '#374151' },
-            labelRenderedSizeThreshold: 6,
-            defaultEdgeType: 'line',
-            enableEdgeEvents: false,
-            zoomToSizeRatioFunction: (ratio) => ratio,
-            itemSizesReference: 'positions',
-            zoomDuration: 200,
-            allowInvalidContainer: true,
-          }}
-        >
-          <GraphEvents
-            onNodeClick={handleNodeClick}
-            selectedNodeId={selectedNodeId}
-            highlightedPath={highlightedPath}
-            searchTerm={searchTerm}
-          />
-        </SigmaContainer>
-      )}
+    <div className="w-full h-[500px] bg-background rounded-lg border">
+      <SigmaContainer
+        style={{ height: '500px', width: '100%' }}
+        settings={{
+          renderLabels: true,
+          labelSize: 12,
+          labelColor: { color: '#374151' },
+          labelRenderedSizeThreshold: 6,
+          defaultEdgeType: 'line',
+          enableEdgeEvents: false,
+          zoomToSizeRatioFunction: (ratio) => ratio,
+          itemSizesReference: 'positions',
+          zoomDuration: 200,
+          allowInvalidContainer: true,
+        }}
+      >
+        <GraphDataLoader nodes={nodes} edges={edges} />
+        <GraphEvents
+          onNodeClick={handleNodeClick}
+          selectedNodeId={selectedNodeId}
+          highlightedPath={highlightedPath}
+          searchTerm={searchTerm}
+        />
+      </SigmaContainer>
     </div>
   );
 }
