@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.agent-action]
 verify_jwt = false
+
+[functions.turbo-agent-query]
+verify_jwt = false
