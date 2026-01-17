@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Share2, Search, Filter, AlertCircle } from 'lucide-react';
+import { Share2, Search, Filter, AlertCircle, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { ConnectionGraph } from '@/components/network/ConnectionGraph';
 import { GraphSidebar } from '@/components/network/GraphSidebar';
 import { FindPathModal } from '@/components/network/FindPathModal';
+import { AddConnectionModal } from '@/components/network/AddConnectionModal';
 import { useConnections } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
 
@@ -49,6 +50,7 @@ export default function Network() {
   const [findPathOpen, setFindPathOpen] = useState(false);
   const [pathStartContactId, setPathStartContactId] = useState<string | null>(null);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [addConnectionOpen, setAddConnectionOpen] = useState(false);
 
   const nodes = graphData?.nodes || [];
   const edges = graphData?.edges || [];
@@ -149,6 +151,11 @@ export default function Network() {
                 className="pl-9 w-64"
               />
             </div>
+
+            <Button onClick={() => setAddConnectionOpen(true)}>
+              <Link2 className="h-4 w-4 mr-2" />
+              Dodaj połączenie
+            </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -259,6 +266,12 @@ export default function Network() {
         nodes={nodes}
         startContactId={pathStartContactId}
         onPathFound={handlePathFound}
+      />
+
+      {/* Add Connection Modal */}
+      <AddConnectionModal
+        open={addConnectionOpen}
+        onOpenChange={setAddConnectionOpen}
       />
     </div>
   );
