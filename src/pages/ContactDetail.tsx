@@ -12,10 +12,14 @@ import { ContactTasksTab } from '@/components/contacts/ContactTasksTab';
 import { ContactNotesTab } from '@/components/contacts/ContactNotesTab';
 import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactModal } from '@/components/contacts/ContactModal';
+import { BIInterviewChat } from '@/components/agents/BIInterviewChat';
+import { BIDataViewer } from '@/components/agents/BIDataViewer';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { director } = useAuth();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -64,7 +68,29 @@ export default function ContactDetail() {
         </TabsContent>
 
         <TabsContent value="agent" className="mt-6">
-          <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
+          <Tabs defaultValue="profile" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="profile">Profil Agenta</TabsTrigger>
+              <TabsTrigger value="bi-interview">Wywiad BI</TabsTrigger>
+              <TabsTrigger value="bi-data">Dane BI</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="profile">
+              <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
+            </TabsContent>
+            
+            <TabsContent value="bi-interview">
+              <BIInterviewChat 
+                contactId={contact.id} 
+                contactName={contact.full_name}
+                tenantId={director?.tenant_id}
+              />
+            </TabsContent>
+            
+            <TabsContent value="bi-data">
+              <BIDataViewer contactId={contact.id} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="needs-offers" className="mt-6">

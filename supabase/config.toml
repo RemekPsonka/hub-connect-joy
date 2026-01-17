@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.turbo-agent-query]
 verify_jwt = false
+
+[functions.bi-agent-interview]
+verify_jwt = false
