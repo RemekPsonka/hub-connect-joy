@@ -47,6 +47,75 @@ const BI_FRAMEWORK = {
   }
 };
 
+// All fields in order for sequential questioning
+const ALL_FIELDS_ORDERED: { section: string; field: string; label: string }[] = [
+  { section: 'section_1_basic_info', field: 'industry', label: 'Branża?' },
+  { section: 'section_1_basic_info', field: 'company_main', label: 'Nazwa firmy?' },
+  { section: 'section_1_basic_info', field: 'nip', label: 'NIP?' },
+  { section: 'section_1_basic_info', field: 'website', label: 'Strona www?' },
+  { section: 'section_1_basic_info', field: 'linkedin', label: 'LinkedIn?' },
+  { section: 'section_1_basic_info', field: 'headquarters', label: 'Siedziba?' },
+  { section: 'section_1_basic_info', field: 'founded_year', label: 'Rok założenia?' },
+  { section: 'section_1_basic_info', field: 'assistant_name', label: 'Asystent - imię?' },
+  { section: 'section_1_basic_info', field: 'assistant_email', label: 'Asystent - email?' },
+  { section: 'section_1_basic_info', field: 'assistant_phone', label: 'Asystent - telefon?' },
+  { section: 'section_2_business_metrics', field: 'employees_count', label: 'Ilu pracowników?' },
+  { section: 'section_2_business_metrics', field: 'clients_current', label: 'Ilu klientów obecnie?' },
+  { section: 'section_2_business_metrics', field: 'clients_plan_this_year', label: 'Plan klientów na rok?' },
+  { section: 'section_2_business_metrics', field: 'revenue_last_year', label: 'Przychód 2024?' },
+  { section: 'section_2_business_metrics', field: 'revenue_plan_this_year', label: 'Plan przychodu?' },
+  { section: 'section_2_business_metrics', field: 'ebitda_last_year', label: 'EBITDA 2024?' },
+  { section: 'section_2_business_metrics', field: 'main_activity', label: 'Główna działalność?' },
+  { section: 'section_2_business_metrics', field: 'markets', label: 'Rynki?' },
+  { section: 'section_2_business_metrics', field: 'top_products', label: 'Top produkty?' },
+  { section: 'section_2_business_metrics', field: 'value_proposition', label: 'Propozycja wartości?' },
+  { section: 'section_2_business_metrics', field: 'ownership_structure', label: 'Struktura własności?' },
+  { section: 'section_3_priorities_challenges', field: 'top_3_priorities', label: 'Top 3 priorytety?' },
+  { section: 'section_3_priorities_challenges', field: 'biggest_challenge', label: 'Największe wyzwanie?' },
+  { section: 'section_3_priorities_challenges', field: 'biggest_achievement', label: 'Największy sukces?' },
+  { section: 'section_3_priorities_challenges', field: 'top_3_clients', label: 'Top 3 klientów?' },
+  { section: 'section_3_priorities_challenges', field: 'what_seeking', label: 'Czego szuka?' },
+  { section: 'section_3_priorities_challenges', field: 'strategy_2_3_years', label: 'Strategia 2-3 lata?' },
+  { section: 'section_4_investments', field: 'recent_investments', label: 'Ostatnie inwestycje?' },
+  { section: 'section_4_investments', field: 'planned_investments', label: 'Planowane inwestycje?' },
+  { section: 'section_5_cc_relations', field: 'source_of_contact', label: 'Skąd kontakt?' },
+  { section: 'section_5_cc_relations', field: 'attended_cc_meetings', label: 'Uczestnictwo w CC?' },
+  { section: 'section_5_cc_relations', field: 'wants_to_meet', label: 'Kogo chce poznać?' },
+  { section: 'section_5_cc_relations', field: 'value_to_cc', label: 'Wartość dla CC?' },
+  { section: 'section_6_personal', field: 'family', label: 'Rodzina?' },
+  { section: 'section_6_personal', field: 'passions', label: 'Pasje?' },
+  { section: 'section_6_personal', field: 'personal_goals_2_3_years', label: 'Cele osobiste?' },
+  { section: 'section_6_personal', field: 'life_principles', label: 'Zasady życiowe?' },
+];
+
+// Find next empty field
+function findNextEmptyField(biProfile: any, currentFieldIndex: number = -1): { section: string; field: string; label: string; index: number } | null {
+  for (let i = currentFieldIndex + 1; i < ALL_FIELDS_ORDERED.length; i++) {
+    const fieldInfo = ALL_FIELDS_ORDERED[i];
+    const sectionData = biProfile[fieldInfo.section] || {};
+    const value = sectionData[fieldInfo.field];
+    if (value === null || value === undefined || value === '') {
+      return { ...fieldInfo, index: i };
+    }
+  }
+  return null;
+}
+
+// Find current field index based on last asked question
+function findCurrentFieldIndex(conversationLog: any[]): number {
+  if (!conversationLog || conversationLog.length === 0) return -1;
+  
+  // Find last agent message with question_field
+  for (let i = conversationLog.length - 1; i >= 0; i--) {
+    const msg = conversationLog[i];
+    if (msg.speaker === 'agent' && msg.question_field) {
+      const idx = ALL_FIELDS_ORDERED.findIndex(f => f.field === msg.question_field);
+      if (idx >= 0) return idx;
+    }
+  }
+  return -1;
+}
+
 // Calculate completeness score
 function calculateCompleteness(biProfile: any): number {
   const allFields: string[] = [];
@@ -200,11 +269,17 @@ serve(async (req) => {
       employee_count: contact.companies.employee_count
     } : null;
 
-    // 5. Pre-AI detection of end signals - immediate termination without AI call
+    // 5. Pre-AI detection of signals - immediate handling without AI call
     const endSignals = ['koniec', 'kończymy', 'wystarczy', 'na razie tyle', 'stop', 'przerwij', 'później', 'przerywam', 'zakończ', 'to tyle', 'dosyć', 'starczy'];
-    const isEndingRequest = userMessage !== 'START_INTERVIEW' && endSignals.some(signal => 
-      userMessage.toLowerCase().includes(signal)
-    );
+    const skipSignals = ['dalej', 'pomiń', 'następne', 'skip', 'next', '-', '.', 'nie wiem', 'brak', 'n/a', 'nd'];
+    
+    const msgLower = userMessage.toLowerCase().trim();
+    const isEndingRequest = userMessage !== 'START_INTERVIEW' && endSignals.some(signal => msgLower.includes(signal));
+    const isSkipRequest = userMessage !== 'START_INTERVIEW' && skipSignals.some(signal => msgLower === signal);
+    const isStartRequest = userMessage === 'START_INTERVIEW';
+
+    // Get current field index from conversation
+    const currentFieldIndex = findCurrentFieldIndex(session.conversation_log || []);
 
     if (isEndingRequest) {
       console.log('End signal detected, pausing interview immediately');
@@ -237,77 +312,141 @@ serve(async (req) => {
       );
     }
 
-    // 6. Build BI Agent prompt
-    const completedSections = getCompletedSections(biData.bi_profile || {});
-    const recentConversation = (session.conversation_log || []).slice(-10);
+    // Handle skip request - move to next question without AI
+    if (isSkipRequest) {
+      console.log('Skip signal detected, moving to next question');
+      
+      const nextField = findNextEmptyField(biData.bi_profile || {}, currentFieldIndex);
+      
+      if (!nextField) {
+        // All fields completed
+        const updatedConversationLog = [
+          ...(session.conversation_log || []),
+          { timestamp: new Date().toISOString(), speaker: 'user', message: userMessage },
+          { timestamp: new Date().toISOString(), speaker: 'agent', message: 'Wszystkie pola zebrane.' }
+        ];
+        
+        await supabase
+          .from('bi_interview_sessions')
+          .update({
+            status: 'completed',
+            conversation_log: updatedConversationLog,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', session.id);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            agent_message: 'Wszystkie pola zebrane.',
+            next_question: null,
+            completeness: 1,
+            sections_completed: getCompletedSections(biData.bi_profile || {}),
+            status: 'completed',
+            session_id: session.id
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const updatedConversationLog = [
+        ...(session.conversation_log || []),
+        { timestamp: new Date().toISOString(), speaker: 'user', message: userMessage },
+        { timestamp: new Date().toISOString(), speaker: 'agent', message: nextField.label, question_field: nextField.field }
+      ];
+      
+      await supabase
+        .from('bi_interview_sessions')
+        .update({
+          conversation_log: updatedConversationLog,
+          questions_asked: (session.questions_asked || 0) + 1
+        })
+        .eq('id', session.id);
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          agent_message: nextField.label,
+          next_question: { section: nextField.section, field: nextField.field },
+          completeness: biData.completeness_score || 0,
+          sections_completed: getCompletedSections(biData.bi_profile || {}),
+          status: 'in_progress',
+          session_id: session.id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    const biAgentPrompt = `
-Jesteś asystentem BI. Zbierasz dane od DYREKTORA (nie od klienta). Dyrektor wpisuje dane zebrane podczas rozmowy z klientem.
+    // Handle start request - first question without AI
+    if (isStartRequest) {
+      console.log('Start interview, asking first question');
+      
+      const nextField = findNextEmptyField(biData.bi_profile || {}, -1);
+      
+      if (!nextField) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            agent_message: 'Wszystkie pola już wypełnione.',
+            next_question: null,
+            completeness: 1,
+            sections_completed: getCompletedSections(biData.bi_profile || {}),
+            status: 'completed',
+            session_id: session.id
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const updatedConversationLog = [
+        ...(session.conversation_log || []),
+        { timestamp: new Date().toISOString(), speaker: 'user', message: 'START' },
+        { timestamp: new Date().toISOString(), speaker: 'agent', message: nextField.label, question_field: nextField.field }
+      ];
+      
+      await supabase
+        .from('bi_interview_sessions')
+        .update({
+          conversation_log: updatedConversationLog,
+          questions_asked: 1
+        })
+        .eq('id', session.id);
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          agent_message: nextField.label,
+          next_question: { section: nextField.section, field: nextField.field },
+          completeness: biData.completeness_score || 0,
+          sections_completed: getCompletedSections(biData.bi_profile || {}),
+          status: 'in_progress',
+          session_id: session.id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-## KONTAKT: ${contact.full_name} | ${contact.company || '?'} | ${contact.position || '?'}
+    // 6. AI is only used for data extraction now (not for question generation)
+    // Find current field from last agent message
+    const lastAgentMsg = (session.conversation_log || []).slice().reverse().find((m: any) => m.speaker === 'agent' && m.question_field);
+    const currentField = lastAgentMsg?.question_field;
+    const currentSection = ALL_FIELDS_ORDERED.find(f => f.field === currentField)?.section;
 
-## OBECNE DANE BI (${((biData.completeness_score || 0) * 100).toFixed(0)}% kompletne)
-${JSON.stringify(biData.bi_profile || {}, null, 2)}
+    // Build simple extraction prompt
+    const extractionPrompt = `
+Wyciągnij dane z odpowiedzi.
 
-## HISTORIA (ostatnie)
-${recentConversation.map((msg: any) => `${msg.speaker === 'user' ? 'D' : 'A'}: ${msg.message}`).join('\n') || 'Start'}
+POLE: ${currentField || 'unknown'}
+SEKCJA: ${currentSection || 'unknown'}
+ODPOWIEDŹ: "${userMessage}"
 
-## WIADOMOŚĆ DYREKTORA
-"${userMessage}"
-
----
-
-## POLA DO ZEBRANIA (6 sekcji)
-
-1. section_1_basic_info: full_name, company_main, industry, nip, website, linkedin, assistant_name/email/phone, headquarters, residence, founded_year
-2. section_2_business_metrics: employees_count, clients_current/plan, revenue_last_year/plan, ebitda, main_activity, markets[], top_products[], value_proposition, ownership_structure
-3. section_3_priorities_challenges: top_3_priorities[], biggest_challenge, biggest_achievement, top_3_clients[], what_seeking[], strategy_2_3_years
-4. section_4_investments: recent_investments[], planned_investments[]
-5. section_5_cc_relations: source_of_contact, attended_cc_meetings[], wants_to_meet[], value_to_cc
-6. section_6_personal: family, work_life_balance, personal_goals[], passions[], life_principles[]
-
----
-
-## ZASADY (PRZESTRZEGAJ ŚCIŚLE)
-
-1. Pytania: KRÓTKIE, 1 linia, bez upiększeń
-2. Po odpowiedzi: zapisz → następne pytanie (bez komentarzy, bez podziękowań)
-3. "nie wiem" / "-" / brak → null, następne pytanie
-4. "koniec" → status="paused", odpowiedź: "OK, wstrzymano."
-5. NIE dopytuj, NIE rozwijaj, NIE podsumowuj
-
-PRZYKŁADY TWOICH ODPOWIEDZI:
-- "Branża?"
-- "Ilu pracowników?"
-- "Przychody 2024?"
-- "Główni klienci?"
-- "OK, wstrzymano."
-
-NIE pisz tak:
-- "Dziękuję za tę informację!"
-- "Świetnie! Rozumiem, że..."
-- "Czy mógłbyś rozwinąć..."
-
-${userMessage === 'START_INTERVIEW' ? 'To START. Zadaj pierwsze pytanie z sekcji 1. Przykład: "Branża firmy?"' : 'Zapisz dane z wiadomości i zadaj następne pytanie.'}
-
----
-
-## OUTPUT (tylko JSON, bez markdown)
-
+Zwróć TYLKO JSON:
 {
-  "extracted_data": {
-    "section_X": { "pole": "wartość" }
-  },
-  "agent_message": "Następne pytanie?",
-  "next_question": { "section": "...", "field": "..." },
-  "session_update": { "questions_asked": N, "questions_answered": N, "sections_completed": [] },
-  "status": "in_progress"
+  "value": "wyciągnięta wartość lub null jeśli brak danych",
+  "extracted": true/false
 }
-
-Statusy: "in_progress", "paused", "completed"
 `;
 
-    // 6. Call AI
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       console.error('LOVABLE_API_KEY not configured');
@@ -317,7 +456,7 @@ Statusy: "in_progress", "paused", "completed"
       );
     }
 
-    console.log('Calling AI for BI interview...');
+    console.log('Calling AI for data extraction...');
     
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -326,9 +465,9 @@ Statusy: "in_progress", "paused", "completed"
         'Authorization': `Bearer ${LOVABLE_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-flash-lite',
         messages: [
-          { role: 'user', content: biAgentPrompt }
+          { role: 'user', content: extractionPrompt }
         ]
       })
     });
@@ -347,69 +486,58 @@ Statusy: "in_progress", "paused", "completed"
     
     console.log('AI response received, parsing...');
 
-    // Parse AI response
-    let agentResponse: any;
+    // Parse AI extraction response
+    let extractedValue: any = null;
     try {
-      // Try to extract JSON from response
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        agentResponse = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.extracted && parsed.value !== null && parsed.value !== '') {
+          extractedValue = parsed.value;
+        }
       }
     } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      console.log('Raw content:', rawContent.substring(0, 500));
-      
-      // Fallback response
-      agentResponse = {
-        extracted_data: {},
-        agent_message: rawContent || 'Przepraszam, wystąpił problem. Czy możesz powtórzyć?',
-        next_question: null,
-        session_update: {
-          questions_asked: session.questions_asked || 0,
-          questions_answered: session.questions_answered || 0,
-          sections_completed: session.sections_completed || []
-        },
-        status: 'in_progress'
-      };
+      console.log('Failed to parse extraction, using raw value');
+      // Use raw message as value if parsing fails
+      extractedValue = userMessage;
     }
+
+    // Find next empty field
+    const nextField = findNextEmptyField(biData.bi_profile || {}, currentFieldIndex);
 
     // 7. Update BI profile with extracted data
     const updatedBiProfile = { ...(biData.bi_profile || {}) };
-    const extractedData = agentResponse.extracted_data || {};
     
-    for (const [sectionKey, sectionData] of Object.entries(extractedData)) {
-      if (typeof sectionData === 'object' && sectionData !== null) {
-        if (!updatedBiProfile[sectionKey]) {
-          updatedBiProfile[sectionKey] = {};
-        }
-        
-        for (const [fieldKey, value] of Object.entries(sectionData as object)) {
-          const oldValue = updatedBiProfile[sectionKey]?.[fieldKey];
-          updatedBiProfile[sectionKey][fieldKey] = value;
-          
-          // Log change to history
-          if (oldValue !== value) {
-            await supabase
-              .from('contact_bi_history')
-              .insert({
-                contact_bi_id: biData.id,
-                field_path: `${sectionKey}.${fieldKey}`,
-                old_value: oldValue !== undefined ? JSON.stringify(oldValue) : null,
-                new_value: JSON.stringify(value),
-                change_reason: 'bi_interview'
-              });
-          }
-        }
+    if (extractedValue !== null && currentSection && currentField) {
+      if (!updatedBiProfile[currentSection]) {
+        updatedBiProfile[currentSection] = {};
+      }
+      
+      const oldValue = updatedBiProfile[currentSection]?.[currentField];
+      updatedBiProfile[currentSection][currentField] = extractedValue;
+      
+      // Log change to history
+      if (oldValue !== extractedValue) {
+        await supabase
+          .from('contact_bi_history')
+          .insert({
+            contact_bi_id: biData.id,
+            field_path: `${currentSection}.${currentField}`,
+            old_value: oldValue !== undefined ? JSON.stringify(oldValue) : null,
+            new_value: JSON.stringify(extractedValue),
+            change_reason: 'bi_interview'
+          });
       }
     }
 
     // Calculate new completeness
     const newCompleteness = calculateCompleteness(updatedBiProfile);
     const newCompletedSections = getCompletedSections(updatedBiProfile);
-    const newStatus = agentResponse.status === 'completed' ? 'complete' : 
-                      agentResponse.status === 'paused' ? 'in_progress' : 'in_progress';
+    
+    // Determine status and next message
+    const isCompleted = !nextField;
+    const newStatus = isCompleted ? 'completed' : 'in_progress';
+    const nextMessage = isCompleted ? 'Wszystkie pola zebrane.' : nextField.label;
 
     // Update BI data
     await supabase
@@ -418,8 +546,8 @@ Statusy: "in_progress", "paused", "completed"
         bi_profile: updatedBiProfile,
         completeness_score: newCompleteness,
         last_bi_update: new Date().toISOString(),
-        bi_status: newStatus,
-        next_review_date: agentResponse.status === 'completed' 
+        bi_status: isCompleted ? 'complete' : 'in_progress',
+        next_review_date: isCompleted 
           ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() 
           : null
       })
@@ -436,33 +564,33 @@ Statusy: "in_progress", "paused", "completed"
       {
         timestamp: new Date().toISOString(),
         speaker: 'agent',
-        message: agentResponse.agent_message,
-        question_field: agentResponse.next_question?.field
+        message: nextMessage,
+        question_field: nextField?.field || null
       }
     ];
 
     await supabase
       .from('bi_interview_sessions')
       .update({
-        questions_asked: (agentResponse.session_update?.questions_asked || session.questions_asked || 0) + 1,
-        questions_answered: agentResponse.session_update?.questions_answered || session.questions_answered || 0,
+        questions_asked: (session.questions_asked || 0) + 1,
+        questions_answered: (session.questions_answered || 0) + (extractedValue !== null ? 1 : 0),
         sections_completed: newCompletedSections,
         conversation_log: updatedConversationLog,
-        status: agentResponse.status,
-        completed_at: agentResponse.status === 'completed' ? new Date().toISOString() : null
+        status: newStatus,
+        completed_at: isCompleted ? new Date().toISOString() : null
       })
       .eq('id', session.id);
 
-    console.log(`BI Interview updated: completeness=${newCompleteness}, status=${agentResponse.status}`);
+    console.log(`BI Interview updated: completeness=${newCompleteness}, status=${newStatus}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        agent_message: agentResponse.agent_message,
-        next_question: agentResponse.next_question,
+        agent_message: nextMessage,
+        next_question: nextField ? { section: nextField.section, field: nextField.field } : null,
         completeness: newCompleteness,
         sections_completed: newCompletedSections,
-        status: agentResponse.status,
+        status: newStatus,
         session_id: session.id
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
