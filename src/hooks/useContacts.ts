@@ -397,3 +397,28 @@ export function useContactOffers(contactId: string | undefined) {
     enabled: !!contactId && !!director?.tenant_id,
   });
 }
+
+export function useGenerateContactProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (contactId: string) => {
+      const { data, error } = await supabase.functions.invoke('generate-contact-profile', {
+        body: { contact_id: contactId }
+      });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      return { contactId, profileSummary: data.profile_summary };
+    },
+    onSuccess: ({ contactId }) => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      toast.success('Profil AI został wygenerowany');
+    },
+    onError: (error) => {
+      console.error('Error generating contact profile:', error);
+      toast.error(error instanceof Error ? error.message : 'Błąd podczas generowania profilu AI');
+    },
+  });
+}
