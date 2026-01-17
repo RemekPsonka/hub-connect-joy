@@ -46,38 +46,158 @@ serve(async (req) => {
       );
     }
 
-    // Build prompt with available data
+    // Fetch additional data for richer profile
+    const [consultationsResult, needsResult, offersResult] = await Promise.all([
+      // Last 3 consultations
+      supabase
+        .from("consultations")
+        .select("scheduled_at, notes, ai_summary, agenda, status")
+        .eq("contact_id", contact_id)
+        .order("scheduled_at", { ascending: false })
+        .limit(3),
+      // Active needs
+      supabase
+        .from("needs")
+        .select("title, description, priority, status")
+        .eq("contact_id", contact_id)
+        .eq("status", "active"),
+      // Active offers
+      supabase
+        .from("offers")
+        .select("title, description, status")
+        .eq("contact_id", contact_id)
+        .eq("status", "active"),
+    ]);
+
+    const consultations = consultationsResult.data || [];
+    const needs = needsResult.data || [];
+    const offers = offersResult.data || [];
     const company = contact.companies;
-    const promptParts = [
+
+    // Assess data quality
+    const dataQuality = {
+      hasPosition: !!contact.position || !!contact.title,
+      hasCompany: !!contact.company || !!company?.name,
+      hasNotes: !!contact.notes,
+      hasNeeds: needs.length > 0,
+      hasOffers: offers.length > 0,
+      hasConsultations: consultations.length > 0,
+    };
+    const qualityScore = Object.values(dataQuality).filter(Boolean).length;
+
+    console.log("Generating AI profile for contact:", contact.full_name, "| Data quality score:", qualityScore);
+
+    // Build rich system prompt
+    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych i tworzenia profesjonalnych profili osób dla systemu CRM.
+
+TWOJE ZADANIE:
+Stwórz kompleksowy, profesjonalny profil osoby na podstawie dostarczonych danych.
+Profil powinien być użyteczny dla dyrektora zarządzającego siecią kontaktów biznesowych.
+
+STRUKTURA PROFILU:
+1. **Kim jest ta osoba** (1-2 zdania) - rola zawodowa, pozycja w firmie
+2. **Kompetencje i obszary ekspertyzy** (1-2 zdania) - na podstawie stanowiska, branży, potrzeb/ofert
+3. **Wartość dla sieci kontaktów** (1-2 zdania) - jak może pomóc, jakie korzyści wnosi
+4. **Rekomendowany sposób kontaktu** (1 zdanie) - na podstawie historii interakcji
+
+ZASADY:
+- Pisz w języku polskim, profesjonalnym tonem
+- Maksymalnie 300 słów
+- Bazuj TYLKO na dostarczonych danych - nie wymyślaj informacji
+- Jeśli brakuje danych dla sekcji, pomiń ją gracefully
+- Jeśli są notatki z konsultacji, wyciągnij kluczowe informacje o osobie
+- Podkreśl unikalne cechy/wartość tej osoby
+- Unikaj ogólników - bądź konkretny i precyzyjny
+- Jeśli osoba ma zdefiniowane potrzeby lub oferty, wykorzystaj je do opisu jej profilu
+
+${qualityScore < 2 ? `
+UWAGA: Dostępnych jest bardzo mało danych o tej osobie.
+Wygeneruj krótkie, ogólne podsumowanie (1-2 zdania) bez domysłów.
+Skoncentruj się tylko na tym, co wiadomo na pewno.` : ''}
+
+ODPOWIEDZ TYLKO tekstem profilu, bez nagłówków sekcji i bez formatowania markdown.`;
+
+    // Build rich user prompt with all available data
+    const formatDate = (dateStr: string | null) => {
+      if (!dateStr) return 'brak danych';
+      try {
+        return new Date(dateStr).toLocaleDateString('pl-PL');
+      } catch {
+        return dateStr;
+      }
+    };
+
+    const userPromptParts = [
+      `Wygeneruj profesjonalny profil dla następującej osoby:`,
+      ``,
+      `=== DANE PODSTAWOWE ===`,
       `Imię i nazwisko: ${contact.full_name}`,
+      `Tytuł: ${contact.title || 'brak'}`,
+      `Stanowisko: ${contact.position || 'brak'}`,
+      `Firma: ${contact.company || company?.name || 'brak'}`,
+      `Miasto: ${contact.city || 'brak'}`,
+      `Źródło kontaktu: ${contact.source || 'nieznane'}`,
+      `LinkedIn: ${contact.linkedin_url || 'brak'}`,
+      `Siła relacji: ${contact.relationship_strength || 5}/10`,
+      `Ostatni kontakt: ${formatDate(contact.last_contact_date)}`,
+      `Tagi: ${contact.tags && contact.tags.length > 0 ? contact.tags.join(', ') : 'brak'}`,
+      ``,
+      `=== NOTATKI ===`,
+      contact.notes || 'Brak notatek',
     ];
 
-    if (contact.title) promptParts.push(`Tytuł: ${contact.title}`);
-    if (contact.position) promptParts.push(`Stanowisko: ${contact.position}`);
-    if (contact.company) promptParts.push(`Firma: ${contact.company}`);
-    if (company?.industry) promptParts.push(`Branża firmy: ${company.industry}`);
-    if (company?.description) promptParts.push(`Opis firmy: ${company.description}`);
-    if (contact.city) promptParts.push(`Miasto: ${contact.city}`);
-    if (contact.notes) promptParts.push(`Notatki: ${contact.notes}`);
-    if (contact.tags && contact.tags.length > 0) promptParts.push(`Tagi: ${contact.tags.join(", ")}`);
+    // Add company info if available
+    if (company) {
+      userPromptParts.push(
+        ``,
+        `=== INFORMACJE O FIRMIE ===`,
+        `Nazwa firmy: ${company.name}`,
+        `Branża: ${company.industry || 'nieznana'}`,
+        `Opis firmy: ${company.description || 'brak'}`,
+        `Analiza AI firmy: ${company.ai_analysis || 'brak'}`,
+        `Wielkość: ${company.employee_count || 'nieznana'}`,
+        `Strona: ${company.website || 'brak'}`
+      );
+    }
 
-    const systemPrompt = `Jesteś ekspertem w tworzeniu profesjonalnych podsumowań osób dla systemu CRM do zarządzania kontaktami biznesowymi.
-    
-Twoim zadaniem jest wygenerowanie zwięzłego, profesjonalnego podsumowania osoby (2-3 zdania, maksymalnie 200 słów).
+    // Add needs
+    userPromptParts.push(``, `=== POTRZEBY (czego szuka) ===`);
+    if (needs.length > 0) {
+      needs.forEach(n => {
+        userPromptParts.push(`- ${n.title}${n.description ? ': ' + n.description : ''} [priorytet: ${n.priority || 'normalny'}]`);
+      });
+    } else {
+      userPromptParts.push('Brak zdefiniowanych potrzeb');
+    }
 
-Podsumowanie powinno:
-- Opisać kim jest ta osoba zawodowo
-- Wskazać jej główne kompetencje lub obszary ekspertyzy
-- Zasugerować jaką wartość może wnieść do sieci kontaktów biznesowych
-- Być napisane w języku polskim
+    // Add offers
+    userPromptParts.push(``, `=== OFERTY (co może zaoferować) ===`);
+    if (offers.length > 0) {
+      offers.forEach(o => {
+        userPromptParts.push(`- ${o.title}${o.description ? ': ' + o.description : ''}`);
+      });
+    } else {
+      userPromptParts.push('Brak zdefiniowanych ofert');
+    }
 
-Odpowiedz TYLKO tekstem podsumowania, bez dodatkowych komentarzy czy formatowania.`;
+    // Add consultation history
+    userPromptParts.push(``, `=== HISTORIA KONSULTACJI (ostatnie 3) ===`);
+    if (consultations.length > 0) {
+      consultations.forEach((c, i) => {
+        userPromptParts.push(
+          `--- Konsultacja ${i + 1} ---`,
+          `Data: ${formatDate(c.scheduled_at)}`,
+          `Status: ${c.status || 'nieznany'}`,
+          `Agenda: ${c.agenda || 'brak'}`,
+          `Notatki: ${c.notes || 'brak'}`,
+          `Podsumowanie AI: ${c.ai_summary || 'brak'}`
+        );
+      });
+    } else {
+      userPromptParts.push('Brak historii konsultacji');
+    }
 
-    const userPrompt = `Wygeneruj profesjonalne podsumowanie dla następującej osoby:
-
-${promptParts.join("\n")}`;
-
-    console.log("Generating AI profile for contact:", contact.full_name);
+    const userPrompt = userPromptParts.join('\n');
 
     // Call AI Gateway
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -139,7 +259,8 @@ ${promptParts.join("\n")}`;
     return new Response(
       JSON.stringify({ 
         success: true, 
-        profile_summary: profileSummary 
+        profile_summary: profileSummary,
+        data_quality_score: qualityScore
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
