@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +31,7 @@ export default function Settings() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerationProgress, setRegenerationProgress] = useState({ current: 0, total: 0 });
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [isCancelled, setIsCancelled] = useState(false);
 
   // Fetch tenant ID
   useEffect(() => {
@@ -114,9 +116,16 @@ export default function Settings() {
     };
   }
 
+  // Cancel regeneration
+  function handleCancel() {
+    setIsCancelled(true);
+    toast.info('Anulowanie... poczekaj na zakończenie bieżącego rekordu');
+  }
+
   // Regenerate all embeddings
   async function handleRegenerateAll() {
     setIsRegenerating(true);
+    setIsCancelled(false);
     const toastId = toast.loading('Pobieranie listy rekordów bez embeddingów...');
 
     try {
@@ -130,7 +139,7 @@ export default function Settings() {
       }
 
       setRegenerationProgress({ current: 0, total });
-      toast.loading(`Generowanie embeddingów: 0 z ${total}...`, { id: toastId });
+      toast.loading(`Generowanie embeddingów (OpenAI): 0 z ${total}...`, { id: toastId });
 
       let processed = 0;
       let successCount = 0;
@@ -138,6 +147,7 @@ export default function Settings() {
 
       // Process contacts
       for (const id of missing.contacts) {
+        if (isCancelled) break;
         try {
           const { error } = await supabase.functions.invoke('generate-embedding', {
             body: { type: 'contact', id }
@@ -149,11 +159,15 @@ export default function Settings() {
         }
         processed++;
         setRegenerationProgress({ current: processed, total });
-        toast.loading(`Generowanie embeddingów: ${processed} z ${total}...`, { id: toastId });
+        toast.loading(`Generowanie embeddingów (OpenAI): ${processed} z ${total}...`, { id: toastId });
+        
+        // Rate limiting: 100ms delay between requests
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Process needs
       for (const id of missing.needs) {
+        if (isCancelled) break;
         try {
           const { error } = await supabase.functions.invoke('generate-embedding', {
             body: { type: 'need', id }
@@ -165,11 +179,14 @@ export default function Settings() {
         }
         processed++;
         setRegenerationProgress({ current: processed, total });
-        toast.loading(`Generowanie embeddingów: ${processed} z ${total}...`, { id: toastId });
+        toast.loading(`Generowanie embeddingów (OpenAI): ${processed} z ${total}...`, { id: toastId });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Process offers
       for (const id of missing.offers) {
+        if (isCancelled) break;
         try {
           const { error } = await supabase.functions.invoke('generate-embedding', {
             body: { type: 'offer', id }
@@ -181,23 +198,28 @@ export default function Settings() {
         }
         processed++;
         setRegenerationProgress({ current: processed, total });
-        toast.loading(`Generowanie embeddingów: ${processed} z ${total}...`, { id: toastId });
+        toast.loading(`Generowanie embeddingów (OpenAI): ${processed} z ${total}...`, { id: toastId });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Show result
-      if (errorCount === 0) {
-        toast.success(`Wygenerowano ${successCount} embeddingów!`, { id: toastId });
+      if (isCancelled) {
+        toast.info(`Anulowano. Wygenerowano ${successCount} embeddingów.`, { id: toastId });
+      } else if (errorCount === 0) {
+        toast.success(`✓ Wygenerowano ${successCount} embeddingów!`, { id: toastId });
       } else {
         toast.warning(`Wygenerowano ${successCount} embeddingów, ${errorCount} błędów.`, { id: toastId });
       }
 
-      // Refresh stats by incrementing refresh key
+      // Refresh stats
       setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Regeneration failed:', error);
       toast.error('Błąd podczas regeneracji embeddingów', { id: toastId });
     } finally {
       setIsRegenerating(false);
+      setIsCancelled(false);
       setRegenerationProgress({ current: 0, total: 0 });
     }
   }
@@ -220,6 +242,11 @@ export default function Settings() {
     ? Math.round((totalWithEmbeddings / totalRecords) * 100) 
     : 0;
 
+  // Estimate cost: ~200 tokens per record, $0.02 per 1M tokens
+  const estimatedCost = totalMissing > 0 
+    ? ((totalMissing * 200) / 1000000 * 0.02).toFixed(4)
+    : '0.00';
+
   return (
     <div className="space-y-6">
       <div>
@@ -227,7 +254,7 @@ export default function Settings() {
         <p className="text-muted-foreground">Zarządzaj ustawieniami aplikacji</p>
       </div>
 
-      {/* Synonyms Dictionary - NEW */}
+      {/* Synonyms Dictionary */}
       <SynonymsDictionary />
       
       {/* AI Search Settings */}
@@ -235,13 +262,22 @@ export default function Settings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            Wyszukiwanie AI (Embeddingi)
+            Wyszukiwanie Semantyczne AI
           </CardTitle>
           <CardDescription>
-            Zarządzaj embeddingami do wyszukiwania semantycznego (opcjonalne)
+            Embeddingi OpenAI do inteligentnego wyszukiwania (text-embedding-3-small)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Info box */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Embeddingi AI</strong> pozwalają znaleźć np. "biomasa" gdy szukasz "pellet", 
+              lub "ubezpieczenie" gdy szukasz "ochrona". System automatycznie rozumie synonimy i powiązane pojęcia.
+            </AlertDescription>
+          </Alert>
+
           {/* Stats */}
           {isLoadingStats ? (
             <div className="text-muted-foreground">Ładowanie statystyk...</div>
@@ -250,8 +286,8 @@ export default function Settings() {
               {/* Overall progress */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Ogólny postęp indeksowania</span>
-                  <span className="font-medium">{percentComplete}%</span>
+                  <span>Pokrycie embeddingami</span>
+                  <span className="font-medium">{totalWithEmbeddings} z {totalRecords} ({percentComplete}%)</span>
                 </div>
                 <Progress value={percentComplete} className="h-2" />
               </div>
@@ -259,67 +295,87 @@ export default function Settings() {
               {/* Detailed stats */}
               <div className="grid gap-3 text-sm">
                 <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span>Kontakty z embeddingiem</span>
+                  <span>Kontakty</span>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{stats.contacts_with} z {stats.contacts_total}</span>
-                    {stats.contacts_with === stats.contacts_total ? (
+                    {stats.contacts_with === stats.contacts_total && stats.contacts_total > 0 ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
+                    ) : stats.contacts_total > 0 ? (
                       <AlertCircle className="h-4 w-4 text-amber-500" />
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span>Potrzeby z embeddingiem</span>
+                  <span>Potrzeby</span>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{stats.needs_with} z {stats.needs_total}</span>
-                    {stats.needs_with === stats.needs_total ? (
+                    {stats.needs_with === stats.needs_total && stats.needs_total > 0 ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
+                    ) : stats.needs_total > 0 ? (
                       <AlertCircle className="h-4 w-4 text-amber-500" />
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span>Oferty z embeddingiem</span>
+                  <span>Oferty</span>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{stats.offers_with} z {stats.offers_total}</span>
-                    {stats.offers_with === stats.offers_total ? (
+                    {stats.offers_with === stats.offers_total && stats.offers_total > 0 ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
+                    ) : stats.offers_total > 0 ? (
                       <AlertCircle className="h-4 w-4 text-amber-500" />
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
 
+              {/* Cost estimate */}
+              {totalMissing > 0 && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Szacowany koszt regeneracji: ~${estimatedCost} ({totalMissing} rekordów)</span>
+                </div>
+              )}
+
               {/* Regenerate button */}
-              <div className="pt-4 border-t">
-                <Button
-                  onClick={handleRegenerateAll}
-                  disabled={isRegenerating || totalMissing === 0}
-                  className="w-full"
-                >
-                  {isRegenerating ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Generowanie: {regenerationProgress.current} z {regenerationProgress.total}
-                    </>
-                  ) : totalMissing > 0 ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Regeneruj brakujące embeddingi ({totalMissing})
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Wszystkie embeddingi są aktualne
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Embeddingi umożliwiają dodatkowe wyszukiwanie semantyczne.
-                  Główne wyszukiwanie opiera się na słowniku synonimów powyżej.
+              <div className="pt-4 border-t space-y-3">
+                {isRegenerating ? (
+                  <div className="space-y-2">
+                    <Progress 
+                      value={(regenerationProgress.current / regenerationProgress.total) * 100} 
+                      className="h-2" 
+                    />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Generowanie: {regenerationProgress.current} z {regenerationProgress.total}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={handleCancel}>
+                        Anuluj
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleRegenerateAll}
+                    disabled={totalMissing === 0}
+                    className="w-full"
+                  >
+                    {totalMissing > 0 ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Regeneruj brakujące embeddingi ({totalMissing})
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Wszystkie embeddingi są aktualne
+                      </>
+                    )}
+                  </Button>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Używa OpenAI text-embedding-3-small (~$0.02 za 1000 rekordów). 
+                  Może potrwać kilka minut dla dużych baz danych.
                 </p>
               </div>
             </div>

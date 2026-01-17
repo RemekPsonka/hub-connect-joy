@@ -12,19 +12,19 @@ interface EmbeddingRequest {
   text?: string; // For direct text embedding (query mode)
 }
 
-// Valid embedding sizes from common models
-const VALID_EMBEDDING_SIZES = [384, 512, 768, 1024, 1536, 3072];
-const TARGET_EMBEDDING_SIZE = 1536; // Our database expects this size
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not configured");
+      return new Response(
+        JSON.stringify({ error: "OPENAI_API_KEY is not configured. Please add it in Settings." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -121,54 +121,25 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating embedding for ${type || 'query'} ${id || ''}: "${textToEmbed.substring(0, 100)}..."`);
+    console.log(`[OpenAI] Generating embedding for ${type || 'query'} ${id || ''}: "${textToEmbed.substring(0, 100)}..."`);
 
-    // Generate embedding using Lovable AI Gateway
-    const embeddingResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call OpenAI Embeddings API (dedicated embedding model, NOT chat!)
+    const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are an embedding generator. Generate a semantic vector representation of the following text as a JSON array of exactly ${TARGET_EMBEDDING_SIZE} floating-point numbers between -1 and 1. The numbers should capture the semantic meaning of the text for similarity search. Return ONLY the JSON array, no other text.`
-          },
-          {
-            role: "user",
-            content: textToEmbed
-          }
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "store_embedding",
-              description: "Store the generated embedding vector",
-              parameters: {
-                type: "object",
-                properties: {
-                  embedding: {
-                    type: "array",
-                    items: { type: "number" },
-                    description: `Array of ${TARGET_EMBEDDING_SIZE} floating point numbers representing the semantic embedding`
-                  }
-                },
-                required: ["embedding"]
-              }
-            }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "store_embedding" } }
+        model: "text-embedding-3-small", // Cheapest embedding model, 1536 dimensions
+        input: textToEmbed.substring(0, 8000), // Limit to ~8K chars
+        encoding_format: "float"
       }),
     });
 
     if (!embeddingResponse.ok) {
       const errorText = await embeddingResponse.text();
-      console.error("Embedding generation failed:", embeddingResponse.status, errorText);
+      console.error("OpenAI API error:", embeddingResponse.status, errorText);
       
       if (embeddingResponse.status === 429) {
         return new Response(
@@ -176,87 +147,52 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      if (embeddingResponse.status === 401) {
+        return new Response(
+          JSON.stringify({ error: "Invalid OpenAI API key. Please check your configuration." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       if (embeddingResponse.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to your workspace." }),
+          JSON.stringify({ error: "OpenAI payment required. Please check your OpenAI billing." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      throw new Error(`Embedding generation failed: ${embeddingResponse.status}`);
+      throw new Error(`OpenAI API failed: ${embeddingResponse.status} - ${errorText}`);
     }
 
     const embeddingData = await embeddingResponse.json();
-    console.log("Embedding response structure:", Object.keys(embeddingData));
-
-    // Extract embedding from tool call response
-    let embedding: number[] = [];
     
-    const toolCall = embeddingData.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-        if (Array.isArray(args.embedding)) {
-          embedding = args.embedding;
-          console.log(`Extracted embedding from tool_calls, size: ${embedding.length}`);
-        }
-      } catch (e) {
-        console.error("Failed to parse tool call arguments:", e);
-      }
-    }
-
-    // Also check direct content response
-    if (embedding.length === 0) {
-      const content = embeddingData.choices?.[0]?.message?.content;
-      if (content) {
-        try {
-          // Try to parse as JSON array
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            embedding = parsed;
-            console.log(`Extracted embedding from content, size: ${embedding.length}`);
-          }
-        } catch (e) {
-          console.log("Content is not JSON array:", content?.substring(0, 100));
-        }
-      }
-    }
-
-    // Validate embedding - accept various sizes and resize if needed
-    const isValidSize = VALID_EMBEDDING_SIZES.includes(embedding.length) || embedding.length === TARGET_EMBEDDING_SIZE;
-    const isValidArray = Array.isArray(embedding) && embedding.every(n => typeof n === 'number');
+    // Extract embedding from OpenAI response
+    const embedding = embeddingData.data?.[0]?.embedding;
     
-    if (!isValidArray || embedding.length === 0) {
-      console.error(`Invalid embedding: not an array of numbers. Got: ${typeof embedding}, length: ${embedding?.length}`);
+    if (!embedding || !Array.isArray(embedding) || embedding.length !== 1536) {
+      console.error(`Invalid embedding from OpenAI: ${embedding?.length} dimensions (expected 1536)`);
       return new Response(
         JSON.stringify({ 
-          error: "Failed to generate valid embedding",
-          details: "AI did not return a valid number array"
+          error: "Invalid embedding received from OpenAI",
+          details: `Got ${embedding?.length || 0} dimensions, expected 1536`
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Resize embedding to target size if necessary
-    if (embedding.length !== TARGET_EMBEDDING_SIZE) {
-      console.log(`Resizing embedding from ${embedding.length} to ${TARGET_EMBEDDING_SIZE}`);
-      embedding = resizeEmbedding(embedding, TARGET_EMBEDDING_SIZE);
-    }
-
-    // Normalize the embedding
-    embedding = normalizeEmbedding(embedding);
+    console.log(`✓ Generated valid 1536D embedding from OpenAI (model: text-embedding-3-small)`);
 
     // Format as pgvector string
     const embeddingStr = `[${embedding.join(",")}]`;
 
     // Query mode: just return the embedding without saving
     if (isQueryMode) {
-      console.log(`Generated query embedding for: "${textToEmbed.substring(0, 50)}..."`);
+      console.log(`Returning query embedding for: "${textToEmbed.substring(0, 50)}..."`);
       return new Response(
         JSON.stringify({ 
           success: true, 
           embedding: embedding,
-          embeddingLength: embedding.length 
+          embeddingLength: embedding.length,
+          model: "text-embedding-3-small"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -293,14 +229,15 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Successfully stored embedding for ${type} ${id}, size: ${embedding.length}`);
+    console.log(`✓ Saved OpenAI embedding for ${type} ${id}, size: ${embedding.length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         type, 
         id,
-        embeddingLength: embedding.length 
+        embeddingLength: embedding.length,
+        model: "text-embedding-3-small"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -313,29 +250,3 @@ serve(async (req) => {
     );
   }
 });
-
-// Resize embedding to target size using interpolation
-function resizeEmbedding(embedding: number[], targetSize: number): number[] {
-  if (embedding.length === targetSize) return embedding;
-  
-  const result: number[] = new Array(targetSize);
-  const ratio = embedding.length / targetSize;
-  
-  for (let i = 0; i < targetSize; i++) {
-    const srcIdx = i * ratio;
-    const srcIdxFloor = Math.floor(srcIdx);
-    const srcIdxCeil = Math.min(srcIdxFloor + 1, embedding.length - 1);
-    const weight = srcIdx - srcIdxFloor;
-    
-    result[i] = embedding[srcIdxFloor] * (1 - weight) + embedding[srcIdxCeil] * weight;
-  }
-  
-  return result;
-}
-
-// Normalize embedding to unit length
-function normalizeEmbedding(embedding: number[]): number[] {
-  const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-  if (magnitude === 0) return embedding;
-  return embedding.map(val => val / magnitude);
-}
