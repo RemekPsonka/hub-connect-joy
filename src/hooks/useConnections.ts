@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-
 export interface Connection {
   id: string;
   contact_a_id: string;
@@ -185,5 +184,73 @@ export function useContactConnections(contactId: string | null) {
       });
     },
     enabled: !!tenantId && !!contactId,
+  });
+}
+
+interface AddConnectionParams {
+  contactAId: string;
+  contactBId: string;
+  connectionType: string;
+  strength: number;
+}
+
+export function useAddConnection() {
+  const { director } = useAuth();
+  const tenantId = director?.tenant_id;
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ contactAId, contactBId, connectionType, strength }: AddConnectionParams) => {
+      if (!tenantId) throw new Error('No tenant');
+
+      // Check if connection already exists (in either direction)
+      const { data: existing, error: checkError } = await supabase
+        .from('connections')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .or(`and(contact_a_id.eq.${contactAId},contact_b_id.eq.${contactBId}),and(contact_a_id.eq.${contactBId},contact_b_id.eq.${contactAId})`)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existing) throw new Error('Connection already exists');
+
+      const { data, error } = await supabase
+        .from('connections')
+        .insert({
+          tenant_id: tenantId,
+          contact_a_id: contactAId,
+          contact_b_id: contactBId,
+          connection_type: connectionType,
+          strength,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-connections'] });
+    },
+  });
+}
+
+export function useDeleteConnection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (connectionId: string) => {
+      const { error } = await supabase
+        .from('connections')
+        .delete()
+        .eq('id', connectionId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-connections'] });
+    },
   });
 }
