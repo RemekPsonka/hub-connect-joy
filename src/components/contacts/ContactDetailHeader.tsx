@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { GroupBadge } from './GroupBadge';
-import { useDeleteContact, type ContactWithGroup } from '@/hooks/useContacts';
+import { useDeleteContact, type ContactWithDetails } from '@/hooks/useContacts';
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 
 interface ContactDetailHeaderProps {
-  contact: ContactWithGroup;
+  contact: ContactWithDetails;
   onEdit: () => void;
 }
 

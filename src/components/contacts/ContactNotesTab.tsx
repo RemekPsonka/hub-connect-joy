@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { useUpdateContact, type ContactWithGroup } from '@/hooks/useContacts';
+import { useUpdateContact, type ContactWithDetails } from '@/hooks/useContacts';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface ContactNotesTabProps {
-  contact: ContactWithGroup;
+  contact: ContactWithDetails;
 }
 
 export function ContactNotesTab({ contact }: ContactNotesTabProps) {
@@ -33,7 +33,7 @@ export function ContactNotesTab({ contact }: ContactNotesTabProps) {
           {
             onSuccess: () => {
               // Silent update - don't show toast for auto-save
-              queryClient.setQueryData(['contact', contact.id], (old: ContactWithGroup | undefined) => {
+              queryClient.setQueryData(['contact', contact.id], (old: ContactWithDetails | undefined) => {
                 if (old) {
                   return { ...old, notes: newNotes || null };
                 }

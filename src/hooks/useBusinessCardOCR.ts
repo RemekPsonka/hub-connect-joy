@@ -17,6 +17,7 @@ export interface ExtractedContactData {
   city: string | null;
   linkedin_url: string | null;
   notes: string | null;
+  profile_summary: string | null;
 }
 
 export interface EnrichedCompanyData {
@@ -39,6 +40,7 @@ export interface CreateContactWithCompanyData {
     linkedin_url?: string;
     city?: string;
     notes?: string;
+    profile_summary?: string;
   };
   company?: {
     name: string;
@@ -182,6 +184,7 @@ export function useBusinessCardOCR() {
           linkedin_url: input.contact.linkedin_url || null,
           city: input.contact.city || null,
           notes: input.contact.notes || null,
+          profile_summary: input.contact.profile_summary || null,
           company: input.company?.name || null,
           company_id: companyId,
           tenant_id: director.tenant_id
