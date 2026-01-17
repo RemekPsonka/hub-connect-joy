@@ -18,6 +18,7 @@ import ConsultationDetail from "./pages/ConsultationDetail";
 import Meetings from "./pages/Meetings";
 import MeetingDetail from "./pages/MeetingDetail";
 import Matches from "./pages/Matches";
+import Network from "./pages/Network";
 import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/meetings/:id" element={<MeetingDetail />} />
               <Route path="/matches" element={<Matches />} />
+              <Route path="/network" element={<Network />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/search" element={<Search />} />
               <Route path="/notifications" element={<Notifications />} />
