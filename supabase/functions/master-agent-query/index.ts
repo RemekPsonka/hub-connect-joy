@@ -190,6 +190,13 @@ Bądź konkretny i praktyczny. Jeśli nie masz wystarczających danych, powiedz 
       );
     }
 
+    // Truncate prompt if too long (max ~100k chars for safety)
+    const truncatedPrompt = masterPrompt.length > 100000 
+      ? masterPrompt.substring(0, 100000) + '\n\n[... treść skrócona ...]'
+      : masterPrompt;
+    
+    console.log(`Master prompt length: ${truncatedPrompt.length} chars`);
+
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -199,7 +206,7 @@ Bądź konkretny i praktyczny. Jeśli nie masz wystarczających danych, powiedz 
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          { role: 'user', content: masterPrompt }
+          { role: 'user', content: truncatedPrompt }
         ]
       })
     });
@@ -207,8 +214,61 @@ Bądź konkretny i praktyczny. Jeśli nie masz wystarczających danych, powiedz 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error('AI Gateway error:', errorText);
+      console.error('AI Gateway status:', aiResponse.status);
+      
+      // Retry with smaller model if 500 error
+      if (aiResponse.status === 500) {
+        console.log('Retrying with gemini-2.5-flash-lite...');
+        const retryResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-lite',
+            messages: [
+              { role: 'user', content: truncatedPrompt.substring(0, 50000) }
+            ]
+          })
+        });
+        
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          const retryContent = retryData.choices?.[0]?.message?.content || '';
+          console.log('Retry successful');
+          
+          // Continue with retry response
+          let response;
+          try {
+            const jsonMatch = retryContent.match(/```json\s*([\s\S]*?)\s*```/) || 
+                              retryContent.match(/\{[\s\S]*\}/);
+            const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : retryContent;
+            response = JSON.parse(jsonStr);
+          } catch {
+            response = {
+              answer: retryContent,
+              agents_consulted: [],
+              reasoning: {},
+              recommendations: [],
+              related_contacts: [],
+              potential_matches: []
+            };
+          }
+          
+          return new Response(
+            JSON.stringify({
+              success: true,
+              total_agents: allAgents?.length || 0,
+              ...response
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      
       return new Response(
-        JSON.stringify({ error: 'AI service error' }),
+        JSON.stringify({ error: 'AI service error', details: errorText.substring(0, 200) }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
