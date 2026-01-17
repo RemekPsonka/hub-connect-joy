@@ -1027,11 +1027,11 @@ export type Database = {
           p_fts_weight?: number
           p_limit?: number
           p_query: string
-          p_query_embedding?: string
+          p_query_embedding: string
           p_semantic_weight?: number
-          p_tenant_id?: string
+          p_tenant_id: string
           p_threshold?: number
-          p_types?: string[]
+          p_types: string[]
         }
         Returns: {
           combined_score: number
