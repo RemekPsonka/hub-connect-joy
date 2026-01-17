@@ -1657,6 +1657,7 @@ export type Database = {
         }
         Returns: {
           combined_score: number
+          contact_id: string
           description: string
           fts_score: number
           id: string

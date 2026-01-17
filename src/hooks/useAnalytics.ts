@@ -252,7 +252,35 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
 
         setData(analyticsData);
       } catch (err) {
+        console.error('Analytics fetch error:', err);
         setError(err as Error);
+        
+        // Set safe default values on error
+        setData({
+          metrics: {
+            totalContacts: 0,
+            contactsGrowth: 0,
+            activeNeeds: 0,
+            needsFulfillmentRate: 0,
+            totalMeetings: 0,
+            avgMeetingsPerWeek: 0,
+            successfulMatches: 0,
+            matchSuccessRate: 0,
+            activeOffers: 0,
+          },
+          activityTimeline: [],
+          contactsByIndustry: [],
+          meetingOutcomes: [],
+          topCategories: [],
+          networkHealth: {
+            healthy: 0,
+            healthyPercent: 0,
+            warning: 0,
+            warningPercent: 0,
+            critical: 0,
+            criticalPercent: 0,
+          },
+        });
       } finally {
         setIsLoading(false);
       }
@@ -271,14 +299,14 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
       });
 
       if (response.error) throw response.error;
-      setAiInsights(response.data.insights || []);
+      setAiInsights(response.data?.insights || []);
     } catch (err) {
       console.error('Failed to generate AI insights:', err);
-      // Fallback insights
+      // Fallback insights with safe message
       setAiInsights([
         {
-          title: 'Analiza w toku',
-          description: 'Nie udało się wygenerować insights. Spróbuj ponownie później.',
+          title: 'Brak wystarczających danych',
+          description: 'Dodaj więcej kontaktów aby otrzymać spersonalizowane insights.',
           type: 'warning'
         }
       ]);

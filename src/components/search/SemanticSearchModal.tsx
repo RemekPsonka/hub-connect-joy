@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useSemanticSearch, SearchResult as SearchResultType } from '@/hooks/useSemanticSearch';
 import { SearchResult } from './SearchResult';
+import { toast } from 'sonner';
 
 interface SemanticSearchModalProps {
   open: boolean;
@@ -72,8 +73,11 @@ export function SemanticSearchModal({ open, onOpenChange }: SemanticSearchModalP
       case 'need':
       case 'offer':
         // Navigate to contact that has this need/offer
-        // For now, just close the modal
-        // TODO: Navigate to contact needs/offers tab
+        if (result.contactId) {
+          navigate(`/contacts/${result.contactId}`);
+        } else {
+          toast.error('Nie można znaleźć powiązanego kontaktu');
+        }
         break;
     }
   }, [navigate, onOpenChange]);

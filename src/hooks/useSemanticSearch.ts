@@ -11,6 +11,7 @@ export interface SearchResult {
   ftsScore?: number;
   semanticScore?: number;
   matchSource?: 'fts' | 'semantic' | 'hybrid';
+  contactId?: string;
 }
 
 interface SemanticSearchParams {
@@ -122,7 +123,8 @@ export function useSemanticSearch() {
         similarity: item.combined_score || 0,
         ftsScore: item.fts_score || 0,
         semanticScore: item.semantic_score || 0,
-        matchSource: item.match_source as 'fts' | 'semantic' | 'hybrid'
+        matchSource: item.match_source as 'fts' | 'semantic' | 'hybrid',
+        contactId: item.contact_id || (item.type === 'contact' ? item.id : undefined)
       }));
       
       console.log(`Hybrid search found ${searchResults.length} results`);
