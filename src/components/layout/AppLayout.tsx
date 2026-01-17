@@ -3,10 +3,10 @@ import { Outlet } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { UserMenu } from './UserMenu';
-import { Bell, Search } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { SemanticSearchModal } from '@/components/search/SemanticSearchModal';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export function AppLayout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -53,9 +53,7 @@ export function AppLayout() {
             
             {/* Right side */}
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-              </Button>
+              <NotificationBell />
               <UserMenu />
             </div>
           </header>

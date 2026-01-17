@@ -720,6 +720,119 @@ export type Database = {
           },
         ]
       }
+      daily_serendipity: {
+        Row: {
+          acted_at: string | null
+          acted_on: boolean | null
+          contact_a_id: string | null
+          contact_b_id: string | null
+          created_at: string | null
+          date: string
+          description: string
+          director_id: string
+          feedback: string | null
+          id: string
+          match_id: string | null
+          need_id: string | null
+          offer_id: string | null
+          reasoning: string | null
+          tenant_id: string
+          title: string
+          type: string
+          viewed_at: string | null
+        }
+        Insert: {
+          acted_at?: string | null
+          acted_on?: boolean | null
+          contact_a_id?: string | null
+          contact_b_id?: string | null
+          created_at?: string | null
+          date?: string
+          description: string
+          director_id: string
+          feedback?: string | null
+          id?: string
+          match_id?: string | null
+          need_id?: string | null
+          offer_id?: string | null
+          reasoning?: string | null
+          tenant_id: string
+          title: string
+          type: string
+          viewed_at?: string | null
+        }
+        Update: {
+          acted_at?: string | null
+          acted_on?: boolean | null
+          contact_a_id?: string | null
+          contact_b_id?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string
+          director_id?: string
+          feedback?: string | null
+          id?: string
+          match_id?: string | null
+          need_id?: string | null
+          offer_id?: string | null
+          reasoning?: string | null
+          tenant_id?: string
+          title?: string
+          type?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_serendipity_contact_a_id_fkey"
+            columns: ["contact_a_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_contact_b_id_fkey"
+            columns: ["contact_b_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_need_id_fkey"
+            columns: ["need_id"]
+            isOneToOne: false
+            referencedRelation: "needs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_serendipity_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       directors: {
         Row: {
           created_at: string | null
@@ -1026,6 +1139,129 @@ export type Database = {
           },
           {
             foreignKeyName: "needs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          consultation_reminders: boolean | null
+          created_at: string | null
+          daily_serendipity: boolean | null
+          director_id: string
+          id: string
+          new_matches: boolean | null
+          relationship_decay: boolean | null
+          task_overdue: boolean | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          consultation_reminders?: boolean | null
+          created_at?: string | null
+          daily_serendipity?: boolean | null
+          director_id: string
+          id?: string
+          new_matches?: boolean | null
+          relationship_decay?: boolean | null
+          task_overdue?: boolean | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          consultation_reminders?: boolean | null
+          created_at?: string | null
+          daily_serendipity?: boolean | null
+          director_id?: string
+          id?: string
+          new_matches?: boolean | null
+          relationship_decay?: boolean | null
+          task_overdue?: boolean | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: true
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_preferences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          action_taken: boolean | null
+          action_taken_at: string | null
+          created_at: string | null
+          director_id: string
+          entity_id: string | null
+          entity_type: string | null
+          expires_at: string | null
+          id: string
+          message: string
+          priority: string | null
+          read: boolean | null
+          read_at: string | null
+          tenant_id: string
+          title: string
+          type: string
+        }
+        Insert: {
+          action_taken?: boolean | null
+          action_taken_at?: string | null
+          created_at?: string | null
+          director_id: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at?: string | null
+          id?: string
+          message: string
+          priority?: string | null
+          read?: boolean | null
+          read_at?: string | null
+          tenant_id: string
+          title: string
+          type: string
+        }
+        Update: {
+          action_taken?: boolean | null
+          action_taken_at?: string | null
+          created_at?: string | null
+          director_id?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at?: string | null
+          id?: string
+          message?: string
+          priority?: string | null
+          read?: boolean | null
+          read_at?: string | null
+          tenant_id?: string
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
