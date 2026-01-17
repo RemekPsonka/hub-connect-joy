@@ -1844,6 +1844,146 @@ export type Database = {
         }
         Relationships: []
       }
+      turbo_agent_sessions: {
+        Row: {
+          agents_responded: number | null
+          agents_selected: number | null
+          categories: Json | null
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          insights: string[] | null
+          master_response: string | null
+          original_query: string
+          queries_completed_at: string | null
+          query_intent: string | null
+          selection_completed_at: string | null
+          started_at: string | null
+          status: string | null
+          tenant_id: string
+          top_results: Json | null
+          total_agents_available: number | null
+          total_duration_ms: number | null
+        }
+        Insert: {
+          agents_responded?: number | null
+          agents_selected?: number | null
+          categories?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          insights?: string[] | null
+          master_response?: string | null
+          original_query: string
+          queries_completed_at?: string | null
+          query_intent?: string | null
+          selection_completed_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          tenant_id: string
+          top_results?: Json | null
+          total_agents_available?: number | null
+          total_duration_ms?: number | null
+        }
+        Update: {
+          agents_responded?: number | null
+          agents_selected?: number | null
+          categories?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          insights?: string[] | null
+          master_response?: string | null
+          original_query?: string
+          queries_completed_at?: string | null
+          query_intent?: string | null
+          selection_completed_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          tenant_id?: string
+          top_results?: Json | null
+          total_agents_available?: number | null
+          total_duration_ms?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turbo_agent_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      turbo_agent_sub_queries: {
+        Row: {
+          agent_response: string | null
+          confidence_score: number | null
+          contact_id: string
+          contact_name: string | null
+          evidence: string[] | null
+          id: string
+          processing_time_ms: number | null
+          query_sent_at: string | null
+          reasoning: Json | null
+          relevance_score: number | null
+          response_received_at: string | null
+          selection_reason: string | null
+          session_id: string | null
+          status: string | null
+          sub_query: string
+        }
+        Insert: {
+          agent_response?: string | null
+          confidence_score?: number | null
+          contact_id: string
+          contact_name?: string | null
+          evidence?: string[] | null
+          id?: string
+          processing_time_ms?: number | null
+          query_sent_at?: string | null
+          reasoning?: Json | null
+          relevance_score?: number | null
+          response_received_at?: string | null
+          selection_reason?: string | null
+          session_id?: string | null
+          status?: string | null
+          sub_query: string
+        }
+        Update: {
+          agent_response?: string | null
+          confidence_score?: number | null
+          contact_id?: string
+          contact_name?: string | null
+          evidence?: string[] | null
+          id?: string
+          processing_time_ms?: number | null
+          query_sent_at?: string | null
+          reasoning?: Json | null
+          relevance_score?: number | null
+          response_received_at?: string | null
+          selection_reason?: string | null
+          session_id?: string | null
+          status?: string | null
+          sub_query?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turbo_agent_sub_queries_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "turbo_agent_sub_queries_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "turbo_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
