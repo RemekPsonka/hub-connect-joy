@@ -129,11 +129,19 @@ Bądź konkretny, praktyczny i pomocny.
 
     console.log('Querying Contact Agent...');
 
-    const aiResponse = await fetch('https://ai.lovable.dev/api/chat', {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: 'LOVABLE_API_KEY is not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
