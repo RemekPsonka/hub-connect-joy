@@ -48,6 +48,14 @@ serve(async (req) => {
       );
     }
 
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: 'LOVABLE_API_KEY is not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -161,9 +169,12 @@ Wybieraj strategicznie - lepiej mniej, ale bardziej trafnych agentów.`;
 
     console.log(`[Turbo] Calling AI for agent selection...`);
 
-    const selectionResponse = await fetch('https://ai.gateway.lovable.dev/chat', {
+    const selectionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`
+      },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [{ role: 'user', content: selectionPrompt }]
@@ -281,9 +292,12 @@ Zwróć JSON:
 Jeśli nie masz informacji, zwróć confidence=0.0 i powiedz wprost "Brak danych".`;
 
       try {
-        const agentResponse = await fetch('https://ai.gateway.lovable.dev/chat', {
+        const agentResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`
+          },
           body: JSON.stringify({
             model: 'google/gemini-2.5-flash-lite',
             messages: [{ role: 'user', content: agentPrompt }]
@@ -435,9 +449,12 @@ Zwróć JSON:
 
     console.log(`[Turbo] Calling AI for aggregation...`);
 
-    const aggregationResponse = await fetch('https://ai.gateway.lovable.dev/chat', {
+    const aggregationResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`
+      },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [{ role: 'user', content: aggregationPrompt }]
