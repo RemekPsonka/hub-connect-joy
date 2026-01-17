@@ -8,8 +8,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Plus, Search, List, Columns } from 'lucide-react';
+import { Plus, Search, List, Columns, X } from 'lucide-react';
 import type { TasksFilters } from '@/hooks/useTasks';
+import { TaskContactFilter } from './TaskContactFilter';
 
 interface TasksHeaderProps {
   filters: TasksFilters;
@@ -28,6 +29,18 @@ export function TasksHeader({
   onNewTask,
   pendingCount = 0,
 }: TasksHeaderProps) {
+  const hasActiveFilters = 
+    (filters.status && filters.status !== 'all') ||
+    (filters.taskType && filters.taskType !== 'all') ||
+    (filters.priority && filters.priority !== 'all') ||
+    (filters.crossProgress && filters.crossProgress !== 'all') ||
+    filters.contactId ||
+    filters.search;
+
+  const clearFilters = () => {
+    onFiltersChange({});
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -104,6 +117,50 @@ export function TasksHeader({
             <SelectItem value="urgent">Pilny</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Cross-task progress filter - only visible when taskType is 'cross' */}
+        {filters.taskType === 'cross' && (
+          <Select
+            value={filters.crossProgress || 'all'}
+            onValueChange={(value) => onFiltersChange({ 
+              ...filters, 
+              crossProgress: value as TasksFilters['crossProgress'] 
+            })}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Postęp" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Każdy postęp</SelectItem>
+              <SelectItem value="0">0/3 - Nowe</SelectItem>
+              <SelectItem value="1">1/3 - Rozpoczęte</SelectItem>
+              <SelectItem value="2">2/3 - Prawie gotowe</SelectItem>
+              <SelectItem value="3">3/3 - Ukończone</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Contact filter */}
+        <TaskContactFilter
+          value={filters.contactId}
+          onChange={(contactId) => onFiltersChange({ 
+            ...filters, 
+            contactId 
+          })}
+        />
+
+        {/* Clear filters button */}
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Wyczyść
+          </Button>
+        )}
 
         <ToggleGroup
           type="single"
