@@ -47,7 +47,7 @@ function GraphDataLoader({
       
       // Circular layout - stabilne pozycje początkowe
       const angle = (2 * Math.PI * index) / nodes.length;
-      const radius = 100;
+      const radius = 200;
 
       graph.addNode(node.id, {
         label: node.full_name,
@@ -85,13 +85,15 @@ function GraphDataLoader({
     // Zastosuj layout PRZED załadowaniem do Sigma
     if (graph.order > 0) {
       forceAtlas2.assign(graph, {
-        iterations: 100,
+        iterations: 150,
         settings: {
-          gravity: 1,
-          scalingRatio: 10,
-          strongGravityMode: true,
-          slowDown: 5,
-          barnesHutOptimize: graph.order > 100,
+          gravity: 0.5,
+          scalingRatio: 20,
+          strongGravityMode: false,
+          slowDown: 3,
+          barnesHutOptimize: true,
+          linLogMode: true,
+          outboundAttractionDistribution: true,
         },
       });
     }
@@ -242,7 +244,7 @@ export function ConnectionGraph({
           renderLabels: true,
           labelSize: 12,
           labelColor: { color: '#374151' },
-          labelRenderedSizeThreshold: 6,
+          labelRenderedSizeThreshold: 4,
           defaultEdgeType: 'line',
           enableEdgeEvents: false,
           zoomToSizeRatioFunction: (ratio) => ratio,
