@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import ReactMarkdown from 'react-markdown';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
-  MessageSquare, 
   Send, 
   Loader2, 
   Bot, 
@@ -13,7 +13,9 @@ import {
   Sparkles,
   Network,
   Users,
-  Lightbulb
+  Lightbulb,
+  Search,
+  Target
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,24 +29,34 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 const suggestionPrompts = [
   {
-    icon: Network,
-    title: 'Znajdź połączenia',
-    prompt: 'Kto z moich kontaktów mógłby skorzystać na poznaniu kogoś innego z mojej sieci?',
+    icon: Search,
+    title: 'Wyszukaj w sieci',
+    prompt: 'Kto z moich kontaktów mógłby znać prezesa Tauron lub kogoś z zarządu?',
+  },
+  {
+    icon: Target,
+    title: 'Nierozwiązane potrzeby',
+    prompt: 'Jakie aktywne potrzeby moich kontaktów z branży IT pozostają niezaspokojone?',
   },
   {
     icon: Users,
-    title: 'Przygotuj do spotkania',
-    prompt: 'Pomóż mi przygotować się do nadchodzących konsultacji. Co powinienem wiedzieć?',
+    title: 'Rekomendacje kontaktów',
+    prompt: 'Z kim powinienem się skontaktować w tym tygodniu? Kto potrzebuje mojej uwagi?',
   },
   {
     icon: Sparkles,
-    title: 'Dopasuj potrzeby',
-    prompt: 'Znajdź dopasowania między potrzebami a ofertami moich kontaktów.',
+    title: 'Najlepsze dopasowania',
+    prompt: 'Znajdź najlepsze dopasowania między potrzebami a ofertami moich kontaktów.',
+  },
+  {
+    icon: Network,
+    title: 'Potencjalni klienci',
+    prompt: 'Którzy z moich kontaktów mogliby być potencjalnymi klientami lub partnerami?',
   },
   {
     icon: Lightbulb,
-    title: 'Sugestie follow-up',
-    prompt: 'Z którymi kontaktami powinienem się odezwać? Kogo dawno nie kontaktowałem?',
+    title: 'Podsumuj aktywność',
+    prompt: 'Podsumuj moje ostatnie spotkania i zasugeruj działania follow-up.',
   },
 ];
 
@@ -220,7 +232,7 @@ export default function AIChat() {
                 i dopasować potrzeby do ofert.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-4xl">
                 {suggestionPrompts.map((suggestion, index) => (
                   <Button
                     key={index}
@@ -231,7 +243,7 @@ export default function AIChat() {
                     <suggestion.icon className="h-5 w-5 mr-3 flex-shrink-0 text-primary" />
                     <div>
                       <div className="font-medium">{suggestion.title}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-1">
+                      <div className="text-xs text-muted-foreground line-clamp-2">
                         {suggestion.prompt}
                       </div>
                     </div>
@@ -258,13 +270,19 @@ export default function AIChat() {
                     )}
                     
                     <div
-                      className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                      className={`rounded-lg px-4 py-3 max-w-[80%] ${
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{message.content}</div>
+                      {message.role === 'assistant' ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      )}
                     </div>
 
                     {message.role === 'user' && (

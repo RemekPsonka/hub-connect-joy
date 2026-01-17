@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Loader2, Sparkles, X } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -14,7 +14,7 @@ interface SemanticSearchModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function SemanticSearchModal({ open, onOpenChange }: SemanticSearchModalProps) {
+export const SemanticSearchModal = forwardRef<HTMLDivElement, SemanticSearchModalProps>(function SemanticSearchModal({ open, onOpenChange }, ref) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [isSemanticEnabled, setIsSemanticEnabled] = useState(true);
@@ -100,7 +100,7 @@ export function SemanticSearchModal({ open, onOpenChange }: SemanticSearchModalP
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 gap-0">
+      <DialogContent ref={ref} className="max-w-2xl p-0 gap-0">
         <div className="flex items-center gap-3 p-4 border-b">
           {isSearching ? (
             <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
@@ -236,4 +236,4 @@ export function SemanticSearchModal({ open, onOpenChange }: SemanticSearchModalP
       </DialogContent>
     </Dialog>
   );
-}
+});
