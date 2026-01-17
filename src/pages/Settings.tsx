@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign } from 'lucide-react';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
+import { GroupManagementModal } from '@/components/settings/GroupManagementModal';
+import { useContactGroups } from '@/hooks/useContactGroups';
 
 interface EmbeddingStats {
   contacts_with: number;
@@ -33,6 +35,9 @@ export default function Settings() {
   const [regenerationProgress, setRegenerationProgress] = useState({ current: 0, total: 0 });
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isCancelled, setIsCancelled] = useState(false);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  
+  const { data: groups = [] } = useContactGroups();
 
   // Fetch tenant ID
   useEffect(() => {
@@ -258,6 +263,53 @@ export default function Settings() {
       {/* Notification Preferences */}
       <NotificationPreferences />
 
+      {/* Contact Groups Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Tags className="h-5 w-5" />
+            Grupy kontaktów
+          </CardTitle>
+          <CardDescription>
+            Zarządzaj grupami do kategoryzacji kontaktów
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              {groups.length === 0 
+                ? 'Brak zdefiniowanych grup' 
+                : `${groups.length} ${groups.length === 1 ? 'grupa' : groups.length < 5 ? 'grupy' : 'grup'}`}
+            </div>
+            <Button onClick={() => setIsGroupModalOpen(true)}>
+              Zarządzaj grupami
+            </Button>
+          </div>
+          
+          {groups.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-4">
+              {groups.map((group) => (
+                <div
+                  key={group.id}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+                  style={{ 
+                    backgroundColor: `${group.color}20`, 
+                    color: group.color || '#6366f1',
+                    border: `1px solid ${group.color}40`
+                  }}
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full" 
+                    style={{ backgroundColor: group.color || '#6366f1' }} 
+                  />
+                  {group.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Synonyms Dictionary */}
       <SynonymsDictionary />
       
@@ -401,6 +453,12 @@ export default function Settings() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Group Management Modal */}
+      <GroupManagementModal 
+        isOpen={isGroupModalOpen} 
+        onClose={() => setIsGroupModalOpen(false)} 
+      />
     </div>
   );
 }

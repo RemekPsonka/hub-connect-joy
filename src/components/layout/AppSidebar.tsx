@@ -9,6 +9,7 @@ import {
   Network,
   Search,
   BarChart3,
+  Handshake,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -29,6 +30,7 @@ const navigationItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users },
   { title: 'Konsultacje', url: '/consultations', icon: Calendar },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
   { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
   { title: 'Analityka', url: '/analytics', icon: BarChart3 },
