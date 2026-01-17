@@ -4,7 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export interface ExtractedContactData {
-  full_name: string;
+  title: string | null;
+  first_name: string;
+  last_name: string;
   position: string | null;
   company: string | null;
   email: string | null;
@@ -28,7 +30,9 @@ export interface EnrichedCompanyData {
 
 export interface CreateContactWithCompanyData {
   contact: {
-    full_name: string;
+    title?: string;
+    first_name: string;
+    last_name: string;
     position?: string;
     email?: string;
     phone?: string;
@@ -160,12 +164,25 @@ export function useBusinessCardOCR() {
         }
       }
 
-      // Create contact
+      // Create contact - generate full_name from parts
+      const fullName = [input.contact.title, input.contact.first_name, input.contact.last_name]
+        .filter(Boolean)
+        .join(' ');
+
       const { data: contact, error: contactError } = await supabase
         .from('contacts')
         .insert({
-          ...input.contact,
-          company: input.company?.name || input.contact.full_name.split(' ')[0], // Fallback
+          title: input.contact.title || null,
+          first_name: input.contact.first_name,
+          last_name: input.contact.last_name,
+          full_name: fullName,
+          position: input.contact.position || null,
+          email: input.contact.email || null,
+          phone: input.contact.phone || null,
+          linkedin_url: input.contact.linkedin_url || null,
+          city: input.contact.city || null,
+          notes: input.contact.notes || null,
+          company: input.company?.name || null,
           company_id: companyId,
           tenant_id: director.tenant_id
         })

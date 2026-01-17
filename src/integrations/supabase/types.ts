@@ -641,11 +641,13 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           email: string | null
+          first_name: string | null
           fts: unknown
           full_name: string
           id: string
           is_active: boolean | null
           last_contact_date: string | null
+          last_name: string | null
           linkedin_url: string | null
           notes: string | null
           phone: string | null
@@ -658,6 +660,7 @@ export type Database = {
           source: string | null
           tags: string[] | null
           tenant_id: string
+          title: string | null
           updated_at: string | null
         }
         Insert: {
@@ -666,11 +669,13 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           email?: string | null
+          first_name?: string | null
           fts?: unknown
           full_name: string
           id?: string
           is_active?: boolean | null
           last_contact_date?: string | null
+          last_name?: string | null
           linkedin_url?: string | null
           notes?: string | null
           phone?: string | null
@@ -683,6 +688,7 @@ export type Database = {
           source?: string | null
           tags?: string[] | null
           tenant_id: string
+          title?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -691,11 +697,13 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           email?: string | null
+          first_name?: string | null
           fts?: unknown
           full_name?: string
           id?: string
           is_active?: boolean | null
           last_contact_date?: string | null
+          last_name?: string | null
           linkedin_url?: string | null
           notes?: string | null
           phone?: string | null
@@ -708,6 +716,7 @@ export type Database = {
           source?: string | null
           tags?: string[] | null
           tenant_id?: string
+          title?: string | null
           updated_at?: string | null
         }
         Relationships: [

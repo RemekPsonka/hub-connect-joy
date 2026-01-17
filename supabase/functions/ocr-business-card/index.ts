@@ -45,10 +45,14 @@ serve(async (req) => {
           {
             role: 'system',
             content: `Jesteś ekspertem w analizie wizytówek. Twoim zadaniem jest wyekstrahowanie wszystkich danych kontaktowych z obrazu wizytówki.
+
+WAŻNE: Rozdziel dane osobowe na tytuł naukowy/zawodowy, imię i nazwisko.
             
 Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi polami:
-- full_name: Imię i nazwisko (string, wymagane)
-- position: Stanowisko/tytuł zawodowy (string lub null)
+- title: Tytuł naukowy lub zawodowy (dr, prof., mgr, inż., dr hab., dr n. med., MBA, etc.) - TYLKO tytuły, BEZ imienia i nazwiska (string lub null)
+- first_name: Imię osoby (string, wymagane)
+- last_name: Nazwisko osoby (string, wymagane)
+- position: Stanowisko w firmie, np. Dyrektor, Manager, Prezes (string lub null) - to NIE jest tytuł naukowy!
 - company: Nazwa firmy (string lub null)
 - email: Adres email (string lub null)
 - phone: Główny numer telefonu (string lub null)
@@ -58,6 +62,12 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi pol
 - city: Samo miasto (string lub null)
 - linkedin_url: URL profilu LinkedIn jeśli widoczny (string lub null)
 - notes: Inne informacje z wizytówki, np. slogan, specjalizacje (string lub null)
+
+PRZYKŁADY rozdzielania:
+- "dr hab. n. med. Jan Kowalski, prof. UJ" → title: "dr hab. n. med., prof. UJ", first_name: "Jan", last_name: "Kowalski"
+- "mgr inż. Anna Nowak" → title: "mgr inż.", first_name: "Anna", last_name: "Nowak"
+- "Piotr Wiśniewski MBA" → title: "MBA", first_name: "Piotr", last_name: "Wiśniewski"
+- "Jan Kowalski" → title: null, first_name: "Jan", last_name: "Kowalski"
 
 Jeśli jakieś pole nie jest widoczne na wizytówce, ustaw null.
 Normalizuj numery telefonów do formatu międzynarodowego (+48...).
