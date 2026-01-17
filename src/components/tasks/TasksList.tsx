@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useNavigate } from 'react-router-dom';
+import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 
 interface TasksListProps {
   tasks: TaskWithDetails[];
@@ -35,7 +36,12 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
       {tasks.map((task) => {
         const crossTask = task.cross_tasks?.[0];
         const isCrossTask = task.task_type === 'cross' && crossTask;
-        const isCompleted = task.status === 'completed';
+        
+        // For cross-tasks, calculate effective status based on workflow
+        const effectiveStatus = isCrossTask 
+          ? calculateCrossTaskStatus(crossTask)
+          : task.status;
+        const isCompleted = effectiveStatus === 'completed';
 
         return (
           <Card
@@ -49,8 +55,13 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
               <div className="flex items-start gap-4">
                 <Checkbox
                   checked={isCompleted}
+                  disabled={!!isCrossTask} // Disable for cross-tasks - status is automatic
                   onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={(checked) => onStatusChange(task.id, !!checked)}
+                  onCheckedChange={(checked) => {
+                    if (!isCrossTask) {
+                      onStatusChange(task.id, !!checked);
+                    }
+                  }}
                   className="mt-1"
                 />
 
@@ -121,7 +132,7 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <TaskStatusBadge status={task.status} />
+                        <TaskStatusBadge status={effectiveStatus} />
                         {task.due_date && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Calendar className="h-3 w-3" />

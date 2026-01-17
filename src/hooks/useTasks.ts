@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 
 export type Task = Tables<'tasks'>;
 export type TaskInsert = TablesInsert<'tasks'>;
@@ -458,15 +459,26 @@ export function useUpdateCrossTaskStatus() {
         }
       }
 
-      const { data, error } = await supabase
+      const { data: crossTask, error } = await supabase
         .from('cross_tasks')
         .update(updates)
         .eq('id', input.crossTaskId)
-        .select()
+        .select('*, task_id')
         .single();
 
       if (error) throw error;
-      return data;
+
+      // Calculate new status based on cross-task workflow and update main task
+      const newStatus = calculateCrossTaskStatus(crossTask);
+      
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', crossTask.task_id);
+
+      if (taskError) throw taskError;
+
+      return crossTask;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
