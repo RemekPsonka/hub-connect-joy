@@ -142,13 +142,13 @@ function ConnectionItem({ connection }: ConnectionItemProps) {
         {/* Editable Connection Type */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Badge 
-              variant="secondary" 
-              className={`cursor-pointer hover:opacity-80 text-xs ${connectionTypeColors[connectionType] || ''}`}
+            <button 
+              onClick={(e) => e.stopPropagation()}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer hover:opacity-80 ${connectionTypeColors[connectionType] || 'bg-secondary text-secondary-foreground'}`}
             >
               {connectionTypeLabels[connectionType] || connectionType}
               <ChevronDown className="h-3 w-3 ml-1" />
-            </Badge>
+            </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {Object.entries(connectionTypeLabels).map(([key, label]) => (
