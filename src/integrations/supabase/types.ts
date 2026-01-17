@@ -63,6 +63,301 @@ export type Database = {
           },
         ]
       }
+      consultation_chat_messages: {
+        Row: {
+          chat_type: string
+          consultation_id: string
+          content: string
+          created_at: string | null
+          id: string
+          role: string
+        }
+        Insert: {
+          chat_type: string
+          consultation_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          role: string
+        }
+        Update: {
+          chat_type?: string
+          consultation_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_chat_messages_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_guests: {
+        Row: {
+          comment: string | null
+          consultation_id: string
+          created_at: string | null
+          guest_name: string | null
+          guest_type: string
+          id: string
+          meeting_date: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          comment?: string | null
+          consultation_id: string
+          created_at?: string | null
+          guest_name?: string | null
+          guest_type: string
+          id?: string
+          meeting_date?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          comment?: string | null
+          consultation_id?: string
+          created_at?: string | null
+          guest_name?: string | null
+          guest_type?: string
+          id?: string
+          meeting_date?: string | null
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_guests_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_meetings: {
+        Row: {
+          cc_group: string | null
+          comment: string | null
+          company: string | null
+          consultation_id: string
+          contact_name: string | null
+          created_at: string | null
+          follow_up: string | null
+          id: string
+          meeting_date: string | null
+          meeting_type: string
+          sort_order: number | null
+        }
+        Insert: {
+          cc_group?: string | null
+          comment?: string | null
+          company?: string | null
+          consultation_id: string
+          contact_name?: string | null
+          created_at?: string | null
+          follow_up?: string | null
+          id?: string
+          meeting_date?: string | null
+          meeting_type: string
+          sort_order?: number | null
+        }
+        Update: {
+          cc_group?: string | null
+          comment?: string | null
+          company?: string | null
+          consultation_id?: string
+          contact_name?: string | null
+          created_at?: string | null
+          follow_up?: string | null
+          id?: string
+          meeting_date?: string | null
+          meeting_type?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_meetings_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_questionnaire: {
+        Row: {
+          business_goals_needing_support: string | null
+          cc_group: string | null
+          consultation_id: string
+          created_at: string | null
+          current_engagement: string | null
+          director_name: string | null
+          expertise_contribution: string | null
+          group_engagement_details: string | null
+          group_engagement_rating: number | null
+          id: string
+          key_cc_events_plan: string | null
+          member_email: string | null
+          member_name: string | null
+          next_meeting_date: string | null
+          previous_projects_review: string | null
+          strategic_contacts_needed: string | null
+          strategic_partners_sought: string | null
+          tenant_id: string
+          updated_at: string | null
+          valuable_education_topics: string | null
+          value_for_community: string | null
+        }
+        Insert: {
+          business_goals_needing_support?: string | null
+          cc_group?: string | null
+          consultation_id: string
+          created_at?: string | null
+          current_engagement?: string | null
+          director_name?: string | null
+          expertise_contribution?: string | null
+          group_engagement_details?: string | null
+          group_engagement_rating?: number | null
+          id?: string
+          key_cc_events_plan?: string | null
+          member_email?: string | null
+          member_name?: string | null
+          next_meeting_date?: string | null
+          previous_projects_review?: string | null
+          strategic_contacts_needed?: string | null
+          strategic_partners_sought?: string | null
+          tenant_id: string
+          updated_at?: string | null
+          valuable_education_topics?: string | null
+          value_for_community?: string | null
+        }
+        Update: {
+          business_goals_needing_support?: string | null
+          cc_group?: string | null
+          consultation_id?: string
+          created_at?: string | null
+          current_engagement?: string | null
+          director_name?: string | null
+          expertise_contribution?: string | null
+          group_engagement_details?: string | null
+          group_engagement_rating?: number | null
+          id?: string
+          key_cc_events_plan?: string | null
+          member_email?: string | null
+          member_name?: string | null
+          next_meeting_date?: string | null
+          previous_projects_review?: string | null
+          strategic_contacts_needed?: string | null
+          strategic_partners_sought?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+          valuable_education_topics?: string | null
+          value_for_community?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_questionnaire_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_questionnaire_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_recommendations: {
+        Row: {
+          company: string | null
+          consultation_id: string
+          contact_name: string | null
+          created_at: string | null
+          id: string
+          recommendation_kind: string | null
+          recommendation_type: string
+          sort_order: number | null
+          topic: string | null
+        }
+        Insert: {
+          company?: string | null
+          consultation_id: string
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          recommendation_kind?: string | null
+          recommendation_type: string
+          sort_order?: number | null
+          topic?: string | null
+        }
+        Update: {
+          company?: string | null
+          consultation_id?: string
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          recommendation_kind?: string | null
+          recommendation_type?: string
+          sort_order?: number | null
+          topic?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_recommendations_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_thanks: {
+        Row: {
+          business_benefit_type: string | null
+          consultation_id: string
+          contact_name: string | null
+          created_at: string | null
+          id: string
+          sort_order: number | null
+          transaction_amount: string | null
+        }
+        Insert: {
+          business_benefit_type?: string | null
+          consultation_id: string
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          sort_order?: number | null
+          transaction_amount?: string | null
+        }
+        Update: {
+          business_benefit_type?: string | null
+          consultation_id?: string
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          sort_order?: number | null
+          transaction_amount?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_thanks_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       consultations: {
         Row: {
           agenda: string | null
