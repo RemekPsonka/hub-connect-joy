@@ -86,6 +86,13 @@ serve(async (req) => {
       .select('task_id, role, tasks(*)')
       .eq('contact_id', contact_id);
 
+    // Fetch BI data
+    const { data: biData } = await supabase
+      .from('contact_bi_data')
+      .select('*')
+      .eq('contact_id', contact_id)
+      .maybeSingle();
+
     // Fetch previous conversation history from database if session_id provided
     let dbConversationHistory: Array<{role: string; content: string}> = [];
     if (session_id) {
@@ -192,6 +199,19 @@ ${(consultations || []).slice(0, 5).map(c => `- ${c.scheduled_at}: ${c.status} |
 
 **Ostatnie spotkania:**
 ${(recentMeetings || []).slice(0, 5).map(m => `- ${m.meeting_date}: ${m.meeting_type} | ${m.comment || 'brak komentarza'} | Follow-up: ${m.follow_up || 'brak'}`).join('\n') || 'Brak'}
+
+**Dane z wywiadu BI (${biData?.completeness_score ? (biData.completeness_score * 100).toFixed(0) + '% kompletne' : 'nie przeprowadzony'}):**
+${biData?.bi_profile ? `
+- Przychody ostatni rok: ${biData.bi_profile.section_2_business_metrics?.revenue_last_year ? biData.bi_profile.section_2_business_metrics.revenue_last_year.toLocaleString() + ' PLN' : 'nieznane'}
+- Pracownicy: ${biData.bi_profile.section_2_business_metrics?.employees_count || 'nieznane'}
+- EBITDA: ${biData.bi_profile.section_2_business_metrics?.ebitda_last_year ? biData.bi_profile.section_2_business_metrics.ebitda_last_year.toLocaleString() + ' PLN' : 'nieznane'}
+- Top priorytety: ${(biData.bi_profile.section_3_priorities_challenges?.top_3_priorities || []).join(', ') || 'nieznane'}
+- Największe wyzwanie: ${biData.bi_profile.section_3_priorities_challenges?.biggest_challenge || 'nieznane'}
+- Strategia 2-3 lata: ${biData.bi_profile.section_3_priorities_challenges?.strategy_2_3_years || 'nieznana'}
+- Planowane inwestycje: ${(biData.bi_profile.section_4_investments?.planned_investments || []).map((i: any) => i.type || i.description).join(', ') || 'brak'}
+- Źródło kontaktu: ${biData.bi_profile.section_5_cc_relations?.source_of_contact?.person || 'nieznane'}
+- Pasje: ${(biData.bi_profile.section_6_personal?.passions || []).join(', ') || 'nieznane'}
+` : 'Brak danych BI - wywiad nie przeprowadzony'}
 
 ---
 

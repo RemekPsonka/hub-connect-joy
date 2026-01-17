@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,7 +14,7 @@ import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { GroupManagementModal } from '@/components/settings/GroupManagementModal';
 import { useContactGroups } from '@/hooks/useContactGroups';
-
+import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
   contacts_with: number;
   contacts_total: number;
@@ -29,6 +32,7 @@ interface MissingEmbeddings {
 
 export default function Settings() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<EmbeddingStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -38,6 +42,8 @@ export default function Settings() {
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   
   const { data: groups = [] } = useContactGroups();
+  const { data: biStats } = useBIStatistics(tenantId || undefined);
+  const { data: contactsWithoutBI = [] } = useContactsWithoutBI(tenantId || undefined);
 
   // Fetch tenant ID
   useEffect(() => {
@@ -260,8 +266,17 @@ export default function Settings() {
         <p className="text-muted-foreground">Zarządzaj ustawieniami aplikacji</p>
       </div>
 
-      {/* Notification Preferences */}
-      <NotificationPreferences />
+      <Tabs defaultValue="general" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="general">Ogólne</TabsTrigger>
+          <TabsTrigger value="bi">Business Intelligence</TabsTrigger>
+          <TabsTrigger value="ai">AI & Embeddingi</TabsTrigger>
+        </TabsList>
+
+        {/* General Tab */}
+        <TabsContent value="general" className="space-y-6">
+          {/* Notification Preferences */}
+          <NotificationPreferences />
 
       {/* Contact Groups Management */}
       <Card>
@@ -310,11 +325,110 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Synonyms Dictionary */}
-      <SynonymsDictionary />
-      
-      {/* AI Search Settings */}
-      <Card>
+          {/* Synonyms Dictionary */}
+          <SynonymsDictionary />
+        </TabsContent>
+
+        {/* BI Tab */}
+        <TabsContent value="bi" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5" />
+                Statystyki Business Intelligence
+              </CardTitle>
+              <CardDescription>
+                Przegląd wywiadów BI z kontaktami
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Statistics Grid */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="flex flex-col items-center p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400 mb-2" />
+                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">{biStats?.completed || 0}</span>
+                  <span className="text-sm text-green-600 dark:text-green-400">Ukończonych wywiadów</span>
+                </div>
+                <div className="flex flex-col items-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400 mb-2" />
+                  <span className="text-2xl font-bold text-blue-700 dark:text-blue-300">{biStats?.avgCompleteness || 0}%</span>
+                  <span className="text-sm text-blue-600 dark:text-blue-400">Średnia kompletność</span>
+                </div>
+                <div className="flex flex-col items-center p-4 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <Calendar className="h-8 w-8 text-amber-600 dark:text-amber-400 mb-2" />
+                  <span className="text-2xl font-bold text-amber-700 dark:text-amber-300">{biStats?.needsReview || 0}</span>
+                  <span className="text-sm text-amber-600 dark:text-amber-400">Wymaga aktualizacji</span>
+                </div>
+              </div>
+
+              {/* Contacts without BI */}
+              {contactsWithoutBI.length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-medium">Kontakty bez wywiadu BI ({contactsWithoutBI.length})</h3>
+                  </div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Kontakt</TableHead>
+                          <TableHead>Firma</TableHead>
+                          <TableHead className="text-right">Akcja</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {contactsWithoutBI.slice(0, 10).map((contact) => (
+                          <TableRow key={contact.id}>
+                            <TableCell className="font-medium">{contact.full_name}</TableCell>
+                            <TableCell className="text-muted-foreground">{contact.company || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => navigate(`/contacts/${contact.id}`)}
+                              >
+                                Rozpocznij wywiad
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {contactsWithoutBI.length > 10 && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      ...i {contactsWithoutBI.length - 10} więcej kontaktów
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {contactsWithoutBI.length === 0 && biStats?.total === 0 && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Brak kontaktów w systemie. Dodaj kontakty, aby rozpocząć przeprowadzanie wywiadów BI.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {contactsWithoutBI.length === 0 && biStats && biStats.total > 0 && (
+                <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-700 dark:text-green-300">
+                    Wszystkie aktywne kontakty mają wywiad BI. Świetna robota!
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI Tab */}
+        <TabsContent value="ai" className="space-y-6">
+          {/* AI Search Settings */}
+          <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
@@ -439,20 +553,22 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Placeholder for other settings */}
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <SettingsIcon className="h-5 w-5" />
-            Pozostałe ustawienia
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Dodatkowe opcje konfiguracji zostaną wkrótce dodane.
-          </p>
-        </CardContent>
-      </Card>
+          {/* Placeholder for other settings */}
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SettingsIcon className="h-5 w-5" />
+                Pozostałe ustawienia
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Dodatkowe opcje konfiguracji zostaną wkrótce dodane.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Group Management Modal */}
       <GroupManagementModal 
