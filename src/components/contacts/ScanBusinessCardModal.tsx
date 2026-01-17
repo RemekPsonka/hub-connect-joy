@@ -39,7 +39,9 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
 
   // Form state for editing extracted data
   const [formData, setFormData] = useState<ExtractedContactData>({
-    full_name: '',
+    title: null,
+    first_name: '',
+    last_name: '',
     position: null,
     company: null,
     email: null,
@@ -106,15 +108,17 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
   };
 
   const handleCreateContact = async () => {
-    if (!formData.full_name) {
-      toast.error('Imię i nazwisko jest wymagane');
+    if (!formData.first_name || !formData.last_name) {
+      toast.error('Imię i nazwisko są wymagane');
       return;
     }
 
     try {
       await createContactWithCompany({
         contact: {
-          full_name: formData.full_name,
+          title: formData.title || undefined,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
           position: formData.position || undefined,
           email: formData.email || undefined,
           phone: formData.phone || formData.mobile || undefined,
@@ -146,7 +150,9 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
     setEnrichedData(null);
     setStep('upload');
     setFormData({
-      full_name: '',
+      title: null,
+      first_name: '',
+      last_name: '',
       position: null,
       company: null,
       email: null,
@@ -256,14 +262,35 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
           {(step === 'extracted' || step === 'enriched') && (
             <div className="space-y-4 pt-2 border-t">
               <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label htmlFor="full_name">Imię i nazwisko *</Label>
-                  <Input
-                    id="full_name"
-                    value={formData.full_name}
-                    onChange={(e) => updateFormField('full_name', e.target.value)}
-                    placeholder="Jan Kowalski"
-                  />
+                {/* Title, First Name, Last Name row */}
+                <div className="col-span-2 grid grid-cols-4 gap-3">
+                  <div>
+                    <Label htmlFor="title">Tytuł</Label>
+                    <Input
+                      id="title"
+                      value={formData.title || ''}
+                      onChange={(e) => updateFormField('title', e.target.value)}
+                      placeholder="dr, prof."
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="first_name">Imię *</Label>
+                    <Input
+                      id="first_name"
+                      value={formData.first_name}
+                      onChange={(e) => updateFormField('first_name', e.target.value)}
+                      placeholder="Jan"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="last_name">Nazwisko *</Label>
+                    <Input
+                      id="last_name"
+                      value={formData.last_name}
+                      onChange={(e) => updateFormField('last_name', e.target.value)}
+                      placeholder="Kowalski"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -429,9 +456,9 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
                   )}
                 </Button>
               ) : (
-                <Button 
+              <Button 
                   onClick={handleCreateContact}
-                  disabled={isCreating || !formData.full_name}
+                  disabled={isCreating || !formData.first_name || !formData.last_name}
                 >
                   {isCreating ? (
                     <>
@@ -449,7 +476,7 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
           {step === 'enriched' && (
             <Button 
               onClick={handleCreateContact}
-              disabled={isCreating || !formData.full_name}
+              disabled={isCreating || !formData.first_name || !formData.last_name}
             >
               {isCreating ? (
                 <>

@@ -35,7 +35,9 @@ import { useContactGroups, useCreateContact, useUpdateContact, type ContactWithG
 const linkedinUrlPattern = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w-]+\/?$/i;
 
 const contactSchema = z.object({
-  full_name: z.string().min(1, 'Imię i nazwisko jest wymagane').max(100, 'Maksymalnie 100 znaków'),
+  title: z.string().max(50, 'Maksymalnie 50 znaków').optional().or(z.literal('')),
+  first_name: z.string().min(1, 'Imię jest wymagane').max(50, 'Maksymalnie 50 znaków'),
+  last_name: z.string().min(1, 'Nazwisko jest wymagane').max(50, 'Maksymalnie 50 znaków'),
   email: z.string().email('Nieprawidłowy adres email').max(255).optional().or(z.literal('')),
   phone: z.string().max(20, 'Maksymalnie 20 znaków').optional().or(z.literal('')),
   company: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
@@ -104,7 +106,9 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
-      full_name: '',
+      title: '',
+      first_name: '',
+      last_name: '',
       email: '',
       phone: '',
       company: '',
@@ -121,7 +125,9 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
   useEffect(() => {
     if (contact) {
       form.reset({
-        full_name: contact.full_name || '',
+        title: contact.title || '',
+        first_name: contact.first_name || '',
+        last_name: contact.last_name || '',
         email: contact.email || '',
         phone: contact.phone || '',
         company: contact.company || '',
@@ -135,7 +141,9 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
       });
     } else {
       form.reset({
-        full_name: '',
+        title: '',
+        first_name: '',
+        last_name: '',
         email: '',
         phone: '',
         company: '',
@@ -157,8 +165,16 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
       normalizedLinkedinUrl = `https://${normalizedLinkedinUrl}`;
     }
 
+    // Generate full_name from parts
+    const fullName = [data.title, data.first_name, data.last_name]
+      .filter(Boolean)
+      .join(' ');
+
     const submitData = {
-      full_name: data.full_name,
+      title: data.title || null,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      full_name: fullName,
       email: data.email || null,
       phone: data.phone || null,
       company: data.company || null,
@@ -197,19 +213,50 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4 mt-4">
-                <FormField
-                  control={form.control}
-                  name="full_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Imię i nazwisko *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jan Kowalski" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Title, First Name, Last Name row */}
+                <div className="grid grid-cols-4 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tytuł</FormLabel>
+                        <FormControl>
+                          <Input placeholder="dr, prof." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="first_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Imię *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Jan" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="last_name"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Nazwisko *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Kowalski" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
