@@ -1022,29 +1022,53 @@ export type Database = {
           type: string
         }[]
       }
-      search_all_hybrid: {
-        Args: {
-          p_fts_weight?: number
-          p_limit?: number
-          p_query: string
-          p_query_embedding?: string
-          p_semantic_weight?: number
-          p_tenant_id?: string
-          p_threshold?: number
-          p_types?: string[]
-        }
-        Returns: {
-          combined_score: number
-          description: string
-          fts_score: number
-          id: string
-          match_source: string
-          semantic_score: number
-          subtitle: string
-          title: string
-          type: string
-        }[]
-      }
+      search_all_hybrid:
+        | {
+            Args: {
+              p_fts_weight?: number
+              p_limit?: number
+              p_query: string
+              p_query_embedding?: string
+              p_semantic_weight?: number
+              p_tenant_id?: string
+              p_threshold?: number
+              p_types?: string[]
+            }
+            Returns: {
+              combined_score: number
+              description: string
+              fts_score: number
+              id: string
+              match_source: string
+              semantic_score: number
+              subtitle: string
+              title: string
+              type: string
+            }[]
+          }
+        | {
+            Args: {
+              p_fts_weight?: number
+              p_limit?: number
+              p_query: string
+              p_query_embedding?: string
+              p_semantic_weight?: number
+              p_tenant_id?: string
+              p_threshold?: number
+              p_types?: string[]
+            }
+            Returns: {
+              combined_score: number
+              description: string
+              fts_score: number
+              id: string
+              match_source: string
+              semantic_score: number
+              subtitle: string
+              title: string
+              type: string
+            }[]
+          }
       search_contacts_semantic: {
         Args: {
           p_limit?: number
