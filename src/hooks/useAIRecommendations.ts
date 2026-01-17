@@ -56,5 +56,9 @@ export function useAIRecommendations() {
     }
   }, []);
 
-  return { recommendations, isLoading, error, fetchRecommendations };
+  const removeRecommendation = useCallback((recommendationId: string) => {
+    setRecommendations(prev => prev.filter(r => r.id !== recommendationId));
+  }, []);
+
+  return { recommendations, isLoading, error, fetchRecommendations, removeRecommendation };
 }

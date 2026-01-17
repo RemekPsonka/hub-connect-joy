@@ -78,7 +78,7 @@ function RecommendationItem({ recommendation, onClick }: RecommendationItemProps
 }
 
 export function AIRecommendations() {
-  const { recommendations, isLoading, error, fetchRecommendations } = useAIRecommendations();
+  const { recommendations, isLoading, error, fetchRecommendations, removeRecommendation } = useAIRecommendations();
   const [selectedRecommendation, setSelectedRecommendation] = useState<AIRecommendation | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   
@@ -93,10 +93,12 @@ export function AIRecommendations() {
 
   const handleModalClose = (open: boolean) => {
     setModalOpen(open);
-    if (!open) {
-      // Refresh recommendations after closing modal (in case action was taken)
-      fetchRecommendations();
-    }
+    // No longer fetching recommendations on close - using local state update instead
+  };
+
+  const handleActionComplete = (recommendationId: string) => {
+    // Locally remove the recommendation from the list (no AI refetch needed)
+    removeRecommendation(recommendationId);
   };
   
   if (isLoading) {
@@ -182,6 +184,7 @@ export function AIRecommendations() {
         open={modalOpen}
         onOpenChange={handleModalClose}
         recommendation={selectedRecommendation}
+        onActionComplete={handleActionComplete}
       />
     </>
   );
