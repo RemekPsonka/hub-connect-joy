@@ -1,7 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import Graph from 'graphology';
 import { SigmaContainer, useRegisterEvents, useSigma } from '@react-sigma/core';
-import '@react-sigma/core/lib/style.css';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { ContactNode, Connection } from '@/hooks/useConnections';
 
