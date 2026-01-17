@@ -30,7 +30,7 @@ export function useSemanticSearch() {
   const search = useCallback(async ({
     query,
     types = ['contact', 'need', 'offer'],
-    threshold = 0.2,
+    threshold = 0.4,
     limit = 30,
     useHybrid = true
   }: SemanticSearchParams) => {
