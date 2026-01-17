@@ -4,6 +4,17 @@ import { SigmaContainer, useRegisterEvents, useSigma } from '@react-sigma/core';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { ContactNode, Connection } from '@/hooks/useConnections';
 
+// Mapa kolorów dla typów połączeń
+const CONNECTION_TYPE_COLORS: Record<string, string> = {
+  personal: '#22c55e',      // zielony - znajomi
+  professional: '#3b82f6',  // niebieski - współpracownicy
+  met_at_event: '#f59e0b',  // pomarańczowy - spotkani na evencie
+  project: '#8b5cf6',       // fioletowy - wspólny projekt
+  family: '#ec4899',        // różowy - rodzina
+  knows: '#6b7280',         // szary - ogólne "zna"
+  other: '#94a3b8',         // jasnoszary - inne
+};
+
 interface ConnectionGraphProps {
   nodes: ContactNode[];
   edges: Connection[];
@@ -81,23 +92,27 @@ function GraphEvents({
       graph.setNodeAttribute(node, 'hidden', hidden);
     });
 
-    // Update edge colors
+    // Update edge colors - zachowuj oryginalne kolory typu połączenia
     graph.forEachEdge((edge, attributes, source, target) => {
-      let color = '#d1d5db';
-      let size = 1;
+      let color = attributes.originalColor || '#d1d5db';
+      let size = attributes.originalSize || 1;
 
+      // Podświetlenie ścieżki
       if (highlightedPath && highlightedPath.length > 0) {
         const sourceIdx = highlightedPath.indexOf(source);
         const targetIdx = highlightedPath.indexOf(target);
         if (sourceIdx !== -1 && targetIdx !== -1 && Math.abs(sourceIdx - targetIdx) === 1) {
-          color = '#22c55e';
-          size = 3;
+          color = '#22c55e'; // zielony dla ścieżki
+          size = Math.max(size * 1.5, 4);
+        } else {
+          color = '#e5e7eb'; // wyszarzenie nieaktywnych
+          size = size * 0.5;
         }
       }
 
+      // Podświetlenie krawędzi wybranego węzła
       if (selectedNodeId && (source === selectedNodeId || target === selectedNodeId)) {
-        color = '#3b82f6';
-        size = 2;
+        size = Math.max(size * 1.3, 2);
       }
 
       graph.setEdgeAttribute(edge, 'color', color);
@@ -149,9 +164,15 @@ export function ConnectionGraph({
       // Only add edge if both nodes exist
       if (g.hasNode(edge.contact_a_id) && g.hasNode(edge.contact_b_id)) {
         try {
+          const typeColor = CONNECTION_TYPE_COLORS[edge.connection_type || 'knows'] || '#6b7280';
+          // Siła 1-10 → grubość 0.5-5
+          const edgeSize = Math.max(0.5, (edge.strength || 5) / 2);
+          
           g.addEdge(edge.contact_a_id, edge.contact_b_id, {
-            size: (edge.strength || 5) / 5,
-            color: '#d1d5db',
+            size: edgeSize,
+            color: typeColor,
+            originalColor: typeColor,
+            originalSize: edgeSize,
             type: edge.connection_type,
           });
         } catch (e) {

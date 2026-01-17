@@ -18,6 +18,7 @@ import { ConnectionGraph } from '@/components/network/ConnectionGraph';
 import { GraphSidebar } from '@/components/network/GraphSidebar';
 import { FindPathModal } from '@/components/network/FindPathModal';
 import { AddConnectionModal } from '@/components/network/AddConnectionModal';
+import { ConnectionLegend } from '@/components/network/ConnectionLegend';
 import { useConnections } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
 
@@ -237,6 +238,9 @@ export default function Network() {
             />
           </ErrorBoundary>
         </div>
+
+        {/* Legend */}
+        <ConnectionLegend className="mx-4 mb-2" />
 
         {/* Footer Stats */}
         <div className="px-4 py-2 border-t bg-muted/30 flex items-center justify-between text-sm text-muted-foreground">
