@@ -16,6 +16,8 @@ export interface TasksFilters {
   search?: string;
   crossProgress?: 'all' | '0' | '1' | '2' | '3';
   contactId?: string;
+  sortBy?: 'created_at' | 'due_date' | 'priority';
+  sortDirection?: 'asc' | 'desc';
 }
 
 export interface TaskWithDetails extends Task {
@@ -127,9 +129,19 @@ export function useTasks(filters: TasksFilters = {}) {
             intro_made_at,
             contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
             contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)
-          )
-        `)
-        .order('created_at', { ascending: false });
+        )
+        `);
+
+      // Apply sorting - priority requires client-side sorting
+      const sortField = filters.sortBy || 'created_at';
+      const ascending = filters.sortDirection === 'asc';
+      
+      if (sortField !== 'priority') {
+        query = query.order(sortField, { ascending, nullsFirst: false });
+      } else {
+        // For priority, we'll sort client-side after fetching
+        query = query.order('created_at', { ascending: false });
+      }
 
       // Apply contact filter if we have task IDs
       if (taskIdsFromContact) {
@@ -162,6 +174,16 @@ export function useTasks(filters: TasksFilters = {}) {
           if (task.task_type !== 'cross' || !task.cross_tasks?.[0]) return false;
           const progress = calculateCrossTaskProgress(task.cross_tasks[0]);
           return progress.completed === targetProgress;
+        });
+      }
+
+      // Client-side sorting for priority
+      if (sortField === 'priority') {
+        const priorityOrder: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
+        result.sort((a, b) => {
+          const aVal = priorityOrder[a.priority || 'low'] || 0;
+          const bVal = priorityOrder[b.priority || 'low'] || 0;
+          return ascending ? aVal - bVal : bVal - aVal;
         });
       }
       

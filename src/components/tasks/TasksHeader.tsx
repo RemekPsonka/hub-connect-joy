@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Plus, Search, List, Columns, X } from 'lucide-react';
+import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { TasksFilters } from '@/hooks/useTasks';
 import { TaskContactFilter } from './TaskContactFilter';
 
@@ -148,6 +148,42 @@ export function TasksHeader({
             contactId 
           })}
         />
+
+        {/* Sorting Controls */}
+        <div className="flex items-center gap-1 border-l pl-4 ml-2">
+          <Select
+            value={filters.sortBy || 'created_at'}
+            onValueChange={(value) => onFiltersChange({ 
+              ...filters, 
+              sortBy: value as TasksFilters['sortBy'] 
+            })}
+          >
+            <SelectTrigger className="w-[150px]">
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Sortuj" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="created_at">Data utworzenia</SelectItem>
+              <SelectItem value="due_date">Termin</SelectItem>
+              <SelectItem value="priority">Priorytet</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => onFiltersChange({ 
+              ...filters, 
+              sortDirection: filters.sortDirection === 'asc' ? 'desc' : 'asc' 
+            })}
+            title={filters.sortDirection === 'asc' ? 'Rosnąco' : 'Malejąco'}
+          >
+            {filters.sortDirection === 'asc' 
+              ? <ArrowUp className="h-4 w-4" /> 
+              : <ArrowDown className="h-4 w-4" />
+            }
+          </Button>
+        </div>
 
         {/* Clear filters button */}
         {hasActiveFilters && (
