@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Badge } from '@/components/ui/badge';
 import { 
   Send, 
   Loader2, 
@@ -15,19 +17,29 @@ import {
   Users,
   Lightbulb,
   Search,
-  Target
+  Target,
+  MessageCircle,
+  Brain,
+  Link2,
+  Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useMasterAgent, MasterAgentResponse } from '@/hooks/useContactAgent';
+import { MasterAgentMessage } from '@/components/ai/MasterAgentMessage';
+
+type ChatMode = 'chat' | 'master';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  masterResponse?: MasterAgentResponse;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
-const suggestionPrompts = [
+const chatSuggestions = [
   {
     icon: Search,
     title: 'Wyszukaj w sieci',
@@ -60,12 +72,52 @@ const suggestionPrompts = [
   },
 ];
 
+const masterSuggestions = [
+  {
+    icon: Link2,
+    title: 'Znajdź połączenia',
+    prompt: 'Kto z moich kontaktów mógłby znać prezesa Tauron? Przeszukaj wiedzę wszystkich agentów.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Synergiczne połączenia',
+    prompt: 'Znajdź synergię między kontaktami z branży IT i finansowej - kto powinien się poznać?',
+  },
+  {
+    icon: Brain,
+    title: 'Briefing przed spotkaniem',
+    prompt: 'Przygotuj mi briefing przed spotkaniem z klientem z branży medycznej - co wiem o tym rynku?',
+  },
+  {
+    icon: Target,
+    title: 'Dopasowanie potrzeb',
+    prompt: 'Jakie potrzeby moich kontaktów mogę zaspokoić oferując usługi consulting AI?',
+  },
+  {
+    icon: Users,
+    title: 'Analiza klastrów',
+    prompt: 'Jakie klastry branżowe widzisz w mojej sieci? Kto jest kluczowy w każdym z nich?',
+  },
+  {
+    icon: Zap,
+    title: 'Szybkie intros',
+    prompt: 'Kto powinien poznać kogo w mojej sieci? Zaproponuj 3 najważniejsze wprowadzenia.',
+  },
+];
+
 export default function AIChat() {
+  const [mode, setMode] = useState<ChatMode>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  const { director } = useAuth();
+  const { queryMasterAgent, isLoading: masterLoading } = useMasterAgent();
+
+  const currentSuggestions = mode === 'chat' ? chatSuggestions : masterSuggestions;
+  const isAnyLoading = isLoading || masterLoading;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -178,9 +230,31 @@ export default function AIChat() {
     }
   };
 
+  const handleMasterQuery = async (messageText: string) => {
+    if (!director?.tenant_id) {
+      toast.error('Brak dostępu do Master Agent - zaloguj się ponownie');
+      return;
+    }
+
+    const response = await queryMasterAgent(director.tenant_id, messageText, 'general');
+    
+    if (response) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: response.answer,
+          masterResponse: response,
+        },
+      ]);
+    } else {
+      throw new Error('Brak odpowiedzi od Master Agent');
+    }
+  };
+
   const handleSend = async (text?: string) => {
     const messageText = text || input.trim();
-    if (!messageText || isLoading) return;
+    if (!messageText || isAnyLoading) return;
 
     const userMessage: Message = { role: 'user', content: messageText };
     setMessages((prev) => [...prev, userMessage]);
@@ -188,11 +262,14 @@ export default function AIChat() {
     setIsLoading(true);
 
     try {
-      await streamChat(userMessage);
+      if (mode === 'chat') {
+        await streamChat(userMessage);
+      } else {
+        await handleMasterQuery(messageText);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       toast.error(error instanceof Error ? error.message : 'Wystąpił błąd');
-      // Remove user message on error
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -206,41 +283,98 @@ export default function AIChat() {
     }
   };
 
+  const handleModeChange = (value: string) => {
+    if (value && (value === 'chat' || value === 'master')) {
+      setMode(value);
+      // Optionally clear messages when switching modes
+      // setMessages([]);
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Bot className="h-6 w-6 text-primary" />
-          AI Network Assistant
-        </h1>
-        <p className="text-muted-foreground">
-          Twój inteligentny asystent do zarządzania siecią kontaktów
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              {mode === 'chat' ? (
+                <Bot className="h-6 w-6 text-primary" />
+              ) : (
+                <Brain className="h-6 w-6 text-purple-500" />
+              )}
+              {mode === 'chat' ? 'AI Network Assistant' : 'Master Agent'}
+            </h1>
+            <p className="text-muted-foreground">
+              {mode === 'chat' 
+                ? 'Twój inteligentny asystent do zarządzania siecią kontaktów'
+                : 'Koordynator wszystkich Contact Agents - analiza całej sieci'}
+            </p>
+          </div>
+          
+          <ToggleGroup 
+            type="single" 
+            value={mode} 
+            onValueChange={handleModeChange}
+            className="bg-muted rounded-lg p-1"
+          >
+            <ToggleGroupItem 
+              value="chat" 
+              aria-label="Chat mode"
+              className="gap-2 data-[state=on]:bg-background"
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Chat</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="master" 
+              aria-label="Master Agent mode"
+              className="gap-2 data-[state=on]:bg-background data-[state=on]:text-purple-600"
+            >
+              <Brain className="h-4 w-4" />
+              <span className="hidden sm:inline">Master Agent</span>
+              <Badge variant="secondary" className="hidden sm:inline-flex text-[10px] px-1.5 py-0">
+                AI
+              </Badge>
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
 
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardContent className="flex-1 flex flex-col p-0">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Bot className="h-8 w-8 text-primary" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                mode === 'chat' ? 'bg-primary/10' : 'bg-purple-500/10'
+              }`}>
+                {mode === 'chat' ? (
+                  <Bot className="h-8 w-8 text-primary" />
+                ) : (
+                  <Brain className="h-8 w-8 text-purple-500" />
+                )}
               </div>
-              <h2 className="text-xl font-semibold mb-2">Witaj!</h2>
+              <h2 className="text-xl font-semibold mb-2">
+                {mode === 'chat' ? 'Witaj!' : 'Master Agent gotowy'}
+              </h2>
               <p className="text-muted-foreground text-center max-w-md mb-8">
-                Jestem Twoim AI asystentem do zarządzania siecią kontaktów. 
-                Mogę pomóc Ci znaleźć połączenia, przygotować się do spotkań 
-                i dopasować potrzeby do ofert.
+                {mode === 'chat' 
+                  ? 'Jestem Twoim AI asystentem do zarządzania siecią kontaktów. Mogę pomóc Ci znaleźć połączenia, przygotować się do spotkań i dopasować potrzeby do ofert.'
+                  : 'Koordynuję wiedzę wszystkich Twoich Contact Agents. Mogę przeszukać całą sieć, znajdować synergię między kontaktami i rekomendować strategiczne połączenia.'}
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-4xl">
-                {suggestionPrompts.map((suggestion, index) => (
+                {currentSuggestions.map((suggestion, index) => (
                   <Button
                     key={index}
                     variant="outline"
-                    className="h-auto py-4 px-4 justify-start text-left"
+                    className={`h-auto py-4 px-4 justify-start text-left ${
+                      mode === 'master' ? 'hover:border-purple-500/50' : ''
+                    }`}
                     onClick={() => handleSend(suggestion.prompt)}
                   >
-                    <suggestion.icon className="h-5 w-5 mr-3 flex-shrink-0 text-primary" />
+                    <suggestion.icon className={`h-5 w-5 mr-3 flex-shrink-0 ${
+                      mode === 'chat' ? 'text-primary' : 'text-purple-500'
+                    }`} />
                     <div>
                       <div className="font-medium">{suggestion.title}</div>
                       <div className="text-xs text-muted-foreground line-clamp-2">
@@ -263,23 +397,35 @@ export default function AIChat() {
                   >
                     {message.role === 'assistant' && (
                       <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          <Bot className="h-4 w-4" />
+                        <AvatarFallback className={
+                          message.masterResponse 
+                            ? 'bg-purple-500/10 text-purple-500' 
+                            : 'bg-primary/10 text-primary'
+                        }>
+                          {message.masterResponse ? (
+                            <Brain className="h-4 w-4" />
+                          ) : (
+                            <Bot className="h-4 w-4" />
+                          )}
                         </AvatarFallback>
                       </Avatar>
                     )}
                     
                     <div
-                      className={`rounded-lg px-4 py-3 max-w-[80%] ${
+                      className={`rounded-lg px-4 py-3 max-w-[85%] ${
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                       }`}
                     >
                       {message.role === 'assistant' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
-                        </div>
+                        message.masterResponse ? (
+                          <MasterAgentMessage response={message.masterResponse} />
+                        ) : (
+                          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          </div>
+                        )
                       ) : (
                         <div className="whitespace-pre-wrap">{message.content}</div>
                       )}
@@ -295,15 +441,26 @@ export default function AIChat() {
                   </div>
                 ))}
 
-                {isLoading && messages[messages.length - 1]?.role === 'user' && (
+                {isAnyLoading && messages[messages.length - 1]?.role === 'user' && (
                   <div className="flex gap-3 justify-start">
                     <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        <Bot className="h-4 w-4" />
+                      <AvatarFallback className={
+                        mode === 'master' 
+                          ? 'bg-purple-500/10 text-purple-500' 
+                          : 'bg-primary/10 text-primary'
+                      }>
+                        {mode === 'master' ? (
+                          <Brain className="h-4 w-4" />
+                        ) : (
+                          <Bot className="h-4 w-4" />
+                        )}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="rounded-lg px-4 py-2 bg-muted">
+                    <div className="rounded-lg px-4 py-2 bg-muted flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">
+                        {mode === 'master' ? 'Konsultacja agentów...' : 'Myślę...'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -318,17 +475,22 @@ export default function AIChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Napisz wiadomość..."
+                placeholder={mode === 'chat' 
+                  ? 'Napisz wiadomość...' 
+                  : 'Zapytaj Master Agent o całą sieć...'
+                }
                 className="min-h-[44px] max-h-32 resize-none"
                 rows={1}
               />
               <Button
                 onClick={() => handleSend()}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isAnyLoading}
                 size="icon"
-                className="flex-shrink-0"
+                className={`flex-shrink-0 ${
+                  mode === 'master' ? 'bg-purple-600 hover:bg-purple-700' : ''
+                }`}
               >
-                {isLoading ? (
+                {isAnyLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Send className="h-4 w-4" />
