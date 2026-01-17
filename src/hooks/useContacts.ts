@@ -160,7 +160,7 @@ export function useUpdateContact() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: ContactUpdate & { id: string }) => {
+    mutationFn: async ({ id, silent, ...updates }: ContactUpdate & { id: string; silent?: boolean }) => {
       const { data, error } = await supabase
         .from('contacts')
         .update(updates)
@@ -170,15 +170,25 @@ export function useUpdateContact() {
 
       if (error) throw error;
 
-      return data as ContactWithGroup;
+      return { data: data as ContactWithGroup, silent };
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['contact', data.id] });
-      
-      // Regenerate embedding in background
-      generateEmbeddingInBackground('contact', data.id);
-      toast.success('Kontakt został zaktualizowany');
+    onSuccess: ({ data, silent }) => {
+      if (!silent) {
+        queryClient.invalidateQueries({ queryKey: ['contacts'] });
+        queryClient.invalidateQueries({ queryKey: ['contact', data.id] });
+        
+        // Regenerate embedding in background
+        generateEmbeddingInBackground('contact', data.id);
+        toast.success('Kontakt został zaktualizowany');
+      } else {
+        // Optymistyczna aktualizacja cache bez invalidacji
+        queryClient.setQueryData(['contact', data.id], (old: ContactWithDetails | undefined) => {
+          if (old) {
+            return { ...old, ...data };
+          }
+          return old;
+        });
+      }
     },
     onError: (error) => {
       console.error('Error updating contact:', error);

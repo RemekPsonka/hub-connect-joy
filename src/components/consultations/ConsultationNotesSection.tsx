@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,21 +10,28 @@ interface ConsultationNotesSectionProps {
   notes: string | null;
 }
 
+// Normalizacja null/undefined → "" dla poprawnego porównania
+const normalizeNotes = (value: string | null | undefined): string => value || '';
+
 export function ConsultationNotesSection({ consultationId, notes }: ConsultationNotesSectionProps) {
-  const [value, setValue] = useState(notes || '');
+  const [value, setValue] = useState(normalizeNotes(notes));
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const isFirstRender = useRef(true);
   const { toast } = useToast();
   const updateConsultation = useUpdateConsultation();
 
+  // Reset state przy zmianie konsultacji
   useEffect(() => {
-    setValue(notes || '');
-  }, [notes]);
+    setValue(normalizeNotes(notes));
+    setLastSaved(null);
+    isFirstRender.current = true;
+  }, [consultationId]);
 
-  // Debounced save
+  // Funkcja zapisu
   const saveNotes = useCallback(
     async (newValue: string) => {
-      if (newValue === notes) return;
+      if (normalizeNotes(newValue) === normalizeNotes(notes)) return;
 
       setIsSaving(true);
       try {
@@ -46,15 +53,19 @@ export function ConsultationNotesSection({ consultationId, notes }: Consultation
     [consultationId, notes, updateConsultation, toast]
   );
 
+  // Debounce - nie uruchamiaj przy pierwszej renderacji
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
     const timer = setTimeout(() => {
-      if (value !== notes) {
-        saveNotes(value);
-      }
+      saveNotes(value);
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [value, notes, saveNotes]);
+  }, [value, saveNotes]);
 
   return (
     <Card>

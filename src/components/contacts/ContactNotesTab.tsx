@@ -1,65 +1,63 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateContact, type ContactWithDetails } from '@/hooks/useContacts';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface ContactNotesTabProps {
   contact: ContactWithDetails;
 }
 
+// Normalizacja null/undefined → "" dla poprawnego porównania
+const normalizeNotes = (value: string | null | undefined): string => value || '';
+
 export function ContactNotesTab({ contact }: ContactNotesTabProps) {
-  const [notes, setNotes] = useState(contact.notes || '');
+  const [notes, setNotes] = useState(normalizeNotes(contact.notes));
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const isFirstRender = useRef(true);
   const updateContact = useUpdateContact();
-  const queryClient = useQueryClient();
 
-  // Update local state when contact changes
+  // Reset state przy zmianie kontaktu
   useEffect(() => {
-    setNotes(contact.notes || '');
-  }, [contact.notes]);
+    setNotes(normalizeNotes(contact.notes));
+    setLastSaved(null);
+    isFirstRender.current = true;
+  }, [contact.id]);
 
-  // Debounced save
+  // Funkcja zapisu
   const saveNotes = useCallback(
     async (newNotes: string) => {
-      if (newNotes === contact.notes) return;
+      if (normalizeNotes(newNotes) === normalizeNotes(contact.notes)) return;
 
       setIsSaving(true);
       try {
-        await updateContact.mutateAsync(
-          { id: contact.id, notes: newNotes || null },
-          {
-            onSuccess: () => {
-              // Silent update - don't show toast for auto-save
-              queryClient.setQueryData(['contact', contact.id], (old: ContactWithDetails | undefined) => {
-                if (old) {
-                  return { ...old, notes: newNotes || null };
-                }
-                return old;
-              });
-            },
-          }
-        );
+        await updateContact.mutateAsync({
+          id: contact.id,
+          notes: newNotes || null,
+          silent: true, // Cichy zapis bez toasta i pełnej invalidacji
+        });
         setLastSaved(new Date());
       } finally {
         setIsSaving(false);
       }
     },
-    [contact.id, contact.notes, updateContact, queryClient]
+    [contact.id, contact.notes, updateContact]
   );
 
-  // Debounce effect
+  // Debounce - nie uruchamiaj przy pierwszej renderacji
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
     const timer = setTimeout(() => {
-      if (notes !== contact.notes) {
-        saveNotes(notes);
-      }
+      saveNotes(notes);
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [notes, contact.notes, saveNotes]);
+  }, [notes, saveNotes]);
 
   return (
     <Card>
