@@ -173,7 +173,7 @@ export function ConnectionGraph({
             color: typeColor,
             originalColor: typeColor,
             originalSize: edgeSize,
-            type: edge.connection_type,
+            connectionType: edge.connection_type,
           });
         } catch (e) {
           // Edge might already exist
