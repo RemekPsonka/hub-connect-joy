@@ -354,9 +354,9 @@ export default function AIChat() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header - fixed height */}
-      <div className="flex-shrink-0 mb-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header - fixed at top */}
+      <div className="flex-shrink-0 mb-4 bg-muted/30">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -386,7 +386,7 @@ export default function AIChat() {
       </div>
 
       {/* Main chat area - takes remaining space */}
-      <Card className="flex-1 flex flex-col min-h-0">
+      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <CardContent className="flex-1 flex flex-col p-0 min-h-0">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6">
