@@ -236,6 +236,38 @@ export function useAddConnection() {
   });
 }
 
+interface UpdateConnectionParams {
+  connectionId: string;
+  connectionType?: string;
+  strength?: number;
+}
+
+export function useUpdateConnection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ connectionId, connectionType, strength }: UpdateConnectionParams) => {
+      const updates: Record<string, unknown> = {};
+      if (connectionType !== undefined) updates.connection_type = connectionType;
+      if (strength !== undefined) updates.strength = strength;
+
+      const { data, error } = await supabase
+        .from('connections')
+        .update(updates)
+        .eq('id', connectionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-connections'] });
+    },
+  });
+}
+
 export function useDeleteConnection() {
   const queryClient = useQueryClient();
 
