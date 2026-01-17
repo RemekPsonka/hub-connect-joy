@@ -200,7 +200,44 @@ serve(async (req) => {
       employee_count: contact.companies.employee_count
     } : null;
 
-    // 5. Build BI Agent prompt
+    // 5. Pre-AI detection of end signals - immediate termination without AI call
+    const endSignals = ['koniec', 'kończymy', 'wystarczy', 'na razie tyle', 'stop', 'przerwij', 'później', 'przerywam', 'zakończ', 'to tyle', 'dosyć', 'starczy'];
+    const isEndingRequest = userMessage !== 'START_INTERVIEW' && endSignals.some(signal => 
+      userMessage.toLowerCase().includes(signal)
+    );
+
+    if (isEndingRequest) {
+      console.log('End signal detected, pausing interview immediately');
+      
+      const updatedConversationLog = [
+        ...(session.conversation_log || []),
+        { timestamp: new Date().toISOString(), speaker: 'user', message: userMessage },
+        { timestamp: new Date().toISOString(), speaker: 'agent', message: 'Dziękuję za poświęcony czas! Wywiad wstrzymany - wróć kiedy będziesz mieć chwilę.' }
+      ];
+      
+      await supabase
+        .from('bi_interview_sessions')
+        .update({
+          status: 'paused',
+          conversation_log: updatedConversationLog
+        })
+        .eq('id', session.id);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          agent_message: 'Dziękuję za poświęcony czas! Wywiad wstrzymany - wróć kiedy będziesz mieć chwilę.',
+          next_question: null,
+          completeness: biData.completeness_score || 0,
+          sections_completed: getCompletedSections(biData.bi_profile || {}),
+          status: 'paused',
+          session_id: session.id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 6. Build BI Agent prompt
     const completedSections = getCompletedSections(biData.bi_profile || {});
     const recentConversation = (session.conversation_log || []).slice(-10);
 
@@ -281,13 +318,22 @@ To jest POCZĄTEK WYWIADU. Przywitaj się ciepło, przedstaw cel wywiadu (zebran
 - Naturalny, profesjonalny ale ciepły ton
 - Zadawaj 1-2 pytania na raz (nie więcej!)
 - Używaj kontekstu z poprzednich odpowiedzi
-- Dziękuj za odpowiedzi przed kolejnym pytaniem
-- Jeśli użytkownik mówi "nie wiem" → zapisz null, nie naciskaj
-- Jeśli odpowiedź niejednoznaczna → dopytaj elegancko
+- Dziękuj KRÓTKO za odpowiedzi
+
+**KLUCZOWE ZASADY - BEZWZGLĘDNIE PRZESTRZEGAJ:**
+1. **AKCEPTUJ KRÓTKIE ODPOWIEDZI** - jeśli użytkownik odpowiada zwięźle, zapisz co powiedział i przejdź dalej. NIE dopytuj o szczegóły, NIE proś o rozwinięcie.
+2. **NIE POWTARZAJ PYTAŃ** - jeśli już pytałeś o dane pole i nie dostałeś odpowiedzi, przejdź do następnego pola
+3. **NATYCHMIAST AKCEPTUJ ZAKOŃCZENIE** - gdy użytkownik mówi "koniec", "wystarczy", "kończymy", "na razie tyle", "stop" itp. → ustaw status="paused" i pożegnaj się JEDNYM ZDANIEM bez dopytywania czy na pewno chce zakończyć
+4. **NIE PROŚ O POTWIERDZENIE** zakończenia rozmowy - po prostu ją zakończ
+5. **"Nie wiem" / "brak" / "-" / "nie odpowiem"** → zapisz null i przejdź do następnego pytania BEZ komentarza
+6. **NIGDY nie dopytuj więcej niż raz** o to samo pole - użytkownik nie musi odpowiadać na wszystko
+7. **Bądź ZWIĘZŁY** - nie pisz długich akapitów, użytkownik ceni swój czas
+8. **Odpowiedź niejednoznaczna** → zapisz co zrozumiałeś i idź dalej, NIE dopytuj
 
 **WAŻNE:** 
 - NIE wymyślaj danych - tylko to co użytkownik podał
-- Jeśli użytkownik chce przerwać ("później", "koniec") → status="paused"
+- Jeśli użytkownik chce przerwać → status="paused", KRÓTKIE pożegnanie (max 1 zdanie)
+- Jeśli użytkownik wydaje się zniecierpliwiony → przyspiesz wywiad lub zaproponuj przerwę
 
 ---
 
