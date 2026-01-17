@@ -392,87 +392,34 @@ export function useGenerateRecommendations() {
       meetingId: string;
       forContactIds: string[];
     }) => {
-      // Get all participants except selected members
-      const { data: participants } = await supabase
-        .from('meeting_participants')
-        .select('contact_id, contact:contacts(id, full_name, company, relationship_strength)')
-        .eq('meeting_id', meetingId)
-        .not('contact_id', 'in', `(${forContactIds.join(',')})`);
+      // Call the AI-powered edge function
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-meeting-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            meetingId,
+            forContactIds,
+          }),
+        }
+      );
 
-      if (!participants || participants.length === 0) {
-        throw new Error('Brak innych uczestników do rekomendacji');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Błąd podczas generowania rekomendacji AI');
       }
 
-      // Generate placeholder recommendations
-      const recommendations: Array<{
-        meeting_id: string;
-        for_contact_id: string;
-        recommended_contact_id: string;
-        rank: number;
-        reasoning: string;
-        talking_points: string;
-        match_type: string;
-        status: string;
-      }> = [];
-
-      const reasonings = [
-        'Wspólne zainteresowania branżowe',
-        'Komplementarne kompetencje',
-        'Potencjalna współpraca biznesowa',
-        'Podobne doświadczenia zawodowe',
-        'Networking w tej samej branży',
-      ];
-
-      const talkingPoints = [
-        'Zapytaj o ostatnie projekty',
-        'Omów wyzwania w branży',
-        'Porozmawiaj o trendach rynkowych',
-        'Wymień się doświadczeniami',
-        'Przedyskutuj możliwości współpracy',
-      ];
-
-      for (const forContactId of forContactIds) {
-        // Sort participants by relationship strength and pick top 5
-        const sorted = [...participants]
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 5);
-
-        sorted.forEach((p, index) => {
-          recommendations.push({
-            meeting_id: meetingId,
-            for_contact_id: forContactId,
-            recommended_contact_id: p.contact_id,
-            rank: index + 1,
-            reasoning: reasonings[index % reasonings.length],
-            talking_points: talkingPoints[index % talkingPoints.length],
-            match_type: 'ai_placeholder',
-            status: 'pending',
-          });
-        });
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Nie udało się wygenerować rekomendacji');
       }
 
-      // Delete existing recommendations for these contacts
-      await supabase
-        .from('meeting_recommendations')
-        .delete()
-        .eq('meeting_id', meetingId)
-        .in('for_contact_id', forContactIds);
-
-      // Insert new recommendations
-      const { data, error } = await supabase
-        .from('meeting_recommendations')
-        .insert(recommendations)
-        .select();
-
-      if (error) throw error;
-
-      // Update meeting flag
-      await supabase
-        .from('group_meetings')
-        .update({ recommendations_generated: true })
-        .eq('id', meetingId);
-
-      return data;
+      return result.recommendations || [];
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['meeting-recommendations', variables.meetingId] });

@@ -34,7 +34,7 @@ export function ConsultationPreparationSection({
 
     try {
       // 1. Gather context in parallel
-      const [contactResult, consultationsResult, tasksResult, needsResult, offersResult] = await Promise.all([
+      const [contactResult, consultationsResult, tasksResult, needsResult, offersResult, matchesResult] = await Promise.all([
         supabase.from('contacts').select('*').eq('id', contactId).single(),
         supabase.from('consultations')
           .select('notes, ai_summary, scheduled_at, agenda')
@@ -53,6 +53,15 @@ export function ConsultationPreparationSection({
           .select('*')
           .eq('contact_id', contactId)
           .eq('status', 'active'),
+        supabase.from('matches')
+          .select(`
+            similarity_score,
+            need:needs(title, description, contact_id, contact:contacts(id, full_name, company)),
+            offer:offers(title, description, contact_id, contact:contacts(id, full_name, company))
+          `)
+          .in('status', ['pending', 'suggested'])
+          .order('similarity_score', { ascending: false })
+          .limit(10),
       ]);
 
       const contact = contactResult.data;
@@ -61,6 +70,12 @@ export function ConsultationPreparationSection({
       const pendingTasks = tasks.filter((t: any) => t?.status === 'pending');
       const needs = needsResult.data || [];
       const offers = offersResult.data || [];
+      
+      // Filter matches relevant to this contact
+      const allMatches = matchesResult.data || [];
+      const relevantMatches = allMatches.filter((m: any) => 
+        m.need?.contact_id === contactId || m.offer?.contact_id === contactId
+      );
 
       // Format context
       const formatConsultations = () => {
@@ -85,6 +100,17 @@ export function ConsultationPreparationSection({
         return offers.map(o => `- ${o.title}: ${o.description || ''}`).join('\n');
       };
 
+      const formatMatches = () => {
+        if (relevantMatches.length === 0) return 'Brak sugerowanych połączeń';
+        return relevantMatches.map((m: any, i: number) => {
+          const isNeedOwner = m.need?.contact_id === contactId;
+          const partner = isNeedOwner ? m.offer?.contact : m.need?.contact;
+          const partnerItem = isNeedOwner ? m.offer : m.need;
+          const score = Math.round((m.similarity_score || 0) * 100);
+          return `${i + 1}. ${partner?.full_name || 'Nieznany'} (${partner?.company || 'Brak firmy'}) - ${isNeedOwner ? 'Oferuje' : 'Potrzebuje'}: ${partnerItem?.title || ''} (dopasowanie: ${score}%)`;
+        }).join('\n');
+      };
+
       // 2. Build prompt
       const prompt = `Przygotuj brief przed spotkaniem z ${contactName}${contactCompany ? ` z firmy ${contactCompany}` : ''}.
 
@@ -104,12 +130,18 @@ ${formatNeeds()}
 Aktywne oferty:
 ${formatOffers()}
 
+Sugerowane połączenia biznesowe (dopasowania need↔offer):
+${formatMatches()}
+
 Przygotuj brief zawierający:
 1. Podsumowanie ostatniego spotkania i status ustaleń
 2. Kluczowe tematy do omówienia
 3. Pytania do zadania
 4. Sugerowane tematy rozmowy
-5. Tematy small-talk (jeśli znane hobby/zainteresowania z notatek)
+5. Sugerowane połączenia do zaproponowania (jeśli są dopasowania powyżej)
+   - Wyjaśnij dlaczego warto połączyć te osoby
+   - Podaj konkretne korzyści dla obu stron
+6. Tematy small-talk (jeśli znane hobby/zainteresowania z notatek)
 
 Odpowiedz po polsku, zwięźle i konkretnie. Użyj formatowania markdown.`;
 

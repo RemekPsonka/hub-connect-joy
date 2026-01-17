@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Sparkles,
@@ -14,6 +13,8 @@ import {
   Users,
   MessageSquare,
   Lightbulb,
+  Brain,
+  Loader2,
 } from 'lucide-react';
 import {
   useMeetingParticipants,
@@ -23,6 +24,7 @@ import {
   type RecommendationStatus,
 } from '@/hooks/useMeetings';
 import { toast } from 'sonner';
+import { streamAIChat } from '@/hooks/useAIChat';
 
 interface MeetingRecommendationsTabProps {
   meetingId: string;
@@ -37,6 +39,8 @@ const statusLabels: Record<RecommendationStatus, { label: string; color: string 
 
 export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsTabProps) {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [loadingExplanation, setLoadingExplanation] = useState<string | null>(null);
 
   const { data: participants = [] } = useMeetingParticipants(meetingId);
   const { data: recommendations = [], isLoading } = useMeetingRecommendations(meetingId);
@@ -86,6 +90,51 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
       toast.success('Status został zaktualizowany');
     } catch (error) {
       toast.error('Błąd podczas aktualizacji statusu');
+    }
+  };
+
+  const handleExplainMatch = async (rec: typeof recommendations[0]) => {
+    if (!rec.for_contact || !rec.recommended_contact) return;
+    
+    const recId = rec.id;
+    setLoadingExplanation(recId);
+
+    try {
+      const prompt = `Wyjaśnij szczegółowo dlaczego te dwie osoby biznesowe powinny się poznać podczas spotkania networkingowego:
+
+OSOBA A: ${rec.for_contact.full_name}${rec.for_contact.company ? ` (${rec.for_contact.company})` : ''}
+OSOBA B: ${rec.recommended_contact.full_name}${rec.recommended_contact.company ? ` (${rec.recommended_contact.company})` : ''}
+
+Obecne uzasadnienie: ${rec.reasoning || 'Brak'}
+Sugerowane tematy: ${rec.talking_points || 'Brak'}
+Typ dopasowania: ${rec.match_type || 'networking'}
+
+Napisz szczegółowe wyjaśnienie (3-5 zdań) zawierające:
+1. Dlaczego to połączenie ma sens biznesowy
+2. Konkretne korzyści dla każdej ze stron
+3. 2-3 konkretne tematy do omówienia podczas rozmowy
+
+Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
+
+      let explanation = '';
+      await streamAIChat({
+        messages: [{ role: 'user', content: prompt }],
+        onDelta: (chunk) => {
+          explanation += chunk;
+          setExplanations(prev => ({ ...prev, [recId]: explanation }));
+        },
+        onDone: () => {
+          setLoadingExplanation(null);
+        },
+        onError: () => {
+          setLoadingExplanation(null);
+          toast.error('Błąd podczas generowania wyjaśnienia');
+        }
+      });
+    } catch (error) {
+      console.error('Error explaining match:', error);
+      setLoadingExplanation(null);
+      toast.error('Błąd podczas generowania wyjaśnienia');
     }
   };
 
@@ -178,7 +227,7 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
                         {index > 0 && <Separator className="my-3" />}
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span className="text-sm font-medium text-muted-foreground">
                                 #{rec.rank}
                               </span>
@@ -193,6 +242,13 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
                               <Badge className={statusLabels[rec.status].color}>
                                 {statusLabels[rec.status].label}
                               </Badge>
+                              {rec.match_type && rec.match_type !== 'ai_placeholder' && (
+                                <Badge variant="outline" className="text-xs">
+                                  {rec.match_type === 'need-offer' ? 'Potrzeba↔Oferta' :
+                                   rec.match_type === 'offer-need' ? 'Oferta↔Potrzeba' :
+                                   rec.match_type === 'synergy' ? 'Synergia' : 'Networking'}
+                                </Badge>
+                              )}
                             </div>
 
                             {rec.reasoning && (
@@ -208,10 +264,44 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
                                 <span>{rec.talking_points}</span>
                               </div>
                             )}
+
+                            {/* Explain button */}
+                            <div className="mt-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => handleExplainMatch(rec)}
+                                disabled={loadingExplanation === rec.id}
+                              >
+                                {loadingExplanation === rec.id ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Generowanie...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Brain className="h-3 w-3" />
+                                    Wyjaśnij dopasowanie
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+
+                            {/* AI Explanation */}
+                            {explanations[rec.id] && (
+                              <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
+                                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
+                                  <Sparkles className="h-3 w-3" />
+                                  Szczegółowe wyjaśnienie AI
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap">{explanations[rec.id]}</p>
+                              </div>
+                            )}
                           </div>
 
                           {rec.status === 'pending' && (
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-shrink-0">
                               <Button
                                 variant="ghost"
                                 size="icon"
