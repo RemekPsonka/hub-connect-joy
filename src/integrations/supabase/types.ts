@@ -807,6 +807,33 @@ export type Database = {
           },
         ]
       }
+      search_synonyms: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          id: string
+          synonyms: string[]
+          term: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          synonyms: string[]
+          term: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          synonyms?: string[]
+          term?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       task_contacts: {
         Row: {
           contact_id: string
@@ -923,10 +950,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_synonym: {
+        Args: { p_category?: string; p_synonyms: string[]; p_term: string }
+        Returns: string
+      }
       calculate_relationship_health: {
         Args: { p_contact_id: string }
         Returns: number
       }
+      delete_synonym: { Args: { p_id: string }; Returns: boolean }
+      expand_search_query: { Args: { p_query: string }; Returns: string[] }
       find_connection_path: {
         Args: {
           p_end_contact: string
@@ -959,6 +992,16 @@ export type Database = {
           match_offer_id: string
           match_offer_title: string
           similarity: number
+        }[]
+      }
+      get_all_synonyms: {
+        Args: never
+        Returns: {
+          category: string
+          created_at: string
+          id: string
+          synonyms: string[]
+          term: string
         }[]
       }
       get_current_tenant_id: { Args: never; Returns: string }
@@ -1028,6 +1071,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      test_expand_query: { Args: { p_query: string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }
       unaccent: { Args: { "": string }; Returns: string }
     }

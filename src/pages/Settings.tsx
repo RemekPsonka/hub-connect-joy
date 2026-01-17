@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 
 interface EmbeddingStats {
   contacts_with: number;
@@ -225,16 +226,19 @@ export default function Settings() {
         <h1 className="text-2xl font-bold text-foreground">Ustawienia</h1>
         <p className="text-muted-foreground">Zarządzaj ustawieniami aplikacji</p>
       </div>
+
+      {/* Synonyms Dictionary - NEW */}
+      <SynonymsDictionary />
       
       {/* AI Search Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            Wyszukiwanie AI
+            Wyszukiwanie AI (Embeddingi)
           </CardTitle>
           <CardDescription>
-            Zarządzaj embeddingami do wyszukiwania semantycznego
+            Zarządzaj embeddingami do wyszukiwania semantycznego (opcjonalne)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -314,8 +318,8 @@ export default function Settings() {
                   )}
                 </Button>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Embeddingi umożliwiają wyszukiwanie semantyczne - znajdowanie wyników 
-                  na podstawie znaczenia, nie tylko dokładnego dopasowania słów.
+                  Embeddingi umożliwiają dodatkowe wyszukiwanie semantyczne.
+                  Główne wyszukiwanie opiera się na słowniku synonimów powyżej.
                 </p>
               </div>
             </div>
