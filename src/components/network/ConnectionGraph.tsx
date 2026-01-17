@@ -223,11 +223,11 @@ export function ConnectionGraph({
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[500px] bg-background rounded-lg border">
+    <div ref={containerRef} className="w-full h-[500px] bg-background rounded-lg border">
       {isLayoutDone && (
         <SigmaContainer
           graph={graph}
-          style={{ height: '100%', width: '100%' }}
+          style={{ height: '500px', width: '100%' }}
           settings={{
             renderLabels: true,
             labelSize: 12,
@@ -238,6 +238,7 @@ export function ConnectionGraph({
             zoomToSizeRatioFunction: (ratio) => ratio,
             itemSizesReference: 'positions',
             zoomDuration: 200,
+            allowInvalidContainer: true,
           }}
         >
           <GraphEvents
