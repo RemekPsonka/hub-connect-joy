@@ -116,24 +116,21 @@ function findCurrentFieldIndex(conversationLog: any[]): number {
   return -1;
 }
 
-// Calculate completeness score
+// Calculate completeness score - liczymy TYLKO pola z ALL_FIELDS_ORDERED (te o które pytamy w wywiadzie)
 function calculateCompleteness(biProfile: any): number {
-  const allFields: string[] = [];
-  Object.values(BI_FRAMEWORK).forEach((section: any) => {
-    section.fields.forEach((field: string) => allFields.push(field));
-  });
+  if (!biProfile) return 0;
   
   let filledCount = 0;
-  Object.keys(BI_FRAMEWORK).forEach(sectionKey => {
-    const sectionData = biProfile[sectionKey] || {};
-    Object.keys(sectionData).forEach(key => {
-      if (sectionData[key] !== null && sectionData[key] !== undefined && sectionData[key] !== '') {
-        filledCount++;
-      }
-    });
-  });
   
-  return Math.min(1, filledCount / allFields.length);
+  for (const fieldInfo of ALL_FIELDS_ORDERED) {
+    const sectionData = biProfile[fieldInfo.section] || {};
+    const value = sectionData[fieldInfo.field];
+    if (value !== null && value !== undefined && value !== '') {
+      filledCount++;
+    }
+  }
+  
+  return Math.min(1, filledCount / ALL_FIELDS_ORDERED.length);
 }
 
 // Check which sections are complete
@@ -432,17 +429,30 @@ serve(async (req) => {
     const currentField = lastAgentMsg?.question_field;
     const currentSection = ALL_FIELDS_ORDERED.find(f => f.field === currentField)?.section;
 
-    // Build simple extraction prompt
+    // Build extraction prompt with formatting instructions
     const extractionPrompt = `
-Wyciągnij dane z odpowiedzi.
+Wyciągnij i SFORMATUJ dane z odpowiedzi dyrektora.
 
 POLE: ${currentField || 'unknown'}
-SEKCJA: ${currentSection || 'unknown'}
-ODPOWIEDŹ: "${userMessage}"
+ODPOWIEDŹ DYREKTORA: "${userMessage}"
+
+ZASADY FORMATOWANIA:
+- Pisz poprawną polszczyzną, pełnymi zdaniami
+- Listy: "1) ..., 2) ..., 3) ..."
+- Liczby: "1500 pracowników", "350 mln PLN"
+- Nazwy własne z dużej litery
+- Popraw literówki i rozwiń skróty myślowe
+- Zachowaj sens, popraw styl
+
+PRZYKŁADY:
+"it 50 osób" → "Branża IT, 50 pracowników"
+"przygotować nato kupić robota" → "1) Przygotowanie do zadań NATO, 2) Zakup robota chirurgicznego"
+"szpital wojskowy flanka" → "Szpital wojskowy z nadzorem nad flanką wschodnią NATO"
+"-" lub "nie dotyczy" → null
 
 Zwróć TYLKO JSON:
 {
-  "value": "wyciągnięta wartość lub null jeśli brak danych",
+  "value": "sformatowana wartość lub null",
   "extracted": true/false
 }
 `;

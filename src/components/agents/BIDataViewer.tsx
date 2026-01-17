@@ -102,20 +102,21 @@ function formatValue(value: any): string {
   return String(value);
 }
 
-// Calculate section completeness
+// Calculate section completeness - dopasowane do faktycznej liczby pytań w wywiadzie
 function getSectionCompleteness(sectionData: any, sectionKey: string): number {
   if (!sectionData) return 0;
   
+  // Liczby pól odpowiadające pytaniom w wywiadzie (ALL_FIELDS_ORDERED)
   const fieldCounts: Record<string, number> = {
-    section_1_basic_info: 13,
-    section_2_business_metrics: 17,
-    section_3_priorities_challenges: 10,
-    section_4_investments: 2,
-    section_5_cc_relations: 6,
-    section_6_personal: 8,
+    section_1_basic_info: 10, // industry, company_main, nip, website, linkedin, headquarters, founded_year, assistant_name/email/phone
+    section_2_business_metrics: 11, // employees, clients_current/plan, revenue, ebitda, main_activity, markets, top_products, value_proposition, ownership
+    section_3_priorities_challenges: 6, // top_3_priorities, biggest_challenge, biggest_achievement, top_3_clients, what_seeking, strategy
+    section_4_investments: 2, // recent, planned
+    section_5_cc_relations: 4, // source, attended, wants_to_meet, value
+    section_6_personal: 4, // family, passions, personal_goals, life_principles
   };
   
-  const totalFields = fieldCounts[sectionKey] || 10;
+  const totalFields = fieldCounts[sectionKey] || 5;
   const filledFields = Object.values(sectionData).filter(v => 
     v !== null && v !== undefined && v !== '' && 
     !(Array.isArray(v) && v.length === 0) &&
