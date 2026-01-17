@@ -1,12 +1,37 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useContactConnections } from '@/hooks/useConnections';
+import { useContactConnections, useUpdateConnection, useDeleteConnection } from '@/hooks/useConnections';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, Plus, Building2, UserPlus } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Users, Plus, Building2, UserPlus, ChevronDown, Trash2 } from 'lucide-react';
 import { AddConnectionModal } from '@/components/network/AddConnectionModal';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 
 interface ContactConnectionsSectionProps {
   contactId: string;
@@ -28,6 +53,188 @@ const connectionTypeColors: Record<string, string> = {
   colleague: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   business_partner: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
 };
+
+interface ConnectionItemProps {
+  connection: {
+    id: string;
+    connection_type: string | null;
+    strength: number | null;
+    connected_contact?: {
+      id: string;
+      full_name: string;
+      company: string | null;
+      position: string | null;
+    };
+  };
+}
+
+function ConnectionItem({ connection }: ConnectionItemProps) {
+  const [localStrength, setLocalStrength] = useState(connection.strength || 5);
+  const [isStrengthOpen, setIsStrengthOpen] = useState(false);
+  const updateConnection = useUpdateConnection();
+  const deleteConnection = useDeleteConnection();
+
+  const handleTypeChange = (newType: string) => {
+    updateConnection.mutate(
+      { connectionId: connection.id, connectionType: newType },
+      {
+        onSuccess: () => {
+          toast.success('Typ połączenia zaktualizowany');
+        },
+        onError: () => {
+          toast.error('Błąd podczas aktualizacji');
+        },
+      }
+    );
+  };
+
+  const handleStrengthChange = (value: number) => {
+    updateConnection.mutate(
+      { connectionId: connection.id, strength: value },
+      {
+        onSuccess: () => {
+          toast.success('Siła relacji zaktualizowana');
+          setIsStrengthOpen(false);
+        },
+        onError: () => {
+          toast.error('Błąd podczas aktualizacji');
+        },
+      }
+    );
+  };
+
+  const handleDelete = () => {
+    deleteConnection.mutate(connection.id, {
+      onSuccess: () => {
+        toast.success('Połączenie usunięte');
+      },
+      onError: () => {
+        toast.error('Błąd podczas usuwania');
+      },
+    });
+  };
+
+  const connectionType = connection.connection_type || 'knows';
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+      <Link 
+        to={`/contacts/${connection.connected_contact?.id}`}
+        className="flex-1 min-w-0"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-medium truncate">
+            {connection.connected_contact?.full_name}
+          </span>
+        </div>
+        {connection.connected_contact?.company && (
+          <div className="flex items-center gap-1 text-sm text-muted-foreground mt-0.5">
+            <Building2 className="h-3 w-3" />
+            <span className="truncate">{connection.connected_contact.company}</span>
+            {connection.connected_contact.position && (
+              <span className="truncate">• {connection.connected_contact.position}</span>
+            )}
+          </div>
+        )}
+      </Link>
+
+      <div className="flex items-center gap-2 ml-3">
+        {/* Editable Connection Type */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Badge 
+              variant="secondary" 
+              className={`cursor-pointer hover:opacity-80 text-xs ${connectionTypeColors[connectionType] || ''}`}
+            >
+              {connectionTypeLabels[connectionType] || connectionType}
+              <ChevronDown className="h-3 w-3 ml-1" />
+            </Badge>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {Object.entries(connectionTypeLabels).map(([key, label]) => (
+              <DropdownMenuItem 
+                key={key}
+                onClick={() => handleTypeChange(key)}
+                className={key === connectionType ? 'bg-muted' : ''}
+              >
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Editable Strength */}
+        <Popover open={isStrengthOpen} onOpenChange={setIsStrengthOpen}>
+          <PopoverTrigger asChild>
+            <button className="flex items-center gap-1 cursor-pointer hover:opacity-80" onClick={(e) => e.stopPropagation()}>
+              <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${(connection.strength || 5) * 10}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground w-4">
+                {connection.strength || 5}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48" align="end">
+            <div className="space-y-3">
+              <Label className="text-sm">Siła relacji: {localStrength}</Label>
+              <Slider
+                value={[localStrength]}
+                min={1}
+                max={10}
+                step={1}
+                onValueChange={([v]) => setLocalStrength(v)}
+              />
+              <Button 
+                size="sm" 
+                className="w-full"
+                onClick={() => handleStrengthChange(localStrength)}
+                disabled={updateConnection.isPending}
+              >
+                Zapisz
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Delete Button */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Usunąć połączenie?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Czy na pewno chcesz usunąć połączenie z {connection.connected_contact?.full_name}? 
+                Tej operacji nie można cofnąć.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Anuluj</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Usuń
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
 
 export function ContactConnectionsSection({ contactId, contactName }: ContactConnectionsSectionProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -88,49 +295,7 @@ export function ContactConnectionsSection({ contactId, contactName }: ContactCon
           ) : (
             <div className="space-y-3">
               {connections.map((connection) => (
-                <Link 
-                  key={connection.id} 
-                  to={`/contacts/${connection.connected_contact?.id}`}
-                  className="block"
-                >
-                  <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">
-                          {connection.connected_contact?.full_name}
-                        </span>
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs ${connectionTypeColors[connection.connection_type] || ''}`}
-                        >
-                          {connectionTypeLabels[connection.connection_type] || connection.connection_type}
-                        </Badge>
-                      </div>
-                      {connection.connected_contact?.company && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground mt-0.5">
-                          <Building2 className="h-3 w-3" />
-                          <span className="truncate">{connection.connected_contact.company}</span>
-                          {connection.connected_contact.position && (
-                            <span className="truncate">• {connection.connected_contact.position}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 ml-3">
-                      <div className="flex items-center gap-1">
-                        <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${(connection.strength || 5) * 10}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground w-4">
-                          {connection.strength || 5}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
+                <ConnectionItem key={connection.id} connection={connection} />
               ))}
             </div>
           )}
