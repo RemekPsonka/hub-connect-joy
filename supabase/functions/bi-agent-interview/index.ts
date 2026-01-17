@@ -212,7 +212,7 @@ serve(async (req) => {
       const updatedConversationLog = [
         ...(session.conversation_log || []),
         { timestamp: new Date().toISOString(), speaker: 'user', message: userMessage },
-        { timestamp: new Date().toISOString(), speaker: 'agent', message: 'Dziękuję za poświęcony czas! Wywiad wstrzymany - wróć kiedy będziesz mieć chwilę.' }
+        { timestamp: new Date().toISOString(), speaker: 'agent', message: 'OK, wstrzymano.' }
       ];
       
       await supabase
@@ -226,7 +226,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          agent_message: 'Dziękuję za poświęcony czas! Wywiad wstrzymany - wróć kiedy będziesz mieć chwilę.',
+          agent_message: 'OK, wstrzymano.',
           next_question: null,
           completeness: biData.completeness_score || 0,
           sections_completed: getCompletedSections(biData.bi_profile || {}),
@@ -242,128 +242,69 @@ serve(async (req) => {
     const recentConversation = (session.conversation_log || []).slice(-10);
 
     const biAgentPrompt = `
-Jesteś BI Agentem (Business Intelligence) przeprowadzającym strukturalny wywiad biznesowy dla kontaktu.
+Jesteś asystentem BI. Zbierasz dane od DYREKTORA (nie od klienta). Dyrektor wpisuje dane zebrane podczas rozmowy z klientem.
 
-## KONTAKT
-- **Imię i nazwisko:** ${contact.full_name}
-- **Firma:** ${contact.company || 'nieznana'}
-- **Stanowisko:** ${contact.position || 'nieznane'}
-- **Email:** ${contact.email || 'brak'}
-- **Telefon:** ${contact.phone || 'brak'}
-- **Notatki:** ${contact.notes || 'brak'}
+## KONTAKT: ${contact.full_name} | ${contact.company || '?'} | ${contact.position || '?'}
 
-${companyInfo ? `
-## DANE FIRMY (z systemu)
-${JSON.stringify(companyInfo, null, 2)}
-` : ''}
-
-## OBECNY STAN DANYCH BI
-
-**Completeness:** ${((biData.completeness_score || 0) * 100).toFixed(0)}%
-**Status:** ${biData.bi_status}
-**Sekcje kompletne:** ${completedSections.length > 0 ? completedSections.join(', ') : 'żadna'}
-
-**Obecne dane BI:**
+## OBECNE DANE BI (${((biData.completeness_score || 0) * 100).toFixed(0)}% kompletne)
 ${JSON.stringify(biData.bi_profile || {}, null, 2)}
 
-## HISTORIA KONWERSACJI (ostatnie wiadomości)
-${recentConversation.map((msg: any) => `${msg.speaker === 'user' ? 'Użytkownik' : 'Agent'}: ${msg.message}`).join('\n') || 'Brak historii - to początek wywiadu'}
+## HISTORIA (ostatnie)
+${recentConversation.map((msg: any) => `${msg.speaker === 'user' ? 'D' : 'A'}: ${msg.message}`).join('\n') || 'Start'}
 
----
-
-## FRAMEWORK WYWIADU (6 SEKCJI)
-
-### Sekcja 1: Podstawowe informacje (section_1_basic_info)
-Pola: full_name, company_main, industry, nip, website, linkedin, assistant_name, assistant_email, assistant_phone, headquarters, residence, founded_year, company_age_years
-
-### Sekcja 2: Metryki biznesowe (section_2_business_metrics)
-Pola: employees_count, clients_current, clients_plan_this_year, revenue_last_year, revenue_plan_this_year, ebitda_last_year, ebitda_plan_this_year, ebitda_yoy_change_percent, other_kpis (retention_rate, nps_score, avg_deal_size), main_activity, markets[], top_products[], value_proposition, formal_role, ownership_structure (user_shares_percent, has_partners, partners[]), total_business_scale, other_businesses[]
-
-### Sekcja 3: Priorytety i wyzwania (section_3_priorities_challenges)
-Pola: top_3_priorities[], biggest_challenge, biggest_achievement, proudest_products[], top_3_clients[], client_profile, what_seeking[], strategy_2_3_years, consults_decisions_with[], economic_situation_impact (opportunities[], threats[])
-
-### Sekcja 4: Inwestycje (section_4_investments)
-Pola: recent_investments[] (type, description, date, rationale, cost), planned_investments[] (type, description, timeline, budget, needs[])
-
-### Sekcja 5: Relacje CC (section_5_cc_relations)
-Pola: source_of_contact (person, relation), attended_cc_meetings[], wants_to_meet[], currently_cooperates_with[], value_to_cc (contacts[], knowledge[], resources[]), engagement_in_cc[]
-
-### Sekcja 6: Prywatne (section_6_personal)
-Pola: family (marital_status, spouse_name, children, children_ages[]), work_life_balance, personal_goals_2_3_years[], succession_plan (exists, notes), passions[], life_principles[], philanthropy (supports, organizations[]), other_memberships[]
-
----
-
-## OSTATNIA WIADOMOŚĆ OD UŻYTKOWNIKA
-
+## WIADOMOŚĆ DYREKTORA
 "${userMessage}"
 
 ---
 
-## TWOJE ZADANIE
+## POLA DO ZEBRANIA (6 sekcji)
 
-${userMessage === 'START_INTERVIEW' ? `
-To jest POCZĄTEK WYWIADU. Przywitaj się ciepło, przedstaw cel wywiadu (zebranie kompleksowych informacji biznesowych) i zadaj pierwsze pytanie z sekcji 1 (podstawowe informacje). Zacznij od potwierdzenia danych które już mamy.
-` : `
-1. **Analiza wiadomości:**
-   - Wyciągnij wszystkie fakty z odpowiedzi
-   - Dopasuj je do odpowiednich pól w schemacie BI
-   
-2. **Następne pytanie:**
-   - Jeśli sekcja niekompletna → kontynuuj tę sekcję
-   - Jeśli sekcja kompletna → przejdź do następnej
-   - Jeśli wszystko kompletne → zaproponuj zakończenie
-`}
-
-**STYL KONWERSACJI:**
-- Naturalny, profesjonalny ale ciepły ton
-- Zadawaj 1-2 pytania na raz (nie więcej!)
-- Używaj kontekstu z poprzednich odpowiedzi
-- Dziękuj KRÓTKO za odpowiedzi
-
-**KLUCZOWE ZASADY - BEZWZGLĘDNIE PRZESTRZEGAJ:**
-1. **AKCEPTUJ KRÓTKIE ODPOWIEDZI** - jeśli użytkownik odpowiada zwięźle, zapisz co powiedział i przejdź dalej. NIE dopytuj o szczegóły, NIE proś o rozwinięcie.
-2. **NIE POWTARZAJ PYTAŃ** - jeśli już pytałeś o dane pole i nie dostałeś odpowiedzi, przejdź do następnego pola
-3. **NATYCHMIAST AKCEPTUJ ZAKOŃCZENIE** - gdy użytkownik mówi "koniec", "wystarczy", "kończymy", "na razie tyle", "stop" itp. → ustaw status="paused" i pożegnaj się JEDNYM ZDANIEM bez dopytywania czy na pewno chce zakończyć
-4. **NIE PROŚ O POTWIERDZENIE** zakończenia rozmowy - po prostu ją zakończ
-5. **"Nie wiem" / "brak" / "-" / "nie odpowiem"** → zapisz null i przejdź do następnego pytania BEZ komentarza
-6. **NIGDY nie dopytuj więcej niż raz** o to samo pole - użytkownik nie musi odpowiadać na wszystko
-7. **Bądź ZWIĘZŁY** - nie pisz długich akapitów, użytkownik ceni swój czas
-8. **Odpowiedź niejednoznaczna** → zapisz co zrozumiałeś i idź dalej, NIE dopytuj
-
-**WAŻNE:** 
-- NIE wymyślaj danych - tylko to co użytkownik podał
-- Jeśli użytkownik chce przerwać → status="paused", KRÓTKIE pożegnanie (max 1 zdanie)
-- Jeśli użytkownik wydaje się zniecierpliwiony → przyspiesz wywiad lub zaproponuj przerwę
+1. section_1_basic_info: full_name, company_main, industry, nip, website, linkedin, assistant_name/email/phone, headquarters, residence, founded_year
+2. section_2_business_metrics: employees_count, clients_current/plan, revenue_last_year/plan, ebitda, main_activity, markets[], top_products[], value_proposition, ownership_structure
+3. section_3_priorities_challenges: top_3_priorities[], biggest_challenge, biggest_achievement, top_3_clients[], what_seeking[], strategy_2_3_years
+4. section_4_investments: recent_investments[], planned_investments[]
+5. section_5_cc_relations: source_of_contact, attended_cc_meetings[], wants_to_meet[], value_to_cc
+6. section_6_personal: family, work_life_balance, personal_goals[], passions[], life_principles[]
 
 ---
 
-## OUTPUT FORMAT (zwróć TYLKO valid JSON, bez markdown code blocks)
+## ZASADY (PRZESTRZEGAJ ŚCIŚLE)
+
+1. Pytania: KRÓTKIE, 1 linia, bez upiększeń
+2. Po odpowiedzi: zapisz → następne pytanie (bez komentarzy, bez podziękowań)
+3. "nie wiem" / "-" / brak → null, następne pytanie
+4. "koniec" → status="paused", odpowiedź: "OK, wstrzymano."
+5. NIE dopytuj, NIE rozwijaj, NIE podsumowuj
+
+PRZYKŁADY TWOICH ODPOWIEDZI:
+- "Branża?"
+- "Ilu pracowników?"
+- "Przychody 2024?"
+- "Główni klienci?"
+- "OK, wstrzymano."
+
+NIE pisz tak:
+- "Dziękuję za tę informację!"
+- "Świetnie! Rozumiem, że..."
+- "Czy mógłbyś rozwinąć..."
+
+${userMessage === 'START_INTERVIEW' ? 'To START. Zadaj pierwsze pytanie z sekcji 1. Przykład: "Branża firmy?"' : 'Zapisz dane z wiadomości i zadaj następne pytanie.'}
+
+---
+
+## OUTPUT (tylko JSON, bez markdown)
 
 {
   "extracted_data": {
-    "section_2_business_metrics": {
-      "employees_count": 50,
-      "revenue_last_year": 15000000
-    }
+    "section_X": { "pole": "wartość" }
   },
-  
-  "agent_message": "Dziękuję za informację! Rozumiem, że macie 50 pracowników. A jakie są planowane przychody na ten rok?",
-  
-  "next_question": {
-    "section": "section_2_business_metrics",
-    "field": "revenue_plan_this_year"
-  },
-  
-  "session_update": {
-    "questions_asked": 5,
-    "questions_answered": 4,
-    "sections_completed": ["section_1_basic_info"]
-  },
-  
+  "agent_message": "Następne pytanie?",
+  "next_question": { "section": "...", "field": "..." },
+  "session_update": { "questions_asked": N, "questions_answered": N, "sections_completed": [] },
   "status": "in_progress"
 }
 
-Możliwe statusy: "in_progress", "paused", "completed"
+Statusy: "in_progress", "paused", "completed"
 `;
 
     // 6. Call AI
