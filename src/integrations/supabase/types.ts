@@ -102,6 +102,7 @@ export type Database = {
         Row: {
           comment: string | null
           consultation_id: string
+          contact_id: string | null
           created_at: string | null
           guest_name: string | null
           guest_type: string
@@ -112,6 +113,7 @@ export type Database = {
         Insert: {
           comment?: string | null
           consultation_id: string
+          contact_id?: string | null
           created_at?: string | null
           guest_name?: string | null
           guest_type: string
@@ -122,6 +124,7 @@ export type Database = {
         Update: {
           comment?: string | null
           consultation_id?: string
+          contact_id?: string | null
           created_at?: string | null
           guest_name?: string | null
           guest_type?: string
@@ -137,6 +140,13 @@ export type Database = {
             referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "consultation_guests_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       consultation_meetings: {
@@ -145,6 +155,7 @@ export type Database = {
           comment: string | null
           company: string | null
           consultation_id: string
+          contact_id: string | null
           contact_name: string | null
           created_at: string | null
           follow_up: string | null
@@ -158,6 +169,7 @@ export type Database = {
           comment?: string | null
           company?: string | null
           consultation_id: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           follow_up?: string | null
@@ -171,6 +183,7 @@ export type Database = {
           comment?: string | null
           company?: string | null
           consultation_id?: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           follow_up?: string | null
@@ -185,6 +198,13 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_meetings_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -280,6 +300,7 @@ export type Database = {
         Row: {
           company: string | null
           consultation_id: string
+          contact_id: string | null
           contact_name: string | null
           created_at: string | null
           id: string
@@ -291,6 +312,7 @@ export type Database = {
         Insert: {
           company?: string | null
           consultation_id: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -302,6 +324,7 @@ export type Database = {
         Update: {
           company?: string | null
           consultation_id?: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -318,12 +341,20 @@ export type Database = {
             referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "consultation_recommendations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       consultation_thanks: {
         Row: {
           business_benefit_type: string | null
           consultation_id: string
+          contact_id: string | null
           contact_name: string | null
           created_at: string | null
           id: string
@@ -333,6 +364,7 @@ export type Database = {
         Insert: {
           business_benefit_type?: string | null
           consultation_id: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -342,6 +374,7 @@ export type Database = {
         Update: {
           business_benefit_type?: string | null
           consultation_id?: string
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -354,6 +387,13 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_thanks_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
