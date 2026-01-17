@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Mail, Phone, Building, MapPin, Linkedin, Tag, FileText } from 'lucide-react';
 import { useContactStats, type ContactWithGroup } from '@/hooks/useContacts';
+import { ContactConnectionsSection } from './ContactConnectionsSection';
 
 interface ContactOverviewTabProps {
   contact: ContactWithGroup;
@@ -158,6 +159,9 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Connections/Network section */}
+      <ContactConnectionsSection contactId={contact.id} contactName={contact.full_name} />
     </div>
   );
 }

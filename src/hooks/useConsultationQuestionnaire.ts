@@ -206,10 +206,58 @@ export function useUpdateConsultationMeeting() {
         .single();
 
       if (error) throw error;
+
+      // Auto-create connection if contact_id is set
+      if (updates.contact_id && consultationId) {
+        try {
+          // Get the consultation to find the main contact (client)
+          const { data: consultation } = await supabase
+            .from('consultations')
+            .select('contact_id, tenant_id')
+            .eq('id', consultationId)
+            .single();
+
+          if (consultation && consultation.contact_id && consultation.contact_id !== updates.contact_id) {
+            // Determine connection type based on meeting type
+            const meetingType = updates.meeting_type || data.meeting_type;
+            const connectionType = (meetingType === 'on_event' || meetingType === 'planned_on_event') 
+              ? 'met_at_event' 
+              : 'knows';
+
+            // Check if connection already exists (in either direction)
+            const { data: existingConn } = await supabase
+              .from('connections')
+              .select('id')
+              .or(
+                `and(contact_a_id.eq.${consultation.contact_id},contact_b_id.eq.${updates.contact_id}),and(contact_a_id.eq.${updates.contact_id},contact_b_id.eq.${consultation.contact_id})`
+              )
+              .maybeSingle();
+
+            // Create connection if it doesn't exist
+            if (!existingConn) {
+              await supabase
+                .from('connections')
+                .insert({
+                  contact_a_id: consultation.contact_id,
+                  contact_b_id: updates.contact_id,
+                  connection_type: connectionType,
+                  strength: 7, // Default strong connection for 1x1 meetings
+                  tenant_id: consultation.tenant_id,
+                });
+            }
+          }
+        } catch (connError) {
+          console.error('Failed to create connection:', connError);
+          // Don't throw - we still want the meeting update to succeed
+        }
+      }
+
       return { ...data, consultationId };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['consultation-meetings', data.consultationId] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-connections'] });
     },
   });
 }
