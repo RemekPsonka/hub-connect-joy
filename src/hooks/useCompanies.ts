@@ -88,6 +88,18 @@ export function useUpdateCompany() {
   });
 }
 
+// Helper to get logo URL from website domain using Clearbit
+export function getCompanyLogoUrl(website: string | null | undefined): string | null {
+  if (!website) return null;
+  try {
+    const url = new URL(website.startsWith('http') ? website : `https://${website}`);
+    const domain = url.hostname.replace('www.', '');
+    return `https://logo.clearbit.com/${domain}`;
+  } catch {
+    return null;
+  }
+}
+
 export function useRegenerateCompanyAI() {
   const queryClient = useQueryClient();
   
@@ -98,7 +110,7 @@ export function useRegenerateCompanyAI() {
       website?: string | null;
       industryHint?: string | null;
     }) => {
-      const { data: enriched, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
+      const { data: result, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
         body: { 
           company_name: companyName,
           website: website,
@@ -108,13 +120,20 @@ export function useRegenerateCompanyAI() {
       
       if (enrichError) throw enrichError;
       
+      const enriched = result?.data || result;
+      
       const updateData: CompanyUpdate = {
-        description: enriched.description,
+        description: enriched.description || null,
         ai_analysis: JSON.stringify({
           services: enriched.services || [],
-          collaboration_areas: enriched.collaboration_areas || []
+          collaboration_areas: enriched.collaboration_areas || [],
+          confidence: enriched.confidence || 'medium',
+          employee_count_estimate: enriched.employee_count_estimate || null,
         }),
         industry: enriched.industry || null,
+        logo_url: enriched.logo_url || null,
+        // Update website if AI found one and we didn't have it
+        website: website || enriched.suggested_website || null,
         updated_at: new Date().toISOString()
       };
       

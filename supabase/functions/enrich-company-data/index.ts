@@ -5,6 +5,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to extract domain from URL
+function extractDomain(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    return urlObj.hostname.replace('www.', '');
+  } catch {
+    return null;
+  }
+}
+
+// Generate logo URL using Clearbit
+function getClearbitLogoUrl(domain: string | null): string | null {
+  if (!domain) return null;
+  return `https://logo.clearbit.com/${domain}`;
+}
+
+// Check if logo URL is valid (Clearbit returns 200 for existing logos)
+async function isLogoValid(logoUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(logoUrl, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -21,26 +48,41 @@ serve(async (req) => {
       );
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      console.error('OPENAI_API_KEY is not configured');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY is not configured');
       return new Response(
-        JSON.stringify({ error: 'Klucz API OpenAI nie jest skonfigurowany' }),
+        JSON.stringify({ error: 'Klucz API nie jest skonfigurowany' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('Enriching company data for:', company_name);
 
-    // Call OpenAI GPT-4 API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Step 1: Try to get logo from website domain
+    let logo_url: string | null = null;
+    const domain = extractDomain(website);
+    
+    if (domain) {
+      const clearbitUrl = getClearbitLogoUrl(domain);
+      if (clearbitUrl) {
+        const isValid = await isLogoValid(clearbitUrl);
+        if (isValid) {
+          logo_url = clearbitUrl;
+          console.log('Found logo via Clearbit:', logo_url);
+        }
+      }
+    }
+
+    // Step 2: Call Lovable AI Gateway for company analysis
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'google/gemini-2.5-flash',
         messages: [
           {
             role: 'system',
@@ -48,13 +90,14 @@ serve(async (req) => {
 
 WAŻNE: Generujesz PRZYPUSZCZENIA na podstawie nazwy i kontekstu. Użytkownik powinien zweryfikować te dane.
 
-Zwróć TYLKO poprawny JSON (bez markdown) z polami:
+Zwróć TYLKO poprawny JSON (bez markdown, bez \`\`\`) z polami:
 - industry: Prawdopodobna branża firmy (string)
 - description: Krótki opis działalności, 2-3 zdania (string)
 - services: Lista prawdopodobnych usług/produktów, oddzielone przecinkami (string)
 - collaboration_areas: Potencjalne obszary współpracy biznesowej (string)
-- employee_count_estimate: Szacunkowa wielkość firmy: "mikro (1-9)", "mała (10-49)", "średnia (50-249)", "duża (250+)" lub null jeśli nie da się oszacować
-- confidence: Poziom pewności oceny: "high", "medium", "low"`
+- employee_count_estimate: Szacunkowa wielkość firmy: "micro", "small", "medium", "large" lub null jeśli nie da się oszacować
+- confidence: Poziom pewności oceny: "high", "medium", "low"
+- suggested_website: Jeśli znasz oficjalną stronę firmy, podaj URL (string lub null)`
           },
           {
             role: 'user',
@@ -73,8 +116,20 @@ Wygeneruj prawdopodobny profil tej firmy.`
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Przekroczono limit zapytań, spróbuj ponownie za chwilę' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'Brak środków na koncie AI, doładuj kredyty' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
+      console.error('AI gateway error:', response.status, errorText);
       return new Response(
         JSON.stringify({ error: 'Błąd podczas analizy firmy' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -82,11 +137,11 @@ Wygeneruj prawdopodobny profil tej firmy.`
     }
 
     const data = await response.json();
-    console.log('OpenAI response received');
+    console.log('AI response received');
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
-      console.error('No content in OpenAI response');
+      console.error('No content in AI response');
       return new Response(
         JSON.stringify({ error: 'Brak odpowiedzi od AI' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -105,6 +160,24 @@ Wygeneruj prawdopodobny profil tej firmy.`
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Step 3: If no logo yet and AI suggested a website, try to get logo from it
+    if (!logo_url && enrichedData.suggested_website) {
+      const suggestedDomain = extractDomain(enrichedData.suggested_website);
+      if (suggestedDomain) {
+        const clearbitUrl = getClearbitLogoUrl(suggestedDomain);
+        if (clearbitUrl) {
+          const isValid = await isLogoValid(clearbitUrl);
+          if (isValid) {
+            logo_url = clearbitUrl;
+            console.log('Found logo via AI-suggested website:', logo_url);
+          }
+        }
+      }
+    }
+
+    // Add logo_url to response
+    enrichedData.logo_url = logo_url;
 
     console.log('Successfully enriched company data:', enrichedData);
 

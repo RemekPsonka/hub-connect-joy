@@ -28,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Company, useUpdateCompany, useRegenerateCompanyAI } from '@/hooks/useCompanies';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Company, useUpdateCompany, useRegenerateCompanyAI, getCompanyLogoUrl } from '@/hooks/useCompanies';
 
 const companySchema = z.object({
   name: z.string().min(1, 'Nazwa firmy jest wymagana').max(255),
@@ -45,6 +46,7 @@ const companySchema = z.object({
   description: z.string().optional().nullable(),
   services: z.string().optional().nullable(),
   collaboration_areas: z.string().optional().nullable(),
+  logo_url: z.string().optional().nullable(),
 });
 
 type CompanyFormData = z.infer<typeof companySchema>;
@@ -100,6 +102,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
       description: company.description || '',
       services: aiData.services,
       collaboration_areas: aiData.collaboration_areas,
+      logo_url: company.logo_url || '',
     },
   });
 
@@ -121,6 +124,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
         description: company.description || '',
         services: aiData.services,
         collaboration_areas: aiData.collaboration_areas,
+        logo_url: company.logo_url || '',
       });
     }
   }, [open, company, form]);
@@ -146,6 +150,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
         regon: data.regon || null,
         krs: data.krs || null,
         description: data.description || null,
+        logo_url: data.logo_url || null,
         ai_analysis: aiAnalysis,
       },
     });
@@ -167,6 +172,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
     form.setValue('industry', result.industry || '');
     form.setValue('services', newAiData.services);
     form.setValue('collaboration_areas', newAiData.collaboration_areas);
+    form.setValue('logo_url', result.logo_url || '');
   };
 
   const isLoading = updateCompany.isPending || regenerateAI.isPending;
@@ -437,6 +443,43 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                           placeholder="badania kliniczne, szkolenia medyczne..."
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="logo_url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Logo URL</FormLabel>
+                      <div className="flex gap-3 items-center">
+                        {(field.value || getCompanyLogoUrl(form.watch('website'))) && (
+                          <Avatar className="h-12 w-12 border">
+                            <AvatarImage 
+                              src={field.value || getCompanyLogoUrl(form.watch('website')) || ''} 
+                              alt="Logo firmy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                            <AvatarFallback className="bg-muted">
+                              <Building className="h-6 w-6 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            value={field.value || ''} 
+                            placeholder="https://logo.clearbit.com/example.com"
+                          />
+                        </FormControl>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Zostaw puste, aby automatycznie pobrać logo na podstawie strony www
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
