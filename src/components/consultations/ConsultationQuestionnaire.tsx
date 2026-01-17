@@ -54,6 +54,7 @@ import {
   ConsultationGuest,
   ConsultationThanks,
 } from '@/hooks/useConsultationQuestionnaire';
+import { ContactCombobox } from '@/components/contacts/ContactCombobox';
 
 interface ConsultationQuestionnaireProps {
   consultation: ConsultationWithContact;
@@ -182,6 +183,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
       consultation_id: consultation.id,
       meeting_type: meetingType,
       contact_name: '',
+      contact_id: null,
       company: '',
       cc_group: '',
       meeting_date: null,
@@ -209,6 +211,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
       consultation_id: consultation.id,
       recommendation_type: recommendationType,
       contact_name: '',
+      contact_id: null,
       company: '',
       recommendation_kind: 'external',
       topic: '',
@@ -234,6 +237,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
       consultation_id: consultation.id,
       guest_type: guestType,
       guest_name: '',
+      contact_id: null,
       meeting_date: null,
       comment: '',
       sort_order: guests.filter(g => g.guest_type === guestType).length,
@@ -257,6 +261,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
     await createThanks.mutateAsync({
       consultation_id: consultation.id,
       contact_name: '',
+      contact_id: null,
       transaction_amount: '',
       business_benefit_type: '',
       sort_order: thanks.length,
@@ -556,10 +561,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {meetingsPastOutside.map((meeting) => (
                       <TableRow key={meeting.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={meeting.contact_name || ''}
-                            onChange={(e) => handleUpdateMeeting(meeting.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={meeting.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateMeeting(meeting.id, 'contact_name', name);
+                              handleUpdateMeeting(meeting.id, 'contact_id', contactId);
+                              if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -625,10 +635,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {meetingsPlannedOutside.map((meeting) => (
                       <TableRow key={meeting.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={meeting.contact_name || ''}
-                            onChange={(e) => handleUpdateMeeting(meeting.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={meeting.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateMeeting(meeting.id, 'contact_name', name);
+                              handleUpdateMeeting(meeting.id, 'contact_id', contactId);
+                              if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -694,10 +709,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {meetingsOnEvent.map((meeting) => (
                       <TableRow key={meeting.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={meeting.contact_name || ''}
-                            onChange={(e) => handleUpdateMeeting(meeting.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={meeting.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateMeeting(meeting.id, 'contact_name', name);
+                              handleUpdateMeeting(meeting.id, 'contact_id', contactId);
+                              if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -763,10 +783,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {meetingsPlannedOnEvent.map((meeting) => (
                       <TableRow key={meeting.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={meeting.contact_name || ''}
-                            onChange={(e) => handleUpdateMeeting(meeting.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={meeting.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateMeeting(meeting.id, 'contact_name', name);
+                              handleUpdateMeeting(meeting.id, 'contact_id', contactId);
+                              if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -832,10 +857,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {recsGiven.map((rec) => (
                       <TableRow key={rec.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={rec.contact_name || ''}
-                            onChange={(e) => handleUpdateRecommendation(rec.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={rec.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateRecommendation(rec.id, 'contact_name', name);
+                              handleUpdateRecommendation(rec.id, 'contact_id', contactId);
+                              if (company) handleUpdateRecommendation(rec.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -908,10 +938,15 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {recsReceived.map((rec) => (
                       <TableRow key={rec.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={rec.contact_name || ''}
-                            onChange={(e) => handleUpdateRecommendation(rec.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={rec.contact_id}
+                            onChange={(name, contactId, company) => {
+                              handleUpdateRecommendation(rec.id, 'contact_name', name);
+                              handleUpdateRecommendation(rec.id, 'contact_id', contactId);
+                              if (company) handleUpdateRecommendation(rec.id, 'company', company);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -984,10 +1019,14 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {guestsInvited.map((guest) => (
                       <TableRow key={guest.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={guest.guest_name || ''}
-                            onChange={(e) => handleUpdateGuest(guest.id, 'guest_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={guest.contact_id}
+                            onChange={(name, contactId) => {
+                              handleUpdateGuest(guest.id, 'guest_name', name);
+                              handleUpdateGuest(guest.id, 'contact_id', contactId);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -1053,10 +1092,14 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {guestsPlanned.map((guest) => (
                       <TableRow key={guest.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={guest.guest_name || ''}
-                            onChange={(e) => handleUpdateGuest(guest.id, 'guest_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={guest.contact_id}
+                            onChange={(name, contactId) => {
+                              handleUpdateGuest(guest.id, 'guest_name', name);
+                              handleUpdateGuest(guest.id, 'contact_id', contactId);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>
@@ -1122,10 +1165,14 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                     {thanks.map((t) => (
                       <TableRow key={t.id}>
                         <TableCell>
-                          <Input
+                          <ContactCombobox
                             value={t.contact_name || ''}
-                            onChange={(e) => handleUpdateThanks(t.id, 'contact_name', e.target.value)}
-                            placeholder="Imię i nazwisko"
+                            contactId={t.contact_id}
+                            onChange={(name, contactId) => {
+                              handleUpdateThanks(t.id, 'contact_name', name);
+                              handleUpdateThanks(t.id, 'contact_id', contactId);
+                            }}
+                            placeholder="Szukaj kontaktu..."
                           />
                         </TableCell>
                         <TableCell>

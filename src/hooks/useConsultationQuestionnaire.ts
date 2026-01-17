@@ -31,6 +31,7 @@ export interface ConsultationMeeting {
   consultation_id: string;
   meeting_type: 'past_outside' | 'planned_outside' | 'on_event' | 'planned_on_event';
   contact_name: string | null;
+  contact_id: string | null;
   company: string | null;
   cc_group: string | null;
   meeting_date: string | null;
@@ -45,6 +46,7 @@ export interface ConsultationRecommendation {
   consultation_id: string;
   recommendation_type: 'given_external' | 'given_internal' | 'received';
   contact_name: string | null;
+  contact_id: string | null;
   company: string | null;
   recommendation_kind: 'external' | 'internal' | null;
   topic: string | null;
@@ -57,6 +59,7 @@ export interface ConsultationGuest {
   consultation_id: string;
   guest_type: 'invited' | 'planned_invitation';
   guest_name: string | null;
+  contact_id: string | null;
   meeting_date: string | null;
   comment: string | null;
   sort_order: number;
@@ -67,6 +70,7 @@ export interface ConsultationThanks {
   id: string;
   consultation_id: string;
   contact_name: string | null;
+  contact_id: string | null;
   transaction_amount: string | null;
   business_benefit_type: string | null;
   sort_order: number;
