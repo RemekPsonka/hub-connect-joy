@@ -12,7 +12,14 @@ interface Recommendation {
   title: string;
   description: string;
   contactIds?: string[];
+  contactNames?: string[];
   priority: "high" | "medium" | "low";
+  reasoning?: string;
+}
+
+function generateRecommendationHash(rec: { type: string; contactIds?: string[]; title: string }): string {
+  const sortedIds = [...(rec.contactIds || [])].sort().join('-');
+  return `${rec.type}-${sortedIds}-${rec.title.slice(0, 50)}`;
 }
 
 serve(async (req) => {
@@ -56,6 +63,15 @@ serve(async (req) => {
       );
     }
 
+    // Fetch closed recommendations to filter them out
+    const { data: closedRecs } = await supabase
+      .from("ai_recommendation_actions")
+      .select("recommendation_hash")
+      .eq("tenant_id", tenantId);
+    
+    const closedHashes = new Set((closedRecs || []).map(r => r.recommendation_hash));
+    console.log(`Found ${closedHashes.size} closed recommendations`);
+
     // Fetch context data
     const [contactsRes, needsRes, offersRes, tasksRes, matchesRes] = await Promise.all([
       supabase
@@ -67,13 +83,13 @@ serve(async (req) => {
         .limit(30),
       supabase
         .from("needs")
-        .select("id, title, description, contacts(full_name)")
+        .select("id, title, description, contact_id, contacts(id, full_name)")
         .eq("tenant_id", tenantId)
         .eq("status", "active")
         .limit(15),
       supabase
         .from("offers")
-        .select("id, title, description, contacts(full_name)")
+        .select("id, title, description, contact_id, contacts(id, full_name)")
         .eq("tenant_id", tenantId)
         .eq("status", "active")
         .limit(15),
@@ -86,7 +102,7 @@ serve(async (req) => {
         .limit(10),
       supabase
         .from("matches")
-        .select("id, similarity_score, status, needs(title, contacts(full_name)), offers(title, contacts(full_name))")
+        .select("id, similarity_score, status, needs(title, contact_id, contacts(id, full_name)), offers(title, contact_id, contacts(id, full_name))")
         .eq("tenant_id", tenantId)
         .eq("status", "pending")
         .order("similarity_score", { ascending: false })
@@ -99,7 +115,11 @@ serve(async (req) => {
     const tasks = tasksRes.data || [];
     const matches = matchesRes.data || [];
 
-    // Build context for AI
+    // Build contact ID to name map for later use
+    const contactMap = new Map<string, string>();
+    contacts.forEach(c => contactMap.set(c.id, c.full_name));
+
+    // Build context for AI with contact IDs
     let context = "Dane użytkownika:\n\n";
     
     context += `Kontakty (${contacts.length}):\n`;
@@ -107,7 +127,7 @@ serve(async (req) => {
       const daysSinceContact = c.last_contact_date 
         ? Math.floor((Date.now() - new Date(c.last_contact_date).getTime()) / (1000 * 60 * 60 * 24))
         : null;
-      context += `${i + 1}. ${c.full_name} (${c.company || "brak firmy"}) - siła relacji: ${c.relationship_strength || 0}/10`;
+      context += `${i + 1}. [ID:${c.id}] ${c.full_name} (${c.company || "brak firmy"}) - siła relacji: ${c.relationship_strength || 0}/10`;
       if (daysSinceContact !== null) {
         context += `, ostatni kontakt: ${daysSinceContact} dni temu`;
       }
@@ -116,17 +136,23 @@ serve(async (req) => {
 
     context += `\nAktywne potrzeby (${needs.length}):\n`;
     needs.forEach((n: any, i) => {
-      context += `${i + 1}. "${n.title}" - ${n.contacts?.full_name || "nieznany"}\n`;
+      const contactId = n.contact_id || n.contacts?.id;
+      const contactName = n.contacts?.full_name || "nieznany";
+      context += `${i + 1}. "${n.title}" - [ID:${contactId}] ${contactName}\n`;
     });
 
     context += `\nAktywne oferty (${offers.length}):\n`;
     offers.forEach((o: any, i) => {
-      context += `${i + 1}. "${o.title}" - ${o.contacts?.full_name || "nieznany"}\n`;
+      const contactId = o.contact_id || o.contacts?.id;
+      const contactName = o.contacts?.full_name || "nieznany";
+      context += `${i + 1}. "${o.title}" - [ID:${contactId}] ${contactName}\n`;
     });
 
     context += `\nOczekujące dopasowania (${matches.length}):\n`;
     matches.forEach((m: any, i) => {
-      context += `${i + 1}. Potrzeba "${m.needs?.title}" ↔ Oferta "${m.offers?.title}" (dopasowanie: ${Math.round((m.similarity_score || 0) * 100)}%)\n`;
+      const needContactId = m.needs?.contact_id || m.needs?.contacts?.id;
+      const offerContactId = m.offers?.contact_id || m.offers?.contacts?.id;
+      context += `${i + 1}. Potrzeba "${m.needs?.title}" [ID:${needContactId}] ↔ Oferta "${m.offers?.title}" [ID:${offerContactId}] (dopasowanie: ${Math.round((m.similarity_score || 0) * 100)}%)\n`;
     });
 
     context += `\nOczekujące zadania (${tasks.length}):\n`;
@@ -138,9 +164,15 @@ serve(async (req) => {
 Na podstawie danych użytkownika wygeneruj 3-5 konkretnych, akcjonowalnych rekomendacji.
 
 Typy rekomendacji:
-- connection: sugestia połączenia dwóch osób, które mogłyby skorzystać na poznaniu się
-- followup: przypomnienie o konieczności odezwania się do kogoś
-- opportunity: szansa biznesowa lub potencjalna współpraca
+- connection: sugestia połączenia dwóch osób, które mogłyby skorzystać na poznaniu się (MUSI zawierać dokładnie 2 ID kontaktów)
+- followup: przypomnienie o konieczności odezwania się do kogoś (MUSI zawierać 1 ID kontaktu)
+- opportunity: szansa biznesowa lub potencjalna współpraca (MUSI zawierać przynajmniej 1 ID kontaktu)
+
+WAŻNE:
+- Używaj dokładnych ID kontaktów z podanych danych (format [ID:uuid])
+- Dla typu "connection" ZAWSZE podaj dwa różne kontakty w contactIds
+- Podaj szczegółowe reasoning wyjaśniające dlaczego ta rekomendacja jest wartościowa
+- Podaj contactNames odpowiadające contactIds
 
 Odpowiedz TYLKO w formacie JSON (bez markdown) z tablicą rekomendacji.`;
 
@@ -150,11 +182,24 @@ Wygeneruj 3-5 rekomendacji w formacie JSON:
 {
   "recommendations": [
     {
-      "id": "unique-id",
-      "type": "connection" | "followup" | "opportunity",
-      "title": "Krótki tytuł",
-      "description": "Opis dlaczego to ważne i co zrobić",
-      "priority": "high" | "medium" | "low"
+      "id": "unique-id-1",
+      "type": "connection",
+      "title": "Połącz Jana Kowalskiego z Anną Nowak",
+      "description": "Krótki opis korzyści z połączenia",
+      "contactIds": ["uuid-jana", "uuid-anny"],
+      "contactNames": ["Jan Kowalski", "Anna Nowak"],
+      "priority": "high",
+      "reasoning": "Szczegółowe wyjaśnienie dlaczego te osoby powinny się poznać, jakie korzyści mogą odnieść"
+    },
+    {
+      "id": "unique-id-2",
+      "type": "followup",
+      "title": "Skontaktuj się z Piotrem Wiśniewskim",
+      "description": "Dawno nie było kontaktu",
+      "contactIds": ["uuid-piotra"],
+      "contactNames": ["Piotr Wiśniewski"],
+      "priority": "medium",
+      "reasoning": "Wyjaśnienie dlaczego warto się odezwać do tej osoby"
     }
   ]
 }`;
@@ -218,8 +263,20 @@ Wygeneruj 3-5 rekomendacji w formacie JSON:
       console.error("Failed to parse AI response:", parseError);
     }
 
+    // Filter out already closed recommendations
+    const filteredRecommendations = recommendations.filter(rec => {
+      const hash = generateRecommendationHash(rec);
+      const isClosed = closedHashes.has(hash);
+      if (isClosed) {
+        console.log(`Filtering out closed recommendation: ${rec.title}`);
+      }
+      return !isClosed;
+    });
+
+    console.log(`Returning ${filteredRecommendations.length} recommendations (filtered ${recommendations.length - filteredRecommendations.length})`);
+
     return new Response(
-      JSON.stringify({ recommendations }),
+      JSON.stringify({ recommendations: filteredRecommendations }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

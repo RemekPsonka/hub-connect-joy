@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Sparkles, Users, MessageSquare, Target, RefreshCw } from 'lucide-react';
+import { Sparkles, Users, MessageSquare, Target, RefreshCw, ChevronRight } from 'lucide-react';
 import { useAIRecommendations, AIRecommendation } from '@/hooks/useAIRecommendations';
+import { RecommendationDetailModal } from './RecommendationDetailModal';
 import { cn } from '@/lib/utils';
 
 const typeConfig = {
@@ -33,15 +34,23 @@ const priorityColors = {
   low: 'border-l-muted-foreground',
 };
 
-function RecommendationItem({ recommendation }: { recommendation: AIRecommendation }) {
+interface RecommendationItemProps {
+  recommendation: AIRecommendation;
+  onClick: () => void;
+}
+
+function RecommendationItem({ recommendation, onClick }: RecommendationItemProps) {
   const config = typeConfig[recommendation.type];
   const Icon = config.icon;
   
   return (
-    <div className={cn(
-      "p-3 rounded-lg border border-l-4 bg-card hover:bg-accent/50 transition-colors",
-      priorityColors[recommendation.priority]
-    )}>
+    <div 
+      className={cn(
+        "p-3 rounded-lg border border-l-4 bg-card hover:bg-accent/50 transition-colors cursor-pointer group",
+        priorityColors[recommendation.priority]
+      )}
+      onClick={onClick}
+    >
       <div className="flex items-start gap-3">
         <div className={cn("h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0", config.bg)}>
           <Icon className={cn("h-4 w-4", config.color)} />
@@ -61,6 +70,8 @@ function RecommendationItem({ recommendation }: { recommendation: AIRecommendati
             {recommendation.description}
           </p>
         </div>
+
+        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-2" />
       </div>
     </div>
   );
@@ -68,10 +79,25 @@ function RecommendationItem({ recommendation }: { recommendation: AIRecommendati
 
 export function AIRecommendations() {
   const { recommendations, isLoading, error, fetchRecommendations } = useAIRecommendations();
+  const [selectedRecommendation, setSelectedRecommendation] = useState<AIRecommendation | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   
   useEffect(() => {
     fetchRecommendations();
   }, [fetchRecommendations]);
+
+  const handleRecommendationClick = (rec: AIRecommendation) => {
+    setSelectedRecommendation(rec);
+    setModalOpen(true);
+  };
+
+  const handleModalClose = (open: boolean) => {
+    setModalOpen(open);
+    if (!open) {
+      // Refresh recommendations after closing modal (in case action was taken)
+      fetchRecommendations();
+    }
+  };
   
   if (isLoading) {
     return (
@@ -101,50 +127,62 @@ export function AIRecommendations() {
   }
   
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Rekomendacje AI
-          </CardTitle>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8"
-            onClick={fetchRecommendations}
-            disabled={isLoading}
-          >
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {error ? (
-          <div className="text-center py-6">
-            <p className="text-sm text-muted-foreground mb-3">{error}</p>
-            <Button variant="outline" size="sm" onClick={fetchRecommendations}>
-              Spróbuj ponownie
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Rekomendacje AI
+            </CardTitle>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={fetchRecommendations}
+              disabled={isLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
             </Button>
           </div>
-        ) : recommendations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6 text-center">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-              <Sparkles className="h-6 w-6 text-primary" />
+        </CardHeader>
+        <CardContent className="pt-0">
+          {error ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-3">{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchRecommendations}>
+                Spróbuj ponownie
+              </Button>
             </div>
-            <p className="text-sm font-medium">Brak rekomendacji</p>
-            <p className="text-xs text-muted-foreground">
-              Dodaj więcej kontaktów, aby otrzymać sugestie
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {recommendations.slice(0, 5).map((rec) => (
-              <RecommendationItem key={rec.id} recommendation={rec} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          ) : recommendations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <p className="text-sm font-medium">Brak rekomendacji</p>
+              <p className="text-xs text-muted-foreground">
+                Dodaj więcej kontaktów, aby otrzymać sugestie
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recommendations.slice(0, 5).map((rec) => (
+                <RecommendationItem 
+                  key={rec.id} 
+                  recommendation={rec} 
+                  onClick={() => handleRecommendationClick(rec)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <RecommendationDetailModal
+        open={modalOpen}
+        onOpenChange={handleModalClose}
+        recommendation={selectedRecommendation}
+      />
+    </>
   );
 }
