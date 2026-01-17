@@ -133,7 +133,7 @@ export function useUpsertQuestionnaire() {
           .from('consultation_questionnaire')
           .insert({
             consultation_id: consultationId,
-            tenant_id: tenantId!,
+            tenant_id: director!.tenant_id,
             ...data,
           })
           .select()
