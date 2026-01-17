@@ -115,10 +115,36 @@ export function RecommendationDetailModal({
 
   const isLoading = isDismissing || isCompleting;
 
+  // Build formatted description with contact info
+  const buildFormattedDescription = () => {
+    const lines: string[] = [];
+    
+    // Add description for each contact
+    contacts.forEach(contact => {
+      const contactDesc = recommendation.contactDescriptions?.[contact.id];
+      if (contactDesc) {
+        lines.push(`${contact.full_name} - ${contactDesc}`);
+      }
+    });
+    
+    // Add connection reason
+    if (recommendation.reasoning) {
+      if (lines.length > 0) lines.push('');
+      lines.push(`Powód połączenia: ${recommendation.reasoning}`);
+    }
+    
+    // Fallback to original description if no structured data
+    if (lines.length === 0) {
+      return recommendation.description + (recommendation.reasoning ? `\n\nPowód połączenia: ${recommendation.reasoning}` : '');
+    }
+    
+    return lines.join('\n');
+  };
+
   // Prepare initial data for TaskModal
   const taskInitialData = {
     title: recommendation.title,
-    description: recommendation.description + (recommendation.reasoning ? `\n\nUzasadnienie: ${recommendation.reasoning}` : ''),
+    description: buildFormattedDescription(),
     taskType: recommendation.type === 'connection' ? 'cross' as const : 'standard' as const,
     contactAId: recommendation.contactIds?.[0],
     contactBId: recommendation.contactIds?.[1],
