@@ -65,6 +65,77 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          address: string | null
+          ai_analysis: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          description: string | null
+          employee_count: string | null
+          id: string
+          industry: string | null
+          krs: string | null
+          logo_url: string | null
+          name: string
+          nip: string | null
+          postal_code: string | null
+          regon: string | null
+          tenant_id: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          ai_analysis?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          employee_count?: string | null
+          id?: string
+          industry?: string | null
+          krs?: string | null
+          logo_url?: string | null
+          name: string
+          nip?: string | null
+          postal_code?: string | null
+          regon?: string | null
+          tenant_id: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          ai_analysis?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          employee_count?: string | null
+          id?: string
+          industry?: string | null
+          krs?: string | null
+          logo_url?: string | null
+          name?: string
+          nip?: string | null
+          postal_code?: string | null
+          regon?: string | null
+          tenant_id?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connections: {
         Row: {
           connection_type: string | null
@@ -567,6 +638,7 @@ export type Database = {
         Row: {
           city: string | null
           company: string | null
+          company_id: string | null
           created_at: string | null
           email: string | null
           fts: unknown
@@ -591,6 +663,7 @@ export type Database = {
         Insert: {
           city?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string | null
           email?: string | null
           fts?: unknown
@@ -615,6 +688,7 @@ export type Database = {
         Update: {
           city?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string | null
           email?: string | null
           fts?: unknown
@@ -637,6 +711,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contacts_primary_group_id_fkey"
             columns: ["primary_group_id"]
