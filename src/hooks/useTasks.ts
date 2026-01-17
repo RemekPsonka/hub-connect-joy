@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
-import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
+import { calculateCrossTaskStatus, calculateCrossTaskProgress } from '@/utils/crossTaskStatus';
 
 export type Task = Tables<'tasks'>;
 export type TaskInsert = TablesInsert<'tasks'>;
@@ -14,6 +14,8 @@ export interface TasksFilters {
   taskType?: 'all' | 'standard' | 'cross' | 'group';
   priority?: 'all' | 'low' | 'medium' | 'high' | 'urgent';
   search?: string;
+  crossProgress?: 'all' | '0' | '1' | '2' | '3';
+  contactId?: string;
 }
 
 export interface TaskWithDetails extends Task {
@@ -67,6 +69,41 @@ export function useTasks(filters: TasksFilters = {}) {
   return useQuery({
     queryKey: ['tasks', filters],
     queryFn: async () => {
+      // If filtering by contact, first get the task IDs related to that contact
+      let taskIdsFromContact: string[] | null = null;
+      
+      if (filters.contactId) {
+        // Get tasks where contact is in task_contacts
+        const { data: taskContacts } = await supabase
+          .from('task_contacts')
+          .select('task_id')
+          .eq('contact_id', filters.contactId);
+        
+        // Get cross-tasks where contact is A or B
+        const { data: crossTasksA } = await supabase
+          .from('cross_tasks')
+          .select('task_id')
+          .eq('contact_a_id', filters.contactId);
+        
+        const { data: crossTasksB } = await supabase
+          .from('cross_tasks')
+          .select('task_id')
+          .eq('contact_b_id', filters.contactId);
+        
+        // Combine all task IDs
+        const allTaskIds = new Set<string>();
+        taskContacts?.forEach(tc => tc.task_id && allTaskIds.add(tc.task_id));
+        crossTasksA?.forEach(ct => ct.task_id && allTaskIds.add(ct.task_id));
+        crossTasksB?.forEach(ct => ct.task_id && allTaskIds.add(ct.task_id));
+        
+        taskIdsFromContact = Array.from(allTaskIds);
+        
+        // If no tasks found for this contact, return empty array
+        if (taskIdsFromContact.length === 0) {
+          return [];
+        }
+      }
+
       let query = supabase
         .from('tasks')
         .select(`
@@ -94,6 +131,11 @@ export function useTasks(filters: TasksFilters = {}) {
         `)
         .order('created_at', { ascending: false });
 
+      // Apply contact filter if we have task IDs
+      if (taskIdsFromContact) {
+        query = query.in('id', taskIdsFromContact);
+      }
+
       // Apply filters
       if (filters.status && filters.status !== 'all') {
         query = query.eq('status', filters.status);
@@ -110,7 +152,20 @@ export function useTasks(filters: TasksFilters = {}) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as TaskWithDetails[];
+      
+      let result = data as TaskWithDetails[];
+      
+      // Client-side filter for cross-task progress
+      if (filters.crossProgress && filters.crossProgress !== 'all') {
+        const targetProgress = parseInt(filters.crossProgress);
+        result = result.filter(task => {
+          if (task.task_type !== 'cross' || !task.cross_tasks?.[0]) return false;
+          const progress = calculateCrossTaskProgress(task.cross_tasks[0]);
+          return progress.completed === targetProgress;
+        });
+      }
+      
+      return result;
     },
   });
 }
