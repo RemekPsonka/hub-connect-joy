@@ -30,16 +30,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 
+interface TaskInitialData {
+  title?: string;
+  description?: string;
+  taskType?: 'standard' | 'cross';
+  contactAId?: string;
+  contactBId?: string;
+  connectionReason?: string;
+  priority?: string;
+}
+
 interface TaskModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: TaskWithDetails | null;
   preselectedContactId?: string;
+  initialData?: TaskInitialData;
+  onTaskCreated?: (taskId: string) => void;
 }
 
 type TaskType = 'standard' | 'cross' | 'group';
 
-export function TaskModal({ open, onOpenChange, task, preselectedContactId }: TaskModalProps) {
+export function TaskModal({ open, onOpenChange, task, preselectedContactId, initialData, onTaskCreated }: TaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taskType, setTaskType] = useState<TaskType>('standard');
@@ -90,6 +102,22 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId }: Ta
       } else if (task.task_contacts?.[0]) {
         setContactId(task.task_contacts[0].contact_id);
       }
+    } else if (initialData) {
+      // Use initial data from recommendation
+      setTitle(initialData.title || '');
+      setDescription(initialData.description || '');
+      setTaskType(initialData.taskType || 'standard');
+      setContactAId(initialData.contactAId || '');
+      setContactBId(initialData.contactBId || '');
+      setConnectionReason(initialData.connectionReason || '');
+      setSuggestedIntro('');
+      setPriority(initialData.priority || 'medium');
+      setStatus('pending');
+      setDueDate(undefined);
+      // Set contactId for standard tasks
+      if (initialData.taskType !== 'cross' && initialData.contactAId) {
+        setContactId(initialData.contactAId);
+      }
     } else {
       // Reset form
       setTitle('');
@@ -104,7 +132,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId }: Ta
       setStatus('pending');
       setDueDate(undefined);
     }
-  }, [task, preselectedContactId, open]);
+  }, [task, preselectedContactId, initialData, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +165,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId }: Ta
         });
         toast.success('Zadanie zaktualizowane');
       } else if (taskType === 'cross') {
-        await createCrossTask.mutateAsync({
+        const result = await createCrossTask.mutateAsync({
           title,
           description: description || undefined,
           priority,
@@ -148,8 +176,13 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId }: Ta
           suggested_intro: suggestedIntro,
         });
         toast.success('Zadanie krosowe utworzone');
+        
+        // Call onTaskCreated callback if provided (for recommendations)
+        if (onTaskCreated && result?.id) {
+          onTaskCreated(result.id);
+        }
       } else {
-        await createTask.mutateAsync({
+        const result = await createTask.mutateAsync({
           task: {
             title,
             description,
@@ -161,6 +194,11 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId }: Ta
           contactId: contactId || undefined,
         });
         toast.success('Zadanie utworzone');
+        
+        // Call onTaskCreated callback if provided (for recommendations)
+        if (onTaskCreated && result?.id) {
+          onTaskCreated(result.id);
+        }
       }
 
       onOpenChange(false);
