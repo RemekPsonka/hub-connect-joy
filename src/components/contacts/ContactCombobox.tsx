@@ -25,12 +25,16 @@ interface Contact {
   id: string;
   full_name: string;
   company: string | null;
+  primary_group_id: string | null;
+  contact_groups: {
+    name: string;
+  } | null;
 }
 
 interface ContactComboboxProps {
   value: string;
   contactId: string | null | undefined;
-  onChange: (name: string, contactId: string | null, company: string | null) => void;
+  onChange: (name: string, contactId: string | null, company: string | null, ccGroup: string | null) => void;
   placeholder?: string;
   className?: string;
 }
@@ -59,7 +63,7 @@ export function ContactCombobox({
 
       let query = supabase
         .from('contacts')
-        .select('id, full_name, company')
+        .select('id, full_name, company, primary_group_id, contact_groups(name)')
         .eq('tenant_id', director.tenant_id)
         .eq('is_active', true)
         .order('full_name')
@@ -79,13 +83,18 @@ export function ContactCombobox({
 
   const handleSelectContact = (contact: Contact) => {
     setInputValue(contact.full_name);
-    onChange(contact.full_name, contact.id, contact.company);
+    onChange(
+      contact.full_name, 
+      contact.id, 
+      contact.company,
+      contact.contact_groups?.name || null
+    );
     setOpen(false);
   };
 
   const handleManualEntry = () => {
     if (inputValue.trim()) {
-      onChange(inputValue.trim(), null, null);
+      onChange(inputValue.trim(), null, null, null);
       setOpen(false);
     }
   };
@@ -155,6 +164,11 @@ export function ContactCombobox({
                       {contact.company && (
                         <span className="text-xs text-muted-foreground">
                           {contact.company}
+                        </span>
+                      )}
+                      {contact.contact_groups?.name && (
+                        <span className="text-xs text-primary">
+                          Grupa: {contact.contact_groups.name}
                         </span>
                       )}
                     </div>

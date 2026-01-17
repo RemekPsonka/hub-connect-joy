@@ -564,10 +564,11 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={meeting.contact_name || ''}
                             contactId={meeting.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, ccGroup) => {
                               handleUpdateMeeting(meeting.id, 'contact_name', name);
                               handleUpdateMeeting(meeting.id, 'contact_id', contactId);
                               if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                              if (ccGroup) handleUpdateMeeting(meeting.id, 'cc_group', ccGroup);
                             }}
                             placeholder="Szukaj kontaktu..."
                           />
@@ -638,10 +639,11 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={meeting.contact_name || ''}
                             contactId={meeting.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, ccGroup) => {
                               handleUpdateMeeting(meeting.id, 'contact_name', name);
                               handleUpdateMeeting(meeting.id, 'contact_id', contactId);
                               if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                              if (ccGroup) handleUpdateMeeting(meeting.id, 'cc_group', ccGroup);
                             }}
                             placeholder="Szukaj kontaktu..."
                           />
@@ -712,10 +714,11 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={meeting.contact_name || ''}
                             contactId={meeting.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, ccGroup) => {
                               handleUpdateMeeting(meeting.id, 'contact_name', name);
                               handleUpdateMeeting(meeting.id, 'contact_id', contactId);
                               if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                              if (ccGroup) handleUpdateMeeting(meeting.id, 'cc_group', ccGroup);
                             }}
                             placeholder="Szukaj kontaktu..."
                           />
@@ -786,10 +789,11 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={meeting.contact_name || ''}
                             contactId={meeting.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, ccGroup) => {
                               handleUpdateMeeting(meeting.id, 'contact_name', name);
                               handleUpdateMeeting(meeting.id, 'contact_id', contactId);
                               if (company) handleUpdateMeeting(meeting.id, 'company', company);
+                              if (ccGroup) handleUpdateMeeting(meeting.id, 'cc_group', ccGroup);
                             }}
                             placeholder="Szukaj kontaktu..."
                           />
@@ -860,7 +864,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={rec.contact_name || ''}
                             contactId={rec.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, _ccGroup) => {
                               handleUpdateRecommendation(rec.id, 'contact_name', name);
                               handleUpdateRecommendation(rec.id, 'contact_id', contactId);
                               if (company) handleUpdateRecommendation(rec.id, 'company', company);
@@ -941,7 +945,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={rec.contact_name || ''}
                             contactId={rec.contact_id}
-                            onChange={(name, contactId, company) => {
+                            onChange={(name, contactId, company, _ccGroup) => {
                               handleUpdateRecommendation(rec.id, 'contact_name', name);
                               handleUpdateRecommendation(rec.id, 'contact_id', contactId);
                               if (company) handleUpdateRecommendation(rec.id, 'company', company);
@@ -1022,7 +1026,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={guest.guest_name || ''}
                             contactId={guest.contact_id}
-                            onChange={(name, contactId) => {
+                            onChange={(name, contactId, _company, _ccGroup) => {
                               handleUpdateGuest(guest.id, 'guest_name', name);
                               handleUpdateGuest(guest.id, 'contact_id', contactId);
                             }}
@@ -1095,7 +1099,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={guest.guest_name || ''}
                             contactId={guest.contact_id}
-                            onChange={(name, contactId) => {
+                            onChange={(name, contactId, _company, _ccGroup) => {
                               handleUpdateGuest(guest.id, 'guest_name', name);
                               handleUpdateGuest(guest.id, 'contact_id', contactId);
                             }}
@@ -1168,7 +1172,7 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
                           <ContactCombobox
                             value={t.contact_name || ''}
                             contactId={t.contact_id}
-                            onChange={(name, contactId) => {
+                            onChange={(name, contactId, _company, _ccGroup) => {
                               handleUpdateThanks(t.id, 'contact_name', name);
                               handleUpdateThanks(t.id, 'contact_id', contactId);
                             }}
