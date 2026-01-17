@@ -8,6 +8,7 @@ export interface AIRecommendation {
   description: string;
   contactIds?: string[];
   contactNames?: string[];
+  contactDescriptions?: Record<string, string>;
   priority: 'high' | 'medium' | 'low';
   reasoning?: string;
 }

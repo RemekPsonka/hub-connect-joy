@@ -13,6 +13,7 @@ interface Recommendation {
   description: string;
   contactIds?: string[];
   contactNames?: string[];
+  contactDescriptions?: Record<string, string>;
   priority: "high" | "medium" | "low";
   reasoning?: string;
 }
@@ -171,7 +172,8 @@ Typy rekomendacji:
 WAŻNE:
 - Używaj dokładnych ID kontaktów z podanych danych (format [ID:uuid])
 - Dla typu "connection" ZAWSZE podaj dwa różne kontakty w contactIds
-- Podaj szczegółowe reasoning wyjaśniające dlaczego ta rekomendacja jest wartościowa
+- W polu contactDescriptions podaj dla KAŻDEGO kontaktu (po jego ID) krótki opis tego, czym się zajmuje lub czego potrzebuje (bez imienia, np. "poszukuje wsparcia w marketingu B2B", "specjalizuje się w kampaniach Google Ads")
+- Pole reasoning powinno zawierać TYLKO powód połączenia (dlaczego warto ich połączyć)
 - Podaj contactNames odpowiadające contactIds
 
 Odpowiedz TYLKO w formacie JSON (bez markdown) z tablicą rekomendacji.`;
@@ -188,8 +190,12 @@ Wygeneruj 3-5 rekomendacji w formacie JSON:
       "description": "Krótki opis korzyści z połączenia",
       "contactIds": ["uuid-jana", "uuid-anny"],
       "contactNames": ["Jan Kowalski", "Anna Nowak"],
+      "contactDescriptions": {
+        "uuid-jana": "poszukuje wsparcia w marketingu i pozyskiwaniu klientów B2B",
+        "uuid-anny": "specjalizuje się w kampaniach Google Ads i LinkedIn dla sektora B2B"
+      },
       "priority": "high",
-      "reasoning": "Szczegółowe wyjaśnienie dlaczego te osoby powinny się poznać, jakie korzyści mogą odnieść"
+      "reasoning": "Potrzeby marketingowe Jana idealnie odpowiadają ofercie Anny. Współpraca może przyspieszyć rozwój firmy."
     },
     {
       "id": "unique-id-2",
@@ -198,8 +204,11 @@ Wygeneruj 3-5 rekomendacji w formacie JSON:
       "description": "Dawno nie było kontaktu",
       "contactIds": ["uuid-piotra"],
       "contactNames": ["Piotr Wiśniewski"],
+      "contactDescriptions": {
+        "uuid-piotra": "pracuje nad rozwojem sieci dystrybucji"
+      },
       "priority": "medium",
-      "reasoning": "Wyjaśnienie dlaczego warto się odezwać do tej osoby"
+      "reasoning": "Minęło już 45 dni od ostatniego kontaktu, a Piotr może mieć nowe potrzeby biznesowe."
     }
   ]
 }`;
