@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter } from 'lucide-react';
+import { Search, Plus, Filter, Camera } from 'lucide-react';
+import { ScanBusinessCardModal } from './ScanBusinessCardModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +32,7 @@ export function ContactsHeader({
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
   const [searchInput, setSearchInput] = useState(search);
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -50,10 +52,16 @@ export function ContactsHeader({
             {totalCount}
           </Badge>
         </div>
-        <Button onClick={onAddContact} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Dodaj kontakt
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsScanModalOpen(true)} className="gap-2">
+            <Camera className="h-4 w-4" />
+            <span className="hidden sm:inline">Skanuj wizytówkę</span>
+          </Button>
+          <Button onClick={onAddContact} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Dodaj kontakt
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -87,6 +95,11 @@ export function ContactsHeader({
           </SelectContent>
         </Select>
       </div>
+
+      <ScanBusinessCardModal 
+        isOpen={isScanModalOpen} 
+        onClose={() => setIsScanModalOpen(false)} 
+      />
     </div>
   );
 }

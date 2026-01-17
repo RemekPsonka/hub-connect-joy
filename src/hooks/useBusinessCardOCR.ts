@@ -1,0 +1,197 @@
+import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+export interface ExtractedContactData {
+  full_name: string;
+  position: string | null;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  website: string | null;
+  address: string | null;
+  city: string | null;
+  linkedin_url: string | null;
+  notes: string | null;
+}
+
+export interface EnrichedCompanyData {
+  industry: string;
+  description: string;
+  services: string;
+  collaboration_areas: string;
+  employee_count_estimate: string | null;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface CreateContactWithCompanyData {
+  contact: {
+    full_name: string;
+    position?: string;
+    email?: string;
+    phone?: string;
+    linkedin_url?: string;
+    city?: string;
+    notes?: string;
+  };
+  company?: {
+    name: string;
+    website?: string;
+    address?: string;
+    city?: string;
+    industry?: string;
+    description?: string;
+    ai_analysis?: string;
+    employee_count?: string;
+  };
+}
+
+export function useBusinessCardOCR() {
+  const queryClient = useQueryClient();
+  const [isScanning, setIsScanning] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  // Scan business card using OCR
+  const scanBusinessCard = async (imageBase64: string): Promise<ExtractedContactData> => {
+    setIsScanning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ocr-business-card', {
+        body: { image: imageBase64 }
+      });
+
+      if (error) {
+        console.error('OCR error:', error);
+        throw new Error(error.message || 'Błąd podczas skanowania wizytówki');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Nie udało się przeanalizować wizytówki');
+      }
+
+      return data.data as ExtractedContactData;
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  // Enrich company data using AI
+  const enrichCompanyData = async (
+    companyName: string, 
+    website?: string,
+    industryHint?: string
+  ): Promise<EnrichedCompanyData> => {
+    setIsEnriching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-company-data', {
+        body: { 
+          company_name: companyName,
+          website: website,
+          industry_hint: industryHint
+        }
+      });
+
+      if (error) {
+        console.error('Enrich error:', error);
+        throw new Error(error.message || 'Błąd podczas wzbogacania danych firmy');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Nie udało się wzbogacić danych firmy');
+      }
+
+      return data.data as EnrichedCompanyData;
+    } finally {
+      setIsEnriching(false);
+    }
+  };
+
+  // Create contact with optional company
+  const createContactWithCompanyMutation = useMutation({
+    mutationFn: async (input: CreateContactWithCompanyData) => {
+      // Get current user's tenant_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Użytkownik nie jest zalogowany');
+
+      const { data: director } = await supabase
+        .from('directors')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!director) throw new Error('Nie znaleziono danych użytkownika');
+
+      let companyId: string | null = null;
+
+      // Create company if provided
+      if (input.company && input.company.name) {
+        // Check if company already exists
+        const { data: existingCompany } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', director.tenant_id)
+          .eq('name', input.company.name)
+          .maybeSingle();
+
+        if (existingCompany) {
+          companyId = existingCompany.id;
+          // Update existing company with new data
+          await supabase
+            .from('companies')
+            .update({
+              ...input.company,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', companyId);
+        } else {
+          // Create new company
+          const { data: newCompany, error: companyError } = await supabase
+            .from('companies')
+            .insert({
+              ...input.company,
+              tenant_id: director.tenant_id
+            })
+            .select('id')
+            .single();
+
+          if (companyError) throw companyError;
+          companyId = newCompany.id;
+        }
+      }
+
+      // Create contact
+      const { data: contact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          ...input.contact,
+          company: input.company?.name || input.contact.full_name.split(' ')[0], // Fallback
+          company_id: companyId,
+          tenant_id: director.tenant_id
+        })
+        .select()
+        .single();
+
+      if (contactError) throw contactError;
+
+      return contact;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success('Kontakt został utworzony');
+    },
+    onError: (error) => {
+      console.error('Create contact error:', error);
+      toast.error('Nie udało się utworzyć kontaktu');
+    }
+  });
+
+  return {
+    scanBusinessCard,
+    enrichCompanyData,
+    createContactWithCompany: createContactWithCompanyMutation.mutateAsync,
+    isScanning,
+    isEnriching,
+    isCreating: createContactWithCompanyMutation.isPending
+  };
+}
