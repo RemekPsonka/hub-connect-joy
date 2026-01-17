@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import Graph from 'graphology';
 import { SigmaContainer, useRegisterEvents, useSigma, useLoadGraph } from '@react-sigma/core';
+import '@react-sigma/core/lib/react-sigma.min.css';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { ContactNode, Connection } from '@/hooks/useConnections';
 
@@ -38,11 +39,15 @@ function GraphDataLoader({
   useEffect(() => {
     const graph = new Graph();
 
-    // Dodaj węzły
-    nodes.forEach((node) => {
+    // Dodaj węzły w układzie circular
+    nodes.forEach((node, index) => {
       const baseSize = 8 + (node.connection_count || 0) * 2;
       const size = Math.min(baseSize, 30);
       const color = node.group_color || '#6366f1';
+      
+      // Circular layout - stabilne pozycje początkowe
+      const angle = (2 * Math.PI * index) / nodes.length;
+      const radius = 100;
 
       graph.addNode(node.id, {
         label: node.full_name,
@@ -50,8 +55,8 @@ function GraphDataLoader({
         color,
         originalColor: color,
         originalSize: size,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
+        x: radius * Math.cos(angle),
+        y: radius * Math.sin(angle),
         company: node.company,
         position: node.position,
       });
