@@ -354,8 +354,9 @@ export default function AIChat() {
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
-      <div className="mb-4">
+    <div className="flex flex-col h-full">
+      {/* Header - fixed height */}
+      <div className="flex-shrink-0 mb-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -384,8 +385,9 @@ export default function AIChat() {
         </div>
       </div>
 
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardContent className="flex-1 flex flex-col p-0">
+      {/* Main chat area - takes remaining space */}
+      <Card className="flex-1 flex flex-col min-h-0">
+        <CardContent className="flex-1 flex flex-col p-0 min-h-0">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -460,8 +462,7 @@ export default function AIChat() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full">
+            <ScrollArea className="flex-1">
                 <div className="p-4">
                   <div className="space-y-4 max-w-3xl mx-auto" ref={scrollRef}>
                 {messages.map((message, index) => (
@@ -579,11 +580,11 @@ export default function AIChat() {
                 )}
                   </div>
                 </div>
-              </ScrollArea>
-            </div>
+            </ScrollArea>
           )}
 
-          <div className="border-t p-4">
+          {/* Input area - fixed at bottom */}
+          <div className="flex-shrink-0 border-t p-4">
             <div className="flex gap-2 max-w-3xl mx-auto">
               <Button
                 variant={turboMode ? "default" : "outline"}
