@@ -596,6 +596,60 @@ export type Database = {
           },
         ]
       }
+      contact_agent_memory: {
+        Row: {
+          agent_persona: string | null
+          agent_profile: Json | null
+          contact_id: string
+          created_at: string | null
+          id: string
+          insights: Json | null
+          last_refresh_at: string | null
+          refresh_sources: Json | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          agent_persona?: string | null
+          agent_profile?: Json | null
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          insights?: Json | null
+          last_refresh_at?: string | null
+          refresh_sources?: Json | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          agent_persona?: string | null
+          agent_profile?: Json | null
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          insights?: Json | null
+          last_refresh_at?: string | null
+          refresh_sources?: Json | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_agent_memory_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: true
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_agent_memory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_groups: {
         Row: {
           color: string | null
@@ -1011,6 +1065,88 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      master_agent_memory: {
+        Row: {
+          created_at: string | null
+          id: string
+          industry_clusters: Json | null
+          key_relationships: Json | null
+          last_analysis_at: string | null
+          network_insights: Json | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          industry_clusters?: Json | null
+          key_relationships?: Json | null
+          last_analysis_at?: string | null
+          network_insights?: Json | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          industry_clusters?: Json | null
+          key_relationships?: Json | null
+          last_analysis_at?: string | null
+          network_insights?: Json | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_agent_memory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      master_agent_queries: {
+        Row: {
+          agents_consulted: string[] | null
+          created_at: string | null
+          id: string
+          query: string
+          query_type: string | null
+          reasoning: Json | null
+          response: string | null
+          tenant_id: string
+        }
+        Insert: {
+          agents_consulted?: string[] | null
+          created_at?: string | null
+          id?: string
+          query: string
+          query_type?: string | null
+          reasoning?: Json | null
+          response?: string | null
+          tenant_id: string
+        }
+        Update: {
+          agents_consulted?: string[] | null
+          created_at?: string | null
+          id?: string
+          query?: string
+          query_type?: string | null
+          reasoning?: Json | null
+          response?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_agent_queries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       matches: {
         Row: {
