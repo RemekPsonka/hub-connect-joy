@@ -172,8 +172,11 @@ export function useCreateConsultation() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-consultations', data.contact_id] });
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'upcoming'] });
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'today-count'] });
     },
   });
 }
@@ -196,6 +199,9 @@ export function useUpdateConsultation() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
       queryClient.invalidateQueries({ queryKey: ['consultation', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['contact-consultations', data.contact_id] });
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'upcoming'] });
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'today-count'] });
     },
   });
 }
@@ -204,16 +210,22 @@ export function useDeleteConsultation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, contactId }: { id: string; contactId?: string }) => {
       const { error } = await supabase
         .from('consultations')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+      return { contactId };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
+      if (data.contactId) {
+        queryClient.invalidateQueries({ queryKey: ['contact-consultations', data.contactId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'upcoming'] });
+      queryClient.invalidateQueries({ queryKey: ['consultations', 'today-count'] });
     },
   });
 }

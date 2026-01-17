@@ -50,7 +50,7 @@ export function ConsultationDetailHeader({ consultation, onEdit }: ConsultationD
 
   const handleDelete = async () => {
     try {
-      await deleteConsultation.mutateAsync(consultation.id);
+      await deleteConsultation.mutateAsync({ id: consultation.id, contactId: consultation.contact_id });
       toast({
         title: 'Usunięto',
         description: 'Konsultacja została usunięta.',
