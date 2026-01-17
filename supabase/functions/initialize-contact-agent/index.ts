@@ -129,6 +129,18 @@ serve(async (req) => {
       questionnaires = q || [];
     }
 
+    // 11. Fetch BI data if exists
+    let biData: any = null;
+    const { data: biDataResult } = await supabase
+      .from('contact_bi_data')
+      .select('*')
+      .eq('contact_id', contact_id)
+      .maybeSingle();
+    
+    if (biDataResult) {
+      biData = biDataResult;
+    }
+
     // Build TIMELINE - chronological history
     const timeline: Array<{date: string; type: string; description: string; details?: string}> = [];
 
@@ -285,6 +297,29 @@ ${questionnaires.map(q => `
 
 ---
 
+## DANE Z WYWIADU BI (strukturalne) - kompletność: ${biData?.completeness_score ? (biData.completeness_score * 100).toFixed(0) + '%' : 'nie przeprowadzony'}
+${biData?.bi_profile ? `
+### Sekcja 1 - Dane podstawowe
+${JSON.stringify(biData.bi_profile.section_1_basic_info || {}, null, 2)}
+
+### Sekcja 2 - Metryki biznesowe  
+${JSON.stringify(biData.bi_profile.section_2_business_metrics || {}, null, 2)}
+
+### Sekcja 3 - Priorytety i wyzwania
+${JSON.stringify(biData.bi_profile.section_3_priorities_challenges || {}, null, 2)}
+
+### Sekcja 4 - Inwestycje
+${JSON.stringify(biData.bi_profile.section_4_investments || {}, null, 2)}
+
+### Sekcja 5 - Relacje CC
+${JSON.stringify(biData.bi_profile.section_5_cc_relations || {}, null, 2)}
+
+### Sekcja 6 - Dane prywatne
+${JSON.stringify(biData.bi_profile.section_6_personal || {}, null, 2)}
+` : 'Brak - BI nie przeprowadzony. Rozważ przeprowadzenie wywiadu BI dla pełnego obrazu klienta.'}
+
+---
+
 ## ZADANIE
 
 Na podstawie WSZYSTKICH powyższych danych wygeneruj szczegółowy profil agenta AI dla tego kontaktu.
@@ -419,13 +454,16 @@ Bądź BARDZO konkretny i praktyczny. Wyciągaj wnioski z danych, nie wymyślaj.
             'needs', 
             'offers', 
             'tasks', 
-            'connections'
+            'connections',
+            'bi_data'
           ],
           timeline_events: timeline.length,
           consultations_count: consultations?.length || 0,
           meetings_count: consultationMeetings?.length || 0,
           recommendations_count: recommendationsSummary.length,
-          thanks_count: thanksSummary.length
+          thanks_count: thanksSummary.length,
+          bi_data_completeness: biData?.completeness_score || 0,
+          bi_status: biData?.bi_status || 'not_started'
         },
         updated_at: new Date().toISOString()
       }, {
