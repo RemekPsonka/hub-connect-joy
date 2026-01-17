@@ -24,3 +24,28 @@ export function calculateCrossTaskStatus(crossTask: {
   // Nothing done yet
   return 'pending';
 }
+
+/**
+ * Calculates the progress of a cross-task (0-3 steps completed)
+ * 
+ * Steps:
+ * 1. Discussed with contact A
+ * 2. Discussed with contact B
+ * 3. Intro made
+ */
+export function calculateCrossTaskProgress(crossTask: {
+  discussed_with_a: boolean | null;
+  discussed_with_b: boolean | null;
+  intro_made: boolean | null;
+}): { completed: number; total: number } {
+  const discussedA = crossTask.discussed_with_a || false;
+  const discussedB = crossTask.discussed_with_b || false;
+  const introMade = crossTask.intro_made || false;
+
+  let completed = 0;
+  if (discussedA) completed++;
+  if (discussedB) completed++;
+  if (introMade) completed++;
+
+  return { completed, total: 3 };
+}

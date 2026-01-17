@@ -3,12 +3,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TaskTypeBadge } from './TaskTypeBadge';
 import { TaskPriorityBadge } from './TaskPriorityBadge';
 import { TaskStatusBadge } from './TaskStatusBadge';
+import { CrossTaskProgressBadge } from './CrossTaskProgressBadge';
 import { Link2, Calendar, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useNavigate } from 'react-router-dom';
-import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
+import { calculateCrossTaskStatus, calculateCrossTaskProgress } from '@/utils/crossTaskStatus';
 
 interface TasksListProps {
   tasks: TaskWithDetails[];
@@ -133,6 +134,12 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
                       
                       <div className="flex items-center gap-2">
                         <TaskStatusBadge status={effectiveStatus} />
+                        {isCrossTask && (
+                          <CrossTaskProgressBadge 
+                            completed={calculateCrossTaskProgress(crossTask).completed}
+                            total={3}
+                          />
+                        )}
                         {task.due_date && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Calendar className="h-3 w-3" />
