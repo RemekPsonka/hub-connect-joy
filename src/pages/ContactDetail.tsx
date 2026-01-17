@@ -10,6 +10,7 @@ import { ContactConsultationsTab } from '@/components/contacts/ContactConsultati
 import { ContactHistoryTab } from '@/components/contacts/ContactHistoryTab';
 import { ContactTasksTab } from '@/components/contacts/ContactTasksTab';
 import { ContactNotesTab } from '@/components/contacts/ContactNotesTab';
+import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactModal } from '@/components/contacts/ContactModal';
 
 export default function ContactDetail() {
@@ -48,8 +49,9 @@ export default function ContactDetail() {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Przegląd</TabsTrigger>
+          <TabsTrigger value="agent">Agent AI</TabsTrigger>
           <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
           <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
           <TabsTrigger value="history">Historia</TabsTrigger>
@@ -59,6 +61,10 @@ export default function ContactDetail() {
 
         <TabsContent value="overview" className="mt-6">
           <ContactOverviewTab contact={contact} />
+        </TabsContent>
+
+        <TabsContent value="agent" className="mt-6">
+          <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
         </TabsContent>
 
         <TabsContent value="needs-offers" className="mt-6">

@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.generate-contact-profile]
 verify_jwt = false
+
+[functions.initialize-contact-agent]
+verify_jwt = false
+
+[functions.query-contact-agent]
+verify_jwt = false
+
+[functions.master-agent-query]
+verify_jwt = false
