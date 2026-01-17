@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
+import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 
 interface EmbeddingStats {
   contacts_with: number;
@@ -253,6 +254,9 @@ export default function Settings() {
         <h1 className="text-2xl font-bold text-foreground">Ustawienia</h1>
         <p className="text-muted-foreground">Zarządzaj ustawieniami aplikacji</p>
       </div>
+
+      {/* Notification Preferences */}
+      <NotificationPreferences />
 
       {/* Synonyms Dictionary */}
       <SynonymsDictionary />
