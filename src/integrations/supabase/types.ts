@@ -116,6 +116,53 @@ export type Database = {
           },
         ]
       }
+      bi_interview_sessions: {
+        Row: {
+          completed_at: string | null
+          contact_bi_id: string | null
+          conversation_log: Json | null
+          id: string
+          questions_answered: number | null
+          questions_asked: number | null
+          sections_completed: string[] | null
+          session_type: string | null
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          contact_bi_id?: string | null
+          conversation_log?: Json | null
+          id?: string
+          questions_answered?: number | null
+          questions_asked?: number | null
+          sections_completed?: string[] | null
+          session_type?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          contact_bi_id?: string | null
+          conversation_log?: Json | null
+          id?: string
+          questions_answered?: number | null
+          questions_asked?: number | null
+          sections_completed?: string[] | null
+          session_type?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bi_interview_sessions_contact_bi_id_fkey"
+            columns: ["contact_bi_id"]
+            isOneToOne: false
+            referencedRelation: "contact_bi_data"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
@@ -697,6 +744,111 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_bi_data: {
+        Row: {
+          bi_profile: Json | null
+          bi_status: string | null
+          completeness_score: number | null
+          contact_id: string | null
+          created_at: string | null
+          id: string
+          interviewer_name: string | null
+          last_bi_update: string | null
+          next_review_date: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          bi_profile?: Json | null
+          bi_status?: string | null
+          completeness_score?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          id?: string
+          interviewer_name?: string | null
+          last_bi_update?: string | null
+          next_review_date?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          bi_profile?: Json | null
+          bi_status?: string | null
+          completeness_score?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          id?: string
+          interviewer_name?: string | null
+          last_bi_update?: string | null
+          next_review_date?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_bi_data_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: true
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_bi_data_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_bi_history: {
+        Row: {
+          change_reason: string | null
+          changed_by: string | null
+          contact_bi_id: string | null
+          created_at: string | null
+          field_path: string
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+        }
+        Insert: {
+          change_reason?: string | null
+          changed_by?: string | null
+          contact_bi_id?: string | null
+          created_at?: string | null
+          field_path: string
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Update: {
+          change_reason?: string | null
+          changed_by?: string | null
+          contact_bi_id?: string | null
+          created_at?: string | null
+          field_path?: string
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_bi_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_bi_history_contact_bi_id_fkey"
+            columns: ["contact_bi_id"]
+            isOneToOne: false
+            referencedRelation: "contact_bi_data"
             referencedColumns: ["id"]
           },
         ]
