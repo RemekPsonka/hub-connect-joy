@@ -8,6 +8,9 @@ export interface SearchResult {
   subtitle?: string;
   description?: string;
   similarity: number;
+  ftsScore?: number;
+  semanticScore?: number;
+  matchSource?: 'fts' | 'semantic' | 'hybrid';
 }
 
 interface SemanticSearchParams {
@@ -15,18 +18,21 @@ interface SemanticSearchParams {
   types?: ('contact' | 'need' | 'offer')[];
   threshold?: number;
   limit?: number;
+  useHybrid?: boolean;
 }
 
 export function useSemanticSearch() {
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searchMode, setSearchMode] = useState<'hybrid' | 'fts'>('hybrid');
   
   const search = useCallback(async ({
     query,
     types = ['contact', 'need', 'offer'],
-    threshold = 0.3,
-    limit = 20
+    threshold = 0.2,
+    limit = 30,
+    useHybrid = true
   }: SemanticSearchParams) => {
     if (!query.trim()) {
       setResults([]);
@@ -60,18 +66,48 @@ export function useSemanticSearch() {
       
       const tenantId = director.tenant_id;
       
-      // Use PostgreSQL full-text search with trigram support
-      console.log('Starting FTS search for:', query);
+      // Try to generate query embedding for hybrid search
+      let queryEmbedding: string | null = null;
       
-      const { data, error: rpcError } = await supabase.rpc('search_all_fts', {
+      if (useHybrid) {
+        console.log('Generating query embedding for hybrid search...');
+        try {
+          const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke('generate-embedding', {
+            body: { text: query }
+          });
+          
+          if (!embeddingError && embeddingData?.embedding) {
+            queryEmbedding = embeddingData.embedding;
+            console.log('Query embedding generated successfully');
+            setSearchMode('hybrid');
+          } else {
+            console.warn('Could not generate embedding, falling back to FTS only:', embeddingError);
+            setSearchMode('fts');
+          }
+        } catch (e) {
+          console.warn('Embedding generation failed, using FTS only:', e);
+          setSearchMode('fts');
+        }
+      } else {
+        setSearchMode('fts');
+      }
+      
+      // Use hybrid search function
+      console.log(`Starting ${queryEmbedding ? 'hybrid' : 'FTS'} search for:`, query);
+      
+      const { data, error: rpcError } = await supabase.rpc('search_all_hybrid', {
         p_query: query,
+        p_query_embedding: queryEmbedding,
         p_tenant_id: tenantId,
         p_types: types,
+        p_fts_weight: 0.4,
+        p_semantic_weight: 0.6,
+        p_threshold: threshold,
         p_limit: limit
       });
       
       if (rpcError) {
-        console.error('FTS search error:', rpcError);
+        console.error('Hybrid search error:', rpcError);
         setError('Błąd wyszukiwania');
         setResults([]);
         return [];
@@ -83,10 +119,13 @@ export function useSemanticSearch() {
         title: item.title || '',
         subtitle: item.subtitle || undefined,
         description: item.description || undefined,
-        similarity: item.similarity || 0
+        similarity: item.combined_score || 0,
+        ftsScore: item.fts_score || 0,
+        semanticScore: item.semantic_score || 0,
+        matchSource: item.match_source as 'fts' | 'semantic' | 'hybrid'
       }));
       
-      console.log(`FTS search found ${searchResults.length} results`);
+      console.log(`Hybrid search found ${searchResults.length} results`);
       setResults(searchResults);
       return searchResults;
     } catch (e) {
@@ -109,6 +148,7 @@ export function useSemanticSearch() {
     results,
     isSearching,
     error,
+    searchMode,
     clearResults
   };
 }
