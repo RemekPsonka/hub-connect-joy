@@ -22,6 +22,7 @@ import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
 import Search from "./pages/Search";
 import Notifications from "./pages/Notifications";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/search" element={<Search />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/analytics" element={<Analytics />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />
                 </Route>
