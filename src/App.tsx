@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,8 +7,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Pages
+// Pages - static imports
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
@@ -18,7 +20,6 @@ import ConsultationDetail from "./pages/ConsultationDetail";
 import Meetings from "./pages/Meetings";
 import MeetingDetail from "./pages/MeetingDetail";
 import Matches from "./pages/Matches";
-import Network from "./pages/Network";
 import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
@@ -26,6 +27,21 @@ import Search from "./pages/Search";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
+
+// Lazy load Network page to isolate sigma library issues
+const Network = lazy(() => import("./pages/Network"));
+
+const NetworkFallback = () => (
+  <div className="flex h-full">
+    <div className="flex-1 flex flex-col p-6">
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-10 w-64" />
+      </div>
+      <Skeleton className="flex-1 rounded-lg" />
+    </div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -51,7 +67,14 @@ const App = () => (
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/meetings/:id" element={<MeetingDetail />} />
               <Route path="/matches" element={<Matches />} />
-              <Route path="/network" element={<Network />} />
+              <Route 
+                path="/network" 
+                element={
+                  <Suspense fallback={<NetworkFallback />}>
+                    <Network />
+                  </Suspense>
+                } 
+              />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/search" element={<Search />} />
               <Route path="/notifications" element={<Notifications />} />

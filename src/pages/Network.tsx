@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Share2, Search, ZoomIn, ZoomOut, RotateCcw, Filter } from 'lucide-react';
+import { Share2, Search, Filter, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,11 +13,31 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { ErrorBoundary } from 'react-error-boundary';
 import { ConnectionGraph } from '@/components/network/ConnectionGraph';
 import { GraphSidebar } from '@/components/network/GraphSidebar';
 import { FindPathModal } from '@/components/network/FindPathModal';
-import { useConnections, ContactNode } from '@/hooks/useConnections';
+import { useConnections } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
+
+function GraphErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+  return (
+    <Card className="m-4">
+      <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Nie udało się załadować grafu</h3>
+        <p className="text-muted-foreground mb-4 max-w-md">
+          Wystąpił błąd podczas renderowania grafu sieci kontaktów. 
+          Spróbuj odświeżyć stronę lub skontaktuj się z pomocą techniczną.
+        </p>
+        <p className="text-xs text-muted-foreground mb-4 font-mono bg-muted p-2 rounded max-w-md overflow-auto">
+          {error.message}
+        </p>
+        <Button onClick={resetErrorBoundary}>Spróbuj ponownie</Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Network() {
   const { data: graphData, isLoading } = useConnections();
@@ -193,16 +214,21 @@ export default function Network() {
           </div>
         )}
 
-        {/* Graph */}
+        {/* Graph with Error Boundary */}
         <div className="flex-1 p-4">
-          <ConnectionGraph
-            nodes={filteredNodes}
-            edges={filteredEdges}
-            selectedNodeId={selectedNodeId}
-            highlightedPath={highlightedPath}
-            onNodeClick={handleNodeClick}
-            searchTerm={searchTerm}
-          />
+          <ErrorBoundary
+            FallbackComponent={GraphErrorFallback}
+            onReset={() => window.location.reload()}
+          >
+            <ConnectionGraph
+              nodes={filteredNodes}
+              edges={filteredEdges}
+              selectedNodeId={selectedNodeId}
+              highlightedPath={highlightedPath}
+              onNodeClick={handleNodeClick}
+              searchTerm={searchTerm}
+            />
+          </ErrorBoundary>
         </div>
 
         {/* Footer Stats */}
