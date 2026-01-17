@@ -21,6 +21,7 @@ import Tasks from "./pages/Tasks";
 import AIChat from "./pages/AIChat";
 import Settings from "./pages/Settings";
 import Search from "./pages/Search";
+import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,10 +47,11 @@ const App = () => (
               <Route path="/consultations/:id" element={<ConsultationDetail />} />
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/meetings/:id" element={<MeetingDetail />} />
-                  <Route path="/tasks" element={<Tasks />} />
-                  <Route path="/search" element={<Search />} />
-                  <Route path="/ai" element={<AIChat />} />
-                  <Route path="/settings" element={<Settings />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/search" element={<Search />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/ai" element={<AIChat />} />
+              <Route path="/settings" element={<Settings />} />
                 </Route>
             
             {/* Catch-all */}
