@@ -7,7 +7,9 @@ export interface AIRecommendation {
   title: string;
   description: string;
   contactIds?: string[];
+  contactNames?: string[];
   priority: 'high' | 'medium' | 'low';
+  reasoning?: string;
 }
 
 export function useAIRecommendations() {

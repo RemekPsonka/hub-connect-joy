@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_recommendation_actions: {
+        Row: {
+          action_taken: string
+          contact_ids: string[] | null
+          created_at: string | null
+          id: string
+          recommendation_hash: string
+          recommendation_title: string
+          recommendation_type: string
+          related_task_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action_taken: string
+          contact_ids?: string[] | null
+          created_at?: string | null
+          id?: string
+          recommendation_hash: string
+          recommendation_title: string
+          recommendation_type: string
+          related_task_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action_taken?: string
+          contact_ids?: string[] | null
+          created_at?: string | null
+          id?: string
+          recommendation_hash?: string
+          recommendation_title?: string
+          recommendation_type?: string
+          related_task_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_recommendation_actions_related_task_id_fkey"
+            columns: ["related_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_recommendation_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connections: {
         Row: {
           connection_type: string | null
