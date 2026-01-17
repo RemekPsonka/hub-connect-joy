@@ -56,13 +56,27 @@ export default function Network() {
   const nodes = graphData?.nodes || [];
   const edges = graphData?.edges || [];
 
-  // Filter nodes by selected groups
+  // Pokaż tylko kontakty które mają połączenia
+  const connectedNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    edges.forEach((edge) => {
+      if (edge.contact_a_id) ids.add(edge.contact_a_id);
+      if (edge.contact_b_id) ids.add(edge.contact_b_id);
+    });
+    return ids;
+  }, [edges]);
+
+  // Filtrowane węzły - tylko te z połączeniami + opcjonalnie filtr grup
   const filteredNodes = useMemo(() => {
-    if (selectedGroups.length === 0) return nodes;
-    return nodes.filter((node) => 
-      node.primary_group_id && selectedGroups.includes(node.primary_group_id)
-    );
-  }, [nodes, selectedGroups]);
+    let result = nodes.filter((node) => connectedNodeIds.has(node.id));
+    
+    if (selectedGroups.length > 0) {
+      result = result.filter((node) => 
+        node.primary_group_id && selectedGroups.includes(node.primary_group_id)
+      );
+    }
+    return result;
+  }, [nodes, connectedNodeIds, selectedGroups]);
 
   // Filter edges to only include those where both nodes are visible
   const filteredEdges = useMemo(() => {
