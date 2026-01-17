@@ -133,7 +133,7 @@ export default function AIChat() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [messages]);
 
@@ -460,8 +460,10 @@ export default function AIChat() {
               </div>
             </div>
           ) : (
-            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-              <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="flex-1 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="p-4">
+                  <div className="space-y-4 max-w-3xl mx-auto" ref={scrollRef}>
                 {messages.map((message, index) => (
                   <div
                     key={index}
@@ -575,8 +577,10 @@ export default function AIChat() {
                     </div>
                   </div>
                 )}
-              </div>
-            </ScrollArea>
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
           )}
 
           <div className="border-t p-4">
