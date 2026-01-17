@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.enrich-company-data]
 verify_jwt = false
+
+[functions.generate-contact-profile]
+verify_jwt = false
