@@ -2,8 +2,44 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesUpdate } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type Company = Tables<'companies'>;
+
+export interface CompanyContact {
+  id: string;
+  full_name: string;
+  position: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export function useCompanyContacts(companyId: string | undefined, excludeContactId?: string) {
+  const { director } = useAuth();
+
+  return useQuery({
+    queryKey: ['company_contacts', companyId, excludeContactId],
+    queryFn: async () => {
+      if (!companyId || !director?.tenant_id) return [];
+
+      let query = supabase
+        .from('contacts')
+        .select('id, full_name, position, email, phone')
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .order('full_name', { ascending: true });
+
+      if (excludeContactId) {
+        query = query.neq('id', excludeContactId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as CompanyContact[];
+    },
+    enabled: !!companyId && !!director?.tenant_id,
+  });
+}
 export type CompanyUpdate = TablesUpdate<'companies'>;
 
 export function useCompany(id: string | undefined) {

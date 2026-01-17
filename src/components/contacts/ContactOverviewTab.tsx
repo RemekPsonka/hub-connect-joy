@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Mail, Phone, Building, MapPin, Linkedin, Tag, FileText, Globe, Users, Sparkles, Briefcase, Pencil } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Mail, Phone, Building, MapPin, Linkedin, Tag, FileText, Globe, Users, Sparkles, Briefcase, Pencil, User } from 'lucide-react';
 import { useContactStats, type ContactWithDetails } from '@/hooks/useContacts';
+import { useCompanyContacts } from '@/hooks/useCompanies';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
 import { CompanyModal } from './CompanyModal';
 
@@ -30,6 +33,11 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const { data: stats } = useContactStats(contact.id);
   const company = contact.companies;
+  const { data: companyContacts = [], isLoading: isLoadingContacts } = useCompanyContacts(company?.id, contact.id);
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
 
   // Parse AI analysis if exists
   let aiAnalysis: {
@@ -292,6 +300,58 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
                 <p className="text-sm text-muted-foreground">{aiAnalysis.collaboration_areas}</p>
               </div>
             )}
+
+            {/* People from this company */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">
+                  Osoby z tej firmy {companyContacts.length > 0 && `(${companyContacts.length})`}
+                </p>
+              </div>
+              
+              {isLoadingContacts ? (
+                <p className="text-sm text-muted-foreground">Ładowanie...</p>
+              ) : companyContacts.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">Brak innych osób z tej firmy</p>
+              ) : (
+                <div className="space-y-2">
+                  {companyContacts.map((person) => (
+                    <Link
+                      key={person.id}
+                      to={`/contacts/${person.id}`}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                          {getInitials(person.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{person.full_name}</p>
+                        {person.position && (
+                          <p className="text-xs text-muted-foreground truncate">{person.position}</p>
+                        )}
+                      </div>
+                      <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+                        {person.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            <span className="truncate max-w-[150px]">{person.email}</span>
+                          </span>
+                        )}
+                        {person.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {person.phone}
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
