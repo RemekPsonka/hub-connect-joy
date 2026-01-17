@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.generate-daily-serendipity]
 verify_jwt = false
+
+[functions.generate-analytics-insights]
+verify_jwt = false
