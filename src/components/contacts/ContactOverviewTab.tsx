@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Mail, Phone, Building, MapPin, Linkedin, Tag, FileText, Globe, Users, Sparkles, Briefcase } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Mail, Phone, Building, MapPin, Linkedin, Tag, FileText, Globe, Users, Sparkles, Briefcase, Pencil } from 'lucide-react';
 import { useContactStats, type ContactWithDetails } from '@/hooks/useContacts';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
+import { CompanyModal } from './CompanyModal';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -24,6 +27,7 @@ const sizeLabels: Record<string, string> = {
 };
 
 export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const { data: stats } = useContactStats(contact.id);
   const company = contact.companies;
 
@@ -195,10 +199,20 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
       {company && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Building className="h-5 w-5" />
-              Firma
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Firma
+              </CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setIsCompanyModalOpen(true)}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edytuj
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
@@ -280,6 +294,15 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Company Modal */}
+      {company && (
+        <CompanyModal
+          open={isCompanyModalOpen}
+          onOpenChange={setIsCompanyModalOpen}
+          company={company}
+        />
       )}
 
       {/* Connections/Network section */}
