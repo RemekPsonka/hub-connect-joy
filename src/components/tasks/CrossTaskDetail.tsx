@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 
 interface CrossTaskDetailProps {
   open: boolean;
@@ -43,6 +43,11 @@ export function CrossTaskDetail({ open, onOpenChange, task, onEdit }: CrossTaskD
   const navigate = useNavigate();
   const crossTask = task.cross_tasks?.[0];
   const isCrossTask = task.task_type === 'cross' && crossTask;
+
+  // Calculate effective status for cross-tasks based on workflow
+  const effectiveStatus = isCrossTask 
+    ? calculateCrossTaskStatus(crossTask)
+    : task.status;
 
   const updateCrossStatus = useUpdateCrossTaskStatus();
   const updateTask = useUpdateTask();
@@ -114,7 +119,7 @@ export function CrossTaskDetail({ open, onOpenChange, task, onEdit }: CrossTaskD
               <div className="flex items-center gap-2">
                 <TaskTypeBadge type={task.task_type} />
                 <TaskPriorityBadge priority={task.priority} />
-                <TaskStatusBadge status={task.status} />
+                <TaskStatusBadge status={effectiveStatus} />
               </div>
             </div>
           </div>
@@ -323,7 +328,8 @@ export function CrossTaskDetail({ open, onOpenChange, task, onEdit }: CrossTaskD
                 <Edit2 className="h-4 w-4 mr-2" />
                 Edytuj
               </Button>
-              {task.status !== 'completed' && (
+              {/* For cross-tasks, hide complete button - status is automatic based on workflow */}
+              {!isCrossTask && effectiveStatus !== 'completed' && (
                 <Button size="sm" onClick={handleComplete} disabled={updateTask.isPending}>
                   {updateTask.isPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
