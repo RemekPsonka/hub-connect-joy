@@ -6,6 +6,7 @@ export interface AgentInsight {
   text: string;
   source: string;
   importance: 'high' | 'medium' | 'low';
+  added_at?: string;
 }
 
 export interface AgentProfile {
@@ -15,6 +16,11 @@ export interface AgentProfile {
   communication_style?: string;
   decision_making?: string;
   key_topics?: string[];
+  relationship_dynamics?: string;
+  business_value?: string;
+  timeline_summary?: string;
+  next_steps?: string[];
+  warnings?: string[];
 }
 
 export interface ContactAgentMemory {
@@ -30,14 +36,45 @@ export interface ContactAgentMemory {
   updated_at: string;
 }
 
+export interface ProposedAction {
+  type: 'CREATE_TASK' | 'ADD_NOTE' | 'UPDATE_PROFILE' | 'ADD_INSIGHT' | 'CREATE_NEED' | 'CREATE_OFFER' | 'SCHEDULE_FOLLOWUP';
+  data: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    due_date?: string;
+    field?: string;
+    value?: string;
+    text?: string;
+    importance?: string;
+    date?: string;
+    content?: string;
+  };
+  reason: string;
+}
+
 export interface AgentQueryResponse {
   success: boolean;
+  session_id: string;
   contact_name?: string;
   answer: string;
   relevant_history: string[];
   suggested_topics: string[];
   warnings: string[];
   action_items: string[];
+  proposed_actions: ProposedAction[];
+  memory_update: {
+    new_insights: AgentInsight[];
+    profile_updates: Record<string, unknown>;
+  };
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  proposed_actions?: ProposedAction[];
 }
 
 export function useContactAgentMemory(contactId: string | undefined) {
@@ -65,6 +102,33 @@ export function useContactAgentMemory(contactId: string | undefined) {
   });
 }
 
+export function useAgentConversationHistory(contactId: string | undefined, sessionId: string | undefined) {
+  return useQuery({
+    queryKey: ['agent-conversation', contactId, sessionId],
+    queryFn: async () => {
+      if (!contactId || !sessionId) return [];
+      
+      const { data, error } = await supabase
+        .from('agent_conversations')
+        .select('*')
+        .eq('contact_id', contactId)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      return (data || []).map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+        proposed_actions: (msg.extracted_data as any)?.proposed_actions || []
+      })) as ConversationMessage[];
+    },
+    enabled: !!contactId && !!sessionId
+  });
+}
+
 export function useInitializeContactAgent() {
   const queryClient = useQueryClient();
   
@@ -87,13 +151,23 @@ export function useQueryContactAgent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const queryAgent = useCallback(async (contactId: string, question: string): Promise<AgentQueryResponse | null> => {
+  const queryAgent = useCallback(async (
+    contactId: string, 
+    question: string,
+    sessionId?: string,
+    conversationHistory?: Array<{role: string; content: string}>
+  ): Promise<AgentQueryResponse | null> => {
     setIsLoading(true);
     setError(null);
     
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('query-contact-agent', {
-        body: { contact_id: contactId, question }
+        body: { 
+          contact_id: contactId, 
+          question,
+          session_id: sessionId,
+          conversation_history: conversationHistory
+        }
       });
       
       if (invokeError) throw invokeError;
@@ -108,6 +182,57 @@ export function useQueryContactAgent() {
   }, []);
   
   return { queryAgent, isLoading, error };
+}
+
+export function useExecuteAgentAction() {
+  const queryClient = useQueryClient();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const executeAction = useCallback(async (
+    contactId: string,
+    action: ProposedAction,
+    sessionId?: string
+  ): Promise<{ success: boolean; type?: string; data?: any; error?: string }> => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('agent-action', {
+        body: { 
+          contact_id: contactId, 
+          action,
+          session_id: sessionId
+        }
+      });
+      
+      if (invokeError) throw invokeError;
+      
+      // Invalidate relevant queries based on action type
+      if (action.type === 'CREATE_TASK' || action.type === 'SCHEDULE_FOLLOWUP') {
+        queryClient.invalidateQueries({ queryKey: ['contact-tasks', contactId] });
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      } else if (action.type === 'ADD_NOTE' || action.type === 'UPDATE_PROFILE') {
+        queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      } else if (action.type === 'ADD_INSIGHT') {
+        queryClient.invalidateQueries({ queryKey: ['contact-agent-memory', contactId] });
+      } else if (action.type === 'CREATE_NEED') {
+        queryClient.invalidateQueries({ queryKey: ['contact-needs', contactId] });
+      } else if (action.type === 'CREATE_OFFER') {
+        queryClient.invalidateQueries({ queryKey: ['contact-offers', contactId] });
+      }
+      
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [queryClient]);
+  
+  return { executeAction, isLoading, error };
 }
 
 export interface MasterAgentResponse {

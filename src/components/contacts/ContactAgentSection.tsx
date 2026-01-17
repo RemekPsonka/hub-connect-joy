@@ -1,17 +1,22 @@
-import { useState } from 'react';
-import { Bot, RefreshCw, Send, Sparkles, AlertTriangle, Target, Heart, MessageSquare, Lightbulb } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Bot, RefreshCw, Send, Sparkles, AlertTriangle, Target, Heart, MessageSquare, Lightbulb, Check, X, Edit3, ListTodo, FileText, User, TrendingUp, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { 
   useContactAgentMemory, 
   useInitializeContactAgent, 
   useQueryContactAgent,
-  AgentInsight 
+  useExecuteAgentAction,
+  AgentInsight,
+  ProposedAction,
+  ConversationMessage
 } from '@/hooks/useContactAgent';
+import { cn } from '@/lib/utils';
 
 interface ContactAgentSectionProps {
   contactId: string;
@@ -22,14 +27,21 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
   const { data: agentMemory, isLoading: isLoadingMemory } = useContactAgentMemory(contactId);
   const initializeAgent = useInitializeContactAgent();
   const { queryAgent, isLoading: isQuerying, error: queryError } = useQueryContactAgent();
+  const { executeAction, isLoading: isExecutingAction } = useExecuteAgentAction();
   
-  const [question, setQuestion] = useState('');
-  const [agentResponse, setAgentResponse] = useState<{
-    answer: string;
-    suggested_topics?: string[];
-    warnings?: string[];
-    action_items?: string[];
-  } | null>(null);
+  const [message, setMessage] = useState('');
+  const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID());
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [pendingActions, setPendingActions] = useState<ProposedAction[]>([]);
+  
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [conversation]);
 
   const handleInitialize = async () => {
     try {
@@ -49,21 +61,105 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
     }
   };
 
-  const handleAskAgent = async () => {
-    if (!question.trim()) return;
+  const handleSendMessage = async () => {
+    if (!message.trim() || isQuerying) return;
     
-    const response = await queryAgent(contactId, question);
+    const userMessage: ConversationMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: message.trim(),
+      timestamp: new Date()
+    };
+    
+    setConversation(prev => [...prev, userMessage]);
+    setMessage('');
+    
+    const conversationHistory = conversation.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
+    
+    const response = await queryAgent(contactId, userMessage.content, sessionId, conversationHistory);
+    
     if (response) {
-      setAgentResponse({
-        answer: response.answer,
-        suggested_topics: response.suggested_topics,
-        warnings: response.warnings,
-        action_items: response.action_items
-      });
-      setQuestion('');
+      setSessionId(response.session_id);
+      
+      const assistantMessage: ConversationMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response.answer,
+        timestamp: new Date(),
+        proposed_actions: response.proposed_actions
+      };
+      
+      setConversation(prev => [...prev, assistantMessage]);
+      
+      if (response.proposed_actions && response.proposed_actions.length > 0) {
+        setPendingActions(response.proposed_actions);
+      }
     } else if (queryError) {
       toast.error(queryError);
+      // Remove the user message if there was an error
+      setConversation(prev => prev.filter(m => m.id !== userMessage.id));
     }
+  };
+
+  const handleExecuteAction = async (action: ProposedAction) => {
+    const result = await executeAction(contactId, action, sessionId);
+    
+    if (result.success) {
+      toast.success(`Akcja wykonana: ${getActionLabel(action.type)}`);
+      setPendingActions(prev => prev.filter(a => a !== action));
+      
+      // Add a system message about the action
+      const actionMessage: ConversationMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `✅ Wykonano: ${getActionLabel(action.type)} - ${action.data.title || action.data.text || action.data.field || ''}`,
+        timestamp: new Date()
+      };
+      setConversation(prev => [...prev, actionMessage]);
+    } else {
+      toast.error(`Błąd: ${result.error}`);
+    }
+  };
+
+  const handleRejectAction = (action: ProposedAction) => {
+    setPendingActions(prev => prev.filter(a => a !== action));
+    toast.info('Akcja odrzucona');
+  };
+
+  const handleNewConversation = () => {
+    setConversation([]);
+    setPendingActions([]);
+    setSessionId(crypto.randomUUID());
+    inputRef.current?.focus();
+  };
+
+  const getActionLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'CREATE_TASK': 'Utwórz zadanie',
+      'ADD_NOTE': 'Dodaj notatkę',
+      'UPDATE_PROFILE': 'Aktualizuj profil',
+      'ADD_INSIGHT': 'Zapisz insight',
+      'CREATE_NEED': 'Dodaj potrzebę',
+      'CREATE_OFFER': 'Dodaj ofertę',
+      'SCHEDULE_FOLLOWUP': 'Zaplanuj follow-up'
+    };
+    return labels[type] || type;
+  };
+
+  const getActionIcon = (type: string) => {
+    const icons: Record<string, React.ReactNode> = {
+      'CREATE_TASK': <ListTodo className="h-4 w-4" />,
+      'ADD_NOTE': <FileText className="h-4 w-4" />,
+      'UPDATE_PROFILE': <User className="h-4 w-4" />,
+      'ADD_INSIGHT': <Lightbulb className="h-4 w-4" />,
+      'CREATE_NEED': <TrendingUp className="h-4 w-4" />,
+      'CREATE_OFFER': <Target className="h-4 w-4" />,
+      'SCHEDULE_FOLLOWUP': <Calendar className="h-4 w-4" />
+    };
+    return icons[type] || <Edit3 className="h-4 w-4" />;
   };
 
   const getImportanceBadgeVariant = (importance: string) => {
@@ -119,7 +215,7 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
             )}
           </Button>
           <p className="text-sm text-muted-foreground mt-3">
-            Agent AI przeanalizuje wszystkie dane o kontakcie i stworzy profil, który pomoże w przygotowaniu do spotkań i budowaniu relacji.
+            Agent AI przeanalizuje WSZYSTKIE dane o kontakcie (konsultacje, spotkania, potrzeby, oferty, rekomendacje, korzyści biznesowe) i stworzy profil asystenta.
           </p>
         </CardContent>
       </Card>
@@ -131,26 +227,35 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
 
   return (
     <div className="space-y-4">
-      {/* Agent Persona */}
+      {/* Agent Profile Card - Collapsible Summary */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              Agent AI: {contactName}
+              Asystent: {contactName}
             </CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleRefresh}
-              disabled={initializeAgent.isPending}
-            >
-              {initializeAgent.isPending ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleNewConversation}
+              >
+                Nowa rozmowa
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRefresh}
+                disabled={initializeAgent.isPending}
+              >
+                {initializeAgent.isPending ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
           <CardDescription>
             Ostatnia aktualizacja: {agentMemory.last_refresh_at 
@@ -172,7 +277,6 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
           )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Pain Points */}
             {profile.pain_points && profile.pain_points.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
@@ -180,7 +284,7 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
                   Wyzwania
                 </h4>
                 <div className="flex flex-wrap gap-1">
-                  {profile.pain_points.map((point, i) => (
+                  {profile.pain_points.slice(0, 4).map((point, i) => (
                     <Badge key={i} variant="outline" className="text-xs">
                       {point}
                     </Badge>
@@ -189,7 +293,6 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
               </div>
             )}
             
-            {/* Goals */}
             {profile.goals && profile.goals.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
@@ -197,7 +300,7 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
                   Cele
                 </h4>
                 <div className="flex flex-wrap gap-1">
-                  {profile.goals.map((goal, i) => (
+                  {profile.goals.slice(0, 4).map((goal, i) => (
                     <Badge key={i} variant="outline" className="text-xs">
                       {goal}
                     </Badge>
@@ -206,51 +309,60 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
               </div>
             )}
             
-            {/* Interests */}
-            {profile.interests && profile.interests.length > 0 && (
+            {profile.key_topics && profile.key_topics.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
-                  <Heart className="h-4 w-4 text-pink-500" />
-                  Zainteresowania
+                  <MessageSquare className="h-4 w-4 text-blue-500" />
+                  Tematy do poruszenia
                 </h4>
                 <div className="flex flex-wrap gap-1">
-                  {profile.interests.map((interest, i) => (
+                  {profile.key_topics.slice(0, 4).map((topic, i) => (
                     <Badge key={i} variant="secondary" className="text-xs">
-                      {interest}
+                      {topic}
                     </Badge>
                   ))}
                 </div>
               </div>
             )}
-            
-            {/* Communication Style */}
-            {profile.communication_style && (
+
+            {profile.business_value && (
               <div>
                 <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
-                  <MessageSquare className="h-4 w-4 text-blue-500" />
-                  Styl komunikacji
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  Wartość biznesowa
                 </h4>
                 <p className="text-sm text-muted-foreground">
-                  {profile.communication_style}
+                  {profile.business_value}
                 </p>
               </div>
             )}
           </div>
+
+          {profile.next_steps && profile.next_steps.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <h4 className="text-sm font-medium mb-2">📋 Następne kroki</h4>
+              <ul className="text-sm text-muted-foreground list-disc list-inside">
+                {profile.next_steps.slice(0, 3).map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Insights */}
+      {/* Insights Card */}
       {insights.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Lightbulb className="h-4 w-4 text-yellow-500" />
-              Insights
+              Insights ({insights.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {insights.map((insight, i) => (
+              {insights.slice(0, 5).map((insight, i) => (
                 <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/50">
                   <Badge 
                     variant={getImportanceBadgeVariant(insight.importance)} 
@@ -269,73 +381,145 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
         </Card>
       )}
 
-      {/* Ask Agent */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Zapytaj agenta</CardTitle>
+      {/* Conversational Chat */}
+      <Card className="flex flex-col" style={{ height: '500px' }}>
+        <CardHeader className="pb-3 shrink-0">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Rozmowa z Agentem
+          </CardTitle>
           <CardDescription>
-            Zadaj pytanie o ten kontakt, np. "Jak przygotować się do spotkania?"
+            Zapytaj o ten kontakt, poproś o przygotowanie do spotkania, lub zlecaj zadania
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Textarea
-            placeholder="Wpisz pytanie..."
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            rows={2}
-          />
-          <Button 
-            onClick={handleAskAgent} 
-            disabled={isQuerying || !question.trim()}
-            className="w-full"
-          >
-            {isQuerying ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Myślę...
-              </>
-            ) : (
-              <>
-                <Send className="mr-2 h-4 w-4" />
-                Zapytaj
-              </>
-            )}
-          </Button>
-          
-          {agentResponse && (
-            <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-3">
-              <p className="text-sm">{agentResponse.answer}</p>
-              
-              {agentResponse.warnings && agentResponse.warnings.length > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs font-medium text-destructive mb-1">⚠️ Ostrzeżenia:</p>
-                  <ul className="text-xs text-muted-foreground list-disc list-inside">
-                    {agentResponse.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                  </ul>
+        
+        <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-0">
+          {/* Messages Area */}
+          <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+            <div className="space-y-4">
+              {conversation.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Bot className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">Rozpocznij rozmowę z Agentem AI</p>
+                  <p className="text-xs mt-1">Np. "Jak przygotować się do spotkania?" lub "Co wiem o tej osobie?"</p>
                 </div>
               )}
               
-              {agentResponse.suggested_topics && agentResponse.suggested_topics.length > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs font-medium mb-1">💡 Sugerowane tematy:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {agentResponse.suggested_topics.map((t, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">{t}</Badge>
-                    ))}
+              {conversation.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "flex gap-3",
+                    msg.role === 'user' ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
+                  
+                  <div
+                    className={cn(
+                      "max-w-[80%] rounded-lg px-4 py-2",
+                      msg.role === 'user' 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-muted"
+                    )}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    <p className="text-xs opacity-60 mt-1">
+                      {msg.timestamp.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  
+                  {msg.role === 'user' && (
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                      <User className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {isQuerying && (
+                <div className="flex gap-3">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="bg-muted rounded-lg px-4 py-2">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   </div>
                 </div>
               )}
-              
-              {agentResponse.action_items && agentResponse.action_items.length > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs font-medium mb-1">✅ Do zrobienia:</p>
-                  <ul className="text-xs text-muted-foreground list-disc list-inside">
-                    {agentResponse.action_items.map((a, i) => <li key={i}>{a}</li>)}
-                  </ul>
-                </div>
-              )}
+            </div>
+          </ScrollArea>
+          
+          {/* Pending Actions */}
+          {pendingActions.length > 0 && (
+            <div className="shrink-0 py-3 border-t mt-3">
+              <p className="text-xs font-medium mb-2">💡 Proponowane akcje:</p>
+              <div className="space-y-2">
+                {pendingActions.map((action, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm">
+                    {getActionIcon(action.type)}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium">{getActionLabel(action.type)}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {action.data.title || action.data.text || action.data.field || action.reason}
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-100"
+                        onClick={() => handleExecuteAction(action)}
+                        disabled={isExecutingAction}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                        onClick={() => handleRejectAction(action)}
+                        disabled={isExecutingAction}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+          
+          {/* Input Area */}
+          <div className="shrink-0 flex gap-2 pt-3 border-t mt-3">
+            <Input
+              ref={inputRef}
+              placeholder="Wpisz wiadomość..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+              disabled={isQuerying}
+            />
+            <Button 
+              onClick={handleSendMessage} 
+              disabled={isQuerying || !message.trim()}
+              size="icon"
+            >
+              {isQuerying ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

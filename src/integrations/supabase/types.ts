@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_conversations: {
+        Row: {
+          actions_taken: Json[] | null
+          contact_id: string
+          content: string
+          created_at: string
+          extracted_data: Json | null
+          id: string
+          role: string
+          session_id: string
+          tenant_id: string
+        }
+        Insert: {
+          actions_taken?: Json[] | null
+          contact_id: string
+          content: string
+          created_at?: string
+          extracted_data?: Json | null
+          id?: string
+          role: string
+          session_id?: string
+          tenant_id: string
+        }
+        Update: {
+          actions_taken?: Json[] | null
+          contact_id?: string
+          content?: string
+          created_at?: string
+          extracted_data?: Json | null
+          id?: string
+          role?: string
+          session_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_recommendation_actions: {
         Row: {
           action_taken: string

@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { contact_id, question } = await req.json();
+    const { contact_id, question, session_id, conversation_history } = await req.json();
 
     if (!contact_id || !question) {
       return new Response(
@@ -53,59 +53,155 @@ serve(async (req) => {
       .eq('id', contact_id)
       .single();
 
-    // Fetch recent consultations
+    // Fetch recent consultations with more details
     const { data: consultations } = await supabase
       .from('consultations')
       .select('*')
       .eq('contact_id', contact_id)
       .order('scheduled_at', { ascending: false })
-      .limit(5);
+      .limit(10);
+
+    // Fetch recent consultation meetings
+    const { data: recentMeetings } = await supabase
+      .from('consultation_meetings')
+      .select('*')
+      .eq('contact_id', contact_id)
+      .order('meeting_date', { ascending: false })
+      .limit(10);
 
     // Fetch needs and offers
     const { data: needs } = await supabase
       .from('needs')
       .select('*')
-      .eq('contact_id', contact_id)
-      .eq('status', 'active');
+      .eq('contact_id', contact_id);
 
     const { data: offers } = await supabase
       .from('offers')
       .select('*')
-      .eq('contact_id', contact_id)
-      .eq('status', 'active');
+      .eq('contact_id', contact_id);
 
-    const prompt = `Jesteś Contact Agent - osobistym asystentem AI dla kontaktu biznesowego.
+    // Fetch tasks
+    const { data: taskContacts } = await supabase
+      .from('task_contacts')
+      .select('task_id, role, tasks(*)')
+      .eq('contact_id', contact_id);
+
+    // Fetch previous conversation history from database if session_id provided
+    let dbConversationHistory: Array<{role: string; content: string}> = [];
+    if (session_id) {
+      const { data: prevMessages } = await supabase
+        .from('agent_conversations')
+        .select('role, content')
+        .eq('contact_id', contact_id)
+        .eq('session_id', session_id)
+        .order('created_at', { ascending: true })
+        .limit(20);
+      
+      dbConversationHistory = prevMessages || [];
+    }
+
+    // Combine with provided conversation history
+    const fullHistory = [
+      ...dbConversationHistory,
+      ...(conversation_history || [])
+    ];
+
+    const conversationContext = fullHistory.length > 0 
+      ? fullHistory.map((m: any) => `${m.role === 'user' ? 'DIRECTOR' : 'AGENT'}: ${m.content}`).join('\n')
+      : 'Brak wcześniejszej rozmowy w tej sesji.';
+
+    const profile = agentMemory.agent_profile || {};
+
+    const prompt = `Jesteś Contact Agent - osobistym asystentem AI dla kontaktu biznesowego. Prowadzisz konwersację z Dyrektorem (użytkownikiem) na temat tego kontaktu.
+
+## TWOJA ROLA
+
+Jesteś asystentem który:
+- Zna wszystkie szczegóły o tym kontakcie
+- Pomaga przygotować się do spotkań
+- Sugeruje tematy do rozmów
+- Może PROPONOWAĆ AKCJE do wykonania (które Director zatwierdzi)
+- Pamięta kontekst rozmowy i uczy się z każdej interakcji
+
+## TWOJE MOŻLIWOŚCI
+
+Możesz zaproponować następujące akcje (Director musi je zatwierdzić):
+- CREATE_TASK: Utwórz zadanie powiązane z tym kontaktem
+- ADD_NOTE: Dodaj notatkę do kontaktu  
+- UPDATE_PROFILE: Zaktualizuj dane kontaktu (np. stanowisko, telefon)
+- ADD_INSIGHT: Zapisz nowy insight do swojej pamięci o tym kontakcie
+- CREATE_NEED: Dodaj nową potrzebę klienta
+- CREATE_OFFER: Dodaj nową ofertę/kompetencję klienta
+- SCHEDULE_FOLLOWUP: Zaplanuj follow-up kontakt
+
+---
 
 ## TWOJA WIEDZA O TYM KONTAKCIE
 
 **Podstawowe dane:**
 - Imię i nazwisko: ${contact?.full_name}
 - Stanowisko: ${contact?.position || 'nieznane'}
-- Firma: ${contact?.company || 'nieznana'}
+- Firma: ${contact?.company?.name || contact?.company || 'nieznana'}
+- Branża: ${contact?.company?.industry || 'nieznana'}
+- Email: ${contact?.email || 'brak'}
+- Telefon: ${contact?.phone || 'brak'}
+- Miasto: ${contact?.city || 'nieznane'}
 - Siła relacji: ${contact?.relationship_strength}/10
 - Ostatni kontakt: ${contact?.last_contact_date || 'nieznany'}
+
+**Notatki:**
+${contact?.notes || 'Brak notatek'}
+
+**AI Analiza firmy:**
+${contact?.company?.ai_analysis || 'Brak analizy'}
 
 **Twoja persona dla tego kontaktu:**
 ${agentMemory.agent_persona}
 
-**Profil (pain points, interests, goals):**
-${JSON.stringify(agentMemory.agent_profile, null, 2)}
+**Profil (szczegółowa wiedza):**
+- Wyzwania: ${(profile.pain_points || []).join(', ') || 'nieznane'}
+- Cele: ${(profile.goals || []).join(', ') || 'nieznane'}
+- Zainteresowania: ${(profile.interests || []).join(', ') || 'nieznane'}
+- Styl komunikacji: ${profile.communication_style || 'nieznany'}
+- Podejmowanie decyzji: ${profile.decision_making || 'nieznane'}
+- Kluczowe tematy: ${(profile.key_topics || []).join(', ') || 'brak'}
+- Dynamika relacji: ${profile.relationship_dynamics || 'nieznana'}
+- Wartość biznesowa: ${profile.business_value || 'nieoceniona'}
+- Timeline: ${profile.timeline_summary || 'brak'}
+- Następne kroki: ${(profile.next_steps || []).join(', ') || 'brak'}
+- Ostrzeżenia: ${(profile.warnings || []).join(', ') || 'brak'}
 
 **Zebrane insights:**
 ${(agentMemory.insights || []).map((i: any) => `- [${i.importance}] ${i.text} (źródło: ${i.source})`).join('\n') || 'Brak'}
 
-**Aktualne potrzeby:**
-${(needs || []).map(n => `- ${n.title}: ${n.description || ''}`).join('\n') || 'Brak'}
+---
 
-**Aktualne oferty:**
-${(offers || []).map(o => `- ${o.title}: ${o.description || ''}`).join('\n') || 'Brak'}
+## AKTUALNE DANE
+
+**Potrzeby (${needs?.length || 0}):**
+${(needs || []).map(n => `- [${n.status}] ${n.title}: ${n.description || ''} (priorytet: ${n.priority})`).join('\n') || 'Brak'}
+
+**Oferty (${offers?.length || 0}):**
+${(offers || []).map(o => `- [${o.status}] ${o.title}: ${o.description || ''}`).join('\n') || 'Brak'}
+
+**Zadania (${taskContacts?.length || 0}):**
+${(taskContacts || []).map((tc: any) => `- [${tc.tasks?.status}] ${tc.tasks?.title} (rola: ${tc.role}, termin: ${tc.tasks?.due_date || 'brak'})`).join('\n') || 'Brak'}
 
 **Ostatnie konsultacje:**
-${(consultations || []).map(c => `- ${c.scheduled_at}: ${c.status} | ${c.notes?.substring(0, 200) || 'brak notatek'}`).join('\n') || 'Brak'}
+${(consultations || []).slice(0, 5).map(c => `- ${c.scheduled_at}: ${c.status} | ${c.notes?.substring(0, 150) || 'brak notatek'}`).join('\n') || 'Brak'}
+
+**Ostatnie spotkania:**
+${(recentMeetings || []).slice(0, 5).map(m => `- ${m.meeting_date}: ${m.meeting_type} | ${m.comment || 'brak komentarza'} | Follow-up: ${m.follow_up || 'brak'}`).join('\n') || 'Brak'}
 
 ---
 
-## PYTANIE OD DIRECTORA
+## KONTEKST ROZMOWY (poprzednie wiadomości w tej sesji)
+
+${conversationContext}
+
+---
+
+## NOWA WIADOMOŚĆ OD DIRECTORA
 
 "${question}"
 
@@ -113,21 +209,54 @@ ${(consultations || []).map(c => `- ${c.scheduled_at}: ${c.status} | ${c.notes?.
 
 ## ZADANIE
 
-Odpowiedz na pytanie wykorzystując swoją wiedzę o tym kontakcie.
-Bądź konkretny, praktyczny i pomocny.
+Odpowiedz na wiadomość Directora wykorzystując swoją wiedzę o tym kontakcie.
+Bądź konkretny, praktyczny i pomocny. Mów w pierwszej osobie jako asystent.
+Jeśli Director wspomina o czymś ważnym do zapamiętania lub do zrobienia - zaproponuj odpowiednią akcję.
 
 **Zwróć JSON:**
 \`\`\`json
 {
-  "answer": "Twoja odpowiedź na pytanie",
-  "relevant_history": ["punkty z historii relevantne do pytania"],
-  "suggested_topics": ["tematy które warto poruszyć"],
+  "answer": "Twoja odpowiedź na wiadomość Directora - naturalna, konwersacyjna",
+  "relevant_history": ["punkty z historii kontaktu relevantne do rozmowy"],
+  "suggested_topics": ["tematy które warto poruszyć w kontekście rozmowy"],
   "warnings": ["ostrzeżenia lub rzeczy na które zwrócić uwagę"],
-  "action_items": ["sugerowane działania"]
+  "action_items": ["sugerowane działania do rozważenia"],
+  "proposed_actions": [
+    {
+      "type": "CREATE_TASK | ADD_NOTE | UPDATE_PROFILE | ADD_INSIGHT | CREATE_NEED | CREATE_OFFER | SCHEDULE_FOLLOWUP",
+      "data": {
+        "title": "dla zadań",
+        "description": "opis",
+        "priority": "high/medium/low",
+        "due_date": "YYYY-MM-DD",
+        "field": "dla UPDATE_PROFILE - nazwa pola",
+        "value": "dla UPDATE_PROFILE - nowa wartość",
+        "text": "dla ADD_INSIGHT/ADD_NOTE",
+        "importance": "dla ADD_INSIGHT - high/medium/low"
+      },
+      "reason": "dlaczego proponujesz tę akcję"
+    }
+  ],
+  "memory_update": {
+    "new_insights": [
+      {
+        "text": "nowy insight wyciągnięty z tej rozmowy",
+        "source": "conversation",
+        "importance": "high/medium/low"
+      }
+    ],
+    "profile_updates": {
+      "key_topics": ["zaktualizowane tematy jeśli pojawiły się nowe"],
+      "other_field": "wartość jeśli trzeba zaktualizować"
+    }
+  }
 }
-\`\`\``;
+\`\`\`
 
-    console.log('Querying Contact Agent...');
+Jeśli nie ma nic do zaproponowania jako akcje lub memory_update, zwróć puste tablice/obiekty.
+NIE proponuj akcji przy każdej wiadomości - tylko gdy to ma sens (np. Director prosi o utworzenie zadania, wspomina coś ważnego do zapamiętania, etc.)`;
+
+    console.log('Querying Contact Agent with conversation context...');
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -176,13 +305,65 @@ Bądź konkretny, praktyczny i pomocny.
         relevant_history: [],
         suggested_topics: [],
         warnings: [],
-        action_items: []
+        action_items: [],
+        proposed_actions: [],
+        memory_update: { new_insights: [], profile_updates: {} }
       };
+    }
+
+    // Generate or use provided session_id
+    const currentSessionId = session_id || crypto.randomUUID();
+
+    // Save conversation to database
+    try {
+      // Save user message
+      await supabase.from('agent_conversations').insert({
+        tenant_id: agentMemory.tenant_id,
+        contact_id: contact_id,
+        session_id: currentSessionId,
+        role: 'user',
+        content: question,
+        extracted_data: {}
+      });
+
+      // Save assistant response
+      await supabase.from('agent_conversations').insert({
+        tenant_id: agentMemory.tenant_id,
+        contact_id: contact_id,
+        session_id: currentSessionId,
+        role: 'assistant',
+        content: response.answer,
+        extracted_data: {
+          proposed_actions: response.proposed_actions || [],
+          memory_update: response.memory_update || {}
+        }
+      });
+
+      // If there are memory updates with new insights, update agent memory
+      if (response.memory_update?.new_insights?.length > 0) {
+        const currentInsights = agentMemory.insights || [];
+        const newInsights = response.memory_update.new_insights.map((i: any) => ({
+          ...i,
+          added_at: new Date().toISOString()
+        }));
+        
+        await supabase
+          .from('contact_agent_memory')
+          .update({
+            insights: [...currentInsights, ...newInsights],
+            updated_at: new Date().toISOString()
+          })
+          .eq('contact_id', contact_id);
+      }
+    } catch (saveError) {
+      console.error('Error saving conversation:', saveError);
+      // Continue even if save fails
     }
 
     return new Response(
       JSON.stringify({
         success: true,
+        session_id: currentSessionId,
         contact_name: contact?.full_name,
         ...response
       }),
