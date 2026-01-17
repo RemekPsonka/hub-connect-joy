@@ -3,6 +3,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { QuickActions } from '@/components/dashboard/QuickActions';
+import { RelationshipAlerts } from '@/components/dashboard/RelationshipAlerts';
+import { AIRecommendations } from '@/components/dashboard/AIRecommendations';
+import { TodaysPriorities } from '@/components/dashboard/TodaysPriorities';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -139,6 +142,15 @@ export default function Dashboard() {
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* AI Widgets - show only when there are contacts */}
+      {!loading && !hasNoContacts && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <TodaysPriorities />
+          <AIRecommendations />
+          <RelationshipAlerts />
+        </div>
       )}
 
       <ContactModal
