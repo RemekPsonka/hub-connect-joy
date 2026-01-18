@@ -2348,7 +2348,7 @@ export type Database = {
         Returns: string
       }
       assistant_can_access_contact: {
-        Args: { _contact_id: string; _user_id: string }
+        Args: { p_assistant_id: string; p_contact_id: string }
         Returns: boolean
       }
       calculate_relationship_health: {
