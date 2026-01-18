@@ -16,12 +16,13 @@ export interface UseDuplicateCheckReturn {
 }
 
 export function useDuplicateCheck(): UseDuplicateCheckReturn {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
   const [isChecking, setIsChecking] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
 
   const checkForDuplicate = useCallback(async (contact: Partial<ContactInsert>): Promise<DuplicateCheckResult> => {
-    if (!director?.tenant_id) {
+    if (!tenantId) {
       return { isDuplicate: false, existingContact: null };
     }
 
@@ -44,7 +45,7 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
             last_name: contact.last_name,
             email: contact.email || null,
             phone: contact.phone || null,
-            tenant_id: director.tenant_id,
+            tenant_id: tenantId,
           }
         }
       });
@@ -64,13 +65,13 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
     } finally {
       setIsChecking(false);
     }
-  }, [director?.tenant_id]);
+  }, [tenantId]);
 
   const mergeContacts = useCallback(async (
     existingContactId: string, 
     newContactData: Partial<ContactInsert>
   ): Promise<Contact> => {
-    if (!director?.tenant_id) {
+    if (!tenantId) {
       throw new Error('Brak tenant_id');
     }
 
@@ -80,7 +81,7 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
         body: {
           existingContactId,
           newContactData,
-          tenant_id: director.tenant_id,
+          tenant_id: tenantId,
         }
       });
 
@@ -96,7 +97,7 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
     } finally {
       setIsMerging(false);
     }
-  }, [director?.tenant_id]);
+  }, [tenantId]);
 
   return {
     checkForDuplicate,

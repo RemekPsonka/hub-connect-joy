@@ -156,15 +156,23 @@ export function useContactGroups() {
 
 export function useCreateContact() {
   const queryClient = useQueryClient();
-  const { director } = useAuth();
+  const { director, assistant, isAssistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useMutation({
     mutationFn: async (contact: Omit<ContactInsert, 'tenant_id'>) => {
-      if (!director?.tenant_id) throw new Error('Brak tenant_id');
+      if (!tenantId) throw new Error('Brak tenant_id');
+
+      // Walidacja dla asystentów - mogą tworzyć tylko w dozwolonych grupach
+      if (isAssistant && contact.primary_group_id) {
+        if (!assistant?.allowed_group_ids?.includes(contact.primary_group_id)) {
+          throw new Error('Nie masz uprawnień do tworzenia kontaktów w tej grupie');
+        }
+      }
 
       const { data, error } = await supabase
         .from('contacts')
-        .insert({ ...contact, tenant_id: director.tenant_id })
+        .insert({ ...contact, tenant_id: tenantId })
         .select('*, contact_groups(*)')
         .single();
 
@@ -306,12 +314,13 @@ export function useBulkDeleteContacts() {
 
 // Stats hooks for contact detail
 export function useContactStats(contactId: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact_stats', contactId],
     queryFn: async () => {
-      if (!contactId || !director?.tenant_id) return { needs: 0, offers: 0, tasks: 0 };
+      if (!contactId || !tenantId) return { needs: 0, offers: 0, tasks: 0 };
 
       const [needsResult, offersResult, tasksResult] = await Promise.all([
         supabase
@@ -337,17 +346,18 @@ export function useContactStats(contactId: string | undefined) {
         tasks: tasksResult.count || 0,
       };
     },
-    enabled: !!contactId && !!director?.tenant_id,
+    enabled: !!contactId && !!tenantId,
   });
 }
 
 export function useContactConsultations(contactId: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact_consultations', contactId],
     queryFn: async () => {
-      if (!contactId || !director?.tenant_id) return [];
+      if (!contactId || !tenantId) return [];
 
       const { data, error } = await supabase
         .from('consultations')
@@ -359,17 +369,18 @@ export function useContactConsultations(contactId: string | undefined) {
 
       return data;
     },
-    enabled: !!contactId && !!director?.tenant_id,
+    enabled: !!contactId && !!tenantId,
   });
 }
 
 export function useContactTasks(contactId: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact_tasks', contactId],
     queryFn: async () => {
-      if (!contactId || !director?.tenant_id) return [];
+      if (!contactId || !tenantId) return [];
 
       const { data, error } = await supabase
         .from('task_contacts')
@@ -380,17 +391,18 @@ export function useContactTasks(contactId: string | undefined) {
 
       return data;
     },
-    enabled: !!contactId && !!director?.tenant_id,
+    enabled: !!contactId && !!tenantId,
   });
 }
 
 export function useContactNeeds(contactId: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact_needs', contactId],
     queryFn: async () => {
-      if (!contactId || !director?.tenant_id) return [];
+      if (!contactId || !tenantId) return [];
 
       const { data, error } = await supabase
         .from('needs')
@@ -402,17 +414,18 @@ export function useContactNeeds(contactId: string | undefined) {
 
       return data;
     },
-    enabled: !!contactId && !!director?.tenant_id,
+    enabled: !!contactId && !!tenantId,
   });
 }
 
 export function useContactOffers(contactId: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact_offers', contactId],
     queryFn: async () => {
-      if (!contactId || !director?.tenant_id) return [];
+      if (!contactId || !tenantId) return [];
 
       const { data, error } = await supabase
         .from('offers')
@@ -424,7 +437,7 @@ export function useContactOffers(contactId: string | undefined) {
 
       return data;
     },
-    enabled: !!contactId && !!director?.tenant_id,
+    enabled: !!contactId && !!tenantId,
   });
 }
 
