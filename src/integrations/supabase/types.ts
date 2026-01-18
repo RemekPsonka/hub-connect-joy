@@ -778,6 +778,51 @@ export type Database = {
           },
         ]
       }
+      contact_activity_log: {
+        Row: {
+          activity_type: string
+          contact_id: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          activity_type: string
+          contact_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          activity_type?: string
+          contact_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_activity_log_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_activity_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_agent_memory: {
         Row: {
           agent_persona: string | null

@@ -108,6 +108,15 @@ Konsultacje: ${consultations.length}`;
     // Update contact
     await supabase.from("contacts").update({ profile_summary: profileSummary, updated_at: new Date().toISOString() }).eq("id", contact_id);
 
+    // Log AI profile generation activity
+    await supabase.from("contact_activity_log").insert({
+      tenant_id: tenantId,
+      contact_id: contact_id,
+      activity_type: 'ai_profile_generated',
+      description: 'Wygenerowano profil AI',
+      metadata: { model: 'google/gemini-3-flash-preview' }
+    });
+
     return new Response(
       JSON.stringify({ success: true, profile_summary: profileSummary }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
