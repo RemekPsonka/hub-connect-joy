@@ -58,7 +58,7 @@ export default function ContactDetail() {
             <TabsTrigger value="agent">Agent AI</TabsTrigger>
           </TabsList>
         ) : (
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-7">
             <TabsTrigger value="overview">Przegląd</TabsTrigger>
             <TabsTrigger value="agent">Agent AI</TabsTrigger>
             <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
