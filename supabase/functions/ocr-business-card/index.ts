@@ -21,26 +21,26 @@ serve(async (req) => {
       );
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      console.error('OPENAI_API_KEY is not configured');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY is not configured');
       return new Response(
-        JSON.stringify({ error: 'Klucz API OpenAI nie jest skonfigurowany' }),
+        JSON.stringify({ error: 'Klucz API nie jest skonfigurowany' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Processing business card image...');
+    console.log('Processing single business card image...');
 
-    // Call OpenAI GPT-4 Vision API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call Lovable AI Gateway with Gemini vision model
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           {
             role: 'system',
@@ -60,6 +60,8 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi pol
 - website: Strona www firmy bez http/https (string lub null)
 - address: Pełny adres - ulica, numer, miasto, kod (string lub null)
 - city: Samo miasto (string lub null)
+- nip: NIP firmy jeśli widoczny (string lub null)
+- regon: REGON firmy jeśli widoczny (string lub null)
 - linkedin_url: URL profilu LinkedIn jeśli widoczny (string lub null)
 - notes: Inne informacje z wizytówki, np. slogan, specjalizacje (string lub null)
 - profile_summary: Krótkie profesjonalne podsumowanie osoby (2-3 zdania) na podstawie stanowiska, firmy i tytułów. Opisz kim jest ta osoba zawodowo i jaką wartość może wnieść do sieci kontaktów. (string, wymagane)
@@ -94,14 +96,28 @@ Usuń prefiksy http/https ze stron www.`
             ]
           }
         ],
-        max_tokens: 1000,
-        temperature: 0.1, // Low temperature for more consistent extraction
+        max_tokens: 1500,
+        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
+      console.error('Lovable AI Gateway error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Przekroczono limit zapytań, spróbuj ponownie później' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'Wymagana płatność - dodaj środki do konta Lovable' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: 'Błąd podczas analizy wizytówki' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -109,11 +125,11 @@ Usuń prefiksy http/https ze stron www.`
     }
 
     const data = await response.json();
-    console.log('OpenAI response received');
+    console.log('Lovable AI response received');
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
-      console.error('No content in OpenAI response');
+      console.error('No content in response');
       return new Response(
         JSON.stringify({ error: 'Brak odpowiedzi od AI' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

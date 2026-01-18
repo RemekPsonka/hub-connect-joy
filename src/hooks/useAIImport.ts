@@ -106,6 +106,7 @@ interface UseAIImportReturn {
   
   parseFiles: (files: File[]) => Promise<void>;
   parseText: (text: string) => Promise<void>;
+  parseBatchBusinessCards: (files: File[]) => Promise<void>;
   checkAllDuplicates: () => Promise<void>;
   updateDuplicateDecision: (index: number, decision: 'merge' | 'new' | 'skip') => void;
   updateParsedContact: (index: number, updates: Partial<ParsedContact>) => void;
@@ -459,6 +460,134 @@ export function useAIImport(): UseAIImportReturn {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setErrors([errMsg]);
       toast.error('Błąd parsowania tekstu', { description: errMsg });
+    } finally {
+      setIsParsing(false);
+      setProgress({ current: 0, total: 0, stage: '' });
+    }
+  }, [tenantId]);
+
+  // Parse batch business card images (multiple cards per image)
+  const parseBatchBusinessCards = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    
+    setIsParsing(true);
+    setErrors([]);
+
+    try {
+      // Convert all files to base64
+      const imagePromises = files.map(async (file) => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+        });
+      });
+
+      setProgress({ current: 0, total: files.length, stage: 'Przygotowywanie zdjęć...' });
+      const images = await Promise.all(imagePromises);
+
+      setProgress({ current: 0, total: 1, stage: 'Analizowanie wizytówek przez AI...' });
+
+      // Call batch OCR function
+      const { data, error } = await supabase.functions.invoke('ocr-business-cards-batch', {
+        body: { images }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Błąd podczas skanowania wizytówek');
+      }
+
+      if (!data.success || !data.contacts) {
+        throw new Error(data.error || 'Nie udało się przeanalizować wizytówek');
+      }
+
+      // Convert to extended contact format
+      let contacts: ParsedContact[] = data.contacts.map((c: any) => toExtendedContact({
+        first_name: c.first_name,
+        last_name: c.last_name,
+        email: c.email,
+        phone: c.phone || c.mobile,
+        company: c.company,
+        position: c.position,
+        city: c.city,
+        linkedin_url: c.linkedin_url,
+        notes: c.notes,
+        tags: [],
+        // Extended company data from OCR
+        company_nip: c.nip || null,
+        company_regon: c.regon || null,
+        company_website: c.website || null,
+        company_address: c.address || null,
+      }));
+
+      // Check duplicates
+      if (contacts.length > 0 && tenantId) {
+        setProgress({ current: 0, total: contacts.length, stage: 'Sprawdzanie duplikatów...' });
+        
+        for (let i = 0; i < contacts.length; i++) {
+          const contact = contacts[i];
+          setProgress({ 
+            current: i + 1, 
+            total: contacts.length, 
+            stage: `Sprawdzanie: ${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Kontakt'
+          });
+
+          try {
+            const { data: dupData } = await supabase.functions.invoke('check-duplicate-contact', {
+              body: {
+                contact: {
+                  first_name: contact.first_name,
+                  last_name: contact.last_name,
+                  email: contact.email,
+                  phone: contact.phone,
+                  tenant_id: tenantId
+                }
+              }
+            });
+
+            if (dupData?.isDuplicate && dupData?.existingContact) {
+              contacts[i] = {
+                ...contact,
+                status: 'duplicate',
+                selected: false,
+                duplicate_contact_id: dupData.existingContact.id,
+                duplicate_info: {
+                  full_name: dupData.existingContact.full_name,
+                  email: dupData.existingContact.email,
+                  phone: dupData.existingContact.phone,
+                  company: dupData.existingContact.company,
+                },
+                duplicate_decision: 'merge',
+              };
+            } else {
+              contacts[i] = { ...contact, status: 'ready' };
+            }
+          } catch (err) {
+            console.error('Error checking contact:', err);
+            contacts[i] = { ...contact, status: 'ready' };
+          }
+        }
+      }
+
+      setParsedContacts(contacts);
+      setMetadata({
+        sourceFormat: 'business_cards_batch',
+        detectedColumns: ['first_name', 'last_name', 'company', 'position', 'email', 'phone'],
+        totalParsed: contacts.length,
+        warnings: data.errors || []
+      });
+
+      if (contacts.length === 0) {
+        setErrors(['Nie udało się wyodrębnić żadnych kontaktów ze zdjęć wizytówek.']);
+      } else {
+        toast.success(`Rozpoznano ${contacts.length} wizytówek`);
+      }
+
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      setErrors([errMsg]);
+      toast.error('Błąd skanowania wizytówek', { description: errMsg });
     } finally {
       setIsParsing(false);
       setProgress({ current: 0, total: 0, stage: '' });
@@ -834,6 +963,7 @@ export function useAIImport(): UseAIImportReturn {
     stats,
     parseFiles,
     parseText,
+    parseBatchBusinessCards,
     checkAllDuplicates,
     updateDuplicateDecision,
     updateParsedContact,
