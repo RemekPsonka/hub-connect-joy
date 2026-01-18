@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.delete-tenant]
 verify_jwt = false
+
+[functions.analyze-linkedin-profile]
+verify_jwt = false

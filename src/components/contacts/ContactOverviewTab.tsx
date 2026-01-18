@@ -7,13 +7,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, Phone, Building, MapPin, Linkedin, Tag, Globe, Users, 
-  Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw 
+  Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw, Search 
 } from 'lucide-react';
 import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
 import { useCompanyContacts, useRegenerateCompanyAI, getCompanyLogoUrl } from '@/hooks/useCompanies';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
 import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
+import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -42,6 +43,7 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
   
   const generateContactProfile = useGenerateContactProfile();
   const regenerateCompanyAI = useRegenerateCompanyAI();
+  const linkedInAnalysis = useLinkedInAnalysis();
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -170,16 +172,40 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
               {contact.linkedin_url && (
                 <div className="flex items-center gap-3">
                   <Linkedin className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <div className="flex-1">
                     <p className="text-sm text-muted-foreground">LinkedIn</p>
-                    <a
-                      href={contact.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Profil LinkedIn
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={contact.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Profil LinkedIn
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => linkedInAnalysis.mutate({ 
+                          contactId: contact.id, 
+                          linkedinUrl: contact.linkedin_url! 
+                        })}
+                        disabled={linkedInAnalysis.isPending}
+                      >
+                        {linkedInAnalysis.isPending ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Analizuję...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="h-3 w-3 mr-1" />
+                            Analizuj
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
