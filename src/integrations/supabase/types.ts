@@ -1079,6 +1079,7 @@ export type Database = {
           is_active: boolean | null
           last_contact_date: string | null
           last_name: string | null
+          linkedin_data: Json | null
           linkedin_url: string | null
           met_date: string | null
           met_source: string | null
@@ -1109,6 +1110,7 @@ export type Database = {
           is_active?: boolean | null
           last_contact_date?: string | null
           last_name?: string | null
+          linkedin_data?: Json | null
           linkedin_url?: string | null
           met_date?: string | null
           met_source?: string | null
@@ -1139,6 +1141,7 @@ export type Database = {
           is_active?: boolean | null
           last_contact_date?: string | null
           last_name?: string | null
+          linkedin_data?: Json | null
           linkedin_url?: string | null
           met_date?: string | null
           met_source?: string | null
@@ -1483,6 +1486,64 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      linkedin_network_contacts: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          full_name: string
+          id: string
+          linkedin_url: string | null
+          matched_contact_id: string | null
+          position: string | null
+          source_contact_id: string
+          tenant_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          full_name: string
+          id?: string
+          linkedin_url?: string | null
+          matched_contact_id?: string | null
+          position?: string | null
+          source_contact_id: string
+          tenant_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          full_name?: string
+          id?: string
+          linkedin_url?: string | null
+          matched_contact_id?: string | null
+          position?: string | null
+          source_contact_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "linkedin_network_contacts_matched_contact_id_fkey"
+            columns: ["matched_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "linkedin_network_contacts_source_contact_id_fkey"
+            columns: ["source_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "linkedin_network_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       master_agent_memory: {
         Row: {

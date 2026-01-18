@@ -15,6 +15,7 @@ import { ContactConnectionsSection } from './ContactConnectionsSection';
 import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
 import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
+import { LinkedInNetworkSection } from './LinkedInNetworkSection';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -555,6 +556,12 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           company={company}
         />
       )}
+
+      {/* ===== LINKEDIN NETWORK SECTION ===== */}
+      <div className="space-y-4">
+        <Separator />
+        <LinkedInNetworkSection contactId={contact.id} contactName={contact.full_name} />
+      </div>
 
       {/* ===== CONNECTIONS SECTION ===== */}
       <div className="space-y-4">
