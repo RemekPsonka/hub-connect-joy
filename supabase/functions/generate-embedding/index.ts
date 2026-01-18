@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse, verifyResourceAccess, accessDeniedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Verify authorization
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+
+    console.log(`[generate-embedding] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
+
     const { type, id, text: providedText } = await req.json() as EmbeddingRequest;
 
     // Query mode: just generate embedding for text and return it
@@ -44,6 +53,15 @@ serve(async (req) => {
         JSON.stringify({ error: "Provide either 'text' for query mode, or 'type' and 'id' for entity mode" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // In entity mode, verify the resource belongs to the user's tenant
+    if (isEntityMode) {
+      const tableName = type === "contact" ? "contacts" : type === "need" ? "needs" : "offers";
+      const hasAccess = await verifyResourceAccess(supabase, tableName, id!, authResult.tenantId);
+      if (!hasAccess) {
+        return accessDeniedResponse(corsHeaders, `Access denied to ${type} ${id}`);
+      }
     }
 
     let textToEmbed = providedText;
