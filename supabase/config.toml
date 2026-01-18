@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.create-tenant-user]
 verify_jwt = false
+
+[functions.update-tenant-user]
+verify_jwt = false
