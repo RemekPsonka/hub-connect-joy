@@ -6,6 +6,144 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export type Company = Tables<'companies'>;
 
+// ============= POSITION RANKING FOR TOP CONTACT =============
+const POSITION_PRIORITIES: Array<{ pattern: RegExp; rank: number }> = [
+  { pattern: /właściciel|owner|founder|założyciel/i, rank: 10 },
+  { pattern: /prezes|ceo|chief executive|dyrektor generalny/i, rank: 9 },
+  { pattern: /wiceprezes|vice president|vp|zastępca prezesa/i, rank: 8 },
+  { pattern: /dyrektor|director|managing|cto|cfo|coo|cmo/i, rank: 7 },
+  { pattern: /manager|menedżer|kierownik|head of/i, rank: 6 },
+  { pattern: /partner/i, rank: 5 },
+];
+
+export const getPositionRank = (position: string | null): number => {
+  if (!position) return 0;
+  for (const { pattern, rank } of POSITION_PRIORITIES) {
+    if (pattern.test(position)) return rank;
+  }
+  return 1; // Other positions
+};
+
+// ============= COMPANY WITH TOP CONTACT =============
+export interface CompanyWithTopContact {
+  id: string;
+  name: string;
+  city: string | null;
+  nip: string | null;
+  website: string | null;
+  industry: string | null;
+  phone: string | null;
+  top_contact: {
+    id: string;
+    full_name: string;
+    position: string | null;
+  } | null;
+}
+
+interface CompaniesFilters {
+  search?: string;
+  page: number;
+  pageSize: number;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+}
+
+export function useCompaniesWithContacts(filters: CompaniesFilters) {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['companies_with_contacts', tenantId, filters],
+    queryFn: async () => {
+      if (!tenantId) return { data: [], count: 0 };
+
+      const { page, pageSize, sortBy, sortOrder, search } = filters;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // Build companies query
+      let query = supabase
+        .from('companies')
+        .select('id, name, city, nip, website, industry, phone', { count: 'exact' })
+        .eq('tenant_id', tenantId);
+
+      // Search filter
+      if (search) {
+        query = query.ilike('name', `%${search}%`);
+      }
+
+      // Sorting
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+
+      // Pagination
+      query = query.range(from, to);
+
+      const { data: companiesData, error: companiesError, count } = await query;
+
+      if (companiesError) throw companiesError;
+      if (!companiesData || companiesData.length === 0) {
+        return { data: [], count: count || 0 };
+      }
+
+      // Fetch contacts for these companies
+      const companyIds = companiesData.map(c => c.id);
+      const { data: contactsData, error: contactsError } = await supabase
+        .from('contacts')
+        .select('id, full_name, position, company_id')
+        .in('company_id', companyIds)
+        .eq('is_active', true);
+
+      if (contactsError) throw contactsError;
+
+      // Group contacts by company and find top contact
+      const contactsByCompany: Record<string, typeof contactsData> = {};
+      for (const contact of contactsData || []) {
+        if (contact.company_id) {
+          if (!contactsByCompany[contact.company_id]) {
+            contactsByCompany[contact.company_id] = [];
+          }
+          contactsByCompany[contact.company_id].push(contact);
+        }
+      }
+
+      // Build final result with top contact
+      const result: CompanyWithTopContact[] = companiesData.map(company => {
+        const companyContacts = contactsByCompany[company.id] || [];
+        
+        // Find contact with highest position rank
+        let topContact: { id: string; full_name: string; position: string | null } | null = null;
+        let highestRank = -1;
+
+        for (const contact of companyContacts) {
+          const rank = getPositionRank(contact.position);
+          if (rank > highestRank) {
+            highestRank = rank;
+            topContact = {
+              id: contact.id,
+              full_name: contact.full_name,
+              position: contact.position,
+            };
+          }
+        }
+
+        return {
+          id: company.id,
+          name: company.name,
+          city: company.city,
+          nip: company.nip,
+          website: company.website,
+          industry: company.industry,
+          phone: company.phone,
+          top_contact: topContact,
+        };
+      });
+
+      return { data: result, count: count || 0 };
+    },
+    enabled: !!tenantId,
+  });
+}
+
 // Hook to get list of companies for filtering
 export function useCompaniesList() {
   const { director, assistant } = useAuth();
