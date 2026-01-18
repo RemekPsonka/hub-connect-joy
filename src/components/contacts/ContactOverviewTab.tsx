@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, Phone, Building, MapPin, Linkedin, Tag, Globe, Users, 
-  Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw, Search, Link2
+  Sparkles, Briefcase, Pencil, User, Loader2, Search, Link2
 } from 'lucide-react';
 import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
 import { 
@@ -23,6 +23,7 @@ import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
 import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
 import { LinkedInNetworkSection } from './LinkedInNetworkSection';
+import { CompanyAIAnalysisCard } from './CompanyAIAnalysisCard';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -426,85 +427,13 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
             </CardContent>
           </Card>
 
-          {/* AI Analysis Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Analiza AI firmy
-                </CardTitle>
-                {hasCompanyAI && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateCompanyAI}
-                    disabled={regenerateCompanyAI.isPending}
-                  >
-                    {regenerateCompanyAI.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-1" />
-                        Regeneruj AI
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {hasCompanyAI ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    {company.description || aiAnalysis?.description}
-                  </p>
-
-                  {/* Services */}
-                  {aiAnalysis?.services && (
-                    <div className="pt-4 border-t">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Briefcase className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-sm font-medium">Usługi</p>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{aiAnalysis.services}</p>
-                    </div>
-                  )}
-
-                  {/* Collaboration areas */}
-                  {aiAnalysis?.collaboration_areas && (
-                    <div className="pt-4 border-t">
-                      <p className="text-sm font-medium mb-2">Obszary współpracy</p>
-                      <p className="text-sm text-muted-foreground">{aiAnalysis.collaboration_areas}</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Brak analizy AI dla tej firmy
-                  </p>
-                  <Button
-                    onClick={handleGenerateCompanyAI}
-                    disabled={regenerateCompanyAI.isPending}
-                    size="sm"
-                  >
-                    {regenerateCompanyAI.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Generowanie...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Wygeneruj analizę AI
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* AI Analysis Card - New tabbed component */}
+          <CompanyAIAnalysisCard
+            aiAnalysis={aiAnalysis}
+            companyDescription={company.description}
+            onRegenerate={handleGenerateCompanyAI}
+            isRegenerating={regenerateCompanyAI.isPending}
+          />
 
           {/* People from this company */}
           <Card>
