@@ -21,6 +21,11 @@ interface EnrichedPersonData {
   search_performed: boolean;
   confidence: 'verified' | 'partial' | 'not_found';
   data_notes: string[];
+  perplexity_used: boolean;
+  public_statements: string | null;
+  other_organizations: string | null;
+  warnings: string | null;
+  tags: string[];
 }
 
 interface FirecrawlSearchResult {
@@ -28,6 +33,55 @@ interface FirecrawlSearchResult {
   title: string;
   description?: string;
   markdown?: string;
+}
+
+interface PerplexityResult {
+  content: string;
+  citations: string[];
+}
+
+async function queryPerplexity(
+  apiKey: string, 
+  query: string, 
+  systemPrompt: string,
+  recencyFilter?: string
+): Promise<PerplexityResult | null> {
+  try {
+    const body: Record<string, unknown> = {
+      model: 'sonar-pro',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: query }
+      ],
+    };
+    
+    if (recencyFilter) {
+      body.search_recency_filter = recencyFilter;
+    }
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      console.error(`[Perplexity] Error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      content: data.choices?.[0]?.message?.content || '',
+      citations: data.citations || []
+    };
+  } catch (error) {
+    console.error('[Perplexity] Query error:', error);
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -60,15 +114,8 @@ serve(async (req) => {
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
     
-    if (!FIRECRAWL_API_KEY) {
-      console.error('FIRECRAWL_API_KEY is not configured');
-      return new Response(
-        JSON.stringify({ error: 'Firecrawl API nie jest skonfigurowany' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     if (!LOVABLE_API_KEY) {
       console.error('LOVABLE_API_KEY is not configured');
       return new Response(
@@ -77,60 +124,149 @@ serve(async (req) => {
       );
     }
 
-    console.log('[enrich-person-data] Starting Firecrawl search for:', first_name, last_name, company);
+    const fullName = `${first_name} ${last_name}`;
+    const companyContext = company ? ` ${company}` : '';
+    
+    console.log('[enrich-person-data] Starting enrichment for:', fullName, company);
 
-    // Step 1: Search for the person using Firecrawl - expanded queries
-    const searchQueries = [
-      `"${first_name} ${last_name}" ${company || ''} LinkedIn`,
-      `"${first_name} ${last_name}" ${company || ''} stanowisko kariera`,
-      `"${first_name} ${last_name}" ${company || ''} zarząd prezes dyrektor`
-    ];
+    // ═══════════════════════════════════════════════════════════════
+    // STEP 1: PARALLEL PERPLEXITY QUERIES (if API key available)
+    // ═══════════════════════════════════════════════════════════════
     
-    let allSearchResults: FirecrawlSearchResult[] = [];
+    let perplexityResults: {
+      profile: PerplexityResult | null;
+      media: PerplexityResult | null;
+      organizations: PerplexityResult | null;
+    } = { profile: null, media: null, organizations: null };
     
-    // Primary search
-    const primaryQuery = `"${first_name} ${last_name}" ${company || ''} LinkedIn stanowisko zawodowe kariera`;
-    console.log('[enrich-person-data] Firecrawl search query:', primaryQuery);
+    let allPerplexityCitations: string[] = [];
     
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: primaryQuery,
-        limit: 7,
-        lang: 'pl',
-        scrapeOptions: {
-          formats: ['markdown']
-        }
-      }),
-    });
+    if (PERPLEXITY_API_KEY) {
+      console.log('[enrich-person-data] Starting Perplexity searches...');
+      
+      // QUERY 1: Professional profile and career
+      const profileQuery = `"${fullName}"${companyContext} Polska:
+- aktualne stanowisko i firma
+- historia kariery, poprzednie stanowiska
+- wykształcenie, certyfikaty, osiągnięcia
+- LinkedIn, bio zawodowe
+- branża i specjalizacja`;
 
-    if (!firecrawlResponse.ok) {
-      const errorText = await firecrawlResponse.text();
-      console.error('[enrich-person-data] Firecrawl API error:', firecrawlResponse.status, errorText);
+      const profileSystemPrompt = `Jesteś ekspertem w researchu biznesowym. Znajdź i przedstaw SZCZEGÓŁOWY profil zawodowy osoby.
+Odpowiadaj TYLKO po polsku. Podawaj fakty ze źródeł. Format markdown.
+Struktura:
+## Aktualna pozycja
+## Historia kariery  
+## Wykształcenie i kompetencje
+## Profil LinkedIn (URL jeśli znaleziony)`;
+
+      // QUERY 2: Public statements, media, interviews
+      const mediaQuery = `"${fullName}" wypowiedź wywiad artykuł cytat konferencja:
+- cytaty i wypowiedzi prasowe
+- wywiady w mediach (TV, radio, prasa, online)
+- publikacje i artykuły autorskie
+- wystąpienia na konferencjach, webinary, podcasty
+- komentarze eksperckie`;
+
+      const mediaSystemPrompt = `Jesteś dziennikarzem śledczym. Znajdź WSZYSTKIE publiczne wypowiedzi i występy medialne tej osoby.
+Odpowiadaj TYLKO po polsku. Cytuj dosłownie gdzie możliwe. Format markdown.
+Struktura:
+## Wypowiedzi prasowe (z datami i źródłami)
+## Wywiady medialne
+## Publikacje autorskie
+## Wystąpienia konferencyjne`;
+
+      // QUERY 3: Other organizations, controversies, warnings
+      const orgQuery = `"${fullName}" zarząd "rada nadzorcza" fundacja stowarzyszenie skandal kontrowersja problem:
+- członkostwo w radach nadzorczych innych firm
+- funkcje w organizacjach, stowarzyszeniach, fundacjach
+- działalność społeczna i charytatywna
+- kontrowersje, skandale, problemy prawne
+- konflikty interesów, afery`;
+
+      const orgSystemPrompt = `Jesteś analitykiem due diligence. Znajdź WSZYSTKIE powiązania tej osoby z innymi organizacjami oraz WSZYSTKIE potencjalne czerwone flagi.
+Odpowiadaj TYLKO po polsku. Bądź szczegółowy i obiektywny. Format markdown.
+Struktura:
+## Inne funkcje w zarządach/radach nadzorczych
+## Organizacje i stowarzyszenia
+## Działalność społeczna
+## ⚠️ OSTRZEŻENIA (kontrowersje, problemy, skandale)`;
+
+      // Execute all three queries in parallel
+      const [profileResult, mediaResult, orgResult] = await Promise.all([
+        queryPerplexity(PERPLEXITY_API_KEY, profileQuery, profileSystemPrompt),
+        queryPerplexity(PERPLEXITY_API_KEY, mediaQuery, mediaSystemPrompt, 'year'),
+        queryPerplexity(PERPLEXITY_API_KEY, orgQuery, orgSystemPrompt)
+      ]);
+
+      perplexityResults = {
+        profile: profileResult,
+        media: mediaResult,
+        organizations: orgResult
+      };
+
+      // Collect all citations
+      if (profileResult?.citations) allPerplexityCitations.push(...profileResult.citations);
+      if (mediaResult?.citations) allPerplexityCitations.push(...mediaResult.citations);
+      if (orgResult?.citations) allPerplexityCitations.push(...orgResult.citations);
       
-      if (firecrawlResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Przekroczono limit zapytań Firecrawl, spróbuj ponownie za chwilę' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // Deduplicate citations
+      allPerplexityCitations = [...new Set(allPerplexityCitations)];
       
-      return new Response(
-        JSON.stringify({ error: 'Błąd podczas wyszukiwania osoby' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log(`[enrich-person-data] Perplexity completed: profile=${!!profileResult}, media=${!!mediaResult}, org=${!!orgResult}`);
+      console.log(`[enrich-person-data] Total Perplexity citations: ${allPerplexityCitations.length}`);
+    } else {
+      console.warn('[enrich-person-data] PERPLEXITY_API_KEY not configured, skipping internet search');
     }
 
-    const firecrawlData = await firecrawlResponse.json();
-    const searchResults: FirecrawlSearchResult[] = firecrawlData.data || [];
+    // ═══════════════════════════════════════════════════════════════
+    // STEP 2: FIRECRAWL SEARCH (if API key available)
+    // ═══════════════════════════════════════════════════════════════
     
-    console.log(`[enrich-person-data] Firecrawl returned ${searchResults.length} results`);
+    let firecrawlResults: FirecrawlSearchResult[] = [];
+    
+    if (FIRECRAWL_API_KEY) {
+      console.log('[enrich-person-data] Starting Firecrawl search...');
+      
+      const primaryQuery = `"${fullName}"${companyContext} LinkedIn stanowisko zawodowe kariera`;
+      
+      try {
+        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/search', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: primaryQuery,
+            limit: 7,
+            lang: 'pl',
+            scrapeOptions: {
+              formats: ['markdown']
+            }
+          }),
+        });
 
-    // Step 2: Analyze results with Lovable AI - ENHANCED PROMPT
+        if (firecrawlResponse.ok) {
+          const firecrawlData = await firecrawlResponse.json();
+          firecrawlResults = firecrawlData.data || [];
+          console.log(`[enrich-person-data] Firecrawl returned ${firecrawlResults.length} results`);
+        } else {
+          console.error('[enrich-person-data] Firecrawl error:', firecrawlResponse.status);
+        }
+      } catch (error) {
+        console.error('[enrich-person-data] Firecrawl error:', error);
+      }
+    } else {
+      console.warn('[enrich-person-data] FIRECRAWL_API_KEY not configured, skipping Firecrawl search');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STEP 3: AI SYNTHESIS - Combine all data sources
+    // ═══════════════════════════════════════════════════════════════
+    
+    console.log('[enrich-person-data] Starting AI synthesis...');
+
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -142,154 +278,104 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie profili zawodowych osób.
+            content: `Jesteś ekspertem w analizie profili zawodowych i due diligence osób.
 
 🎯 TWOJE ZADANIE:
-Przeanalizuj wyniki wyszukiwania i stwórz SZCZEGÓŁOWY profil zawodowy szukanej osoby.
+Przeanalizuj WSZYSTKIE dostarczone źródła i stwórz KOMPLEKSOWY profil osoby.
 
-📋 CO MUSISZ USTALIĆ:
+📋 SEKCJE DO WYPEŁNIENIA:
 
-1. AKTUALNE STANOWISKO
-   - Dokładna nazwa stanowiska
-   - W jakiej firmie pracuje
-   - Od kiedy (jeśli dostępne)
+1. **PROFIL ZAWODOWY**
+   - Aktualne stanowisko i firma
+   - Historia kariery (poprzednie stanowiska)
+   - Wykształcenie, certyfikaty
+   - Specjalizacja i kompetencje
 
-2. HISTORIA ZAWODOWA / KARIERA
-   - Poprzednie stanowiska i firmy
-   - Ścieżka kariery (awanse, zmiany)
-   - Kluczowe osiągnięcia
+2. **WYPOWIEDZI PUBLICZNE I MEDIA**
+   - Cytaty prasowe (z datami i źródłami)
+   - Wywiady medialne
+   - Publikacje autorskie
+   - Wystąpienia konferencyjne
 
-3. KOMPETENCJE I SPECJALIZACJA
-   - Główne umiejętności
-   - Branża/specjalizacja
-   - Certyfikaty, wykształcenie (jeśli dostępne)
+3. **INNE ORGANIZACJE**
+   - Rady nadzorcze innych firm
+   - Członkostwo w stowarzyszeniach
+   - Fundacje, działalność społeczna
+   - Powiązania biznesowe
 
-4. OBECNOŚĆ ONLINE
-   - LinkedIn (URL profilu)
-   - Publikacje, artykuły
-   - Wystąpienia, konferencje, wywiady
+4. **⚠️ OSTRZEŻENIA I CZERWONE FLAGI**
+   - Kontrowersje, skandale
+   - Problemy prawne
+   - Konflikty interesów
+   - Negatywne informacje prasowe
+   (Jeśli brak - napisz "Nie znaleziono ostrzeżeń")
 
-5. ROLA W FIRMIE ${company ? `(${company})` : ''}
-   - Czy jest w zarządzie/kierownictwie?
-   - Obszar odpowiedzialności
-   - Kluczowe projekty/zadania
-
-6. KONTEKST BIZNESOWY
-   - Branża w której działa
-   - Sieć kontaktów (jeśli widoczna)
-   - Aktywność zawodowa
+5. **TAGI** (5-10 słów kluczowych charakteryzujących osobę)
+   Format: #tag1 #tag2 #tag3
 
 ZASADY KRYTYCZNE:
-- Podawaj TYLKO informacje które BEZPOŚREDNIO dotyczą szukanej osoby
-- Każda informacja MUSI mieć oznaczone źródło [📎 Źródło: URL]
-- Jeśli coś dotyczy INNEJ osoby o podobnym nazwisku - NIE uwzględniaj
-- Brak danych = jasno to zaznacz (nie wymyślaj!)
-
-FORMAT ODPOWIEDZI (markdown):
-
-## 👤 Profil zawodowy: ${first_name} ${last_name}
-
-### 💼 Aktualna pozycja
-✅ **[Stanowisko]** w **[Firma]**
-📅 Od: [data jeśli znana]
-📎 Źródło: [URL]
-
-LUB
-
-📭 Nie znaleziono informacji o aktualnym stanowisku
-
----
-
-### 📈 Historia kariery
-| Okres | Stanowisko | Firma |
-|-------|------------|-------|
-| [data] | [stanowisko] | [firma] |
-
-📎 Źródła: [URLs]
-
-LUB
-
-📭 Nie znaleziono informacji o historii kariery
-
----
-
-### 🎯 Specjalizacja i kompetencje
-- **Branża:** [branża]
-- **Kompetencje:** [lista]
-- **Wykształcenie:** [jeśli znane]
-
-📎 Źródło: [URL]
-
----
-
-### 🌐 Obecność online
-- **LinkedIn:** [URL lub brak]
-- **Publikacje:** [jeśli są]
-- **Wystąpienia:** [jeśli są]
-
----
-
-### 🏢 Rola w ${company || 'firmie'}
-✅ [Opis roli, odpowiedzialności, projektów]
-📎 Źródło: [URL]
-
-LUB
-
-📭 Brak szczegółów o roli w firmie
-
----
-
-### 💡 Podsumowanie i uwagi
-- **Wiarygodność danych:** [wysoka/średnia/niska]
-- **Uwagi:** [komentarz o jakości źródeł, potencjalnych rozbieżnościach]
-
----
-
-OZNACZENIA:
 - ✅ = Zweryfikowany fakt ze źródła
 - 📎 = Link do źródła
 - 📭 = Brak informacji
-- 💡 = Uwaga/komentarz AI
-- ⚠️ = Informacja niepewna`
+- ⚠️ = Ostrzeżenie/problem
+- Każda informacja MUSI mieć źródło
+- NIE WYMYŚLAJ informacji!
+- Jeśli dane są o INNEJ osobie - zaznacz to`
           },
           {
             role: 'user',
-            content: `🔍 Szukam SZCZEGÓŁOWYCH informacji o osobie:
+            content: `🔍 KOMPLEKSOWA ANALIZA OSOBY:
 
 👤 DANE PODSTAWOWE:
-- Imię: ${first_name}
-- Nazwisko: ${last_name}
+- Imię i nazwisko: ${fullName}
 ${company ? `- Firma: ${company}` : '- Firma: Nie podano'}
 ${email ? `- Email: ${email}` : ''}
 ${linkedin_url ? `- LinkedIn: ${linkedin_url}` : ''}
 
 ═══════════════════════════════════════════════════════════════
-📊 WYNIKI WYSZUKIWANIA (${searchResults.length} źródeł):
+📡 ŹRÓDŁO 1: PERPLEXITY - PROFIL ZAWODOWY
 ═══════════════════════════════════════════════════════════════
+${perplexityResults.profile?.content || '📭 Brak danych z Perplexity (API key nie skonfigurowany)'}
 
-${searchResults.length === 0 ? '⚠️ Brak wyników wyszukiwania.' : searchResults.map((r, i) => `
+Cytaty: ${perplexityResults.profile?.citations?.join(', ') || 'brak'}
+
+═══════════════════════════════════════════════════════════════
+📡 ŹRÓDŁO 2: PERPLEXITY - WYPOWIEDZI I MEDIA
+═══════════════════════════════════════════════════════════════
+${perplexityResults.media?.content || '📭 Brak danych'}
+
+Cytaty: ${perplexityResults.media?.citations?.join(', ') || 'brak'}
+
+═══════════════════════════════════════════════════════════════
+📡 ŹRÓDŁO 3: PERPLEXITY - ORGANIZACJE I OSTRZEŻENIA
+═══════════════════════════════════════════════════════════════
+${perplexityResults.organizations?.content || '📭 Brak danych'}
+
+Cytaty: ${perplexityResults.organizations?.citations?.join(', ') || 'brak'}
+
+═══════════════════════════════════════════════════════════════
+🔍 ŹRÓDŁO 4: FIRECRAWL - WYNIKI WYSZUKIWANIA (${firecrawlResults.length} stron)
+═══════════════════════════════════════════════════════════════
+${firecrawlResults.length === 0 ? '📭 Brak wyników wyszukiwania.' : firecrawlResults.map((r, i) => `
 ┌─────────────────────────────────────────────────────────────
-│ ŹRÓDŁO ${i + 1}: ${r.url}
-├─────────────────────────────────────────────────────────────
+│ STRONA ${i + 1}: ${r.url}
 │ Tytuł: ${r.title || 'Brak tytułu'}
-│ Opis: ${r.description || 'Brak opisu'}
 ├─────────────────────────────────────────────────────────────
-│ TREŚĆ:
-${r.markdown?.substring(0, 2500) || 'Brak treści'}
-└─────────────────────────────────────────────────────────────
-`).join('\n')}
+${r.markdown?.substring(0, 2000) || r.description || 'Brak treści'}
+└─────────────────────────────────────────────────────────────`).join('\n')}
 
 ═══════════════════════════════════════════════════════════════
 
 🎯 ZADANIE:
-1. Przeanalizuj WSZYSTKIE źródła
-2. Wyodrębnij TYLKO informacje o ${first_name} ${last_name}${company ? ` z firmy ${company}` : ''}
-3. Zbuduj pełny profil zawodowy z historią kariery
-4. Jeśli dane są o INNEJ osobie - zaznacz to jasno
-5. Oceń wiarygodność każdej informacji`
+1. Połącz informacje ze WSZYSTKICH źródeł
+2. Stwórz spójny, szczegółowy profil
+3. Wyodrębnij wypowiedzi publiczne i cytaty
+4. Wymień WSZYSTKIE organizacje gdzie osoba działa
+5. Zidentyfikuj WSZYSTKIE ostrzeżenia i czerwone flagi
+6. Wygeneruj 5-10 tagów charakteryzujących osobę`
           }
         ],
-        max_tokens: 2500,
+        max_tokens: 4000,
         temperature: 0.2,
       }),
     });
@@ -326,36 +412,86 @@ ${r.markdown?.substring(0, 2500) || 'Brak treści'}
       );
     }
 
-    // Extract sources from results
-    const sources = searchResults.map(r => r.url);
-
-    // Determine confidence based on results
-    let confidence: 'verified' | 'partial' | 'not_found' = 'not_found';
-    if (searchResults.length > 0) {
-      const hasLinkedIn = sources.some(url => url.includes('linkedin.com'));
-      const hasVerifiedInfo = profileSummary.includes('✅');
-      
-      if (hasLinkedIn || (hasVerifiedInfo && searchResults.length >= 3)) {
-        confidence = 'verified';
-      } else if (hasVerifiedInfo) {
-        confidence = 'partial';
-      }
+    // ═══════════════════════════════════════════════════════════════
+    // STEP 4: EXTRACT STRUCTURED DATA FROM AI RESPONSE
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Extract tags from the response (looking for #tag patterns)
+    const tagMatches = profileSummary.match(/#[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+/gi) || [];
+    const tags = tagMatches.map((t: string) => t.replace('#', '').toLowerCase());
+    
+    // Extract public statements section
+    let publicStatements: string | null = null;
+    const statementsMatch = profileSummary.match(/(?:WYPOWIEDZI|MEDIA|CYTATY)[^]*?(?=\n##|\n═|$)/i);
+    if (statementsMatch) {
+      publicStatements = statementsMatch[0].trim();
     }
+    
+    // Extract other organizations section
+    let otherOrganizations: string | null = null;
+    const orgMatch = profileSummary.match(/(?:INNE ORGANIZACJE|RADY NADZORCZE|STOWARZYSZENIA)[^]*?(?=\n##|\n═|$)/i);
+    if (orgMatch) {
+      otherOrganizations = orgMatch[0].trim();
+    }
+    
+    // Extract warnings section
+    let warnings: string | null = null;
+    const warningsMatch = profileSummary.match(/(?:OSTRZEŻENIA|CZERWONE FLAGI|KONTROWERSJE|SKANDALE)[^]*?(?=\n##|\n═|$)/i);
+    if (warningsMatch && !warningsMatch[0].includes('Nie znaleziono ostrzeżeń')) {
+      warnings = warningsMatch[0].trim();
+    }
+
+    // Combine all sources
+    const allSources = [
+      ...firecrawlResults.map(r => r.url),
+      ...allPerplexityCitations
+    ].filter((url, index, self) => self.indexOf(url) === index); // Deduplicate
+
+    // Determine confidence
+    let confidence: 'verified' | 'partial' | 'not_found' = 'not_found';
+    const hasPerplexityData = perplexityResults.profile?.content || perplexityResults.media?.content;
+    const hasFirecrawlData = firecrawlResults.length > 0;
+    const hasLinkedIn = allSources.some(url => url.includes('linkedin.com'));
+    const hasVerifiedInfo = profileSummary.includes('✅');
+    
+    if (hasLinkedIn || (hasVerifiedInfo && (hasPerplexityData || firecrawlResults.length >= 3))) {
+      confidence = 'verified';
+    } else if (hasVerifiedInfo || hasPerplexityData || hasFirecrawlData) {
+      confidence = 'partial';
+    }
+
+    // Build data notes
+    const dataNotes: string[] = [];
+    if (PERPLEXITY_API_KEY) {
+      dataNotes.push(`Perplexity: profil=${!!perplexityResults.profile}, media=${!!perplexityResults.media}, organizacje=${!!perplexityResults.organizations}`);
+      dataNotes.push(`Źródła Perplexity: ${allPerplexityCitations.length}`);
+    } else {
+      dataNotes.push('Perplexity: nie skonfigurowany');
+    }
+    if (FIRECRAWL_API_KEY) {
+      dataNotes.push(`Firecrawl: ${firecrawlResults.length} stron`);
+    } else {
+      dataNotes.push('Firecrawl: nie skonfigurowany');
+    }
+    if (hasLinkedIn) dataNotes.push('✅ Znaleziono profil LinkedIn');
+    if (warnings) dataNotes.push('⚠️ Znaleziono ostrzeżenia');
+    if (tags.length > 0) dataNotes.push(`Tagi: ${tags.length}`);
 
     const enrichedData: EnrichedPersonData = {
       profile_summary: profileSummary,
-      sources,
+      sources: allSources,
       search_performed: true,
       confidence,
-      data_notes: [
-        `Przeszukano ${searchResults.length} źródeł internetowych`,
-        searchResults.some(r => r.url.includes('linkedin.com')) 
-          ? 'Znaleziono profil LinkedIn' 
-          : 'Nie znaleziono profilu LinkedIn'
-      ]
+      data_notes: dataNotes,
+      perplexity_used: !!PERPLEXITY_API_KEY,
+      public_statements: publicStatements,
+      other_organizations: otherOrganizations,
+      warnings,
+      tags
     };
 
-    console.log('[enrich-person-data] Successfully enriched person data, confidence:', confidence);
+    console.log('[enrich-person-data] Successfully enriched person data');
+    console.log(`[enrich-person-data] Confidence: ${confidence}, Tags: ${tags.length}, Sources: ${allSources.length}`);
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),
