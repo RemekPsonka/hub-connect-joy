@@ -7,9 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   FileSpreadsheet, 
   Upload, 
@@ -18,24 +18,22 @@ import {
   Check, 
   AlertCircle, 
   Loader2, 
-  ArrowLeft, 
   ArrowRight,
   Users,
-  Merge,
-  Plus,
+  AlertTriangle,
   X,
   MapPin,
   Calendar,
   Sparkles,
   Building2,
-  Trash2
+  Search
 } from 'lucide-react';
-import { useAIImport, ParsedContact, DuplicateMatch } from '@/hooks/useAIImport';
+import { useAIImport, ParsedContact } from '@/hooks/useAIImport';
 import { useContactGroups } from '@/hooks/useContacts';
 import { useDefaultPositions } from '@/hooks/useDefaultPositions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { ImportContactRow } from './ImportContactRow';
 
 interface AIImportContactsModalProps {
   open: boolean;
@@ -43,7 +41,7 @@ interface AIImportContactsModalProps {
   onSuccess?: () => void;
 }
 
-type Step = 'source' | 'preview' | 'duplicates' | 'importing' | 'complete';
+type Step = 'source' | 'preview' | 'importing' | 'complete';
 
 // Suggested "met at" sources
 const metSourceSuggestions = [
@@ -56,33 +54,6 @@ const metSourceSuggestions = [
   'Networking'
 ];
 
-// Personal email domains to ignore for company extraction
-const personalEmailDomains = [
-  'gmail.com', 'wp.pl', 'o2.pl', 'onet.pl', 'interia.pl', 
-  'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com', 
-  'icloud.com', 'me.com', 'mail.com', 'protonmail.com',
-  'tlen.pl', 'gazeta.pl', 'op.pl', 'poczta.fm'
-];
-
-function isPersonalEmail(email: string): boolean {
-  if (!email) return true;
-  const domain = email.split('@')[1]?.toLowerCase();
-  return personalEmailDomains.includes(domain);
-}
-
-function extractCompanyFromEmail(email: string): { domain: string; companyName: string } | null {
-  if (!email || isPersonalEmail(email)) return null;
-  const domain = email.split('@')[1]?.toLowerCase();
-  if (!domain) return null;
-  
-  // Remove TLD and capitalize
-  const companyName = domain.split('.')[0];
-  return {
-    domain,
-    companyName: companyName.charAt(0).toUpperCase() + companyName.slice(1)
-  };
-}
-
 export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImportContactsModalProps) {
   const [step, setStep] = useState<Step>('source');
   const [pastedText, setPastedText] = useState('');
@@ -91,33 +62,35 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
   const [metDate, setMetDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [enrichingIndexes, setEnrichingIndexes] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: groups } = useContactGroups();
+  const { data: groups = [] } = useContactGroups();
   const { data: defaultPositions = [] } = useDefaultPositions();
   const {
     isParsing,
-    isCheckingDuplicates,
     isImporting,
     parsedContacts,
-    duplicates,
-    newContacts,
     metadata,
     errors,
     progress,
+    stats,
     parseFiles,
     parseText,
-    checkAllDuplicates,
-    updateDuplicateDecision,
     updateParsedContact,
     removeParsedContact,
+    enrichCompany,
+    enrichPerson,
+    enrichAllCompanies,
+    enrichAllPersons,
+    applyDefaultsToAll,
+    toggleContactSelection,
+    toggleAllSelection,
     importContacts,
     reset
   } = useAIImport();
 
   // Find "Inne" group as default
-  const defaultGroup = groups?.find(g => g.name.toLowerCase() === 'inne');
+  const defaultGroup = groups.find(g => g.name.toLowerCase() === 'inne');
   const defaultPosition = defaultPositions.find(p => p.is_default)?.name || 'Inny';
 
   // Reset on close
@@ -129,10 +102,16 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
       setMetSource('');
       setMetDate(new Date().toISOString().split('T')[0]);
       setUploadedFiles([]);
-      setEnrichingIndexes(new Set());
       reset();
     }
   }, [open, reset]);
+
+  // Transition to preview when contacts are parsed
+  useEffect(() => {
+    if (step === 'source' && parsedContacts.length > 0 && !isParsing) {
+      setStep('preview');
+    }
+  }, [parsedContacts, isParsing, step]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -172,34 +151,27 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     } else if (pastedText.trim()) {
       await parseText(pastedText);
     }
-    
-    // Move to preview step if we have contacts
-    if (parsedContacts.length > 0 || !errors.length) {
-      setStep('preview');
-    }
   };
 
-  // After parsing - check if we got contacts and transition
-  useEffect(() => {
-    if (step === 'source' && parsedContacts.length > 0 && !isParsing) {
-      setStep('preview');
-    }
-  }, [parsedContacts, isParsing, step]);
-
-  const handleCheckDuplicates = async () => {
-    await checkAllDuplicates();
-    if (duplicates.length > 0) {
-      setStep('duplicates');
-    } else {
-      handleImport();
-    }
+  const handleApplyDefaults = () => {
+    applyDefaultsToAll(
+      selectedGroupId || defaultGroup?.id || null,
+      metSource || null,
+      metDate || null
+    );
+    toast.success('Zastosowano domyślne ustawienia do wszystkich kontaktów');
   };
 
   const handleImport = async () => {
+    // Apply defaults before import
+    applyDefaultsToAll(
+      selectedGroupId || defaultGroup?.id || null,
+      metSource || null,
+      metDate || null
+    );
+
     setStep('importing');
-    // Use selected group or default to "Inne"
-    const groupToUse = selectedGroupId || defaultGroup?.id;
-    const result = await importContacts(groupToUse, metSource || undefined, metDate || undefined);
+    const result = await importContacts();
     setStep('complete');
     
     if (result.errors.length === 0) {
@@ -219,52 +191,6 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     onOpenChange(false);
   };
 
-  const handleEnrichCompany = async (index: number, email: string) => {
-    const extracted = extractCompanyFromEmail(email);
-    if (!extracted) return;
-
-    setEnrichingIndexes(prev => new Set(prev).add(index));
-
-    try {
-      const { data, error } = await supabase.functions.invoke('enrich-company-data', {
-        body: { company_name: extracted.companyName, website: extracted.domain }
-      });
-
-      if (error) throw error;
-
-      // Update the contact with enriched data
-      const updates: Partial<ParsedContact> = {
-        company: data?.name || extracted.companyName
-      };
-
-      // If we got industry info, add as tag
-      if (data?.industry) {
-        const currentTags = parsedContacts[index]?.tags || [];
-        if (!currentTags.includes(data.industry)) {
-          updates.tags = [...currentTags, data.industry];
-        }
-      }
-
-      updateParsedContact(index, updates);
-      toast.success('Pobrano dane firmy', { description: updates.company });
-    } catch (err) {
-      console.error('Error enriching company:', err);
-      // Still set the company name from domain
-      updateParsedContact(index, { company: extracted.companyName });
-      toast.info('Ustawiono nazwę firmy z domeny email');
-    } finally {
-      setEnrichingIndexes(prev => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
-    }
-  };
-
-  const handlePositionChange = (index: number, position: string) => {
-    updateParsedContact(index, { position });
-  };
-
   const getFileIcon = (fileName: string) => {
     const ext = fileName.split('.').pop()?.toLowerCase();
     if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) return <Image className="h-4 w-4" />;
@@ -272,37 +198,26 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     return <FileText className="h-4 w-4" />;
   };
 
-  const getStepNumber = () => {
-    switch (step) {
-      case 'source': return 1;
-      case 'preview': return 2;
-      case 'duplicates': return 3;
-      case 'importing': return 4;
-      case 'complete': return 4;
-    }
-  };
+  const selectedCount = parsedContacts.filter(c => c.selected).length;
+  const allSelected = parsedContacts.length > 0 && selectedCount === parsedContacts.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
-            Import kontaktów przez AI
-            <span className="text-sm font-normal text-muted-foreground ml-2">
-              Krok {getStepNumber()} z 4
-            </span>
+            Profesjonalny import kontaktów
           </DialogTitle>
           <DialogDescription>
             {step === 'source' && 'Wgraj pliki lub wklej dane do automatycznego rozpoznania kontaktów'}
-            {step === 'preview' && 'Sprawdź rozpoznane kontakty, uzupełnij dane i skonfiguruj import'}
-            {step === 'duplicates' && 'Zdecyduj co zrobić z wykrytymi duplikatami'}
+            {step === 'preview' && 'Sprawdź, edytuj i wzbogać kontakty przed importem'}
             {step === 'importing' && 'Trwa importowanie kontaktów...'}
             {step === 'complete' && 'Import zakończony'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col">
           {/* Step: Source */}
           {step === 'source' && (
             <div className="space-y-4">
@@ -391,29 +306,75 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
             </div>
           )}
 
-          {/* Step: Preview with settings */}
+          {/* Step: Preview - Single screen with everything */}
           {step === 'preview' && (
-            <div className="space-y-4">
-              {/* Settings panel */}
-              <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg border">
-                <div className="space-y-2">
-                  <Label>Grupa docelowa</Label>
+            <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+              {/* Stats bar */}
+              <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg border">
+                <div className="flex gap-3">
+                  <Badge variant="outline" className="gap-1">
+                    <Users className="h-3 w-3" />
+                    {stats.total} kontaktów
+                  </Badge>
+                  {stats.duplicates > 0 && (
+                    <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-600 border-amber-300">
+                      <AlertTriangle className="h-3 w-3" />
+                      {stats.duplicates} duplikatów
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-600 border-green-300">
+                    <Check className="h-3 w-3" />
+                    {stats.ready} gotowych
+                  </Badge>
+                  {stats.companiesNeeded > 0 && (
+                    <Badge variant="outline" className="gap-1">
+                      <Building2 className="h-3 w-3" />
+                      {stats.companiesNeeded} firm do uzupełnienia
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={enrichAllCompanies}
+                    disabled={stats.companiesNeeded === 0 || isParsing}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Wzbogać firmy
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={enrichAllPersons}
+                    disabled={isParsing}
+                  >
+                    <Search className="h-3 w-3 mr-1" />
+                    Sprawdź osoby
+                  </Button>
+                </div>
+              </div>
+
+              {/* Default settings */}
+              <div className="grid grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg border">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Domyślna grupa</Label>
                   <Select 
                     value={selectedGroupId || 'none'} 
                     onValueChange={(val) => setSelectedGroupId(val === 'none' ? '' : val)}
                   >
-                    <SelectTrigger className="bg-background">
+                    <SelectTrigger className="h-8 text-xs bg-background">
                       <SelectValue placeholder="Wybierz grupę..." />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">
                         <span className="text-muted-foreground">Bez wyboru (→ Inne)</span>
                       </SelectItem>
-                      {groups?.map((group) => (
+                      {groups.map((group) => (
                         <SelectItem key={group.id} value={group.id}>
                           <div className="flex items-center gap-2">
                             <div
-                              className="w-3 h-3 rounded-full"
+                              className="w-2 h-2 rounded-full"
                               style={{ backgroundColor: group.color || '#6366f1' }}
                             />
                             {group.name}
@@ -424,23 +385,23 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
-                    Skąd poznany?
+                    Domyślne źródło
                   </Label>
                   <Input
                     placeholder="np. CC WAW 2025..."
                     value={metSource}
                     onChange={(e) => setMetSource(e.target.value)}
-                    className="bg-background"
+                    className="h-8 text-xs bg-background"
                   />
                   <div className="flex flex-wrap gap-1">
-                    {metSourceSuggestions.slice(0, 4).map((suggestion) => (
+                    {metSourceSuggestions.slice(0, 3).map((suggestion) => (
                       <Badge
                         key={suggestion}
                         variant="outline"
-                        className="cursor-pointer hover:bg-primary/10 transition-colors text-xs"
+                        className="cursor-pointer hover:bg-primary/10 transition-colors text-[10px] px-1.5 py-0"
                         onClick={() => setMetSource(suggestion)}
                       >
                         {suggestion}
@@ -449,182 +410,74 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    Data poznania
+                    Domyślna data
                   </Label>
                   <Input
                     type="date"
                     value={metDate}
                     onChange={(e) => setMetDate(e.target.value)}
-                    className="bg-background"
+                    className="h-8 text-xs bg-background"
                   />
                 </div>
+
+                <div className="flex items-end">
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="h-8 text-xs"
+                    onClick={handleApplyDefaults}
+                  >
+                    Zastosuj do wszystkich
+                  </Button>
+                </div>
               </div>
-
-              {/* Metadata badges */}
-              {metadata && (
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    Format: {metadata.sourceFormat}
-                  </Badge>
-                  <Badge variant="secondary">
-                    <Users className="h-3 w-3 mr-1" />
-                    {metadata.totalParsed} kontaktów
-                  </Badge>
-                  {metadata.detectedColumns.length > 0 && (
-                    <Badge variant="outline">
-                      Kolumny: {metadata.detectedColumns.join(', ')}
-                    </Badge>
-                  )}
-                </div>
-              )}
-
-              {metadata?.warnings && metadata.warnings.length > 0 && (
-                <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
-                  <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500 mb-1">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Ostrzeżenia</span>
-                  </div>
-                  {metadata.warnings.map((w, idx) => (
-                    <p key={idx} className="text-xs text-yellow-600 dark:text-yellow-500">{w}</p>
-                  ))}
-                </div>
-              )}
 
               {/* Contacts table */}
-              <ScrollArea className="h-[350px] border rounded-md">
-                <div className="p-2">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-background">
-                      <tr className="border-b">
-                        <th className="text-left py-2 px-2 font-medium">Imię</th>
-                        <th className="text-left py-2 px-2 font-medium">Nazwisko</th>
-                        <th className="text-left py-2 px-2 font-medium">Firma</th>
-                        <th className="text-left py-2 px-2 font-medium">Stanowisko</th>
-                        <th className="text-left py-2 px-2 font-medium">Email</th>
-                        <th className="text-left py-2 px-2 font-medium">Telefon</th>
-                        <th className="text-center py-2 px-2 font-medium w-24">Akcje</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedContacts.map((contact, idx) => {
-                        const canEnrich = !contact.company && contact.email && !isPersonalEmail(contact.email);
-                        const isEnriching = enrichingIndexes.has(idx);
-
-                        return (
-                          <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
-                            <td className="py-2 px-2">{contact.first_name || '-'}</td>
-                            <td className="py-2 px-2">{contact.last_name || '-'}</td>
-                            <td className="py-2 px-2">
-                              <div className="flex items-center gap-1">
-                                {contact.company || (
-                                  <span className="text-muted-foreground">-</span>
-                                )}
-                                {canEnrich && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 px-1"
-                                    onClick={() => handleEnrichCompany(idx, contact.email!)}
-                                    disabled={isEnriching}
-                                    title="Pobierz dane firmy z domeny email"
-                                  >
-                                    {isEnriching ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Sparkles className="h-3 w-3 text-primary" />
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2">
-                              <Select
-                                value={contact.position || defaultPosition}
-                                onValueChange={(val) => handlePositionChange(idx, val)}
-                              >
-                                <SelectTrigger className="h-7 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {defaultPositions.map((pos) => (
-                                    <SelectItem key={pos.id} value={pos.name}>
-                                      {pos.name}
-                                    </SelectItem>
-                                  ))}
-                                  {contact.position && !defaultPositions.find(p => p.name === contact.position) && (
-                                    <SelectItem value={contact.position}>
-                                      {contact.position}
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="py-2 px-2">
-                              <span className="text-muted-foreground text-xs">
-                                {contact.email || '-'}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2">
-                              <span className="text-muted-foreground text-xs">
-                                {contact.phone || '-'}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-destructive hover:text-destructive"
-                                onClick={() => removeParsedContact(idx)}
-                                title="Usuń z listy"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </ScrollArea>
-
-              <div className="p-3 bg-muted/50 rounded-md">
-                <p className="text-sm text-muted-foreground">
-                  <Sparkles className="h-4 w-4 inline mr-1" />
-                  Kliknij ikonę ✨ przy kontaktach bez firmy, aby automatycznie pobrać dane firmy z domeny email.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Step: Duplicates */}
-          {step === 'duplicates' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  <Users className="h-3 w-3 mr-1" />
-                  {newContacts.length} nowych
-                </Badge>
-                <Badge variant="secondary">
-                  <Merge className="h-3 w-3 mr-1" />
-                  {duplicates.length} duplikatów
-                </Badge>
-              </div>
-
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-4 pr-4">
-                  {duplicates.map((dup, idx) => (
-                    <DuplicateCard
-                      key={idx}
-                      duplicate={dup}
-                      onDecisionChange={(decision) => updateDuplicateDecision(idx, decision)}
+              <div className="flex-1 border rounded-lg overflow-hidden flex flex-col">
+                {/* Table header */}
+                <div className="grid grid-cols-[40px_100px_1fr_1fr_1fr_140px_1fr_1fr_100px_40px] gap-2 py-2 px-2 bg-muted/50 border-b text-xs font-medium sticky top-0">
+                  <div className="flex justify-center">
+                    <Checkbox 
+                      checked={allSelected}
+                      onCheckedChange={(checked) => toggleAllSelection(!!checked)}
                     />
-                  ))}
+                  </div>
+                  <div>Status</div>
+                  <div>Imię</div>
+                  <div>Nazwisko</div>
+                  <div>Firma</div>
+                  <div>Stanowisko</div>
+                  <div>Email</div>
+                  <div>Telefon</div>
+                  <div>Akcje</div>
+                  <div></div>
                 </div>
-              </ScrollArea>
+                
+                {/* Table body */}
+                <ScrollArea className="flex-1">
+                  <div>
+                    {parsedContacts.map((contact, idx) => (
+                      <ImportContactRow
+                        key={idx}
+                        contact={contact}
+                        index={idx}
+                        groups={groups}
+                        defaultPositions={defaultPositions}
+                        defaultPosition={defaultPosition}
+                        metSourceSuggestions={metSourceSuggestions}
+                        onUpdate={updateParsedContact}
+                        onRemove={removeParsedContact}
+                        onToggleSelect={toggleContactSelection}
+                        onEnrichCompany={enrichCompany}
+                        onEnrichPerson={enrichPerson}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
           )}
 
@@ -656,16 +509,14 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
           )}
         </div>
 
-        {/* Progress bar for parsing/checking */}
-        {(isParsing || isCheckingDuplicates) && (
+        {/* Progress bar for parsing */}
+        {isParsing && progress.total > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm">{progress.stage}</span>
             </div>
-            {progress.total > 0 && (
-              <Progress value={(progress.current / progress.total) * 100} />
-            )}
+            <Progress value={(progress.current / progress.total) * 100} />
           </div>
         )}
 
@@ -696,36 +547,13 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
           {step === 'preview' && (
             <>
               <Button variant="outline" onClick={() => setStep('source')}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Wróć
+                Wróć do źródła
               </Button>
               <Button 
-                onClick={handleCheckDuplicates}
-                disabled={parsedContacts.length === 0 || isCheckingDuplicates}
+                onClick={handleImport}
+                disabled={selectedCount === 0 || isImporting}
               >
-                {isCheckingDuplicates ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sprawdzanie duplikatów...
-                  </>
-                ) : (
-                  <>
-                    Importuj kontakty
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </>
-          )}
-
-          {step === 'duplicates' && (
-            <>
-              <Button variant="outline" onClick={() => setStep('preview')}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Wróć
-              </Button>
-              <Button onClick={handleImport}>
-                Importuj
+                Importuj {selectedCount} kontaktów
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </>
@@ -739,68 +567,5 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// Duplicate Card Component
-interface DuplicateCardProps {
-  duplicate: DuplicateMatch;
-  onDecisionChange: (decision: 'merge' | 'new' | 'skip') => void;
-}
-
-function DuplicateCard({ duplicate, onDecisionChange }: DuplicateCardProps) {
-  const { parsedContact, existingContact, decision } = duplicate;
-
-  return (
-    <div className="border rounded-lg p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="font-medium">
-          {parsedContact.first_name} {parsedContact.last_name}
-        </span>
-        <Badge variant="outline">Potencjalny duplikat</Badge>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase">W systemie:</p>
-          <p>{existingContact.full_name}</p>
-          <p className="text-muted-foreground">{existingContact.email || 'brak email'}</p>
-          <p className="text-muted-foreground">{existingContact.phone || 'brak telefonu'}</p>
-          <p className="text-muted-foreground">{existingContact.company || 'brak firmy'}</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase">Z importu:</p>
-          <p>{parsedContact.first_name} {parsedContact.last_name}</p>
-          <p className="text-muted-foreground">{parsedContact.email || 'brak email'}</p>
-          <p className="text-muted-foreground">{parsedContact.phone || 'brak telefonu'}</p>
-          <p className="text-muted-foreground">{parsedContact.company || 'brak firmy'}</p>
-        </div>
-      </div>
-
-      <RadioGroup 
-        value={decision} 
-        onValueChange={(value) => onDecisionChange(value as 'merge' | 'new' | 'skip')}
-        className="flex gap-4"
-      >
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="merge" id={`merge-${existingContact.id}`} />
-          <Label htmlFor={`merge-${existingContact.id}`} className="text-sm cursor-pointer">
-            Scal (uzupełnij dane)
-          </Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="new" id={`new-${existingContact.id}`} />
-          <Label htmlFor={`new-${existingContact.id}`} className="text-sm cursor-pointer">
-            Utwórz nowy
-          </Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="skip" id={`skip-${existingContact.id}`} />
-          <Label htmlFor={`skip-${existingContact.id}`} className="text-sm cursor-pointer">
-            Pomiń
-          </Label>
-        </div>
-      </RadioGroup>
-    </div>
   );
 }

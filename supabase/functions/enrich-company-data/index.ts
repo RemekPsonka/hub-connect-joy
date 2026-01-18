@@ -74,7 +74,7 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Call Lovable AI Gateway for company analysis
+    // Step 2: Call Lovable AI Gateway for company analysis with extended data
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -82,35 +82,43 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie firm i rynku polskiego. Na podstawie nazwy firmy i dostępnych informacji, wygeneruj prawdopodobny profil firmy.
+            content: `Jesteś ekspertem w analizie firm polskich. Na podstawie nazwy firmy i dostępnych informacji, wygeneruj prawdopodobny profil firmy wraz z danymi rejestracyjnymi.
 
-WAŻNE: Generujesz PRZYPUSZCZENIA na podstawie nazwy i kontekstu. Użytkownik powinien zweryfikować te dane.
+WAŻNE: Generujesz PRZYPUSZCZENIA na podstawie nazwy i kontekstu. Dane rejestrowe (NIP, REGON, KRS) możesz podać tylko jeśli masz pewność - w przeciwnym razie zwróć null.
 
 Zwróć TYLKO poprawny JSON (bez markdown, bez \`\`\`) z polami:
+- name: Pełna oficjalna nazwa firmy (string)
+- nip: Numer NIP firmy (10 cyfr bez myślników) lub null jeśli nieznany
+- regon: Numer REGON firmy (9 lub 14 cyfr) lub null jeśli nieznany
+- krs: Numer KRS (10 cyfr) lub null jeśli nieznany
+- address: Ulica i numer budynku lub null
+- city: Miasto siedziby firmy lub null
+- postal_code: Kod pocztowy (XX-XXX) lub null
+- country: Kraj (domyślnie "Polska")
 - industry: Prawdopodobna branża firmy (string)
 - description: Krótki opis działalności, 2-3 zdania (string)
 - services: Lista prawdopodobnych usług/produktów, oddzielone przecinkami (string)
 - collaboration_areas: Potencjalne obszary współpracy biznesowej (string)
-- employee_count_estimate: Szacunkowa wielkość firmy: "micro", "small", "medium", "large" lub null jeśli nie da się oszacować
+- employee_count_estimate: Szacunkowa wielkość firmy: "micro" (1-9), "small" (10-49), "medium" (50-249), "large" (250+) lub null
 - confidence: Poziom pewności oceny: "high", "medium", "low"
 - suggested_website: Jeśli znasz oficjalną stronę firmy, podaj URL (string lub null)`
           },
           {
             role: 'user',
-            content: `Przeanalizuj firmę i wygeneruj profil:
+            content: `Przeanalizuj firmę i wygeneruj pełny profil z danymi rejestracyjnymi:
 
 Nazwa firmy: ${company_name}
 ${website ? `Strona www: ${website}` : ''}
 ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
 
-Wygeneruj prawdopodobny profil tej firmy.`
+Wygeneruj prawdopodobny profil tej firmy wraz z danymi rejestracyjnymi jeśli są dostępne.`
           }
         ],
-        max_tokens: 800,
+        max_tokens: 1000,
         temperature: 0.3,
       }),
     });
