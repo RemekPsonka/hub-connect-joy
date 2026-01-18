@@ -92,6 +92,57 @@ async function searchPerson(query: string, apiKey: string): Promise<string | nul
   }
 }
 
+// Query Perplexity for comprehensive search
+interface PerplexityResult {
+  content: string;
+  citations: string[];
+}
+
+async function queryPerplexity(
+  query: string, 
+  systemPrompt: string, 
+  apiKey: string, 
+  recencyFilter?: string
+): Promise<PerplexityResult> {
+  try {
+    console.log("Perplexity query:", query.substring(0, 100));
+    const body: any = {
+      model: 'sonar-pro',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: query }
+      ],
+    };
+    
+    if (recencyFilter) {
+      body.search_recency_filter = recencyFilter;
+    }
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      console.log("Perplexity failed:", response.status);
+      return { content: '', citations: [] };
+    }
+
+    const data = await response.json();
+    return {
+      content: data.choices?.[0]?.message?.content || '',
+      citations: data.citations || []
+    };
+  } catch (error) {
+    console.error("Perplexity error:", error);
+    return { content: '', citations: [] };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -223,9 +274,14 @@ serve(async (req) => {
     console.log("Has website data:", hasWebsiteData, "Content length:", companyWebsiteContent.length);
 
     // ============= STEP 3: Search for person in company context (PRIORITY 2) =============
+    // Use domain from email for better search if company name looks truncated
+    const searchCompanyName = companyName.length < 10 && emailDomain 
+      ? emailDomain.replace(/\.(pl|com|eu|net|org)$/i, '').replace(/-/g, ' ')
+      : companyName;
+    
     let personSearchResults = "";
     if (FIRECRAWL_API_KEY) {
-      const searchQuery = `"${contact.full_name}" "${companyName}" stanowisko`;
+      const searchQuery = `"${contact.full_name}" "${searchCompanyName}" stanowisko`;
       const searchResults = await searchPerson(searchQuery, FIRECRAWL_API_KEY);
       if (searchResults) {
         personSearchResults = searchResults;
@@ -241,6 +297,80 @@ serve(async (req) => {
         personalSearchResults = personalResults;
         console.log("Personal search results found, length:", personalResults.length);
       }
+    }
+
+    // ============= STEP 3c: PERPLEXITY SEARCH FOR PERSON =============
+    let perplexityProfile = '';
+    let perplexityMedia = '';
+    let perplexityOrgs = '';
+    let perplexityCitations: string[] = [];
+
+    const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+    if (PERPLEXITY_API_KEY) {
+      console.log('Running Perplexity search for person:', contact.full_name, searchCompanyName);
+      
+      // Query 1: Professional profile and career
+      const profileQuery = `"${contact.full_name}" ${searchCompanyName} Polska:
+- aktualne stanowisko i rola w firmie
+- historia kariery, poprzednie firmy i stanowiska
+- pełna nazwa prawna firmy (np. Atlas Ward Polska Sp. z o.o.)
+- osiągnięcia zawodowe, nagrody biznesowe
+- wykształcenie, uczelnia, kierunek`;
+      
+      // Query 2: Media, public statements, hobbies
+      const mediaQuery = `"${contact.full_name}" wywiad artykuł cytat pasja hobby:
+- wywiady w prasie i mediach (Forbes, Puls Biznesu, itp.)
+- cytaty i wypowiedzi publiczne
+- wystąpienia na konferencjach i eventach
+- podcasty, webinary
+- hobby, pasje, sport (motorsport, żeglarstwo, golf, itp.)
+- życie prywatne, rodzina (jeśli publiczne)`;
+      
+      // Query 3: Other organizations, awards, controversies
+      const orgQuery = `"${contact.full_name}" rada nadzorcza fundacja stowarzyszenie nagroda:
+- udział w radach nadzorczych innych firm
+- członkostwo w organizacjach biznesowych (BCC, Konfederacja Lewiatan, itp.)
+- fundacje i działalność społeczna/charytatywna
+- nagrody: EY Przedsiębiorca Roku, Forbes, rankingi branżowe
+- kontrowersje, skandale, problemy prawne
+- sponsoring, patronaty`;
+
+      const [profileResult, mediaResult, orgResult] = await Promise.all([
+        queryPerplexity(
+          profileQuery, 
+          'Jesteś ekspertem ds. kariery i profili zawodowych biznesmenów w Polsce. Szukaj faktów o karierze, stanowiskach, wykształceniu.', 
+          PERPLEXITY_API_KEY
+        ),
+        queryPerplexity(
+          mediaQuery, 
+          'Jesteś dziennikarzem szukającym wzmianek medialnych, wywiadów, hobby i życia prywatnego polskich biznesmenów. Cytuj konkretne źródła.', 
+          PERPLEXITY_API_KEY,
+          'year'
+        ),
+        queryPerplexity(
+          orgQuery, 
+          'Jesteś analitykiem biznesowym szukającym powiązań osób z organizacjami, nagrodami, kontrowersjami. Bądź rzetelny i podawaj źródła.', 
+          PERPLEXITY_API_KEY
+        )
+      ]);
+
+      perplexityProfile = profileResult.content;
+      perplexityMedia = mediaResult.content;
+      perplexityOrgs = orgResult.content;
+      perplexityCitations = [...new Set([
+        ...profileResult.citations, 
+        ...mediaResult.citations, 
+        ...orgResult.citations
+      ])];
+      
+      console.log('Perplexity results:', {
+        profile: perplexityProfile.length,
+        media: perplexityMedia.length,
+        orgs: perplexityOrgs.length,
+        citations: perplexityCitations.length
+      });
+    } else {
+      console.log('PERPLEXITY_API_KEY not configured, skipping Perplexity search');
     }
 
     // ============= STEP 4: Build prompt with data hierarchy =============
@@ -328,15 +458,39 @@ ${hasWebsiteData ? `
 [Na podstawie stanowiska, branży i danych]
 
 ## 🏠 Życie prywatne
-[Informacje o życiu osobistym - tylko ze źródeł lub oznacz jako 💡 DEDUKCJA]
+[Informacje o życiu osobistym - SZCZEGÓŁOWO ze źródeł Perplexity!]
 - 👨‍👩‍👧‍👦 **Rodzina:** [status rodzinny, dzieci jeśli znane ze źródeł]
-- 🎯 **Hobby i zainteresowania:** [pozazawodowe aktywności, pasje]
-- ⚽ **Sport:** [ulubione dyscypliny, aktywność fizyczna]
+- 🎯 **Hobby i zainteresowania:** [pozazawodowe aktywności, pasje - SZCZEGÓŁOWO!]
+- ⚽ **Sport:** [ulubione dyscypliny, aktywność fizyczna, np. motorsport, rajdy]
+- 🏆 **Pasje i osiągnięcia pozazawodowe:** [zespoły sportowe, sponsoring, itp.]
 
 ## 📰 Wzmianki w mediach
 [Artykuły prasowe, wywiady, publikacje, wystąpienia publiczne]
-- Jeśli znaleziono wzmianki - podaj tytuły i źródła
+- WYMIEŃ KONKRETNE wywiady, artykuły z tytułami i źródłami!
+- Cytaty i wypowiedzi prasowe
+- Wystąpienia na konferencjach, podcasty
 - Jeśli brak - napisz "📭 Brak znalezionych wzmianek w mediach"
+
+## 🏅 Nagrody i wyróżnienia
+[Nagrody biznesowe, rankingi, wyróżnienia - z datami i źródłami]
+- EY Przedsiębiorca Roku (finaliści/laureaci)
+- Rankingi Forbes, Puls Biznesu, itp.
+- Nagrody branżowe
+
+## 🔗 Inne organizacje
+[Rady nadzorcze, fundacje, stowarzyszenia, kluby biznesowe - z nazwami i rolami]
+- Rady nadzorcze innych firm
+- Organizacje branżowe (BCC, Konfederacja Lewiatan, itp.)
+- Fundacje i działalność społeczna
+- Kluby biznesowe, sponsoring
+
+## ⚠️ Ostrzeżenia
+[Kontrowersje, skandale, problemy prawne - jeśli znalezione w mediach]
+- Jeśli brak - napisz "✅ Brak znalezionych ostrzeżeń"
+
+## 🏷️ Tagi
+[Lista 5-10 słów kluczowych charakteryzujących osobę, format: #tag1 #tag2]
+Przykład: #budownictwo #ceo #motorsport #innowacje #bim #przedsiębiorca
 
 ## 🤝 Wartość dla sieci
 [Jak osoba może pomóc innym kontaktom - SZCZEGÓŁOWO na podstawie oferty firmy]
@@ -350,7 +504,7 @@ ${hasWebsiteData ? `
 3. [Pytanie o sieć kontaktów]
 4. [Pytanie o zainteresowania/hobby - do budowania relacji]
 
-Maksymalnie 800 słów. ZAWSZE oznaczaj źródła.`;
+Maksymalnie 1200 słów. ZAWSZE oznaczaj źródła.`;
 
     const userPrompt = `# DANE KONTAKTU
 **Imię i nazwisko:** ${contact.full_name}
@@ -381,9 +535,32 @@ Wykorzystaj poniższe informacje do sekcji "Życie prywatne" i "Wzmianki w media
 ${personalSearchResults}
 ` : '# BRAK WYNIKÓW WYSZUKIWANIA O ŻYCIU OSOBISTYM I MEDIACH'}
 
+${perplexityProfile ? `
+# PERPLEXITY: PROFIL ZAWODOWY I KARIERA
+${perplexityProfile}
+` : ''}
+
+${perplexityMedia ? `
+# PERPLEXITY: MEDIA, WYWIADY, HOBBY, ŻYCIE PRYWATNE
+WYKORZYSTAJ TE INFORMACJE DO SEKCJI: Życie prywatne, Wzmianki w mediach, Hobby!
+${perplexityMedia}
+` : ''}
+
+${perplexityOrgs ? `
+# PERPLEXITY: INNE ORGANIZACJE, NAGRODY, OSTRZEŻENIA
+WYKORZYSTAJ DO SEKCJI: Nagrody i wyróżnienia, Inne organizacje, Ostrzeżenia!
+${perplexityOrgs}
+` : ''}
+
+${perplexityCitations.length > 0 ? `
+# ŹRÓDŁA PERPLEXITY (CYTUJ W PROFILU!)
+${perplexityCitations.slice(0, 15).join('\n')}
+` : ''}
+
 ---
 WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIERWSZEŃSTWO!
-PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIACH!`;
+PAMIĘTAJ O WSZYSTKICH SEKCJACH: Życie prywatne (SZCZEGÓŁOWE hobby!), Wzmianki w mediach, Nagrody, Inne organizacje, Ostrzeżenia, Tagi!
+PEŁNA NAZWA FIRMY - użyj nazwy znalezionej w Perplexity jeśli jest dłuższa/pełniejsza!`;
 
     // ============= STEP 5: Call AI with tool calling for structured company data =============
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -528,11 +705,18 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
         companyCreated = true;
         console.log("Created company with ID:", companyId);
       }
-    } else if (companyData && companyId && hasWebsiteData) {
-      // Update existing company with new data from website
+    } else if (companyData && companyId) {
+      // Update existing company with new data from website or Perplexity
       console.log("Updating existing company:", companyId);
       
       const companyUpdate: any = {};
+      
+      // UPDATE COMPANY NAME if AI found a longer/more complete name
+      if (companyData.name && companyData.name.length > (company?.name?.length || 0)) {
+        console.log('Updating company name from', company?.name, 'to', companyData.name);
+        companyUpdate.name = companyData.name;
+      }
+      
       if (companyData.industry && !company?.industry) companyUpdate.industry = companyData.industry;
       if (companyData.description && !company?.description) companyUpdate.description = companyData.description;
       if (companyData.city && !company?.city) companyUpdate.city = companyData.city;
@@ -555,7 +739,8 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
         management: companyData.management || [],
         company_type: companyData.company_type || null,
         analyzed_at: new Date().toISOString(),
-        source: companyWebsite
+        source: companyWebsite,
+        perplexity_used: !!perplexityProfile
       });
 
       if (Object.keys(companyUpdate).length > 0) {
@@ -588,6 +773,8 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
         has_website_data: hasWebsiteData,
         company_website: companyWebsite,
         has_search_results: personSearchResults.length > 0,
+        has_perplexity_results: perplexityProfile.length > 0 || perplexityMedia.length > 0 || perplexityOrgs.length > 0,
+        perplexity_citations: perplexityCitations.length,
         company_created: companyCreated,
         company_updated: companyUpdated,
         company_id: companyId
@@ -601,7 +788,9 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
         sources: {
           website_scraped: hasWebsiteData,
           company_website: companyWebsite,
-          search_performed: personSearchResults.length > 0
+          search_performed: personSearchResults.length > 0,
+          perplexity_used: perplexityProfile.length > 0 || perplexityMedia.length > 0 || perplexityOrgs.length > 0,
+          perplexity_citations: perplexityCitations.slice(0, 10)
         },
         company: {
           id: companyId,
