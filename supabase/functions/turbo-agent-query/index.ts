@@ -1,37 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-interface AgentData {
-  id: string;
-  contact_id: string;
-  agent_persona: string | null;
-  agent_profile: any;
-  insights: any[];
-  contacts: {
-    id: string;
-    full_name: string;
-    company: string | null;
-    position: string | null;
-    city: string | null;
-    notes: string | null;
-  };
-}
-
-interface SubQueryResult {
-  contact_id: string;
-  contact_name: string;
-  answer: string;
-  confidence: number;
-  relevance: number;
-  reasoning: string;
-  evidence: string[];
-  recommendation?: string;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -39,491 +13,140 @@ serve(async (req) => {
   }
 
   try {
-    const { tenant_id, query, max_agents = 20, threshold = 0.3 } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!tenant_id || !query) {
-      return new Response(
-        JSON.stringify({ error: 'tenant_id and query are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // ============= AUTHORIZATION CHECK =============
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+    const { tenantId } = authResult;
+    // ============= END AUTHORIZATION CHECK =============
+
+    const { query, max_agents = 20, threshold = 0.3 } = await req.json();
+
+    if (!query) {
+      return new Response(JSON.stringify({ error: 'query is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY is not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-
     const startTime = Date.now();
-    console.log(`[Turbo] Starting orchestration for tenant ${tenant_id}`);
+    console.log(`[Turbo] Starting for tenant ${tenantId}`);
 
-    // PHASE 1: Create session
+    // Create session
     const { data: session, error: sessionError } = await supabase
       .from('turbo_agent_sessions')
-      .insert({
-        tenant_id,
-        original_query: query,
-        status: 'analyzing'
-      })
+      .insert({ tenant_id: tenantId, original_query: query, status: 'analyzing' })
       .select()
       .single();
 
-    if (sessionError) {
-      console.error('[Turbo] Session creation error:', sessionError);
-      throw sessionError;
-    }
+    if (sessionError) throw sessionError;
 
-    console.log(`[Turbo] Session ${session.id} created`);
-
-    // PHASE 2: Get all Contact Agents with their memory
-    const { data: allAgents, error: agentsError } = await supabase
+    // Get all Contact Agents
+    const { data: allAgents } = await supabase
       .from('contact_agent_memory')
-      .select(`
-        id,
-        contact_id,
-        agent_persona,
-        agent_profile,
-        insights,
-        contacts (
-          id,
-          full_name,
-          company,
-          position,
-          city,
-          notes
-        )
-      `)
-      .eq('tenant_id', tenant_id);
+      .select(`id, contact_id, agent_persona, agent_profile, insights, contacts (id, full_name, company, position, city, notes)`)
+      .eq('tenant_id', tenantId);
 
-    if (agentsError) {
-      console.error('[Turbo] Agents fetch error:', agentsError);
-      throw agentsError;
-    }
+    const validAgents = (allAgents || []).filter(a => a.contacts && !Array.isArray(a.contacts));
 
-    // Filter and transform to proper type
-    const validAgents: AgentData[] = (allAgents || [])
-      .filter(a => a.contacts && !Array.isArray(a.contacts))
-      .map(a => ({
-        id: a.id,
-        contact_id: a.contact_id,
-        agent_persona: a.agent_persona,
-        agent_profile: a.agent_profile,
-        insights: a.insights,
-        contacts: a.contacts as unknown as AgentData['contacts']
-      }));
-    console.log(`[Turbo] Found ${validAgents.length} agents with memory`);
+    // Update session
+    await supabase.from('turbo_agent_sessions').update({ total_agents_available: validAgents.length, status: 'selecting' }).eq('id', session.id);
 
-    // Update session with total agents
-    await supabase
-      .from('turbo_agent_sessions')
-      .update({ 
-        total_agents_available: validAgents.length,
-        status: 'selecting'
-      })
-      .eq('id', session.id);
+    // AI selects agents
+    const agentSummaries = validAgents.map(a => ({ contact_id: a.contact_id, name: (a.contacts as any).full_name, company: (a.contacts as any).company, position: (a.contacts as any).position }));
 
-    // PHASE 3: AI selects top agents based on metadata (quick pre-filtering)
-    const agentSummaries = validAgents.map(a => ({
-      contact_id: a.contact_id,
-      name: a.contacts.full_name,
-      company: a.contacts.company,
-      position: a.contacts.position,
-      city: a.contacts.city,
-      persona_preview: a.agent_persona?.substring(0, 200) || 'Brak danych',
-      insights_count: Array.isArray(a.insights) ? a.insights.length : 0
-    }));
-
-    const selectionPrompt = `Jesteś Master Agent. Przeanalizuj pytanie i wybierz NAJBARDZIEJ RELEVANTNYCH agentów kontaktów.
-
-## PYTANIE OD DIRECTORA
-"${query}"
-
-## DOSTĘPNI AGENCI (${validAgents.length} total)
-${JSON.stringify(agentSummaries, null, 2)}
-
-## ZADANIE
-Wybierz maksymalnie ${max_agents} agentów, którzy NAJPRAWDOPODOBNIEJ będą mieli informacje związane z pytaniem.
-
-Zwróć JSON:
-\`\`\`json
-{
-  "query_intent": "krótki opis intencji pytania",
-  "sub_query_template": "Pytanie do każdego agenta (użyj {contact_name} jako placeholder)",
-  "selected_agents": [
-    {
-      "contact_id": "uuid",
-      "reason": "Dlaczego ten agent może mieć relevantne informacje"
-    }
-  ]
-}
-\`\`\`
-
-Wybieraj strategicznie - lepiej mniej, ale bardziej trafnych agentów.`;
-
-    console.log(`[Turbo] Calling AI for agent selection...`);
+    const selectionPrompt = `Wybierz max ${max_agents} agentów dla pytania: "${query}"\n\nAgenci:\n${JSON.stringify(agentSummaries)}\n\nZwróć JSON:\n\`\`\`json\n{"selected_agents": [{"contact_id": "uuid", "reason": "powód"}], "query_intent": "intent", "sub_query_template": "pytanie dla {contact_name}"}\n\`\`\``;
 
     const selectionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: selectionPrompt }]
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+      body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: selectionPrompt }] })
     });
 
-    if (!selectionResponse.ok) {
-      throw new Error(`AI selection failed: ${selectionResponse.status}`);
-    }
+    if (!selectionResponse.ok) throw new Error('AI selection failed');
 
     const selectionData = await selectionResponse.json();
     const selectionText = selectionData.choices?.[0]?.message?.content || '';
-    
-    // Parse JSON from response
+
     let selectionPlan: any;
     try {
       const jsonMatch = selectionText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        selectionPlan = JSON.parse(jsonMatch[1]);
-      } else {
-        selectionPlan = JSON.parse(selectionText);
-      }
-    } catch (e) {
-      console.error('[Turbo] Failed to parse selection response:', selectionText);
-      selectionPlan = {
-        query_intent: 'general',
-        sub_query_template: `Czy {contact_name} ma informacje związane z: ${query}?`,
-        selected_agents: agentSummaries.slice(0, max_agents).map(a => ({
-          contact_id: a.contact_id,
-          reason: 'Fallback selection'
-        }))
-      };
+      selectionPlan = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(selectionText);
+    } catch {
+      selectionPlan = { selected_agents: agentSummaries.slice(0, max_agents).map(a => ({ contact_id: a.contact_id, reason: 'Fallback' })), query_intent: 'general', sub_query_template: `{contact_name}: ${query}?` };
     }
 
     const selectedAgentIds = selectionPlan.selected_agents?.map((a: any) => a.contact_id) || [];
     const selectedAgents = validAgents.filter(a => selectedAgentIds.includes(a.contact_id));
 
-    console.log(`[Turbo] Selected ${selectedAgents.length} agents`);
+    await supabase.from('turbo_agent_sessions').update({ agents_selected: selectedAgents.length, query_intent: selectionPlan.query_intent, status: 'querying' }).eq('id', session.id);
 
-    // Update session
-    await supabase
-      .from('turbo_agent_sessions')
-      .update({ 
-        agents_selected: selectedAgents.length,
-        query_intent: selectionPlan.query_intent,
-        selection_completed_at: new Date().toISOString(),
-        status: 'querying'
-      })
-      .eq('id', session.id);
-
-    // Create sub-query records
-    const subQueryInserts = selectedAgents.map(agent => {
-      const selectionInfo = selectionPlan.selected_agents?.find((a: any) => a.contact_id === agent.contact_id);
-      return {
-        session_id: session.id,
-        contact_id: agent.contact_id,
-        contact_name: agent.contacts.full_name,
-        sub_query: selectionPlan.sub_query_template.replace('{contact_name}', agent.contacts.full_name),
-        selection_reason: selectionInfo?.reason || 'Selected by AI',
-        status: 'processing'
-      };
-    });
-
-    await supabase.from('turbo_agent_sub_queries').insert(subQueryInserts);
-
-    // PHASE 4: Query selected agents in PARALLEL
-    console.log(`[Turbo] Querying ${selectedAgents.length} agents in parallel...`);
-
-    const queryAgent = async (agent: AgentData): Promise<SubQueryResult | null> => {
-      const agentStartTime = Date.now();
-      const subQuery = selectionPlan.sub_query_template.replace('{contact_name}', agent.contacts.full_name);
-
-      const agentPrompt = `Jesteś dedykowanym AI agentem dla kontaktu: ${agent.contacts.full_name}.
-
-## TWOJA PEŁNA WIEDZA O KONTAKCIE
-
-### Profil
-- Firma: ${agent.contacts.company || 'Nieznana'}
-- Stanowisko: ${agent.contacts.position || 'Nieznane'}
-- Miasto: ${agent.contacts.city || 'Nieznane'}
-
-### Notatki
-${agent.contacts.notes || 'Brak notatek'}
-
-### Persona agenta
-${agent.agent_persona || 'Brak zdefiniowanej persony'}
-
-### Profil agenta
-${JSON.stringify(agent.agent_profile || {}, null, 2)}
-
-### Insights
-${JSON.stringify(agent.insights || [], null, 2)}
-
-## PYTANIE
-"${subQuery}"
-
-## KONTEKST ORYGINALNEGO PYTANIA
-"${query}"
-
-## ZADANIE
-Odpowiedz na pytanie bazując TYLKO na swojej wiedzy o ${agent.contacts.full_name}.
-
-Zwróć JSON:
-\`\`\`json
-{
-  "answer": "Tak/Nie/Może + krótkie wyjaśnienie (1-2 zdania)",
-  "confidence": 0.0-1.0,
-  "relevance": 0.0-1.0,
-  "reasoning": "Dlaczego tak uważasz?",
-  "evidence": ["Konkretne fakty z pamięci agenta"],
-  "recommendation": "Opcjonalna rekomendacja dla Directora"
-}
-\`\`\`
-
-Jeśli nie masz informacji, zwróć confidence=0.0 i powiedz wprost "Brak danych".`;
-
+    // Query agents in parallel
+    const queryAgent = async (agent: any) => {
       try {
-        const agentResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        const agentPrompt = `Agent dla: ${(agent.contacts as any).full_name}\nFirma: ${(agent.contacts as any).company}\nNotatki: ${(agent.contacts as any).notes?.substring(0, 500) || 'Brak'}\nPytanie: "${query}"\n\nZwróć JSON: {"answer": "", "confidence": 0.0, "relevance": 0.0, "evidence": []}`;
+
+        const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-lite',
-            messages: [{ role: 'user', content: agentPrompt }]
-          })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+          body: JSON.stringify({ model: 'google/gemini-2.5-flash-lite', messages: [{ role: 'user', content: agentPrompt }] })
         });
 
-        if (!agentResponse.ok) {
-          throw new Error(`Agent query failed: ${agentResponse.status}`);
-        }
+        if (!resp.ok) return null;
 
-        const agentData = await agentResponse.json();
-        const responseText = agentData.choices?.[0]?.message?.content || '';
-
-        let response: any;
+        const data = await resp.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        let result;
         try {
-          const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            response = JSON.parse(jsonMatch[1]);
-          } else {
-            response = JSON.parse(responseText);
-          }
-        } catch (e) {
-          response = {
-            answer: responseText.substring(0, 500),
-            confidence: 0.5,
-            relevance: 0.5,
-            reasoning: 'Could not parse structured response',
-            evidence: []
-          };
-        }
+          const m = text.match(/```json\s*([\s\S]*?)\s*```/);
+          result = m ? JSON.parse(m[1]) : JSON.parse(text);
+        } catch { result = { answer: text.substring(0, 300), confidence: 0.5, relevance: 0.5, evidence: [] }; }
 
-        const processingTime = Date.now() - agentStartTime;
-
-        // Update sub-query record
-        await supabase
-          .from('turbo_agent_sub_queries')
-          .update({
-            agent_response: response.answer,
-            confidence_score: response.confidence,
-            relevance_score: response.relevance,
-            reasoning: response,
-            evidence: response.evidence || [],
-            response_received_at: new Date().toISOString(),
-            processing_time_ms: processingTime,
-            status: 'completed'
-          })
-          .eq('session_id', session.id)
-          .eq('contact_id', agent.contact_id);
-
-        return {
-          contact_id: agent.contact_id,
-          contact_name: agent.contacts.full_name,
-          answer: response.answer,
-          confidence: response.confidence || 0,
-          relevance: response.relevance || 0,
-          reasoning: response.reasoning || '',
-          evidence: response.evidence || [],
-          recommendation: response.recommendation
-        };
-      } catch (error) {
-        console.error(`[Turbo] Agent ${agent.contacts.full_name} error:`, error);
-        
-        await supabase
-          .from('turbo_agent_sub_queries')
-          .update({ status: 'failed' })
-          .eq('session_id', session.id)
-          .eq('contact_id', agent.contact_id);
-
-        return null;
-      }
+        return { contact_id: agent.contact_id, contact_name: (agent.contacts as any).full_name, ...result };
+      } catch { return null; }
     };
 
-    // Execute all queries in parallel
-    const allResponses = await Promise.all(selectedAgents.map(queryAgent));
-    const successfulResponses = allResponses.filter((r): r is SubQueryResult => r !== null);
+    const responses = (await Promise.all(selectedAgents.map(queryAgent))).filter(r => r !== null && r.relevance >= threshold);
 
-    console.log(`[Turbo] Received ${successfulResponses.length}/${selectedAgents.length} responses`);
+    // Aggregate
+    const aggregationPrompt = `Agreguj odpowiedzi dla: "${query}"\n\nOdpowiedzi:\n${responses.map((r: any) => `- ${r.contact_name}: ${r.answer}`).join('\n')}\n\nZwróć JSON: {"summary": "", "top_recommendations": [], "insights": []}`;
 
-    // Update session
-    await supabase
-      .from('turbo_agent_sessions')
-      .update({ 
-        queries_completed_at: new Date().toISOString(),
-        status: 'aggregating'
-      })
-      .eq('id', session.id);
-
-    // PHASE 5: Filter by threshold
-    const relevantResponses = successfulResponses.filter(r => r.relevance >= threshold);
-    console.log(`[Turbo] ${relevantResponses.length} responses above threshold ${threshold}`);
-
-    // PHASE 6: Master Agent aggregates results
-    const aggregationPrompt = `Jesteś Master Agent. Właśnie zapytałeś ${selectedAgents.length} Contact Agents.
-
-## ORYGINALNE PYTANIE
-"${query}"
-
-## OTRZYMANE ODPOWIEDZI (${relevantResponses.length} relevantnych z ${successfulResponses.length} total)
-
-${relevantResponses.map((r, i) => `
-### ${i+1}. ${r.contact_name}
-- Odpowiedź: ${r.answer}
-- Confidence: ${r.confidence}
-- Relevance: ${r.relevance}
-- Reasoning: ${r.reasoning}
-- Evidence: ${r.evidence?.join(', ') || 'Brak'}
-- Rekomendacja: ${r.recommendation || 'Brak'}
-`).join('\n')}
-
-## ZADANIE
-Przeanalizuj wszystkie odpowiedzi i przygotuj syntetyczną odpowiedź dla Directora.
-
-Zwróć JSON:
-\`\`\`json
-{
-  "summary": "Krótkie podsumowanie (2-3 zdania)",
-  "categories": [
-    {
-      "name": "Nazwa kategorii",
-      "count": 0,
-      "contacts": [
-        {
-          "contact_id": "uuid",
-          "name": "Imię Nazwisko",
-          "answer": "Krótka odpowiedź",
-          "confidence": 0.0
-        }
-      ]
-    }
-  ],
-  "top_recommendations": [
-    {
-      "contact_id": "uuid",
-      "contact_name": "Imię Nazwisko",
-      "score": 0.95,
-      "reason": "Dlaczego warto się skontaktować",
-      "suggested_action": "Konkretna akcja do podjęcia"
-    }
-  ],
-  "insights": [
-    "Obserwacja 1",
-    "Obserwacja 2"
-  ],
-  "next_steps": [
-    "Następny krok 1"
-  ]
-}
-\`\`\``;
-
-    console.log(`[Turbo] Calling AI for aggregation...`);
-
-    const aggregationResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aggResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: aggregationPrompt }]
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+      body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: aggregationPrompt }] })
     });
 
-    if (!aggregationResponse.ok) {
-      throw new Error(`AI aggregation failed: ${aggregationResponse.status}`);
-    }
-
-    const aggregationData = await aggregationResponse.json();
-    const aggregationText = aggregationData.choices?.[0]?.message?.content || '';
-
     let finalResult: any;
-    try {
-      const jsonMatch = aggregationText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        finalResult = JSON.parse(jsonMatch[1]);
-      } else {
-        finalResult = JSON.parse(aggregationText);
-      }
-    } catch (e) {
-      console.error('[Turbo] Failed to parse aggregation response:', aggregationText);
-      finalResult = {
-        summary: aggregationText.substring(0, 500),
-        categories: [],
-        top_recommendations: [],
-        insights: [],
-        next_steps: []
-      };
+    if (aggResp.ok) {
+      const aggData = await aggResp.json();
+      const aggText = aggData.choices?.[0]?.message?.content || '';
+      try {
+        const m = aggText.match(/```json\s*([\s\S]*?)\s*```/);
+        finalResult = m ? JSON.parse(m[1]) : JSON.parse(aggText);
+      } catch { finalResult = { summary: aggText.substring(0, 500), top_recommendations: [], insights: [] }; }
+    } else {
+      finalResult = { summary: 'Nie udało się zagregować', top_recommendations: [], insights: [] };
     }
 
-    const totalDuration = Date.now() - startTime;
+    const duration = Date.now() - startTime;
 
-    // PHASE 7: Save final results
-    await supabase
-      .from('turbo_agent_sessions')
-      .update({
-        status: 'completed',
-        master_response: finalResult.summary,
-        top_results: finalResult,
-        categories: finalResult.categories,
-        insights: finalResult.insights,
-        completed_at: new Date().toISOString(),
-        total_duration_ms: totalDuration
-      })
-      .eq('id', session.id);
-
-    console.log(`[Turbo] Session ${session.id} completed in ${totalDuration}ms`);
+    await supabase.from('turbo_agent_sessions').update({ status: 'completed', master_response: finalResult.summary, top_results: finalResult, total_processing_time_ms: duration, completed_at: new Date().toISOString() }).eq('id', session.id);
 
     return new Response(
-      JSON.stringify({
-        session_id: session.id,
-        duration_ms: totalDuration,
-        agents_available: validAgents.length,
-        agents_selected: selectedAgents.length,
-        agents_responded: successfulResponses.length,
-        relevant_responses: relevantResponses.length,
-        result: finalResult
-      }),
+      JSON.stringify({ success: true, session_id: session.id, agents_queried: selectedAgents.length, responses_received: responses.length, processing_time_ms: duration, ...finalResult }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error: unknown) {
-    console.error('[Turbo] Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+  } catch (error) {
+    console.error('Error:', error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
