@@ -208,13 +208,13 @@ serve(async (req) => {
         companyWebsiteContent = `### Strona główna (${companyWebsite})\n${mainPageContent.substring(0, 4000)}`;
       }
 
-      // Try subpages for more context
-      const subpages = ['/o-nas', '/about', '/oferta', '/uslugi', '/services', '/kontakt', '/contact'];
-      for (const subpage of subpages.slice(0, 3)) { // Limit to 3 subpages
+      // Try subpages for more context - especially for registry data and offer details
+      const subpages = ['/o-nas', '/about', '/oferta', '/uslugi', '/services', '/kontakt', '/contact', '/dane-firmy', '/regulamin', '/polityka-prywatnosci'];
+      for (const subpage of subpages.slice(0, 5)) { // Scrape up to 5 subpages for better data
         const subpageUrl = companyWebsite.replace(/\/$/, '') + subpage;
         const subpageContent = await scrapeWebsite(subpageUrl, FIRECRAWL_API_KEY);
         if (subpageContent && subpageContent.length > 200) {
-          companySubpagesContent += `\n\n### Podstrona ${subpage} (${subpageUrl})\n${subpageContent.substring(0, 2000)}`;
+          companySubpagesContent += `\n\n### Podstrona ${subpage} (${subpageUrl})\n${subpageContent.substring(0, 2500)}`;
         }
       }
     }
@@ -244,16 +244,32 @@ serve(async (req) => {
     }
 
     // ============= STEP 4: Build prompt with data hierarchy =============
-    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych. Wygeneruj profesjonalny profil na podstawie HIERARCHII ŹRÓDEŁ.
+    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych i wydobywania danych z polskich stron firmowych. Wygeneruj profesjonalny profil na podstawie HIERARCHII ŹRÓDEŁ.
 
 ## HIERARCHIA ŹRÓDEŁ (PRZESTRZEGAJ KOLEJNOŚCI!):
 
 ### PRIORYTET 1 - FAKTY ZE STRONY WWW FIRMY
 Jeśli dostępne są dane ze strony firmy, użyj ich PRZEDE WSZYSTKIM do opisania:
-- Czym zajmuje się firma
-- Jaką ofertę ma firma
+- Czym zajmuje się firma - SZCZEGÓŁOWO, nie ogólnikowo!
+- PEŁNĄ ofertę produktów/usług - KAŻDY produkt/usługę osobno
 - W jakiej branży działa
-- Jakie są specjalizacje
+- Specjalizacje i wyróżniki konkurencyjne
+- Dla kogo są te usługi (klienci docelowi)
+
+### 🔴 KRYTYCZNE - DANE REJESTROWE (SZUKAJ AKTYWNIE!)
+Przeszukaj CAŁĄ stronę www pod kątem:
+- **NIP** - szukaj w: stopka strony, /kontakt, /o-nas, regulamin, polityka prywatności (format: XXX-XXX-XX-XX lub 10 cyfr)
+- **REGON** - często obok NIP (9 lub 14 cyfr)
+- **KRS** - dla spółek kapitałowych (10 cyfr, format 0000XXXXXX)
+- **Adres siedziby** - ulica, numer, miasto, kod pocztowy
+- **Forma prawna** - sp. z o.o., S.A., JDG, spółka komandytowa itp.
+
+### 👥 ZARZĄD I WŁAŚCICIELE
+Szukaj informacji o:
+- Właścicielach firmy
+- Członkach zarządu (Prezes, Wiceprezes, Członek Zarządu)
+- Założycielach
+- Dyrektorach (Dyrektor Generalny, CFO, CTO itp.)
 
 ### PRIORYTET 2 - WYNIKI WYSZUKIWANIA O OSOBIE
 Na podstawie wyników wyszukiwania uzupełnij dane o stanowisku i karierze.
@@ -274,6 +290,7 @@ Notatki, potrzeby, oferty, konsultacje z CRM.
 2. Zawsze podawaj źródło: 📎 Źródło: [URL]
 3. Nigdy nie wymyślaj danych o firmie jeśli masz stronę www
 4. Najpierw FAKTY, potem wnioski
+5. **WYDOBYWAJ PEŁNĄ OFERTĘ** - nie pisz ogólnikowo "usługi transportowe", tylko konkretnie: "transport krajowy, spedycja międzynarodowa, magazynowanie, obsługa celna"
 
 ## STRUKTURA ODPOWIEDZI:
 
@@ -283,9 +300,21 @@ Notatki, potrzeby, oferty, konsultacje z CRM.
 ## 🏢 O firmie ${companyName}
 ${hasWebsiteData ? `
 ✅ **Branża:** [wyodrębnij ze strony www]
-✅ **Działalność:** [co firma robi - ze strony]
-✅ **Oferta:** [produkty/usługi - ze strony]
-✅ **Specjalizacje:** [jeśli widoczne]
+✅ **Działalność:** [co firma robi - SZCZEGÓŁOWO ze strony, minimum 2-3 zdania]
+✅ **Pełna oferta:** [WSZYSTKIE produkty/usługi ze strony - wypunktuj każdy osobno!]
+✅ **Specjalizacje:** [wyróżniki, unikalne kompetencje]
+✅ **Klienci docelowi:** [dla kogo są te usługi]
+
+### 📍 Dane rejestrowe (jeśli znalezione na stronie)
+✅ **NIP:** [10 cyfr - szukaj w stopce, /kontakt, /o-nas, regulaminie]
+✅ **REGON:** [9 lub 14 cyfr]
+✅ **KRS:** [10 cyfr - dla spółek]
+✅ **Adres:** [ulica, numer, kod pocztowy, miasto]
+✅ **Forma prawna:** [sp. z o.o., S.A., JDG itp.]
+
+### 👥 Zarząd i właściciele (jeśli znalezione)
+[Lista osób z funkcjami i źródłami]
+
 📎 Źródło: ${companyWebsite}
 ` : `
 📭 Brak danych - strona www niedostępna
@@ -310,7 +339,7 @@ ${hasWebsiteData ? `
 - Jeśli brak - napisz "📭 Brak znalezionych wzmianek w mediach"
 
 ## 🤝 Wartość dla sieci
-[Jak osoba może pomóc innym kontaktom]
+[Jak osoba może pomóc innym kontaktom - SZCZEGÓŁOWO na podstawie oferty firmy]
 
 ## 📋 Potrzeby biznesowe
 [Na podstawie danych z systemu lub wnioski]
@@ -321,7 +350,7 @@ ${hasWebsiteData ? `
 3. [Pytanie o sieć kontaktów]
 4. [Pytanie o zainteresowania/hobby - do budowania relacji]
 
-Maksymalnie 700 słów. ZAWSZE oznaczaj źródła.`;
+Maksymalnie 800 słów. ZAWSZE oznaczaj źródła.`;
 
     const userPrompt = `# DANE KONTAKTU
 **Imię i nazwisko:** ${contact.full_name}
@@ -380,23 +409,40 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
                 },
                 company_data: {
                   type: "object",
-                  description: "Strukturyzowane dane firmy do zapisania w bazie",
+                  description: "Strukturyzowane dane firmy do zapisania w bazie - UZUPEŁNIJ WSZYSTKIE ZNALEZIONE POLA! Szukaj NIP, REGON, KRS, adresu w stopce strony, /kontakt, /o-nas, regulaminie.",
                   properties: {
-                    name: { type: "string", description: "Pełna nazwa firmy (np. Sistrans Sp. z o.o.)" },
-                    industry: { type: "string", description: "Branża firmy (np. Transport, Spedycja, Logistyka)" },
-                    description: { type: "string", description: "Krótki opis firmy (max 500 znaków)" },
-                    what_company_does: { type: "string", description: "Główna działalność firmy" },
-                    what_company_offers: { type: "string", description: "Oferta produktów/usług" },
-                    specializations: { type: "array", items: { type: "string" }, description: "Lista specjalizacji" },
-                    nip: { type: "string", description: "NIP firmy (10 cyfr) jeśli znaleziony" },
-                    regon: { type: "string", description: "REGON firmy jeśli znaleziony" },
-                    krs: { type: "string", description: "KRS firmy jeśli znaleziony" },
-                    address: { type: "string", description: "Adres firmy (ulica, numer)" },
-                    city: { type: "string", description: "Miasto" },
-                    postal_code: { type: "string", description: "Kod pocztowy (np. 00-001)" },
+                    name: { type: "string", description: "Pełna nazwa prawna firmy (np. Adam Pawłowski EUPATENT lub Sistrans Sp. z o.o.)" },
+                    industry: { type: "string", description: "Branża firmy (np. Własność intelektualna, Patenty, Transport)" },
+                    description: { type: "string", description: "Opis firmy (max 500 znaków) - co robi i dla kogo" },
+                    what_company_does: { type: "string", description: "SZCZEGÓŁOWA działalność firmy - minimum 3 zdania! Co konkretnie robi firma?" },
+                    what_company_offers: { type: "string", description: "PEŁNA oferta produktów/usług - wymień WSZYSTKIE usługi ze strony, każdą osobno!" },
+                    what_company_seeks: { type: "string", description: "Czego firma szuka: klienci, partnerzy, pracownicy" },
+                    specializations: { type: "array", items: { type: "string" }, description: "Lista specjalizacji i wyróżników konkurencyjnych" },
+                    target_clients: { type: "string", description: "Klienci docelowi firmy - dla kogo są te usługi?" },
+                    services: { type: "array", items: { type: "string" }, description: "Lista usług - KAŻDA usługa osobno jako element tablicy!" },
+                    collaboration_areas: { type: "array", items: { type: "string" }, description: "Obszary możliwej współpracy biznesowej" },
+                    management: { 
+                      type: "array", 
+                      items: { 
+                        type: "object", 
+                        properties: {
+                          name: { type: "string", description: "Imię i nazwisko" },
+                          position: { type: "string", description: "Stanowisko (Prezes, Właściciel, Dyrektor)" },
+                          source: { type: "string", description: "Źródło informacji (URL)" }
+                        }
+                      }, 
+                      description: "Zarząd, właściciele, kluczowe osoby w firmie" 
+                    },
+                    company_type: { type: "string", description: "Forma prawna: sp. z o.o., S.A., JDG, spółka komandytowa itp." },
+                    nip: { type: "string", description: "NIP firmy (10 cyfr) - SZUKAJ W STOPCE, /KONTAKT, /O-NAS, REGULAMINIE! Format: XXXXXXXXXX" },
+                    regon: { type: "string", description: "REGON firmy (9 lub 14 cyfr) - często obok NIP" },
+                    krs: { type: "string", description: "KRS firmy (10 cyfr, format 0000XXXXXX) - tylko dla spółek" },
+                    address: { type: "string", description: "Adres siedziby (ulica i numer) - szukaj w stopce i /kontakt" },
+                    city: { type: "string", description: "Miasto siedziby" },
+                    postal_code: { type: "string", description: "Kod pocztowy (format XX-XXX)" },
                     website: { type: "string", description: "Strona www firmy" }
                   },
-                  required: ["name", "industry", "description"]
+                  required: ["name", "industry", "description", "what_company_does", "what_company_offers"]
                 }
               },
               required: ["person_profile", "company_data"]
@@ -455,9 +501,15 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
         regon: companyData.regon?.replace(/\D/g, '') || null,
         krs: companyData.krs?.replace(/\D/g, '') || null,
         ai_analysis: JSON.stringify({
-          what_company_does: companyData.what_company_does,
-          what_company_offers: companyData.what_company_offers,
-          specializations: companyData.specializations,
+          what_company_does: companyData.what_company_does || null,
+          what_company_offers: companyData.what_company_offers || null,
+          what_company_seeks: companyData.what_company_seeks || null,
+          specializations: companyData.specializations || [],
+          target_clients: companyData.target_clients || null,
+          services: companyData.services || [],
+          collaboration_areas: companyData.collaboration_areas || [],
+          management: companyData.management || [],
+          company_type: companyData.company_type || null,
           analyzed_at: new Date().toISOString(),
           source: companyWebsite
         })
@@ -493,9 +545,15 @@ PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIA
       
       // Always update AI analysis with latest data
       companyUpdate.ai_analysis = JSON.stringify({
-        what_company_does: companyData.what_company_does,
-        what_company_offers: companyData.what_company_offers,
-        specializations: companyData.specializations,
+        what_company_does: companyData.what_company_does || null,
+        what_company_offers: companyData.what_company_offers || null,
+        what_company_seeks: companyData.what_company_seeks || null,
+        specializations: companyData.specializations || [],
+        target_clients: companyData.target_clients || null,
+        services: companyData.services || [],
+        collaboration_areas: companyData.collaboration_areas || [],
+        management: companyData.management || [],
+        company_type: companyData.company_type || null,
         analyzed_at: new Date().toISOString(),
         source: companyWebsite
       });
