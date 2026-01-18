@@ -200,7 +200,11 @@ export function useBusinessCardOCR() {
           profile_summary: input.contact.profile_summary || null,
           company: input.company?.name || null,
           company_id: companyId,
-          tenant_id: director.tenant_id
+          tenant_id: director.tenant_id,
+          primary_group_id: input.contact.primary_group_id || null,
+          met_source: input.contact.met_source || null,
+          met_date: input.contact.met_date || null,
+          tags: input.contact.tags || null,
         })
         .select()
         .single();
