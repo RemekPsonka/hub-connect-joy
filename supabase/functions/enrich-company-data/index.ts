@@ -188,6 +188,13 @@ serve(async (req) => {
     // Step 3: Analyze with AI (with or without Firecrawl results)
     const hasSearchResults = searchResults.length > 0;
     
+    // NIP validation helper
+    const isValidNIP = (nip: string | null): boolean => {
+      if (!nip) return false;
+      const cleaned = nip.replace(/[^0-9]/g, '');
+      return cleaned.length === 10;
+    };
+
     const systemPrompt = hasSearchResults
       ? `Jesteś ekspertem w analizie firm polskich.
 
@@ -198,6 +205,7 @@ ZASADY:
 - Podawaj TYLKO informacje znalezione w źródłach
 - Każda informacja musi być potwierdzona źródłem
 - Jeśli coś NIE wynika ze źródeł - nie wymyślaj, wpisz null
+- NIP/REGON/KRS podawaj TYLKO jeśli wyraźnie znalazłeś w źródle (stopka, kontakt, o firmie)
 
 Zwróć JSON:
 {
@@ -207,6 +215,12 @@ Zwróć JSON:
   "services": "✅ Usługi/produkty (ze źródeł)",
   "collaboration_areas": "✅ Obszary współpracy (ze źródeł)",
   "employee_count_estimate": "Szacunek lub null",
+  "nip": "✅ NIP jeśli znaleziono w źródłach (10 cyfr) lub null",
+  "regon": "✅ REGON jeśli znaleziono w źródłach lub null",
+  "krs": "✅ KRS jeśli znaleziono w źródłach lub null",
+  "address": "✅ Adres siedziby jeśli znaleziono lub null",
+  "city": "✅ Miasto siedziby jeśli znaleziono lub null",
+  "postal_code": "✅ Kod pocztowy jeśli znaleziono lub null",
   "confidence": "high" lub "medium",
   "suggested_website": "URL strony jeśli znaleziono",
   "sources": ["lista URL źródeł"],
@@ -230,6 +244,12 @@ Zwróć JSON:
   "services": "💡 SUGESTIA: Prawdopodobne usługi",
   "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
   "employee_count_estimate": null,
+  "nip": null,
+  "regon": null,
+  "krs": null,
+  "address": null,
+  "city": null,
+  "postal_code": null,
   "confidence": "low",
   "suggested_website": null,
   "sources": [],
@@ -248,7 +268,7 @@ ${searchResults.map((r, i) => `
 [Źródło ${i + 1}] ${r.url}
 Tytuł: ${r.title}
 ${r.description ? `Opis: ${r.description}` : ''}
-${r.markdown ? `Treść: ${r.markdown.substring(0, 1500)}` : ''}
+${r.markdown ? `Treść: ${r.markdown.substring(0, 2000)}` : ''}
 ---`).join('\n')}`
       : `Zasugeruj profil firmy (tylko sugestie!):
 
@@ -270,7 +290,7 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 1500,
+        max_tokens: 2000,
         temperature: 0.3,
       }),
     });
@@ -314,13 +334,26 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
       const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       enrichedData = JSON.parse(cleanedContent);
       
-      // Always null out registration data - only real verification should provide these
-      enrichedData.nip = null;
-      enrichedData.regon = null;
-      enrichedData.krs = null;
-      enrichedData.address = null;
-      enrichedData.postal_code = null;
-      enrichedData.city = null;
+      // Validate and clean NIP format (should be 10 digits)
+      if (enrichedData.nip) {
+        const cleanedNip = enrichedData.nip.replace(/[^0-9]/g, '');
+        enrichedData.nip = isValidNIP(cleanedNip) ? cleanedNip : null;
+      }
+      
+      // Clean REGON (9 or 14 digits)
+      if (enrichedData.regon) {
+        const cleanedRegon = enrichedData.regon.replace(/[^0-9]/g, '');
+        enrichedData.regon = (cleanedRegon.length === 9 || cleanedRegon.length === 14) ? cleanedRegon : null;
+      }
+      
+      // Clean KRS (10 digits)
+      if (enrichedData.krs) {
+        const cleanedKrs = enrichedData.krs.replace(/[^0-9]/g, '');
+        enrichedData.krs = cleanedKrs.length === 10 ? cleanedKrs : null;
+      }
+      
+      // Add search info
+      enrichedData.search_performed = searchPerformed;
       
       // Add search info
       enrichedData.search_performed = searchPerformed;
