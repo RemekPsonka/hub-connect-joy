@@ -59,7 +59,8 @@ serve(async (req) => {
     
     // Fields that should only be filled if empty (not overwritten)
     // IMPORTANT: phone (private) is NOT in this list - we never overwrite it
-    const simpleFields = ['email', 'company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id', 'company_id'];
+    // IMPORTANT: company_id is handled separately (we may create a company)
+    const simpleFields = ['email', 'company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id'];
 
     for (const field of simpleFields) {
       if (!existingContact[field] && newContactData[field]) {
@@ -81,6 +82,74 @@ serve(async (req) => {
     if (newContactData.phone_business && !existingContact.phone_business) {
       mergedData.phone_business = newContactData.phone_business;
     }
+
+    // ============= COMPANY HANDLING =============
+    // If contact has no company_id but has company name (from merge or existing), create/find company
+    let companyCreated = false;
+    let companyId = existingContact.company_id || newContactData.company_id;
+    const companyName = newContactData.company || existingContact.company;
+    
+    if (!companyId && companyName) {
+      console.log(`Contact has no company_id but has company name: ${companyName}. Searching/creating company...`);
+      
+      // Try to find existing company by name
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .ilike('name', companyName)
+        .maybeSingle();
+      
+      if (existingCompany) {
+        console.log(`Found existing company: ${existingCompany.name} (${existingCompany.id})`);
+        companyId = existingCompany.id;
+      } else {
+        // Create new company with basic data from business card
+        console.log(`Company not found, creating new company: ${companyName}`);
+        
+        // Extract data for company
+        const companyCity = newContactData.city || existingContact.city || null;
+        const email = newContactData.email || existingContact.email;
+        let companyWebsite = null;
+        
+        // Try to extract website from email domain
+        if (email) {
+          const parts = email.split('@');
+          if (parts.length === 2) {
+            const domain = parts[1].toLowerCase();
+            const publicDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'wp.pl', 'onet.pl', 'o2.pl', 'interia.pl', 'hotmail.com', 'icloud.com', 'live.com', 'me.com', 'protonmail.com', 'tutanota.com'];
+            if (!publicDomains.includes(domain)) {
+              companyWebsite = `https://${domain}`;
+            }
+          }
+        }
+        
+        const { data: newCompany, error: companyError } = await supabase
+          .from('companies')
+          .insert({
+            tenant_id: tenantId,
+            name: companyName,
+            city: companyCity,
+            website: companyWebsite,
+          })
+          .select('id')
+          .single();
+        
+        if (companyError) {
+          console.error('Failed to create company:', companyError);
+        } else if (newCompany) {
+          companyId = newCompany.id;
+          companyCreated = true;
+          console.log(`Created new company with ID: ${companyId}`);
+        }
+      }
+      
+      // Update contact with company_id
+      if (companyId) {
+        mergedData.company_id = companyId;
+      }
+    }
+    // ============= END COMPANY HANDLING =============
 
     // Merge tags
     const existingTags = new Set(existingContact.tags || []);
@@ -119,15 +188,29 @@ serve(async (req) => {
         tenant_id: tenantId,
         contact_id: existingContactId,
         activity_type: 'merged',
-        description: 'Kontakt został scalony z innymi danymi',
-        metadata: { fields_updated: Object.keys(mergedData), source: 'manual' }
+        description: companyCreated 
+          ? `Kontakt scalony z danymi wizytówki. Utworzono firmę: ${companyName}`
+          : 'Kontakt został scalony z innymi danymi',
+        metadata: { 
+          fields_updated: Object.keys(mergedData), 
+          source: 'manual',
+          company_created: companyCreated,
+          company_id: companyId
+        }
       });
     }
 
     const { data: updatedContact } = await supabase.from('contacts').select('*').eq('id', existingContactId).single();
 
     return new Response(
-      JSON.stringify({ success: true, contact: updatedContact, merged: true, fieldsUpdated: Object.keys(mergedData) }),
+      JSON.stringify({ 
+        success: true, 
+        contact: updatedContact, 
+        merged: true, 
+        fieldsUpdated: Object.keys(mergedData),
+        companyCreated,
+        companyId
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
