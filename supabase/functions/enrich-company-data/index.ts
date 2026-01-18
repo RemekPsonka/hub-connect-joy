@@ -586,8 +586,55 @@ ${jsonStructure}
     // Parse the JSON response
     let enrichedData;
     try {
-      const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      enrichedData = JSON.parse(cleanedContent);
+      // Remove markdown code blocks more aggressively
+      let cleanedContent = content;
+      
+      // Handle various markdown formats: ```json, ```, with or without newlines
+      cleanedContent = cleanedContent.replace(/^```(?:json)?\s*/i, '');
+      cleanedContent = cleanedContent.replace(/\s*```\s*$/i, '');
+      cleanedContent = cleanedContent.trim();
+      
+      // If content still has code blocks somewhere in middle, extract JSON
+      const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedContent = jsonMatch[0];
+      }
+      
+      // Try to parse - if JSON is truncated, try to fix it
+      try {
+        enrichedData = JSON.parse(cleanedContent);
+      } catch (initialParseError) {
+        console.warn('Initial parse failed, attempting to fix truncated JSON');
+        
+        // Count brackets to see if JSON is incomplete
+        const openBraces = (cleanedContent.match(/\{/g) || []).length;
+        const closeBraces = (cleanedContent.match(/\}/g) || []).length;
+        const openBrackets = (cleanedContent.match(/\[/g) || []).length;
+        const closeBrackets = (cleanedContent.match(/\]/g) || []).length;
+        
+        // Add missing closing brackets
+        let fixedContent = cleanedContent;
+        
+        // Try to close incomplete strings
+        if (fixedContent.match(/"[^"]*$/)) {
+          fixedContent = fixedContent + '"';
+        }
+        
+        // Close arrays
+        for (let i = 0; i < openBrackets - closeBrackets; i++) {
+          // Find last open array and close it
+          fixedContent = fixedContent.replace(/,\s*$/, '') + ']';
+        }
+        
+        // Close objects
+        for (let i = 0; i < openBraces - closeBraces; i++) {
+          fixedContent = fixedContent.replace(/,\s*$/, '') + '}';
+        }
+        
+        console.log('Attempting to parse fixed content...');
+        enrichedData = JSON.parse(fixedContent);
+        console.log('Fixed JSON parse successful');
+      }
       
       // Validate and clean NIP format (should be 10 digits)
       if (enrichedData.nip) {
@@ -617,9 +664,11 @@ ${jsonStructure}
       };
       
     } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
+      console.error('Failed to parse AI response after all attempts:', parseError);
+      console.error('Content length:', content?.length);
+      console.error('Content preview:', content?.substring(0, 500));
       return new Response(
-        JSON.stringify({ error: 'Nie udało się przetworzyć danych firmy', raw: content }),
+        JSON.stringify({ error: 'Nie udało się przetworzyć danych firmy - odpowiedź AI jest niepełna lub uszkodzona' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
