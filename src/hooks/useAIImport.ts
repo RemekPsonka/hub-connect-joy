@@ -922,8 +922,67 @@ export function useAIImport(): UseAIImportReturn {
             tags.push(contact.met_source);
           }
 
-          // TODO: Create company if company data is present
-          // For now, just create contact with company name
+          // Create or get company if company data is present
+          let companyId: string | null = null;
+
+          if (contact.company) {
+            // Check if company already exists
+            const { data: existingCompany } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('tenant_id', tenantId)
+              .eq('name', contact.company)
+              .maybeSingle();
+
+            if (existingCompany) {
+              companyId = existingCompany.id;
+              
+              // Update with AI data if available
+              if (contact.company_nip || contact.company_industry || contact.company_description || 
+                  contact.company_logo_url || contact.company_website) {
+                await supabase
+                  .from('companies')
+                  .update({
+                    ...(contact.company_nip && { nip: contact.company_nip }),
+                    ...(contact.company_industry && { industry: contact.company_industry }),
+                    ...(contact.company_description && { description: contact.company_description }),
+                    ...(contact.company_logo_url && { logo_url: contact.company_logo_url }),
+                    ...(contact.company_website && { website: contact.company_website }),
+                    ...(contact.company_address && { address: contact.company_address }),
+                    ...(contact.company_city && { city: contact.company_city }),
+                    ...(contact.company_postal_code && { postal_code: contact.company_postal_code }),
+                    ...(contact.company_regon && { regon: contact.company_regon }),
+                    ...(contact.company_krs && { krs: contact.company_krs }),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', companyId);
+              }
+            } else {
+              // Create new company with AI data
+              const { data: newCompany, error: companyError } = await supabase
+                .from('companies')
+                .insert({
+                  name: contact.company,
+                  tenant_id: tenantId,
+                  nip: contact.company_nip || null,
+                  industry: contact.company_industry || null,
+                  description: contact.company_description || null,
+                  logo_url: contact.company_logo_url || null,
+                  website: contact.company_website || null,
+                  address: contact.company_address || null,
+                  city: contact.company_city || null,
+                  postal_code: contact.company_postal_code || null,
+                  regon: contact.company_regon || null,
+                  krs: contact.company_krs || null,
+                })
+                .select('id')
+                .single();
+
+              if (!companyError && newCompany) {
+                companyId = newCompany.id;
+              }
+            }
+          }
 
           await createContact.mutateAsync({
             full_name: fullName,
@@ -932,6 +991,7 @@ export function useAIImport(): UseAIImportReturn {
             email: contact.email,
             phone: contact.phone,
             company: contact.company,
+            company_id: companyId,
             position: contact.position,
             city: contact.city,
             notes: contact.comment || contact.notes,
