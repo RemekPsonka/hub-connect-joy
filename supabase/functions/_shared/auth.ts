@@ -1,4 +1,4 @@
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient, createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export interface AuthResult {
   user: { id: string; email?: string };
@@ -27,15 +27,26 @@ export async function verifyAuth(
     return { error: "Missing authorization header", status: 401 };
   }
 
-  // 2. Verify the token
+  // 2. Verify the token using getClaims (more reliable than getUser)
   const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  
+  // Create a client with the user's token to validate it
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } }
+  });
+  
+  const { data: claimsData, error: claimsError } = await userClient.auth.getUser();
 
-  if (authError || !user) {
+  if (claimsError || !claimsData?.user) {
+    console.error('Auth error:', claimsError?.message || 'No user found');
     return { error: "Invalid or expired token", status: 401 };
   }
 
-  // 3. Get tenant_id from directors table
+  const user = claimsData.user;
+
+  // 3. Get tenant_id from directors table (using service role client for DB access)
   const { data: director } = await supabase
     .from("directors")
     .select("id, tenant_id")
