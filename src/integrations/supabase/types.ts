@@ -262,6 +262,7 @@ export type Database = {
           logo_url: string | null
           name: string
           nip: string | null
+          phone: string | null
           postal_code: string | null
           regon: string | null
           tenant_id: string
@@ -282,6 +283,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           nip?: string | null
+          phone?: string | null
           postal_code?: string | null
           regon?: string | null
           tenant_id: string
@@ -302,6 +304,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           nip?: string | null
+          phone?: string | null
           postal_code?: string | null
           regon?: string | null
           tenant_id?: string
@@ -1085,6 +1088,7 @@ export type Database = {
           met_source: string | null
           notes: string | null
           phone: string | null
+          phone_business: string | null
           position: string | null
           primary_group_id: string | null
           profile_embedding: string | null
@@ -1116,6 +1120,7 @@ export type Database = {
           met_source?: string | null
           notes?: string | null
           phone?: string | null
+          phone_business?: string | null
           position?: string | null
           primary_group_id?: string | null
           profile_embedding?: string | null
@@ -1147,6 +1152,7 @@ export type Database = {
           met_source?: string | null
           notes?: string | null
           phone?: string | null
+          phone_business?: string | null
           position?: string | null
           primary_group_id?: string | null
           profile_embedding?: string | null
@@ -2506,21 +2512,15 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: {
-          contact_city: string
           contact_company: string
           contact_email: string
           contact_first_name: string
           contact_full_name: string
           contact_id: string
           contact_last_name: string
-          contact_linkedin_url: string
-          contact_notes: string
           contact_phone: string
+          contact_phone_business: string
           contact_position: string
-          contact_primary_group_id: string
-          contact_profile_summary: string
-          contact_source: string
-          contact_tags: string[]
         }[]
       }
       find_mutual_connections: {
