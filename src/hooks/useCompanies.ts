@@ -6,6 +6,27 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export type Company = Tables<'companies'>;
 
+// Hook to get list of companies for filtering
+export function useCompaniesList() {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['companies_list', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .order('name');
+      if (error) throw error;
+      return data as { id: string; name: string }[];
+    },
+    enabled: !!tenantId,
+  });
+}
+
 export interface CompanyContact {
   id: string;
   full_name: string;

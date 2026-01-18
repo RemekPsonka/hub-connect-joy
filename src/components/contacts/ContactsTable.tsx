@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpDown, Trash2, FolderOpen, Users } from 'lucide-react';
+import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2 } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -40,9 +41,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { GroupBadge } from './GroupBadge';
 import { RelationshipStrengthBar } from './RelationshipStrengthBar';
-import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, type ContactWithGroup } from '@/hooks/useContacts';
-import { formatDistanceToNow } from 'date-fns';
-import { pl } from 'date-fns/locale';
+import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, useGenerateContactProfile, type ContactWithGroup } from '@/hooks/useContacts';
 
 interface ContactsTableProps {
   contacts: ContactWithGroup[];
@@ -52,6 +51,7 @@ interface ContactsTableProps {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
   onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   onSortChange: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
   isLoading: boolean;
 }
@@ -64,14 +64,17 @@ export function ContactsTable({
   sortBy,
   sortOrder,
   onPageChange,
+  onPageSizeChange,
   onSortChange,
   isLoading,
 }: ContactsTableProps) {
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
   const { data: groups = [] } = useContactGroups();
   const bulkUpdate = useBulkUpdateContacts();
   const bulkDelete = useBulkDeleteContacts();
+  const generateProfile = useGenerateContactProfile();
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -121,9 +124,51 @@ export function ContactsTable({
     setSelectedIds([]);
   };
 
-  const formatLastContact = (date: string | null) => {
-    if (!date) return 'Brak';
-    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: pl });
+  const handleGenerateProfile = async (e: React.MouseEvent, contactId: string) => {
+    e.stopPropagation();
+    setGeneratingId(contactId);
+    try {
+      await generateProfile.mutateAsync(contactId);
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  // Windowed pagination logic
+  const getPageNumbers = (): (number | 'ellipsis')[] => {
+    const pages: (number | 'ellipsis')[] = [];
+    const delta = 2;
+
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    // Always show first page
+    pages.push(1);
+
+    // Ellipsis after first page if needed
+    if (page > 3 + delta) {
+      pages.push('ellipsis');
+    }
+
+    // Pages around current
+    const start = Math.max(2, page - delta);
+    const end = Math.min(totalPages - 1, page + delta);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    // Ellipsis before last page if needed
+    if (page < totalPages - 2 - delta) {
+      pages.push('ellipsis');
+    }
+
+    // Always show last page
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+
+    return pages;
   };
 
   if (!isLoading && contacts.length === 0) {
@@ -203,20 +248,22 @@ export function ContactsTable({
                   <ArrowUpDown className="h-4 w-4" />
                 </Button>
               </TableHead>
-              <TableHead>Firma</TableHead>
-              <TableHead>Stanowisko</TableHead>
-              <TableHead>Grupa</TableHead>
               <TableHead>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="gap-1 -ml-3"
-                  onClick={() => handleSort('last_contact_date')}
+                  onClick={() => handleSort('company')}
                 >
-                  Ostatni kontakt
+                  Firma
                   <ArrowUpDown className="h-4 w-4" />
                 </Button>
               </TableHead>
+              <TableHead>Stanowisko</TableHead>
+              <TableHead>Telefon prywatny</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Grupa</TableHead>
+              <TableHead className="w-[140px]">Profil AI</TableHead>
               <TableHead className="w-[120px]">Siła relacji</TableHead>
             </TableRow>
           </TableHeader>
@@ -246,10 +293,49 @@ export function ContactsTable({
                 <TableCell className="text-muted-foreground">{contact.company || '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{contact.position || '-'}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
+                  {contact.phone ? (
+                    <a
+                      href={`tel:${contact.phone}`}
+                      className="text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Phone className="h-3 w-3" />
+                      {contact.phone}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  {contact.email ? (
+                    <a
+                      href={`mailto:${contact.email}`}
+                      className="text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Mail className="h-3 w-3" />
+                      {contact.email}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <GroupBadge group={contact.contact_groups} />
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatLastContact(contact.last_contact_date)}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={generatingId === contact.id}
+                    onClick={(e) => handleGenerateProfile(e, contact.id)}
+                    className="gap-1"
+                  >
+                    {generatingId === contact.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    Generuj AI
+                  </Button>
                 </TableCell>
                 <TableCell>
                   <RelationshipStrengthBar value={contact.relationship_strength || 5} />
@@ -261,38 +347,61 @@ export function ContactsTable({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => page > 1 && onPageChange(page - 1)}
-                className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const pageNum = i + 1;
-              return (
-                <PaginationItem key={pageNum}>
-                  <PaginationLink
-                    onClick={() => onPageChange(pageNum)}
-                    isActive={page === pageNum}
-                    className="cursor-pointer"
-                  >
-                    {pageNum}
-                  </PaginationLink>
-                </PaginationItem>
-              );
-            })}
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => page < totalPages && onPageChange(page + 1)}
-                className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Na stronie:</span>
+          <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+            <SelectTrigger className="w-[80px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-muted-foreground ml-4">
+            Łącznie: {totalCount} kontaktów
+          </span>
+        </div>
+
+        {totalPages > 1 && (
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => page > 1 && onPageChange(page - 1)}
+                  className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              {getPageNumbers().map((pageNum, index) =>
+                pageNum === 'ellipsis' ? (
+                  <PaginationItem key={`ellipsis-${index}`}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={pageNum}>
+                    <PaginationLink
+                      onClick={() => onPageChange(pageNum)}
+                      isActive={page === pageNum}
+                      className="cursor-pointer"
+                    >
+                      {pageNum}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => page < totalPages && onPageChange(page + 1)}
+                  className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        )}
+      </div>
     </div>
   );
 }
