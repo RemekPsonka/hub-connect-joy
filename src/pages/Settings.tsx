@@ -31,7 +31,7 @@ interface MissingEmbeddings {
 }
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, isAssistant } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState<EmbeddingStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
@@ -44,6 +44,21 @@ export default function Settings() {
   const { data: groups = [] } = useContactGroups();
   const { data: biStats } = useBIStatistics(tenantId || undefined);
   const { data: contactsWithoutBI = [] } = useContactsWithoutBI(tenantId || undefined);
+
+  // For assistants, show only password change form
+  if (isAssistant) {
+    // Lazy import to avoid circular deps
+    const PasswordChangeForm = require('@/components/settings/PasswordChangeForm').PasswordChangeForm;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Ustawienia</h1>
+          <p className="text-muted-foreground">Zarządzaj ustawieniami konta</p>
+        </div>
+        <PasswordChangeForm />
+      </div>
+    );
+  }
 
   // Fetch tenant ID
   useEffect(() => {

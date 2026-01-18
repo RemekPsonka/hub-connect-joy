@@ -268,6 +268,9 @@ export default function Owner() {
         </CardContent>
       </Card>
 
+      {/* Assistants Section */}
+      <AssistantsList />
+
       {/* Add User Modal */}
       <AddUserModal 
         isOpen={isAddUserOpen} 

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -60,29 +61,34 @@ const App = () => (
             
             {/* Protected routes */}
             <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/contacts/:id" element={<ContactDetail />} />
-              <Route path="/consultations" element={<Consultations />} />
-              <Route path="/consultations/:id" element={<ConsultationDetail />} />
-              <Route path="/meetings" element={<Meetings />} />
-              <Route path="/meetings/:id" element={<MeetingDetail />} />
-              <Route path="/matches" element={<Matches />} />
+              {/* Director-only routes */}
+              <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
+              <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
+              <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
+              <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
+              <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
+              <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
               <Route 
                 path="/network" 
                 element={
-                  <Suspense fallback={<NetworkFallback />}>
-                    <Network />
-                  </Suspense>
+                  <DirectorGuard>
+                    <Suspense fallback={<NetworkFallback />}>
+                      <Network />
+                    </Suspense>
+                  </DirectorGuard>
                 } 
               />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/ai" element={<AIChat />} />
+              <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
+              <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
+              <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
+              <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
+              <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
+              <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
+              
+              {/* Routes accessible by both directors and assistants */}
+              <Route path="/contacts" element={<Contacts />} />
+              <Route path="/contacts/:id" element={<ContactDetail />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/owner" element={<Owner />} />
             </Route>
             
             {/* Catch-all */}
