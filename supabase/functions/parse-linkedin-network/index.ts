@@ -86,7 +86,19 @@ ZADANIA:
    - summary: krótkie podsumowanie profilu
    - about: sekcja "O mnie" jeśli jest
 
-2. Jeśli widzisz listę kontaktów/połączeń/znajomych - wyodrębnij każdą osobę:
+2. Jeśli widzisz listę kontaktów/połączeń/znajomych - wyodrębnij TYLKO osoby z 1. stopnia znajomości:
+   
+   DODAJ tylko osoby oznaczone jako "1st" (first-degree connections / bezpośredni znajomi)
+   
+   IGNORUJ I NIE DODAWAJ:
+   - Osoby z "2nd" (znajomi znajomych)
+   - Osoby z "3rd" (dalsze połączenia)
+   - Sekcje "People you may know" / "Osoby, które możesz znać"
+   - Sekcje "People also viewed" / "Inni użytkownicy oglądali"
+   - Sugestie, reklamy i sponsorowane treści
+   - Osoby bez wyraźnego oznaczenia "1st" - jeśli stopień znajomości nie jest określony, NIE DODAWAJ
+   
+   Dla każdej osoby z 1. stopnia znajomości wyodrębnij:
    - full_name: imię i nazwisko
    - company: obecna firma (bez "Sp. z o.o.", "S.A." itp.)
    - position: obecne stanowisko
@@ -98,6 +110,7 @@ WAŻNE:
 - Stanowiska i nazwy pozostaw w oryginalnym języku
 - Jeśli nie możesz określić jakiejś wartości, ustaw null
 - Nie wymyślaj danych - tylko to co widzisz we wklejonym tekście
+- KRYTYCZNE: Dodawaj TYLKO pewne kontakty pierwszego stopnia (1st degree)
 
 ZWRÓĆ JSON w formacie:
 {
@@ -113,7 +126,7 @@ ZWRÓĆ JSON w formacie:
   ]
 }
 
-Jeśli brak danych dla sekcji, zwróć pustą tablicę [] lub null.`;
+Jeśli brak danych dla sekcji lub brak kontaktów 1. stopnia, zwróć pustą tablicę [] lub null.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
