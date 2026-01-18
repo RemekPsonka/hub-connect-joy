@@ -888,21 +888,22 @@ export function useAIImport(): UseAIImportReturn {
                 tags.push(contact.met_source);
               }
 
-              await mergeContacts(contact.duplicate_contact_id, {
-                full_name: fullName || undefined,
-                first_name: contact.first_name,
-                last_name: contact.last_name,
-                email: contact.email,
-                phone: contact.phone,
-                company: contact.company,
-                position: contact.position,
-                city: contact.city,
-                notes: contact.comment || contact.notes,
-                tags: tags.length > 0 ? tags : undefined,
-                primary_group_id: contact.group_id || undefined,
-                met_source: contact.met_source || undefined,
-                met_date: contact.met_date || undefined,
-              });
+          await mergeContacts(contact.duplicate_contact_id, {
+            full_name: fullName || undefined,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            email: contact.email,
+            phone: contact.phone,
+            company: contact.company,
+            position: contact.position,
+            city: contact.city,
+            notes: contact.comment || contact.notes,
+            tags: tags.length > 0 ? tags : undefined,
+            primary_group_id: contact.group_id || undefined,
+            met_source: contact.met_source || undefined,
+            met_date: contact.met_date || undefined,
+            profile_summary: contact.ai_person_info || undefined,
+          });
               result.merged++;
               continue;
             }
@@ -934,6 +935,7 @@ export function useAIImport(): UseAIImportReturn {
             met_source: contact.met_source || null,
             met_date: contact.met_date || null,
             linkedin_url: contact.linkedin_url || null,
+            profile_summary: contact.ai_person_info || null,
           });
           result.created++;
         } catch (err) {

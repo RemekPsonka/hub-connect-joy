@@ -228,8 +228,8 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Regeneruj AI
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Wygeneruj rozbudowany profil AI
                     </>
                   )}
                 </Button>
