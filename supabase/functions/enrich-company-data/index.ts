@@ -24,7 +24,7 @@ function getClearbitLogoUrl(domain: string | null): string | null {
   return `https://logo.clearbit.com/${domain}`;
 }
 
-// Check if logo URL is valid (Clearbit returns 200 for existing logos)
+// Check if logo URL is valid
 async function isLogoValid(logoUrl: string): Promise<boolean> {
   try {
     const response = await fetch(logoUrl, { method: 'HEAD' });
@@ -34,11 +34,45 @@ async function isLogoValid(logoUrl: string): Promise<boolean> {
   }
 }
 
-interface FirecrawlSearchResult {
-  url: string;
-  title: string;
-  description?: string;
-  markdown?: string;
+// NIP validation helper
+function isValidNIP(nip: string | null): boolean {
+  if (!nip) return false;
+  const cleaned = nip.replace(/[^0-9]/g, '');
+  return cleaned.length === 10;
+}
+
+// Helper to scrape a single page with Firecrawl
+async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<{ url: string; content: string | null; title: string }> {
+  try {
+    console.log(`Scraping page: ${url}`);
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+        waitFor: 2000
+      }),
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        url,
+        content: data.data?.markdown || null,
+        title: data.data?.metadata?.title || url
+      };
+    }
+    console.warn(`Scrape failed for ${url}: ${response.status}`);
+    return { url, content: null, title: url };
+  } catch (e) {
+    console.warn(`Scrape error for ${url}:`, e);
+    return { url, content: null, title: url };
+  }
 }
 
 serve(async (req) => {
@@ -69,6 +103,7 @@ serve(async (req) => {
     }
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+    const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
@@ -79,7 +114,11 @@ serve(async (req) => {
       );
     }
 
-    console.log('Enriching company data for:', company_name);
+    console.log('=== ENRICHING COMPANY DATA ===');
+    console.log('Company:', company_name);
+    console.log('Website:', website);
+    console.log('Perplexity available:', !!PERPLEXITY_API_KEY);
+    console.log('Firecrawl available:', !!FIRECRAWL_API_KEY);
 
     // Step 1: Try to get logo from website domain
     let logo_url: string | null = null;
@@ -96,62 +135,150 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Scrape company website directly (if available) + search for additional info
-    let searchResults: FirecrawlSearchResult[] = [];
-    let websiteContent: string | null = null;
-    let searchPerformed = false;
+    // ==========================================
+    // PHASE 1: PERPLEXITY DEEP RESEARCH
+    // ==========================================
+    let perplexityInsights: string | null = null;
+    let perplexityCitations: string[] = [];
     
-    if (FIRECRAWL_API_KEY) {
-      // 2a. First: Scrape the company website directly (most reliable source!)
-      if (website || domain) {
-        const urlToScrape = website?.startsWith('http') ? website : `https://${website || domain}`;
-        console.log('Scraping company website directly:', urlToScrape);
+    if (PERPLEXITY_API_KEY) {
+      console.log('=== PHASE 1: PERPLEXITY DEEP RESEARCH ===');
+      
+      const perplexityQuery = `"${company_name}" firma Polska:
+- profil działalności firmy i historia
+- właściciele, zarząd, kluczowe osoby decyzyjne
+- ostatnie inwestycje, projekty, realizacje
+- opinie klientów i partnerów biznesowych
+- pozycja rynkowa, główni konkurenci
+- rekrutacja, otwarte stanowiska, kultura organizacyjna
+- dane rejestrowe: NIP, REGON, KRS, adres
+- branża, produkty, usługi, specjalizacja
+- plany rozwoju, ekspansji, strategia`;
+
+      try {
+        const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { 
+                role: 'system', 
+                content: 'Jesteś ekspertem w analizie polskich firm. Dostarczaj szczegółowe, dokładne informacje z podaniem źródeł. Skup się na: działalności operacyjnej, zarządzie, produktach/usługach, pozycji rynkowej, aktualnych news.'
+              },
+              { role: 'user', content: perplexityQuery }
+            ],
+            search_recency_filter: 'year',
+          }),
+        });
+
+        if (perplexityResponse.ok) {
+          const perplexityData = await perplexityResponse.json();
+          perplexityInsights = perplexityData.choices?.[0]?.message?.content || null;
+          perplexityCitations = perplexityData.citations || [];
+          console.log('Perplexity insights received, length:', perplexityInsights?.length || 0);
+          console.log('Perplexity citations:', perplexityCitations.length);
+        } else {
+          console.warn('Perplexity request failed:', perplexityResponse.status);
+          const errorText = await perplexityResponse.text();
+          console.warn('Perplexity error:', errorText);
+        }
+      } catch (e) {
+        console.warn('Perplexity error:', e);
+      }
+    } else {
+      console.log('Perplexity not configured, skipping deep research');
+    }
+
+    // ==========================================
+    // PHASE 2: FIRECRAWL MULTI-PAGE SCRAPING
+    // ==========================================
+    interface ScrapedPage {
+      url: string;
+      content: string | null;
+      title: string;
+    }
+    
+    let scrapedPages: ScrapedPage[] = [];
+    let firecrawlSearchResults: Array<{ url: string; title: string; markdown?: string }> = [];
+    
+    if (FIRECRAWL_API_KEY && (website || domain)) {
+      console.log('=== PHASE 2: FIRECRAWL MULTI-PAGE SCRAPING ===');
+      
+      const baseUrl = website?.startsWith('http') ? website : `https://${website || domain}`;
+      
+      // 2a. Map the website to discover all URLs
+      let discoveredUrls: string[] = [];
+      try {
+        console.log('Mapping website:', baseUrl);
+        const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: baseUrl,
+            limit: 50,
+            search: 'o nas kontakt usługi oferta produkty kariera zespół zarząd o firmie realizacje projekty'
+          }),
+        });
         
-        try {
-          const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: urlToScrape,
-              formats: ['markdown'],
-              onlyMainContent: true,
-              waitFor: 2000
-            }),
-          });
-          
-          if (scrapeResponse.ok) {
-            const scrapeData = await scrapeResponse.json();
-            websiteContent = scrapeData.data?.markdown || null;
-            searchPerformed = true;
-            console.log('Successfully scraped website, content length:', websiteContent?.length || 0);
-            
-            // Add website as first "search result" for AI analysis
-            if (websiteContent) {
-              searchResults.push({
-                url: urlToScrape,
-                title: `Strona główna ${company_name}`,
-                markdown: websiteContent
-              });
-            }
-          } else {
-            console.warn('Website scrape failed:', scrapeResponse.status);
-          }
-        } catch (e) {
-          console.warn('Website scrape error:', e);
+        if (mapResponse.ok) {
+          const mapData = await mapResponse.json();
+          discoveredUrls = mapData.links || [];
+          console.log(`Discovered ${discoveredUrls.length} URLs`);
+        } else {
+          console.warn('Map failed:', mapResponse.status);
+        }
+      } catch (e) {
+        console.warn('Map error:', e);
+      }
+      
+      // 2b. Select key pages to scrape
+      const keyPagePatterns = [
+        /o-nas|about|o-firmie|kim-jestesmy|historia/i,
+        /kontakt|contact/i,
+        /uslugi|services|oferta|offer/i,
+        /produkty|products/i,
+        /kariera|career|praca|jobs|rekrutacja/i,
+        /zespol|team|zarzad|management|ludzie|people/i,
+        /realizacje|projekty|projects|portfolio|case-study/i,
+        /klienci|clients|partnerzy|partners/i,
+      ];
+      
+      // Always include homepage
+      const pagesToScrape: string[] = [baseUrl];
+      
+      // Add discovered URLs matching key patterns
+      for (const url of discoveredUrls) {
+        if (pagesToScrape.length >= 10) break;
+        if (url === baseUrl) continue;
+        
+        const matchesPattern = keyPagePatterns.some(pattern => pattern.test(url));
+        if (matchesPattern && !pagesToScrape.includes(url)) {
+          pagesToScrape.push(url);
         }
       }
       
-      // 2b. Then: Search for additional info (using site: if we have domain)
+      console.log(`Selected ${pagesToScrape.length} pages to scrape:`, pagesToScrape);
+      
+      // 2c. Scrape pages in parallel (max 8)
+      const scrapePromises = pagesToScrape.slice(0, 8).map(url => 
+        scrapeWithFirecrawl(url, FIRECRAWL_API_KEY)
+      );
+      
+      scrapedPages = await Promise.all(scrapePromises);
+      const successfulScrapes = scrapedPages.filter(p => p.content).length;
+      console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
+      
+      // 2d. Additional search for external sources about the company
       try {
-        // Use site:domain to limit results to the company's website
-        const searchQuery = domain 
-          ? `site:${domain} ${company_name} "o nas" OR "o firmie" OR "usługi" OR "działalność"`
-          : `"${company_name}" Polska firma profil działalność`;
-        
-        console.log('Firecrawl search query:', searchQuery);
+        console.log('Searching for additional external sources...');
+        const searchQuery = `"${company_name}" Polska firma profil działalność opinie`;
         
         const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
           method: 'POST',
@@ -168,109 +295,105 @@ serve(async (req) => {
 
         if (searchResponse.ok) {
           const searchData = await searchResponse.json();
-          const additionalResults = searchData.data || [];
-          // Append to existing results (website scrape is first)
-          searchResults = [...searchResults, ...additionalResults];
-          searchPerformed = true;
-          console.log(`Firecrawl search found ${additionalResults.length} additional results`);
-        } else {
-          console.warn('Firecrawl search failed:', searchResponse.status);
+          firecrawlSearchResults = searchData.data || [];
+          console.log(`Found ${firecrawlSearchResults.length} external sources`);
         }
       } catch (e) {
-        console.warn('Firecrawl search error:', e);
+        console.warn('External search error:', e);
       }
     } else {
-      console.log('FIRECRAWL_API_KEY not configured, skipping web search');
+      console.log('Firecrawl not configured or no website, skipping scraping');
     }
+
+    // ==========================================
+    // PHASE 3: AI SYNTHESIS WITH EXPANDED PROMPT
+    // ==========================================
+    console.log('=== PHASE 3: AI SYNTHESIS ===');
     
-    console.log(`Total sources for AI analysis: ${searchResults.length}, website scraped: ${!!websiteContent}`);
-
-    // Step 3: Analyze with AI (with or without Firecrawl results)
-    const hasSearchResults = searchResults.length > 0;
+    const hasPerplexity = !!perplexityInsights;
+    const hasScrapedContent = scrapedPages.some(p => p.content);
+    const hasExternalSources = firecrawlSearchResults.length > 0;
+    const hasAnyData = hasPerplexity || hasScrapedContent || hasExternalSources;
     
-    // NIP validation helper
-    const isValidNIP = (nip: string | null): boolean => {
-      if (!nip) return false;
-      const cleaned = nip.replace(/[^0-9]/g, '');
-      return cleaned.length === 10;
-    };
+    console.log('Data sources:', {
+      perplexity: hasPerplexity,
+      scrapedPages: scrapedPages.filter(p => p.content).length,
+      externalSources: firecrawlSearchResults.length
+    });
 
-    const systemPrompt = hasSearchResults
-      ? `Jesteś ekspertem w dogłębnej analizie firm polskich.
+    // Build comprehensive system prompt
+    const systemPrompt = hasAnyData
+      ? `Jesteś strategicznym analitykiem biznesowym specjalizującym się w analizie polskich firm.
 
-🔍 MASZ wyniki wyszukiwania internetowego dla tej firmy.
-Przeanalizuj je DOKŁADNIE i wyodrębnij WSZYSTKIE możliwe informacje.
+🎯 CEL: Stwórz KOMPLEKSOWY profil firmy dla wewnętrznych agentów AI do matchowania kontaktów i znajdowania synergii biznesowych.
 
-📋 CO MUSISZ USTALIĆ:
+📊 MASZ DANE Z WIELU ŹRÓDEŁ:
+${hasPerplexity ? '✅ Wyniki deep research z internetu (Perplexity)' : ''}
+${hasScrapedContent ? '✅ Zawartość strony internetowej firmy (multi-page scraping)' : ''}
+${hasExternalSources ? '✅ Dodatkowe źródła zewnętrzne' : ''}
 
-1. CO DOKŁADNIE FIRMA ROBI?
-   - Główna działalność i specjalizacja
-   - Produkty i usługi - SZCZEGÓŁOWO
-   - Realizowane projekty, inwestycje, klienci
+📋 STRUKTURA ANALIZY:
 
-2. CO FIRMA OFERUJE?
-   - Pełna oferta dla klientów i partnerów
-   - Unikalna propozycja wartości
-   - Przewagi konkurencyjne
+1. PODSTAWOWE INFORMACJE
+   - Oficjalna nazwa, forma prawna
+   - Branża główna i subbranże
+   - Pełny opis działalności (3-5 zdań)
 
-3. CZEGO FIRMA SZUKA?
-   - Poszukiwani klienci, partnerzy, dostawcy
-   - Rekrutacja - jakie stanowiska?
-   - Kierunki rozwoju, ekspansji
+2. MODEL BIZNESOWY I POZYCJA RYNKOWA
+   - Jak firma zarabia pieniądze
+   - Unikalna propozycja wartości (USP)
+   - Pozycja względem konkurencji
+   - Udział w rynku (jeśli znany)
 
-4. KTO ZARZĄDZA FIRMĄ?
-   - Zarząd: imiona, nazwiska, stanowiska
-   - Właściciele
-   - Kluczowe osoby decyzyjne
+3. PRODUKTY I USŁUGI (SZCZEGÓŁOWO!)
+   - Lista wszystkich produktów z opisami
+   - Lista wszystkich usług z opisami
+   - Dla kogo są przeznaczone (target)
+   - Flagowe projekty i realizacje
 
-5. DANE REJESTROWE I KONTAKTOWE
-   - NIP, REGON, KRS (jeśli znalezione)
+4. CO FIRMA OFERUJE (dla agentów matchujących)
+   - Pełna oferta dla klientów
+   - Oferta dla partnerów biznesowych
+   - Unikalne kompetencje i przewagi
+   - Certyfikaty, nagrody, wyróżnienia
+
+5. CZEGO FIRMA SZUKA (KLUCZOWE dla matchowania!)
+   - Jakiego typu klientów poszukuje
+   - Jakiego typu partnerów szuka
+   - Jakich dostawców potrzebuje
+   - Otwarte rekrutacje - jakie stanowiska
+   - Plany ekspansji i rozwoju
+   - Wyzwania i problemy do rozwiązania
+
+6. POTENCJAŁ WSPÓŁPRACY
+   - Konkretne obszary możliwej współpracy
+   - Profil idealnego partnera biznesowego
+   - Potencjalne synergie
+
+7. ZARZĄD I ORGANIZACJA
+   - Imiona, nazwiska, stanowiska osób z zarządu
+   - Właściciele (jeśli znani)
+   - Wielkość firmy, liczba pracowników
+   - Kultura organizacyjna
+
+8. AKTUALNOŚCI I SYGNAŁY RYNKOWE
+   - Ostatnie newsy o firmie
+   - Ostatnie inwestycje i projekty
+   - Sygnały: wzrost, problemy, zmiany strategiczne
+
+9. DANE REJESTROWE
+   - NIP, REGON, KRS (TYLKO jeśli znalezione w źródłach!)
    - Adres siedziby
-   - Forma prawna, rok założenia
+   - Rok założenia
 
 ZASADY:
-- Podawaj TYLKO informacje znalezione w źródłach
-- NIP/REGON/KRS podawaj TYLKO jeśli wyraźnie znalazłeś
-- Dla zarządu podawaj źródło dla każdej osoby
+- Podawaj TYLKO informacje znalezione w dostarczonych źródłach
+- NIE WYMYŚLAJ danych rejestrowych (NIP, REGON, KRS)
+- Dla każdej kluczowej informacji wskaż źródło
+- Oceń pewność danych (high/medium/low)
+- Skup się na informacjach przydatnych dla agentów matchujących
 
-Zwróć JSON:
-{
-  "name": "Oficjalna nazwa firmy ze źródeł",
-  "industry": "Branża (ze źródeł)",
-  "description": "Pełny opis działalności firmy (2-3 zdania)",
-  
-  "what_company_does": "SZCZEGÓŁOWY opis co firma robi: główna działalność, specjalizacja, realizowane projekty",
-  "main_products_services": ["Lista głównych produktów/usług - każdy osobno"],
-  "what_company_offers": "Co firma oferuje klientom i partnerom - pełna oferta",
-  "what_company_seeks": "Czego firma szuka: klienci, partnerzy, dostawcy, pracownicy (jeśli rekrutuje)",
-  "target_clients": "Kto jest docelowym klientem firmy",
-  "competitive_advantage": "Co wyróżnia firmę na rynku",
-  
-  "management": [
-    {"name": "Imię Nazwisko", "position": "Stanowisko", "source": "URL źródła"}
-  ],
-  "company_type": "Forma prawna (sp. z o.o., S.A., JDG, itp.)",
-  "founding_year": "Rok założenia lub null",
-  "employee_count_estimate": "Szacunek liczby pracowników lub null",
-  
-  "recent_news": "Ostatnie wiadomości, aktywności, projekty firmy",
-  "company_culture": "Kultura firmy, wartości (jeśli znalezione)",
-  
-  "services": "Usługi/produkty - skrócona lista",
-  "collaboration_areas": "Obszary możliwej współpracy",
-  
-  "nip": "NIP (10 cyfr) lub null",
-  "regon": "REGON lub null",
-  "krs": "KRS lub null",
-  "address": "Adres siedziby lub null",
-  "city": "Miasto lub null",
-  "postal_code": "Kod pocztowy lub null",
-  
-  "confidence": "high/medium",
-  "suggested_website": "URL strony firmy",
-  "sources": ["lista URL źródeł"],
-  "data_notes": ["Uwagi o jakości danych"]
-}`
+Zwróć JSON z następującą strukturą:`
       : `Jesteś ekspertem w analizie firm polskich.
 
 ⚠️ NIE MASZ dostępu do internetu ani baz danych.
@@ -278,75 +401,137 @@ Możesz TYLKO sugerować prawdopodobną branżę i profil na podstawie nazwy fir
 
 ZASADY:
 - Wszystko co podajesz to SUGESTIE, nie fakty
-- Oznacz wszystko jako "💡 SUGESTIA:"
 - NIE wymyślaj NIP, REGON, KRS, adresów, osób z zarządu
 
-Zwróć JSON:
-{
-  "name": "Nazwa firmy",
-  "industry": "💡 SUGESTIA: Prawdopodobna branża",
-  "description": "💡 SUGESTIA: Prawdopodobny opis działalności",
+Zwróć JSON z następującą strukturą:`;
+
+    const jsonStructure = `{
+  "name": "Oficjalna nazwa firmy",
+  "industry": "Branża główna",
+  "sub_industries": ["Subbranże", "Specjalizacje"],
+  "description": "Pełny opis działalności firmy (3-5 zdań)",
   
-  "what_company_does": "💡 SUGESTIA: Co prawdopodobnie firma robi",
-  "main_products_services": ["💡 SUGESTIA: Prawdopodobne usługi"],
-  "what_company_offers": "💡 SUGESTIA: Prawdopodobna oferta",
-  "what_company_seeks": null,
-  "target_clients": "💡 SUGESTIA: Prawdopodobni klienci",
-  "competitive_advantage": null,
+  "business_model": "Jak firma zarabia pieniądze",
+  "value_proposition": "Unikalna propozycja wartości (USP)",
+  "competitive_position": "Pozycja rynkowa vs konkurencja",
+  "market_share_info": "Udział w rynku jeśli znany lub null",
   
-  "management": [],
-  "company_type": null,
-  "founding_year": null,
-  "employee_count_estimate": null,
+  "core_activities": ["Główne obszary działalności"],
+  "products": [
+    {"name": "Nazwa produktu", "description": "Opis", "target": "Dla kogo"}
+  ],
+  "services": [
+    {"name": "Nazwa usługi", "description": "Opis", "target": "Dla kogo"}
+  ],
+  "key_projects": ["Flagowe projekty, realizacje, inwestycje"],
   
-  "recent_news": null,
-  "company_culture": null,
+  "offer_summary": "Pełna oferta firmy w 2-3 zdaniach",
+  "unique_selling_points": ["Co wyróżnia firmę na rynku"],
+  "certifications": ["Certyfikaty, nagrody, wyróżnienia"],
+  "partnerships": ["Kluczowi partnerzy biznesowi"],
   
-  "services": "💡 SUGESTIA: Prawdopodobne usługi",
-  "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
+  "seeking_clients": "Jakiego typu klientów szuka firma",
+  "seeking_partners": "Jakiego typu partnerów biznesowych szuka",
+  "seeking_suppliers": "Jakich dostawców/podwykonawców potrzebuje lub null",
+  "hiring_positions": ["Otwarte rekrutacje - stanowiska"],
+  "expansion_plans": "Plany rozwoju, ekspansji lub null",
+  "pain_points": ["Wyzwania, problemy do rozwiązania"],
   
-  "nip": null,
-  "regon": null,
-  "krs": null,
-  "address": null,
-  "city": null,
-  "postal_code": null,
+  "collaboration_opportunities": [
+    {"area": "Obszar współpracy", "description": "Opis możliwości", "fit_for": "Kto pasuje"}
+  ],
+  "ideal_partner_profile": "Profil idealnego partnera biznesowego",
+  "synergy_potential": ["Obszary potencjalnych synergii"],
   
-  "confidence": "low",
-  "suggested_website": null,
-  "sources": [],
-  "data_notes": ["Wszystkie dane to SUGESTIE - wymaga weryfikacji"]
+  "management": [
+    {"name": "Imię Nazwisko", "position": "Stanowisko", "source": "URL źródła lub nazwa źródła"}
+  ],
+  "company_size": "mikro/mała/średnia/duża",
+  "employee_count": "Liczba lub przedział lub null",
+  "company_culture": "Kultura organizacyjna lub null",
+  "founding_year": "Rok założenia lub null",
+  "founding_story": "Historia powstania firmy lub null",
+  
+  "recent_news": [
+    {"date": "YYYY-MM lub rok", "title": "Tytuł newsa", "summary": "Krótkie streszczenie", "source": "URL lub nazwa źródła"}
+  ],
+  "market_signals": ["Sygnały rynkowe: wzrost, problemy, zmiany"],
+  "sentiment": "positive/neutral/negative",
+  
+  "legal_form": "Forma prawna (sp. z o.o., S.A., itp.) lub null",
+  "nip": "NIP (10 cyfr, tylko jeśli znaleziony!) lub null",
+  "regon": "REGON lub null",
+  "krs": "KRS lub null",
+  "address": "Adres siedziby lub null",
+  "city": "Miasto lub null",
+  "postal_code": "Kod pocztowy lub null",
+  
+  "confidence": "high/medium/low",
+  "data_freshness": "Ocena aktualności danych",
+  "sources": ["Lista URL źródeł"],
+  "analysis_notes": ["Uwagi o jakości danych, brakujących informacjach"]
 }`;
 
-    const userContent = hasSearchResults
-      ? `Przeprowadź DOGŁĘBNĄ analizę firmy na podstawie wyników wyszukiwania:
+    // Build user content with all gathered data
+    let userContent = `Przeprowadź KOMPLEKSOWĄ analizę strategiczną firmy:
 
 Nazwa firmy: ${company_name}
 ${website ? `Strona www: ${website}` : ''}
 ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
 
-📊 WYNIKI WYSZUKIWANIA DO ANALIZY:
-${searchResults.map((r, i) => `
-═══════════════════════════════════════
-[ŹRÓDŁO ${i + 1}] ${r.url}
-Tytuł: ${r.title}
-${r.description ? `Opis: ${r.description}` : ''}
-${r.markdown ? `TREŚĆ:\n${r.markdown.substring(0, 3000)}` : ''}
-═══════════════════════════════════════`).join('\n')}
+`;
+
+    if (hasPerplexity) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+📡 WYNIKI DEEP RESEARCH Z INTERNETU (Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityInsights}
+
+${perplexityCitations.length > 0 ? `Źródła Perplexity:\n${perplexityCitations.map((c, i) => `[${i + 1}] ${c}`).join('\n')}` : ''}
+
+`;
+    }
+
+    if (hasScrapedContent) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+🌐 ZAWARTOŚĆ STRONY INTERNETOWEJ FIRMY (multi-page scraping):
+═══════════════════════════════════════════════════════════════════
+`;
+      for (const page of scrapedPages.filter(p => p.content)) {
+        userContent += `
+--- [${page.title}] ${page.url} ---
+${page.content!.substring(0, 4000)}
+`;
+      }
+    }
+
+    if (hasExternalSources) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+📰 DODATKOWE ŹRÓDŁA ZEWNĘTRZNE:
+═══════════════════════════════════════════════════════════════════
+`;
+      for (const source of firecrawlSearchResults) {
+        userContent += `
+--- [${source.title}] ${source.url} ---
+${source.markdown?.substring(0, 2000) || '(brak treści)'}
+`;
+      }
+    }
+
+    userContent += `
+
+${jsonStructure}
 
 🎯 ZADANIE:
-1. Ustal DOKŁADNIE co firma robi - jakie produkty/usługi
-2. Zidentyfikuj co OFERUJE i czego SZUKA
-3. Znajdź osoby z ZARZĄDU (z linkami źródłowymi)
-4. Wyodrębnij dane rejestrowe (NIP, REGON, KRS, adres)
-5. Oceń pozycję rynkową i przewagi konkurencyjne`
-      : `Zasugeruj profil firmy (tylko sugestie!):
-
-Nazwa firmy: ${company_name}
-${website ? `Strona www: ${website}` : 'Strona www: Nie podano'}
-${industry_hint ? `Wskazówka: ${industry_hint}` : ''}
-
-UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
+1. Przeanalizuj WSZYSTKIE dostarczone źródła
+2. Wyodrębnij SZCZEGÓŁOWE informacje o produktach, usługach, ofercie
+3. Określ CZEGO FIRMA SZUKA - to kluczowe dla matchowania!
+4. Zidentyfikuj osoby z zarządu z podaniem źródeł
+5. Oceń potencjał współpracy i możliwe synergie
+6. Podaj TYLKO dane rejestrowe znalezione w źródłach`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -355,13 +540,13 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 3000,
-        temperature: 0.3,
+        max_tokens: 8000,
+        temperature: 0.2,
       }),
     });
 
@@ -387,7 +572,7 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
     }
 
     const data = await response.json();
-    console.log('AI response received');
+    console.log('AI synthesis completed');
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
@@ -422,11 +607,14 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
         enrichedData.krs = cleanedKrs.length === 10 ? cleanedKrs : null;
       }
       
-      // Add search info
-      enrichedData.search_performed = searchPerformed;
-      
-      // Add search info
-      enrichedData.search_performed = searchPerformed;
+      // Add metadata about the enrichment process
+      enrichedData.enrichment_metadata = {
+        perplexity_used: hasPerplexity,
+        pages_scraped: scrapedPages.filter(p => p.content).length,
+        external_sources: firecrawlSearchResults.length,
+        perplexity_citations: perplexityCitations,
+        analyzed_at: new Date().toISOString()
+      };
       
     } catch (parseError) {
       console.error('Failed to parse AI response:', content);
@@ -436,16 +624,19 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
       );
     }
 
-    // Step 4: If no logo yet and we found/AI suggested a website, try to get logo
-    if (!logo_url && enrichedData.suggested_website) {
-      const suggestedDomain = extractDomain(enrichedData.suggested_website);
-      if (suggestedDomain) {
-        const clearbitUrl = getClearbitLogoUrl(suggestedDomain);
-        if (clearbitUrl) {
-          const isValid = await isLogoValid(clearbitUrl);
-          if (isValid) {
-            logo_url = clearbitUrl;
-            console.log('Found logo via suggested website:', logo_url);
+    // Try to get logo if not found yet
+    if (!logo_url) {
+      const suggestedWebsite = enrichedData.suggested_website || website;
+      if (suggestedWebsite) {
+        const suggestedDomain = extractDomain(suggestedWebsite);
+        if (suggestedDomain) {
+          const clearbitUrl = getClearbitLogoUrl(suggestedDomain);
+          if (clearbitUrl) {
+            const isValid = await isLogoValid(clearbitUrl);
+            if (isValid) {
+              logo_url = clearbitUrl;
+              console.log('Found logo via suggested website:', logo_url);
+            }
           }
         }
       }
@@ -454,12 +645,13 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
     // Add logo_url to response
     enrichedData.logo_url = logo_url;
 
-    console.log('Successfully enriched company data:', {
-      name: enrichedData.name,
-      confidence: enrichedData.confidence,
-      search_performed: searchPerformed,
-      sources_count: enrichedData.sources?.length || 0
-    });
+    console.log('=== ENRICHMENT COMPLETE ===');
+    console.log('Company:', enrichedData.name);
+    console.log('Confidence:', enrichedData.confidence);
+    console.log('Sources:', enrichedData.sources?.length || 0);
+    console.log('Products:', enrichedData.products?.length || 0);
+    console.log('Services:', enrichedData.services?.length || 0);
+    console.log('Management:', enrichedData.management?.length || 0);
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),
