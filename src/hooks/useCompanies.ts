@@ -284,15 +284,35 @@ export function useRegenerateCompanyAI() {
       const updateData: CompanyUpdate = {
         description: enriched.description || null,
         ai_analysis: JSON.stringify({
+          // Pełne dane z analizy AI
+          what_company_does: enriched.what_company_does || null,
+          what_company_offers: enriched.what_company_offers || null,
+          what_company_seeks: enriched.what_company_seeks || null,
+          main_products_services: enriched.main_products_services || [],
+          target_clients: enriched.target_clients || null,
+          competitive_advantage: enriched.competitive_advantage || null,
+          management: enriched.management || [],
+          company_type: enriched.company_type || null,
+          founding_year: enriched.founding_year || null,
+          recent_news: enriched.recent_news || null,
+          company_culture: enriched.company_culture || null,
           services: enriched.services || [],
           collaboration_areas: enriched.collaboration_areas || [],
           confidence: enriched.confidence || 'medium',
           employee_count_estimate: enriched.employee_count_estimate || null,
+          sources: enriched.sources || [],
+          analyzed_at: new Date().toISOString(),
         }),
         industry: enriched.industry || null,
         logo_url: enriched.logo_url || null,
-        // Update website if AI found one and we didn't have it
+        // Wszystkie pola adresowe i rejestrowe
         website: website || enriched.suggested_website || null,
+        address: enriched.address || null,
+        city: enriched.city || null,
+        postal_code: enriched.postal_code || null,
+        nip: enriched.nip || null,
+        regon: enriched.regon || null,
+        krs: enriched.krs || null,
         updated_at: new Date().toISOString()
       };
       

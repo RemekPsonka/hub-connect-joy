@@ -232,6 +232,17 @@ serve(async (req) => {
       }
     }
 
+    // ============= STEP 3b: Search for personal info (hobbies, media mentions) =============
+    let personalSearchResults = "";
+    if (FIRECRAWL_API_KEY) {
+      const personalQuery = `"${contact.full_name}" (wywiad OR hobby OR sport OR rodzina OR "media" OR "prasa")`;
+      const personalResults = await searchPerson(personalQuery, FIRECRAWL_API_KEY);
+      if (personalResults) {
+        personalSearchResults = personalResults;
+        console.log("Personal search results found, length:", personalResults.length);
+      }
+    }
+
     // ============= STEP 4: Build prompt with data hierarchy =============
     const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych. Wygeneruj profesjonalny profil na podstawie HIERARCHII ŹRÓDEŁ.
 
@@ -247,7 +258,10 @@ Jeśli dostępne są dane ze strony firmy, użyj ich PRZEDE WSZYSTKIM do opisani
 ### PRIORYTET 2 - WYNIKI WYSZUKIWANIA O OSOBIE
 Na podstawie wyników wyszukiwania uzupełnij dane o stanowisku i karierze.
 
-### PRIORYTET 3 - DANE Z SYSTEMU
+### PRIORYTET 3 - ŻYCIE OSOBISTE I MEDIA
+Na podstawie wyników wyszukiwania uzupełnij informacje o rodzinie, hobby, sporcie i wzmiankach w mediach.
+
+### PRIORYTET 4 - DANE Z SYSTEMU
 Notatki, potrzeby, oferty, konsultacje z CRM.
 
 ## OZNACZENIA (OBOWIĄZKOWE!):
@@ -284,6 +298,17 @@ ${hasWebsiteData ? `
 ## 🎯 Kompetencje
 [Na podstawie stanowiska, branży i danych]
 
+## 🏠 Życie prywatne
+[Informacje o życiu osobistym - tylko ze źródeł lub oznacz jako 💡 DEDUKCJA]
+- 👨‍👩‍👧‍👦 **Rodzina:** [status rodzinny, dzieci jeśli znane ze źródeł]
+- 🎯 **Hobby i zainteresowania:** [pozazawodowe aktywności, pasje]
+- ⚽ **Sport:** [ulubione dyscypliny, aktywność fizyczna]
+
+## 📰 Wzmianki w mediach
+[Artykuły prasowe, wywiady, publikacje, wystąpienia publiczne]
+- Jeśli znaleziono wzmianki - podaj tytuły i źródła
+- Jeśli brak - napisz "📭 Brak znalezionych wzmianek w mediach"
+
 ## 🤝 Wartość dla sieci
 [Jak osoba może pomóc innym kontaktom]
 
@@ -294,8 +319,9 @@ ${hasWebsiteData ? `
 1. [Konkretne pytanie o firmę/współpracę]
 2. [Pytanie o potrzeby]
 3. [Pytanie o sieć kontaktów]
+4. [Pytanie o zainteresowania/hobby - do budowania relacji]
 
-Maksymalnie 600 słów. ZAWSZE oznaczaj źródła.`;
+Maksymalnie 700 słów. ZAWSZE oznaczaj źródła.`;
 
     const userPrompt = `# DANE KONTAKTU
 **Imię i nazwisko:** ${contact.full_name}
@@ -316,12 +342,19 @@ ${companySubpagesContent}
 ` : '# BRAK DANYCH ZE STRONY WWW FIRMY\n(Strona niedostępna lub brak klucza Firecrawl)'}
 
 ${personSearchResults ? `
-# PRIORYTET 2: WYNIKI WYSZUKIWANIA O OSOBIE
+# PRIORYTET 2: WYNIKI WYSZUKIWANIA O OSOBIE (KARIERA)
 ${personSearchResults}
 ` : '# BRAK WYNIKÓW WYSZUKIWANIA O OSOBIE'}
 
+${personalSearchResults ? `
+# PRIORYTET 3: WYNIKI WYSZUKIWANIA - ŻYCIE OSOBISTE I MEDIA
+Wykorzystaj poniższe informacje do sekcji "Życie prywatne" i "Wzmianki w mediach":
+${personalSearchResults}
+` : '# BRAK WYNIKÓW WYSZUKIWANIA O ŻYCIU OSOBISTYM I MEDIACH'}
+
 ---
-WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIERWSZEŃSTWO!`;
+WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIERWSZEŃSTWO!
+PAMIĘTAJ O SEKCJACH: ŻYCIE PRYWATNE (rodzina, hobby, sport) I WZMIANKI W MEDIACH!`;
 
     // ============= STEP 5: Call AI with tool calling for structured company data =============
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -357,8 +390,10 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
                     specializations: { type: "array", items: { type: "string" }, description: "Lista specjalizacji" },
                     nip: { type: "string", description: "NIP firmy (10 cyfr) jeśli znaleziony" },
                     regon: { type: "string", description: "REGON firmy jeśli znaleziony" },
-                    address: { type: "string", description: "Adres firmy" },
+                    krs: { type: "string", description: "KRS firmy jeśli znaleziony" },
+                    address: { type: "string", description: "Adres firmy (ulica, numer)" },
                     city: { type: "string", description: "Miasto" },
+                    postal_code: { type: "string", description: "Kod pocztowy (np. 00-001)" },
                     website: { type: "string", description: "Strona www firmy" }
                   },
                   required: ["name", "industry", "description"]
@@ -415,8 +450,10 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
         website: companyData.website || companyWebsite || null,
         city: companyData.city || null,
         address: companyData.address || null,
+        postal_code: companyData.postal_code || null,
         nip: companyData.nip?.replace(/\D/g, '').substring(0, 10) || null,
         regon: companyData.regon?.replace(/\D/g, '') || null,
+        krs: companyData.krs?.replace(/\D/g, '') || null,
         ai_analysis: JSON.stringify({
           what_company_does: companyData.what_company_does,
           what_company_offers: companyData.what_company_offers,
@@ -448,7 +485,11 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
       if (companyData.description && !company?.description) companyUpdate.description = companyData.description;
       if (companyData.city && !company?.city) companyUpdate.city = companyData.city;
       if (companyData.address && !company?.address) companyUpdate.address = companyData.address;
+      if (companyData.postal_code) companyUpdate.postal_code = companyData.postal_code;
       if (companyData.nip && !company?.nip) companyUpdate.nip = companyData.nip.replace(/\D/g, '').substring(0, 10);
+      if (companyData.regon && !company?.regon) companyUpdate.regon = companyData.regon.replace(/\D/g, '');
+      if (companyData.krs && !company?.krs) companyUpdate.krs = companyData.krs.replace(/\D/g, '');
+      if (companyData.website && !company?.website) companyUpdate.website = companyData.website;
       
       // Always update AI analysis with latest data
       companyUpdate.ai_analysis = JSON.stringify({
