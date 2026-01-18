@@ -276,6 +276,44 @@ export function ImportContactRow({
                   className="h-8 text-xs"
                 />
               </div>
+
+              {/* AI enrichment actions */}
+              {(canEnrichCompany || canEnrichPerson) && (
+                <div className="flex gap-2">
+                  {canEnrichCompany && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => onEnrichCompany(index)}
+                      disabled={isEnrichingCompany}
+                    >
+                      {isEnrichingCompany ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3 mr-1" />
+                      )}
+                      Pobierz dane firmy (AI)
+                    </Button>
+                  )}
+                  {canEnrichPerson && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => onEnrichPerson(index)}
+                      disabled={isEnrichingPerson}
+                    >
+                      {isEnrichingPerson ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Search className="h-3 w-3 mr-1" />
+                      )}
+                      Sprawdź osobę (AI)
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Company data (if enriched) */}

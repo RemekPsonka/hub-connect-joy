@@ -389,10 +389,10 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
 
           {/* Step: Preview - Single screen with everything */}
           {step === 'preview' && (
-            <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+            <div className="flex flex-col gap-4 flex-1 min-h-0">
               {/* Stats bar */}
-              <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg border">
-                <div className="flex gap-3">
+              <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border flex-shrink-0">
+                <div className="flex flex-wrap gap-3">
                   <Badge variant="outline" className="gap-1">
                     <Users className="h-3 w-3" />
                     {stats.total} kontaktów
@@ -408,31 +408,11 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                     {stats.ready} gotowych
                   </Badge>
                   {stats.companiesNeeded > 0 && (
-                    <Badge variant="outline" className="gap-1">
+                    <Badge variant="outline" className="gap-1 text-muted-foreground">
                       <Building2 className="h-3 w-3" />
                       {stats.companiesNeeded} firm do uzupełnienia
                     </Badge>
                   )}
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={enrichAllCompanies}
-                    disabled={stats.companiesNeeded === 0 || isParsing}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Wzbogać firmy
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={enrichAllPersons}
-                    disabled={isParsing}
-                  >
-                    <Search className="h-3 w-3 mr-1" />
-                    Sprawdź osoby
-                  </Button>
                 </div>
               </div>
 
@@ -517,9 +497,9 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
               </div>
 
               {/* Contacts table */}
-              <div className="flex-1 border rounded-lg overflow-hidden flex flex-col">
+              <div className="flex-1 border rounded-lg overflow-hidden flex flex-col min-h-0">
                 {/* Table header */}
-                <div className="grid grid-cols-[40px_100px_1fr_1fr_1fr_140px_1fr_1fr_100px_40px] gap-2 py-2 px-2 bg-muted/50 border-b text-xs font-medium sticky top-0">
+                <div className="grid grid-cols-[40px_100px_1fr_1fr_1fr_140px_1fr_1fr_100px_40px] gap-2 py-2 px-2 bg-muted/50 border-b text-xs font-medium flex-shrink-0">
                   <div className="flex justify-center">
                     <Checkbox 
                       checked={allSelected}
@@ -537,27 +517,25 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                   <div></div>
                 </div>
                 
-                {/* Table body */}
-                <ScrollArea className="flex-1">
-                  <div>
-                    {parsedContacts.map((contact, idx) => (
-                      <ImportContactRow
-                        key={idx}
-                        contact={contact}
-                        index={idx}
-                        groups={groups}
-                        defaultPositions={defaultPositions}
-                        defaultPosition={defaultPosition}
-                        metSourceSuggestions={metSourceSuggestions}
-                        onUpdate={updateParsedContact}
-                        onRemove={removeParsedContact}
-                        onToggleSelect={toggleContactSelection}
-                        onEnrichCompany={enrichCompany}
-                        onEnrichPerson={enrichPerson}
-                      />
-                    ))}
-                  </div>
-                </ScrollArea>
+                {/* Table body - scrollable */}
+                <div className="flex-1 overflow-y-auto">
+                  {parsedContacts.map((contact, idx) => (
+                    <ImportContactRow
+                      key={idx}
+                      contact={contact}
+                      index={idx}
+                      groups={groups}
+                      defaultPositions={defaultPositions}
+                      defaultPosition={defaultPosition}
+                      metSourceSuggestions={metSourceSuggestions}
+                      onUpdate={updateParsedContact}
+                      onRemove={removeParsedContact}
+                      onToggleSelect={toggleContactSelection}
+                      onEnrichCompany={enrichCompany}
+                      onEnrichPerson={enrichPerson}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           )}
