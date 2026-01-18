@@ -5,6 +5,7 @@ import { ContactsHeader, type ViewMode } from '@/components/contacts/ContactsHea
 import { ContactsTable } from '@/components/contacts/ContactsTable';
 import { CompaniesTable } from '@/components/contacts/CompaniesTable';
 import { ContactModal } from '@/components/contacts/ContactModal';
+import { BulkMergeDomainsModal } from '@/components/contacts/BulkMergeDomainsModal';
 
 export default function Contacts() {
   const [viewMode, setViewMode] = useState<ViewMode>('people');
@@ -17,6 +18,7 @@ export default function Contacts() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [companySortBy, setCompanySortBy] = useState('name');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkMergeModalOpen, setIsBulkMergeModalOpen] = useState(false);
 
   // Contacts query (for people view)
   const contactsQuery = useContacts({
@@ -77,6 +79,7 @@ export default function Contacts() {
         onAddContact={() => setIsModalOpen(true)}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        onBulkMergeByDomain={() => setIsBulkMergeModalOpen(true)}
       />
 
       {viewMode === 'people' ? (
@@ -110,6 +113,11 @@ export default function Contacts() {
       <ContactModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+
+      <BulkMergeDomainsModal
+        open={isBulkMergeModalOpen}
+        onOpenChange={setIsBulkMergeModalOpen}
       />
     </div>
   );

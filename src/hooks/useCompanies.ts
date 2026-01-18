@@ -459,3 +459,244 @@ export function useRegenerateCompanyAI() {
     },
   });
 }
+
+// ============= DOMAIN STATS FOR BULK MERGE =============
+interface DomainStat {
+  domain: string;
+  count: number;
+  hasExistingCompany: boolean;
+  existingCompanyId?: string;
+  existingCompanyName?: string;
+  sampleContacts: string[];
+}
+
+export function useDomainStats() {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['domain_stats', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+
+      // Get all contacts without company_id
+      const { data: contacts, error } = await supabase
+        .from('contacts')
+        .select('id, email, full_name, company')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .is('company_id', null)
+        .not('email', 'is', null);
+
+      if (error) throw error;
+      if (!contacts?.length) return [];
+
+      // Group by domain
+      const domainMap = new Map<string, { contacts: typeof contacts }>();
+      for (const contact of contacts) {
+        const domain = extractEmailDomain(contact.email);
+        if (!domain) continue;
+
+        if (!domainMap.has(domain)) {
+          domainMap.set(domain, { contacts: [] });
+        }
+        domainMap.get(domain)!.contacts.push(contact);
+      }
+
+      // Get all companies to check for matching websites
+      const { data: companies } = await supabase
+        .from('companies')
+        .select('id, name, website')
+        .eq('tenant_id', tenantId);
+
+      // Get contacts that already have company_id for each domain
+      const { data: assignedContacts } = await supabase
+        .from('contacts')
+        .select('email, company_id')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .not('company_id', 'is', null)
+        .not('email', 'is', null);
+
+      // Build domain stats
+      const stats: DomainStat[] = [];
+      for (const [domain, { contacts: domainContacts }] of domainMap.entries()) {
+        if (domainContacts.length < 1) continue;
+
+        let hasExistingCompany = false;
+        let existingCompanyId: string | undefined;
+        let existingCompanyName: string | undefined;
+
+        // Check if company exists with matching website
+        const matchingCompany = companies?.find(c => {
+          const companyDomain = extractWebsiteDomain(c.website);
+          return companyDomain === domain;
+        });
+
+        if (matchingCompany) {
+          hasExistingCompany = true;
+          existingCompanyId = matchingCompany.id;
+          existingCompanyName = matchingCompany.name;
+        } else {
+          // Check if any contact from this domain already has company_id
+          const contactWithCompany = assignedContacts?.find(c => {
+            const contactDomain = extractEmailDomain(c.email);
+            return contactDomain === domain;
+          });
+
+          if (contactWithCompany?.company_id) {
+            const company = companies?.find(c => c.id === contactWithCompany.company_id);
+            if (company) {
+              hasExistingCompany = true;
+              existingCompanyId = company.id;
+              existingCompanyName = company.name;
+            }
+          }
+        }
+
+        stats.push({
+          domain,
+          count: domainContacts.length,
+          hasExistingCompany,
+          existingCompanyId,
+          existingCompanyName,
+          sampleContacts: domainContacts.slice(0, 3).map(c => c.full_name),
+        });
+      }
+
+      // Sort by count descending
+      return stats.sort((a, b) => b.count - a.count);
+    },
+    enabled: !!tenantId,
+  });
+}
+
+// ============= BULK MERGE BY DOMAIN =============
+export function useBulkMergeByDomain() {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!tenantId) throw new Error('No tenant');
+
+      // Get all contacts without company_id
+      const { data: contacts, error } = await supabase
+        .from('contacts')
+        .select('id, email, company')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .is('company_id', null)
+        .not('email', 'is', null);
+
+      if (error) throw error;
+      if (!contacts?.length) return { merged: 0, companiesCreated: 0 };
+
+      // Group by domain
+      const domainMap = new Map<string, typeof contacts>();
+      for (const contact of contacts) {
+        const domain = extractEmailDomain(contact.email);
+        if (!domain) continue;
+
+        if (!domainMap.has(domain)) {
+          domainMap.set(domain, []);
+        }
+        domainMap.get(domain)!.push(contact);
+      }
+
+      // Get all companies
+      const { data: companies } = await supabase
+        .from('companies')
+        .select('id, name, website')
+        .eq('tenant_id', tenantId);
+
+      // Get contacts that already have company_id
+      const { data: assignedContacts } = await supabase
+        .from('contacts')
+        .select('email, company_id')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .not('company_id', 'is', null)
+        .not('email', 'is', null);
+
+      let totalMerged = 0;
+      let companiesCreated = 0;
+
+      for (const [domain, domainContacts] of domainMap.entries()) {
+        if (domainContacts.length < 1) continue;
+
+        let companyId: string | undefined;
+
+        // A) Check if company exists with matching website
+        const matchingCompany = companies?.find(c => {
+          const companyDomain = extractWebsiteDomain(c.website);
+          return companyDomain === domain;
+        });
+
+        if (matchingCompany) {
+          companyId = matchingCompany.id;
+        } else {
+          // B) Check if any contact from this domain already has company_id
+          const contactWithCompany = assignedContacts?.find(c => {
+            const contactDomain = extractEmailDomain(c.email);
+            return contactDomain === domain;
+          });
+
+          if (contactWithCompany?.company_id) {
+            companyId = contactWithCompany.company_id;
+          }
+        }
+
+        // C) Create new company if none found and >= 2 contacts
+        if (!companyId && domainContacts.length >= 2) {
+          const companyName = domainContacts[0].company || 
+            domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+          
+          const { data: newCompany, error: createError } = await supabase
+            .from('companies')
+            .insert({
+              name: companyName,
+              website: `https://${domain}`,
+              tenant_id: tenantId,
+            })
+            .select()
+            .single();
+
+          if (!createError && newCompany) {
+            companyId = newCompany.id;
+            companiesCreated++;
+          }
+        }
+
+        // D) Update all contacts from this domain
+        if (companyId) {
+          const contactIds = domainContacts.map(c => c.id);
+          const { error: updateError } = await supabase
+            .from('contacts')
+            .update({ company_id: companyId })
+            .in('id', contactIds);
+
+          if (!updateError) {
+            totalMerged += contactIds.length;
+          }
+        }
+      }
+
+      return { merged: totalMerged, companiesCreated };
+    },
+    onSuccess: ({ merged, companiesCreated }) => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_list'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['company_contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['domain_stats'] });
+      toast.success(`Scalono ${merged} kontaktów. Utworzono ${companiesCreated} nowych firm.`);
+    },
+    onError: (error) => {
+      console.error('Error in bulk merge:', error);
+      toast.error('Błąd podczas scalania kontaktów');
+    },
+  });
+}
