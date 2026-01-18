@@ -90,6 +90,7 @@ interface ImportStats {
   duplicates: number;
   ready: number;
   companiesNeeded: number;
+  personsNeeded: number;
 }
 
 interface UseAIImportReturn {
@@ -169,7 +170,12 @@ export function useAIImport(): UseAIImportReturn {
     total: parsedContacts.length,
     duplicates: parsedContacts.filter(c => c.status === 'duplicate').length,
     ready: parsedContacts.filter(c => c.status === 'ready' || c.status === 'pending').length,
-    companiesNeeded: parsedContacts.filter(c => !c.company && c.email && !isPersonalEmail(c.email)).length,
+    companiesNeeded: parsedContacts.filter(c => 
+      !c.company_nip && (c.company || (c.email && !isPersonalEmail(c.email)))
+    ).length,
+    personsNeeded: parsedContacts.filter(c => 
+      !c.ai_person_info && c.first_name && c.last_name
+    ).length,
   };
 
   const reset = useCallback(() => {

@@ -416,6 +416,38 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                 </div>
               </div>
 
+              {/* Bulk AI enrichment actions */}
+              <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg border border-primary/20 flex-shrink-0">
+                <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium">Wzbogać AI:</span>
+                
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={enrichAllCompanies}
+                  disabled={stats.companiesNeeded === 0 || isImporting || isParsing}
+                >
+                  <Building2 className="h-3 w-3" />
+                  Wszystkie firmy ({stats.companiesNeeded})
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={enrichAllPersons}
+                  disabled={stats.personsNeeded === 0 || isImporting || isParsing}
+                >
+                  <Search className="h-3 w-3" />
+                  Wszystkie osoby ({stats.personsNeeded})
+                </Button>
+                
+                <span className="text-xs text-muted-foreground ml-auto">
+                  Możesz też wzbogacić pojedyncze kontakty w wierszu
+                </span>
+              </div>
+
               {/* Default settings */}
               <div className="grid grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg border">
                 <div className="space-y-1.5">
