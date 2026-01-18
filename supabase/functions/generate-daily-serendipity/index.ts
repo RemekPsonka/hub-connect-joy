@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,17 +15,26 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    const { tenant_id, director_id } = await req.json();
-    
-    if (!tenant_id || !director_id) {
+
+    // Verify authorization
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+
+    // Use tenant_id and director_id from auth result, not from request body
+    const tenant_id = authResult.tenantId;
+    const director_id = authResult.directorId;
+
+    if (!director_id) {
       return new Response(
-        JSON.stringify({ error: 'tenant_id and director_id are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Only directors can generate serendipity' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log(`[generate-daily-serendipity] Authorized director: ${director_id}, tenant: ${tenant_id}`);
 
     const today = new Date().toISOString().split('T')[0];
     
@@ -177,7 +187,7 @@ WAŻNE: Używaj TYLKO ID kontaktów, potrzeb i ofert z powyższych list! Jeśli 
 
     console.log('Calling AI for serendipity generation...');
 
-    const aiResponse = await fetch('https://api.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
