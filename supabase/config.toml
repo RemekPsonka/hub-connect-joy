@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.update-tenant-user]
 verify_jwt = false
+
+[functions.create-assistant]
+verify_jwt = false

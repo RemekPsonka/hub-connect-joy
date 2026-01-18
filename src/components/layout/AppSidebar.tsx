@@ -14,6 +14,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
+import { useAuth } from '@/contexts/AuthContext';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -42,15 +43,26 @@ const navigationItems = [
   { title: 'Ustawienia', url: '/settings', icon: Settings },
 ];
 
+// Ograniczona nawigacja dla asystentów
+const assistantNavigationItems = [
+  { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Ustawienia', url: '/settings', icon: Settings },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const { isAdmin } = useOwnerPanel();
+  const { isAssistant } = useAuth();
 
-  // Combine nav items - add owner panel if admin
-  const allNavItems = isAdmin 
-    ? [...navigationItems, { title: 'Zarządzanie', url: '/owner', icon: Shield }]
-    : navigationItems;
+  // Dla asystenta - ograniczona nawigacja
+  // Dla admina - pełna nawigacja + zarządzanie
+  // Dla dyrektora - pełna nawigacja
+  const allNavItems = isAssistant
+    ? assistantNavigationItems
+    : isAdmin 
+      ? [...navigationItems, { title: 'Zarządzanie', url: '/owner', icon: Shield }]
+      : navigationItems;
 
   return (
     <Sidebar collapsible="icon">

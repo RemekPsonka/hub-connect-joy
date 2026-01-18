@@ -116,6 +116,90 @@ export type Database = {
           },
         ]
       }
+      assistant_group_access: {
+        Row: {
+          assistant_id: string
+          created_at: string | null
+          group_id: string
+          id: string
+        }
+        Insert: {
+          assistant_id: string
+          created_at?: string | null
+          group_id: string
+          id?: string
+        }
+        Update: {
+          assistant_id?: string
+          created_at?: string | null
+          group_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_group_access_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_group_access_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "contact_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assistants: {
+        Row: {
+          created_at: string | null
+          director_id: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          director_id: string
+          email: string
+          full_name: string
+          id?: string
+          is_active?: boolean | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          director_id?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistants_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bi_interview_sessions: {
         Row: {
           completed_at: string | null
@@ -2177,6 +2261,10 @@ export type Database = {
         Args: { p_category?: string; p_synonyms: string[]; p_term: string }
         Returns: string
       }
+      assistant_can_access_contact: {
+        Args: { _contact_id: string; _user_id: string }
+        Returns: boolean
+      }
       calculate_relationship_health: {
         Args: { p_contact_id: string }
         Returns: number
@@ -2227,6 +2315,8 @@ export type Database = {
           term: string
         }[]
       }
+      get_assistant_group_ids: { Args: { _user_id: string }; Returns: string[] }
+      get_assistant_tenant_id: { Args: { _user_id: string }; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -2237,6 +2327,7 @@ export type Database = {
         Returns: boolean
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
+      is_assistant: { Args: { _user_id: string }; Returns: boolean }
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
