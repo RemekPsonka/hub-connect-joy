@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Camera } from 'lucide-react';
+import { Search, Plus, Filter, Camera, FileSpreadsheet } from 'lucide-react';
 import { ScanBusinessCardModal } from './ScanBusinessCardModal';
+import { AIImportContactsModal } from './AIImportContactsModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,7 @@ interface ContactsHeaderProps {
   groupId: string;
   onGroupChange: (value: string) => void;
   onAddContact: () => void;
+  onImportSuccess?: () => void;
 }
 
 export function ContactsHeader({
@@ -29,10 +31,12 @@ export function ContactsHeader({
   groupId,
   onGroupChange,
   onAddContact,
+  onImportSuccess,
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
   const [searchInput, setSearchInput] = useState(search);
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -53,13 +57,17 @@ export function ContactsHeader({
           </Badge>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            <span className="hidden sm:inline">Importuj listę</span>
+          </Button>
           <Button variant="outline" onClick={() => setIsScanModalOpen(true)} className="gap-2">
             <Camera className="h-4 w-4" />
-            <span className="hidden sm:inline">Skanuj wizytówkę</span>
+            <span className="hidden sm:inline">Skanuj</span>
           </Button>
           <Button onClick={onAddContact} className="gap-2">
             <Plus className="h-4 w-4" />
-            Dodaj kontakt
+            <span className="hidden sm:inline">Dodaj kontakt</span>
           </Button>
         </div>
       </div>
@@ -96,9 +104,15 @@ export function ContactsHeader({
         </Select>
       </div>
 
-      <ScanBusinessCardModal 
-        isOpen={isScanModalOpen} 
-        onClose={() => setIsScanModalOpen(false)} 
+      <ScanBusinessCardModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+      />
+
+      <AIImportContactsModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        onSuccess={onImportSuccess}
       />
     </div>
   );
