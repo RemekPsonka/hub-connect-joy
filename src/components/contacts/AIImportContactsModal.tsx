@@ -245,9 +245,9 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="upload">Wgraj pliki</TabsTrigger>
                   <TabsTrigger value="paste">Wklej tekst</TabsTrigger>
-                  <TabsTrigger value="businessCards" className="gap-1">
+                  <TabsTrigger value="businessCards" className="flex items-center gap-1">
                     <CreditCard className="h-4 w-4" />
-                    Wizytówki
+                    <span>Wizytówki</span>
                   </TabsTrigger>
                 </TabsList>
 
