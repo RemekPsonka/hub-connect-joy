@@ -59,3 +59,9 @@ verify_jwt = false
 
 [functions.create-assistant]
 verify_jwt = false
+
+[functions.check-duplicate-contact]
+verify_jwt = false
+
+[functions.merge-contacts]
+verify_jwt = false
