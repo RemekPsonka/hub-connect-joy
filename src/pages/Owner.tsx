@@ -42,14 +42,12 @@ const roleLabels: Record<AppRole, string> = {
   owner: 'Właściciel',
   admin: 'Administrator',
   director: 'Dyrektor',
-  viewer: 'Obserwator',
 };
 
 const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   owner: 'default',
   admin: 'secondary',
   director: 'outline',
-  viewer: 'outline',
 };
 
 export default function Owner() {
@@ -98,8 +96,7 @@ export default function Owner() {
   const getHighestRole = (roles: AppRole[]): AppRole => {
     if (roles.includes('owner')) return 'owner';
     if (roles.includes('admin')) return 'admin';
-    if (roles.includes('director')) return 'director';
-    return 'viewer';
+    return 'director';
   };
 
   const canChangeRole = (targetRoles: AppRole[]): boolean => {
@@ -203,12 +200,6 @@ export default function Owner() {
                                 <div className="flex items-center gap-2">
                                   <Users className="h-4 w-4" />
                                   Dyrektor
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="viewer">
-                                <div className="flex items-center gap-2">
-                                  <Users className="h-4 w-4" />
-                                  Obserwator
                                 </div>
                               </SelectItem>
                             </SelectContent>

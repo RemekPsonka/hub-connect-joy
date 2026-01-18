@@ -102,7 +102,6 @@ export default function AddUserModal({ isOpen, onClose }: AddUserModalProps) {
               <SelectContent>
                 <SelectItem value="admin">Administrator</SelectItem>
                 <SelectItem value="director">Dyrektor</SelectItem>
-                <SelectItem value="viewer">Obserwator</SelectItem>
               </SelectContent>
             </Select>
           </div>
