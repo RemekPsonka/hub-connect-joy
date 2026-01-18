@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { director } = useAuth();
+  const { director, isAssistant } = useAuth();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -52,16 +52,22 @@ export default function ContactDetail() {
         onEdit={() => setIsEditModalOpen(true)}
       />
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
-          <TabsTrigger value="overview">Przegląd</TabsTrigger>
-          <TabsTrigger value="agent">Agent AI</TabsTrigger>
-          <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
-          <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
-          <TabsTrigger value="history">Historia</TabsTrigger>
-          <TabsTrigger value="tasks">Zadania</TabsTrigger>
-          <TabsTrigger value="notes">Notatki</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue={isAssistant ? "agent" : "overview"} className="w-full">
+        {isAssistant ? (
+          <TabsList>
+            <TabsTrigger value="agent">Agent AI</TabsTrigger>
+          </TabsList>
+        ) : (
+          <TabsList className="grid w-full grid-cols-7">
+            <TabsTrigger value="overview">Przegląd</TabsTrigger>
+            <TabsTrigger value="agent">Agent AI</TabsTrigger>
+            <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
+            <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
+            <TabsTrigger value="history">Historia</TabsTrigger>
+            <TabsTrigger value="tasks">Zadania</TabsTrigger>
+            <TabsTrigger value="notes">Notatki</TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="overview" className="mt-6">
           <ContactOverviewTab contact={contact} />

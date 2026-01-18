@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -37,6 +38,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import AddUserModal from '@/components/owner/AddUserModal';
 import EditUserModal from '@/components/owner/EditUserModal';
+import { AssistantsList } from '@/components/owner/AssistantsList';
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'Właściciel',
