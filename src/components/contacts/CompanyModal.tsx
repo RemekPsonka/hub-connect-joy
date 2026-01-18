@@ -421,7 +421,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                           {...field} 
                           value={field.value || ''} 
                           rows={2}
-                          placeholder="diagnostyka medyczna, leczenie szpitalne, rehabilitacja..."
+                          placeholder="np. ochrona patentowa, znaki towarowe, audyt IP, wzory przemysłowe..."
                         />
                       </FormControl>
                       <FormMessage />
@@ -440,7 +440,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                           {...field} 
                           value={field.value || ''} 
                           rows={2}
-                          placeholder="badania kliniczne, szkolenia medyczne..."
+                          placeholder="np. doradztwo strategiczne, szkolenia, konsultacje prawne..."
                         />
                       </FormControl>
                       <FormMessage />
