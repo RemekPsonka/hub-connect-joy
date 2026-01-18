@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.merge-contacts]
 verify_jwt = false
+
+[functions.parse-contacts-list]
+verify_jwt = false
