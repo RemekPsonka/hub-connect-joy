@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2, Users, Link2 } from 'lucide-react';
+import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2, Users, Link2, GitMerge } from 'lucide-react';
 import { ScanBusinessCardModal } from './ScanBusinessCardModal';
 import { AIImportContactsModal } from './AIImportContactsModal';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,7 @@ interface ContactsHeaderProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onBulkMergeByDomain?: () => void;
+  onFindDuplicates?: () => void;
 }
 
 export function ContactsHeader({
@@ -46,6 +47,7 @@ export function ContactsHeader({
   viewMode,
   onViewModeChange,
   onBulkMergeByDomain,
+  onFindDuplicates,
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
   const { data: companies = [] } = useCompaniesList();
@@ -74,6 +76,12 @@ export function ContactsHeader({
         <div className="flex gap-2">
           {viewMode === 'people' && (
             <>
+              {onFindDuplicates && (
+                <Button variant="outline" onClick={onFindDuplicates} className="gap-2">
+                  <GitMerge className="h-4 w-4" />
+                  <span className="hidden sm:inline">Znajdź duplikaty</span>
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="gap-2">
                 <FileSpreadsheet className="h-4 w-4" />
                 <span className="hidden sm:inline">Importuj listę</span>

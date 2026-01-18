@@ -6,6 +6,7 @@ import { ContactsTable } from '@/components/contacts/ContactsTable';
 import { CompaniesTable } from '@/components/contacts/CompaniesTable';
 import { ContactModal } from '@/components/contacts/ContactModal';
 import { BulkMergeDomainsModal } from '@/components/contacts/BulkMergeDomainsModal';
+import { FindDuplicatesModal } from '@/components/contacts/FindDuplicatesModal';
 
 export default function Contacts() {
   const [viewMode, setViewMode] = useState<ViewMode>('people');
@@ -19,6 +20,7 @@ export default function Contacts() {
   const [companySortBy, setCompanySortBy] = useState('name');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkMergeModalOpen, setIsBulkMergeModalOpen] = useState(false);
+  const [isFindDuplicatesModalOpen, setIsFindDuplicatesModalOpen] = useState(false);
 
   // Contacts query (for people view)
   const contactsQuery = useContacts({
@@ -80,6 +82,7 @@ export default function Contacts() {
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         onBulkMergeByDomain={() => setIsBulkMergeModalOpen(true)}
+        onFindDuplicates={() => setIsFindDuplicatesModalOpen(true)}
       />
 
       {viewMode === 'people' ? (
@@ -118,6 +121,11 @@ export default function Contacts() {
       <BulkMergeDomainsModal
         open={isBulkMergeModalOpen}
         onOpenChange={setIsBulkMergeModalOpen}
+      />
+
+      <FindDuplicatesModal
+        open={isFindDuplicatesModalOpen}
+        onOpenChange={setIsFindDuplicatesModalOpen}
       />
     </div>
   );
