@@ -227,7 +227,7 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
 
     try {
       const { data, error } = await supabase.functions.invoke('enrich-company-data', {
-        body: { companyName: extracted.companyName, website: extracted.domain }
+        body: { company_name: extracted.companyName, website: extracted.domain }
       });
 
       if (error) throw error;
