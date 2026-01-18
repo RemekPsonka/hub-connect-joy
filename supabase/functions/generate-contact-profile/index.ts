@@ -147,17 +147,55 @@ serve(async (req) => {
     const consultations = consultationsResult.data || [];
     const needs = needsResult.data || [];
     const offers = offersResult.data || [];
-    const company = contact.companies;
+    let company = contact.companies;
 
     console.log("Generating AI profile for contact:", contact.full_name);
 
     // ============= STEP 1: Extract company domain from email =============
     const emailDomain = extractDomainFromEmail(contact.email);
-    const companyWebsite = emailDomain ? `https://${emailDomain}` : company?.website;
-    const companyName = contact.company || company?.name || emailDomain?.replace(/\.(pl|com|eu|net|org)$/i, '') || 'Nieznana firma';
+    let companyWebsite = emailDomain ? `https://${emailDomain}` : company?.website;
+    const companyNameFromData = contact.company || company?.name || emailDomain?.replace(/\.(pl|com|eu|net|org)$/i, '') || null;
 
     console.log("Company website to scrape:", companyWebsite);
-    console.log("Company name:", companyName);
+    console.log("Company name from data:", companyNameFromData);
+
+    // ============= STEP 1.5: Check/Create company record =============
+    let companyId = contact.company_id;
+    let companyCreated = false;
+    let companyUpdated = false;
+
+    if (!companyId && (companyNameFromData || emailDomain)) {
+      console.log("Contact has no company_id, checking if company exists...");
+      
+      // Search for existing company by name or website domain
+      let searchConditions = [];
+      if (companyNameFromData) {
+        searchConditions.push(`name.ilike.%${companyNameFromData}%`);
+      }
+      if (emailDomain) {
+        searchConditions.push(`website.ilike.%${emailDomain}%`);
+      }
+
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id, name, website, industry, description, ai_analysis')
+        .eq('tenant_id', tenantId)
+        .or(searchConditions.join(','))
+        .maybeSingle();
+
+      if (existingCompany) {
+        console.log("Found existing company:", existingCompany.name);
+        companyId = existingCompany.id;
+        company = existingCompany;
+        if (!companyWebsite && existingCompany.website) {
+          companyWebsite = existingCompany.website;
+        }
+      } else {
+        console.log("Company not found, will create after AI analysis...");
+      }
+    }
+
+    const companyName = companyNameFromData || 'Nieznana firma';
 
     // ============= STEP 2: Scrape company website (PRIORITY 1) =============
     let companyWebsiteContent = "";
@@ -285,6 +323,7 @@ ${personSearchResults}
 ---
 WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIERWSZEŃSTWO!`;
 
+    // ============= STEP 5: Call AI with tool calling for structured company data =============
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -294,7 +333,43 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
           { role: "system", content: systemPrompt }, 
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 2000,
+        tools: [{
+          type: "function",
+          function: {
+            name: "save_contact_and_company_profile",
+            description: "Zapisz profil osoby i dane firmy do systemu",
+            parameters: {
+              type: "object",
+              properties: {
+                person_profile: {
+                  type: "string",
+                  description: "Pełny profil osoby w formacie markdown zgodnie z szablonem"
+                },
+                company_data: {
+                  type: "object",
+                  description: "Strukturyzowane dane firmy do zapisania w bazie",
+                  properties: {
+                    name: { type: "string", description: "Pełna nazwa firmy (np. Sistrans Sp. z o.o.)" },
+                    industry: { type: "string", description: "Branża firmy (np. Transport, Spedycja, Logistyka)" },
+                    description: { type: "string", description: "Krótki opis firmy (max 500 znaków)" },
+                    what_company_does: { type: "string", description: "Główna działalność firmy" },
+                    what_company_offers: { type: "string", description: "Oferta produktów/usług" },
+                    specializations: { type: "array", items: { type: "string" }, description: "Lista specjalizacji" },
+                    nip: { type: "string", description: "NIP firmy (10 cyfr) jeśli znaleziony" },
+                    regon: { type: "string", description: "REGON firmy jeśli znaleziony" },
+                    address: { type: "string", description: "Adres firmy" },
+                    city: { type: "string", description: "Miasto" },
+                    website: { type: "string", description: "Strona www firmy" }
+                  },
+                  required: ["name", "industry", "description"]
+                }
+              },
+              required: ["person_profile", "company_data"]
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "save_contact_and_company_profile" } },
+        max_tokens: 3000,
       }),
     });
 
@@ -304,12 +379,104 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
     }
 
     const aiData = await aiResponse.json();
-    const profileSummary = aiData.choices?.[0]?.message?.content?.trim();
+    
+    // Parse tool call response
+    let profileSummary = "";
+    let companyData: any = null;
+
+    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+        profileSummary = args.person_profile || "";
+        companyData = args.company_data || null;
+        console.log("Parsed AI response - profile length:", profileSummary.length, "company data:", !!companyData);
+      } catch (e) {
+        console.error("Failed to parse tool call arguments:", e);
+        // Fallback to regular content
+        profileSummary = aiData.choices?.[0]?.message?.content?.trim() || "";
+      }
+    } else {
+      // Fallback if no tool call
+      profileSummary = aiData.choices?.[0]?.message?.content?.trim() || "";
+    }
 
     if (!profileSummary) throw new Error("No profile summary generated");
 
-    // Update contact
-    await supabase.from("contacts").update({ profile_summary: profileSummary, updated_at: new Date().toISOString() }).eq("id", contact_id);
+    // ============= STEP 6: Create/Update company if we have data =============
+    if (companyData && companyData.name && !companyId) {
+      console.log("Creating new company:", companyData.name);
+      
+      const companyInsert = {
+        tenant_id: tenantId,
+        name: companyData.name,
+        industry: companyData.industry || null,
+        description: companyData.description || null,
+        website: companyData.website || companyWebsite || null,
+        city: companyData.city || null,
+        address: companyData.address || null,
+        nip: companyData.nip?.replace(/\D/g, '').substring(0, 10) || null,
+        regon: companyData.regon?.replace(/\D/g, '') || null,
+        ai_analysis: JSON.stringify({
+          what_company_does: companyData.what_company_does,
+          what_company_offers: companyData.what_company_offers,
+          specializations: companyData.specializations,
+          analyzed_at: new Date().toISOString(),
+          source: companyWebsite
+        })
+      };
+
+      const { data: newCompany, error: companyError } = await supabase
+        .from('companies')
+        .insert(companyInsert)
+        .select('id')
+        .single();
+
+      if (companyError) {
+        console.error("Failed to create company:", companyError);
+      } else if (newCompany) {
+        companyId = newCompany.id;
+        companyCreated = true;
+        console.log("Created company with ID:", companyId);
+      }
+    } else if (companyData && companyId && hasWebsiteData) {
+      // Update existing company with new data from website
+      console.log("Updating existing company:", companyId);
+      
+      const companyUpdate: any = {};
+      if (companyData.industry && !company?.industry) companyUpdate.industry = companyData.industry;
+      if (companyData.description && !company?.description) companyUpdate.description = companyData.description;
+      if (companyData.city && !company?.city) companyUpdate.city = companyData.city;
+      if (companyData.address && !company?.address) companyUpdate.address = companyData.address;
+      if (companyData.nip && !company?.nip) companyUpdate.nip = companyData.nip.replace(/\D/g, '').substring(0, 10);
+      
+      // Always update AI analysis with latest data
+      companyUpdate.ai_analysis = JSON.stringify({
+        what_company_does: companyData.what_company_does,
+        what_company_offers: companyData.what_company_offers,
+        specializations: companyData.specializations,
+        analyzed_at: new Date().toISOString(),
+        source: companyWebsite
+      });
+
+      if (Object.keys(companyUpdate).length > 0) {
+        await supabase.from('companies').update(companyUpdate).eq('id', companyId);
+        companyUpdated = true;
+      }
+    }
+
+    // ============= STEP 7: Update contact with profile and company link =============
+    const contactUpdate: any = { 
+      profile_summary: profileSummary, 
+      updated_at: new Date().toISOString() 
+    };
+    
+    if (companyId && !contact.company_id) {
+      contactUpdate.company_id = companyId;
+      console.log("Linking contact to company:", companyId);
+    }
+
+    await supabase.from("contacts").update(contactUpdate).eq("id", contact_id);
 
     // Log AI profile generation activity
     await supabase.from("contact_activity_log").insert({
@@ -321,7 +488,10 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
         model: 'google/gemini-3-flash-preview',
         has_website_data: hasWebsiteData,
         company_website: companyWebsite,
-        has_search_results: personSearchResults.length > 0
+        has_search_results: personSearchResults.length > 0,
+        company_created: companyCreated,
+        company_updated: companyUpdated,
+        company_id: companyId
       }
     });
 
@@ -333,6 +503,12 @@ WYGENERUJ PROFIL ZGODNIE Z HIERARCHIĄ ŹRÓDEŁ. FAKTY ZE STRONY WWW MAJĄ PIER
           website_scraped: hasWebsiteData,
           company_website: companyWebsite,
           search_performed: personSearchResults.length > 0
+        },
+        company: {
+          id: companyId,
+          created: companyCreated,
+          updated: companyUpdated,
+          data: companyData
         }
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

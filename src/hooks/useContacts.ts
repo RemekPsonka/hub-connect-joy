@@ -453,12 +453,27 @@ export function useGenerateContactProfile() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       
-      return { contactId, profileSummary: data.profile_summary };
+      return { 
+        contactId, 
+        profileSummary: data.profile_summary,
+        company: data.company
+      };
     },
-    onSuccess: ({ contactId }) => {
+    onSuccess: ({ contactId, company }) => {
       queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contact_activity_log', contactId] });
-      toast.success('Profil AI został wygenerowany');
+      
+      // Invalidate companies queries if company was created or updated
+      if (company?.created || company?.updated) {
+        queryClient.invalidateQueries({ queryKey: ['companies'] });
+        queryClient.invalidateQueries({ queryKey: ['company'] });
+      }
+      
+      if (company?.created) {
+        toast.success('Profil AI wygenerowany i firma utworzona');
+      } else {
+        toast.success('Profil AI został wygenerowany');
+      }
     },
     onError: (error) => {
       console.error('Error generating contact profile:', error);
