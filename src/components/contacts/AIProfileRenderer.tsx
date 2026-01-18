@@ -2,8 +2,9 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { ExternalLink, Search, AlertTriangle } from 'lucide-react';
 
-type SectionStatus = 'confirmed' | 'deduction' | 'missing' | 'mixed';
+type SectionStatus = 'confirmed' | 'deduction' | 'missing' | 'mixed' | 'online_verified';
 
 interface ProfileSection {
   title: string;
@@ -21,7 +22,13 @@ const FULL_WIDTH_SECTIONS = [
   'wartość dla sieci',
   'aktualne potrzeby',
   'pytania do następnego spotkania',
-  'rekomendowany kontakt'
+  'rekomendowany kontakt',
+  'wyniki wyszukiwania',
+  'stanowisko',
+  'doświadczenie',
+  'linkedin',
+  'inne informacje',
+  'uwagi'
 ];
 
 function parseProfileToSections(markdown: string): ProfileSection[] {
@@ -45,9 +52,14 @@ function parseProfileToSections(markdown: string): ProfileSection[] {
     const hasConfirmed = content.includes('✅');
     const hasDeduction = content.includes('💡');
     const hasMissing = content.includes('📭');
+    const hasSource = content.includes('📎') || content.includes('Źródło:');
     
     let status: SectionStatus = 'mixed';
-    if (hasConfirmed && !hasDeduction && !hasMissing) {
+    
+    // Online verified jeśli ma źródła
+    if (hasConfirmed && hasSource) {
+      status = 'online_verified';
+    } else if (hasConfirmed && !hasDeduction && !hasMissing) {
       status = 'confirmed';
     } else if (!hasConfirmed && hasDeduction && !hasMissing) {
       status = 'deduction';
@@ -73,6 +85,10 @@ function parseProfileToSections(markdown: string): ProfileSection[] {
 
 function StatusBadge({ status }: { status: SectionStatus }) {
   const config = {
+    online_verified: {
+      label: '🔍 Zweryfikowane online',
+      className: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700'
+    },
     confirmed: {
       label: '✅ Potwierdzone',
       className: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700'
@@ -87,7 +103,7 @@ function StatusBadge({ status }: { status: SectionStatus }) {
     },
     mixed: {
       label: '📊 Mieszane źródła',
-      className: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700'
+      className: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-700'
     }
   };
   
@@ -108,6 +124,31 @@ function formatContent(content: string): React.ReactNode {
     <div className="space-y-2">
       {lines.map((line, index) => {
         const trimmedLine = line.trim();
+        
+        // Wykryj i stylizuj linie ze źródłem (📎 Źródło: URL)
+        if (trimmedLine.startsWith('📎') || trimmedLine.toLowerCase().startsWith('źródło:')) {
+          // Wyodrębnij URL
+          const urlMatch = trimmedLine.match(/(https?:\/\/[^\s]+)/);
+          const url = urlMatch ? urlMatch[1] : null;
+          
+          return (
+            <div key={index} className="flex items-center gap-2 text-xs text-muted-foreground pl-4">
+              <ExternalLink className="h-3 w-3" />
+              {url ? (
+                <a 
+                  href={url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 hover:underline truncate max-w-[300px]"
+                >
+                  {url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                </a>
+              ) : (
+                <span>{trimmedLine.replace(/^📎\s*/, '')}</span>
+              )}
+            </div>
+          );
+        }
         
         // Wykryj i stylizuj oznaczenia statusu
         if (trimmedLine.startsWith('✅')) {
@@ -131,6 +172,15 @@ function formatContent(content: string): React.ReactNode {
             <div key={index} className="flex items-start gap-2 p-2 rounded-md bg-gray-50 dark:bg-gray-800/50 border-l-2 border-gray-400">
               <span className="text-sm text-muted-foreground">{trimmedLine}</span>
             </div>
+          );
+        }
+        
+        // Nagłówek sekcji (###)
+        if (trimmedLine.startsWith('###')) {
+          return (
+            <h4 key={index} className="text-sm font-semibold mt-3 mb-1">
+              {trimmedLine.replace(/^###\s*/, '')}
+            </h4>
           );
         }
         
@@ -166,13 +216,15 @@ function formatContent(content: string): React.ReactNode {
 
 function ProfileSectionCard({ section }: { section: ProfileSection }) {
   const borderColors = {
+    online_verified: 'border-l-blue-500',
     confirmed: 'border-l-green-500',
     deduction: 'border-l-amber-500',
     missing: 'border-l-gray-400',
-    mixed: 'border-l-blue-500'
+    mixed: 'border-l-purple-500'
   };
   
   const bgColors = {
+    online_verified: 'bg-blue-50/30 dark:bg-blue-900/10',
     confirmed: 'bg-green-50/30 dark:bg-green-900/10',
     deduction: 'bg-amber-50/30 dark:bg-amber-900/10',
     missing: 'bg-gray-50/30 dark:bg-gray-800/20',
@@ -208,6 +260,30 @@ interface AIProfileRendererProps {
 export function AIProfileRenderer({ markdown }: AIProfileRendererProps) {
   const sections = parseProfileToSections(markdown);
   
+  // Check if this is an online search result (new format)
+  const isOnlineSearchResult = markdown.includes('🔍 Wyniki wyszukiwania') || 
+                               markdown.includes('📎 Źródło') ||
+                               markdown.includes('Źródło:');
+  
+  // Fallback for old format or plain text
+  if (sections.length === 0 && markdown?.trim()) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+            ⚠️ Format podstawowy (bez weryfikacji online)
+          </Badge>
+        </div>
+        <Card className="border-l-4 border-l-amber-400">
+          <CardContent className="p-4">
+            <p className="text-sm whitespace-pre-wrap">{markdown}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
   if (sections.length === 0) {
     return (
       <div className="text-sm text-muted-foreground italic p-4 text-center">
@@ -220,20 +296,24 @@ export function AIProfileRenderer({ markdown }: AIProfileRendererProps) {
   const fullWidthSections = sections.filter(s => s.isFullWidth);
   const narrowSections = sections.filter(s => !s.isFullWidth);
   
-  // Pierwsza sekcja (zwykle "Kim jest ta osoba") powinna być na górze
+  // Główna sekcja (wyniki wyszukiwania lub kim jest ta osoba)
   const mainSection = fullWidthSections.find(s => 
+    s.title.toLowerCase().includes('wyniki wyszukiwania') ||
     s.title.toLowerCase().includes('kim jest')
   );
   const otherFullWidth = fullWidthSections.filter(s => 
+    !s.title.toLowerCase().includes('wyniki wyszukiwania') &&
     !s.title.toLowerCase().includes('kim jest')
   );
   
-  // Sekcja pytań na koniec
-  const questionsSection = otherFullWidth.find(s => 
-    s.title.toLowerCase().includes('pytania')
+  // Sekcja pytań/uwag na koniec
+  const endSection = otherFullWidth.find(s => 
+    s.title.toLowerCase().includes('pytania') ||
+    s.title.toLowerCase().includes('uwagi')
   );
   const middleFullWidth = otherFullWidth.filter(s => 
-    !s.title.toLowerCase().includes('pytania')
+    !s.title.toLowerCase().includes('pytania') &&
+    !s.title.toLowerCase().includes('uwagi')
   );
   
   return (
@@ -241,6 +321,12 @@ export function AIProfileRenderer({ markdown }: AIProfileRendererProps) {
       {/* Legenda */}
       <div className="flex flex-wrap gap-2 pb-2 border-b">
         <span className="text-xs text-muted-foreground mr-2">Legenda:</span>
+        {isOnlineSearchResult && (
+          <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400">
+            <Search className="h-3 w-3 mr-1" />
+            Zweryfikowane online
+          </Badge>
+        )}
         <Badge variant="outline" className="text-xs bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400">
           ✅ Potwierdzone
         </Badge>
@@ -252,7 +338,17 @@ export function AIProfileRenderer({ markdown }: AIProfileRendererProps) {
         </Badge>
       </div>
       
-      {/* Główna sekcja - Kim jest ta osoba */}
+      {/* Banner dla wyników online */}
+      {isOnlineSearchResult && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Search className="h-5 w-5 text-blue-600" />
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+            Profil wzbogacony o dane z wyszukiwania internetowego
+          </span>
+        </div>
+      )}
+      
+      {/* Główna sekcja */}
       {mainSection && (
         <ProfileSectionCard section={mainSection} />
       )}
@@ -271,10 +367,10 @@ export function AIProfileRenderer({ markdown }: AIProfileRendererProps) {
         <ProfileSectionCard key={`full-${index}`} section={section} />
       ))}
       
-      {/* Sekcja pytań na końcu - wyróżniona */}
-      {questionsSection && (
+      {/* Sekcja uwag/pytań na końcu - wyróżniona */}
+      {endSection && (
         <div className="pt-2 border-t">
-          <ProfileSectionCard section={questionsSection} />
+          <ProfileSectionCard section={endSection} />
         </div>
       )}
     </div>

@@ -16,13 +16,18 @@ interface PersonData {
 }
 
 interface EnrichedPersonData {
-  suggested_position: string | null;
-  position_certainty: 'confirmed' | 'likely' | 'guess';
   profile_summary: string | null;
-  summary_source: string;
-  linkedin_found: boolean;
-  confidence: 'high' | 'medium' | 'low';
+  sources: string[];
+  search_performed: boolean;
+  confidence: 'verified' | 'partial' | 'not_found';
   data_notes: string[];
+}
+
+interface FirecrawlSearchResult {
+  url: string;
+  title: string;
+  description?: string;
+  markdown?: string;
 }
 
 serve(async (req) => {
@@ -53,19 +58,70 @@ serve(async (req) => {
       );
     }
 
+    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.error('LOVABLE_API_KEY is not configured');
+    
+    if (!FIRECRAWL_API_KEY) {
+      console.error('FIRECRAWL_API_KEY is not configured');
       return new Response(
-        JSON.stringify({ error: 'Klucz API nie jest skonfigurowany' }),
+        JSON.stringify({ error: 'Firecrawl API nie jest skonfigurowany' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Enriching person data for:', first_name, last_name, 'at', company);
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY is not configured');
+      return new Response(
+        JSON.stringify({ error: 'Lovable AI API nie jest skonfigurowany' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Call Lovable AI Gateway for person analysis
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    console.log('[enrich-person-data] Starting Firecrawl search for:', first_name, last_name, company);
+
+    // Step 1: Search for the person using Firecrawl
+    const searchQuery = `${first_name} ${last_name} ${company || ''} LinkedIn stanowisko zawodowe`;
+    
+    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: searchQuery,
+        limit: 5,
+        lang: 'pl',
+        scrapeOptions: {
+          formats: ['markdown']
+        }
+      }),
+    });
+
+    if (!firecrawlResponse.ok) {
+      const errorText = await firecrawlResponse.text();
+      console.error('[enrich-person-data] Firecrawl API error:', firecrawlResponse.status, errorText);
+      
+      if (firecrawlResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Przekroczono limit zapytań Firecrawl, spróbuj ponownie za chwilę' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ error: 'Błąd podczas wyszukiwania osoby' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const firecrawlData = await firecrawlResponse.json();
+    const searchResults: FirecrawlSearchResult[] = firecrawlData.data || [];
+    
+    console.log(`[enrich-person-data] Firecrawl returned ${searchResults.length} results`);
+
+    // Step 2: Analyze results with Lovable AI
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -76,106 +132,147 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie profili zawodowych osób.
-
-⚠️ KLUCZOWA ZASADA:
-NIE MASZ dostępu do internetu ani LinkedIn.
-Pracujesz TYLKO na danych przekazanych w zapytaniu.
-NIE WYMYŚLAJ informacji o konkretnej osobie!
+            content: `Jesteś ekspertem w analizie wyników wyszukiwania o osobach.
 
 TWOJE ZADANIE:
-Na podstawie nazwy firmy i kontekstu, zasugeruj PRAWDOPODOBNE stanowisko.
-Jasno oznacz, że to SUGESTIA, nie fakt.
+Przeanalizuj wyniki wyszukiwania i wyodrębnij ZWERYFIKOWANE informacje o szukanej osobie.
 
-ZASADY:
-1. Jeśli podano email firmowy → "likely" (prawdopodobne stanowisko)
-2. Jeśli tylko nazwa firmy → "guess" (zgadywanie)
-3. NIE twórz wymyślonego opisu osoby
-4. Profile summary = tylko ogólne info o typowym stanowisku w takiej firmie
+ZASADY KRYTYCZNE:
+1. Podawaj TYLKO informacje które BEZPOŚREDNIO dotyczą szukanej osoby
+2. Każda informacja MUSI mieć oznaczone źródło [źródło: URL]
+3. Jeśli informacja jest niepewna lub dotyczy innej osoby - NIE uwzględniaj jej
+4. Jeśli brak danych - jasno to zaznacz
 
-Zwróć TYLKO poprawny JSON:
-{
-  "suggested_position": "string lub null",
-  "position_certainty": "confirmed" | "likely" | "guess",
-  "profile_summary": "Krótka OGÓLNA informacja o typowym stanowisku w takiej firmie (nie o konkretnej osobie!) lub null",
-  "summary_source": "AI_DEDUCTION" | "NO_DATA",
-  "linkedin_found": false,
-  "confidence": "low" | "medium",
-  "data_notes": ["lista uwag o tym co jest sugestią a co pewne"]
-}`
+FORMAT ODPOWIEDZI (markdown):
+
+## 🔍 Wyniki wyszukiwania online
+
+### Stanowisko i firma
+✅ [informacja] 
+📎 Źródło: [URL]
+
+LUB
+
+📭 Nie znaleziono informacji o stanowisku
+
+### Doświadczenie zawodowe
+✅ [informacja]
+📎 Źródło: [URL]
+
+LUB
+
+📭 Nie znaleziono informacji o doświadczeniu
+
+### LinkedIn
+✅ Profil: [URL]
+
+LUB
+
+📭 Nie znaleziono profilu LinkedIn
+
+### Inne informacje
+✅ [informacja]
+📎 Źródło: [URL]
+
+### Uwagi
+💡 [komentarz o jakości/wiarygodności znalezionych danych]
+
+UŻYJ:
+- ✅ dla zweryfikowanych faktów ze źródeł
+- 📎 dla oznaczenia źródła
+- 📭 dla brakujących informacji
+- 💡 dla uwag i komentarzy AI`
           },
           {
             role: 'user',
-            content: `Przeanalizuj dane i zasugeruj stanowisko (oznacz jako sugestję):
+            content: `Szukam informacji o osobie:
+- Imię: ${first_name}
+- Nazwisko: ${last_name}
+${company ? `- Firma: ${company}` : '- Firma: Nie podano'}
+${email ? `- Email: ${email}` : ''}
+${linkedin_url ? `- LinkedIn: ${linkedin_url}` : ''}
 
-Imię: ${first_name}
-Nazwisko: ${last_name}
-${company ? `Firma: ${company}` : 'Firma: Nie podano'}
-${email ? `Email: ${email}` : 'Email: Nie podano'}
-${linkedin_url ? `LinkedIn: ${linkedin_url}` : 'LinkedIn: Nie podano'}
+WYNIKI WYSZUKIWANIA (${searchResults.length} wyników):
 
-UWAGA: Nie masz dostępu do internetu. Możesz tylko zgadywać na podstawie nazwy firmy.
-Wszystko co zwracasz to SUGESTIA, nie fakt!`
+${searchResults.length === 0 ? 'Brak wyników wyszukiwania.' : searchResults.map((r, i) => `
+--- WYNIK ${i + 1} ---
+URL: ${r.url}
+Tytuł: ${r.title || 'Brak tytułu'}
+Opis: ${r.description || 'Brak opisu'}
+Treść: ${r.markdown?.substring(0, 1500) || 'Brak treści'}
+`).join('\n')}
+
+Przeanalizuj te wyniki i wyodrębnij tylko te informacje, które BEZPOŚREDNIO dotyczą osoby ${first_name} ${last_name}${company ? ` z firmy ${company}` : ''}.
+Jeśli wyniki nie dotyczą tej osoby lub brak konkretnych danych - zaznacz to jasno.`
           }
         ],
-        max_tokens: 500,
-        temperature: 0.3,
+        max_tokens: 1500,
+        temperature: 0.2,
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (!aiResponse.ok) {
+      if (aiResponse.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Przekroczono limit zapytań, spróbuj ponownie za chwilę' }),
+          JSON.stringify({ error: 'Przekroczono limit zapytań AI, spróbuj ponownie za chwilę' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (response.status === 402) {
+      if (aiResponse.status === 402) {
         return new Response(
           JSON.stringify({ error: 'Brak środków na koncie AI, doładuj kredyty' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
+      const errorText = await aiResponse.text();
+      console.error('[enrich-person-data] AI gateway error:', aiResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'Błąd podczas analizy osoby' }),
+        JSON.stringify({ error: 'Błąd podczas analizy wyników' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const data = await response.json();
-    console.log('AI response received');
+    const aiData = await aiResponse.json();
+    const profileSummary = aiData.choices?.[0]?.message?.content || null;
 
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      console.error('No content in AI response');
+    if (!profileSummary) {
+      console.error('[enrich-person-data] No content in AI response');
       return new Response(
         JSON.stringify({ error: 'Brak odpowiedzi od AI' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Parse the JSON response
-    let enrichedData: EnrichedPersonData;
-    try {
-      const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      enrichedData = JSON.parse(cleanedContent);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
-      // Return default data on parse error
-      enrichedData = {
-        suggested_position: null,
-        position_certainty: 'guess',
-        profile_summary: null,
-        summary_source: 'NO_DATA',
-        linkedin_found: false,
-        confidence: 'low',
-        data_notes: ['Nie udało się przetworzyć odpowiedzi AI']
-      };
+    // Extract sources from results
+    const sources = searchResults.map(r => r.url);
+
+    // Determine confidence based on results
+    let confidence: 'verified' | 'partial' | 'not_found' = 'not_found';
+    if (searchResults.length > 0) {
+      const hasLinkedIn = sources.some(url => url.includes('linkedin.com'));
+      const hasVerifiedInfo = profileSummary.includes('✅');
+      
+      if (hasLinkedIn || (hasVerifiedInfo && searchResults.length >= 3)) {
+        confidence = 'verified';
+      } else if (hasVerifiedInfo) {
+        confidence = 'partial';
+      }
     }
 
-    console.log('Successfully enriched person data:', enrichedData);
+    const enrichedData: EnrichedPersonData = {
+      profile_summary: profileSummary,
+      sources,
+      search_performed: true,
+      confidence,
+      data_notes: [
+        `Przeszukano ${searchResults.length} źródeł internetowych`,
+        searchResults.some(r => r.url.includes('linkedin.com')) 
+          ? 'Znaleziono profil LinkedIn' 
+          : 'Nie znaleziono profilu LinkedIn'
+      ]
+    };
+
+    console.log('[enrich-person-data] Successfully enriched person data, confidence:', confidence);
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),
@@ -183,7 +280,7 @@ Wszystko co zwracasz to SUGESTIA, nie fakt!`
     );
 
   } catch (error) {
-    console.error('Error in enrich-person-data:', error);
+    console.error('[enrich-person-data] Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Nieznany błąd' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
