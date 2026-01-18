@@ -41,6 +41,10 @@ export interface CreateContactWithCompanyData {
     city?: string;
     notes?: string;
     profile_summary?: string;
+    primary_group_id?: string;
+    met_source?: string;
+    met_date?: string;
+    tags?: string[];
   };
   company?: {
     name: string;

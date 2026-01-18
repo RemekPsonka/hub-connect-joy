@@ -1035,6 +1035,8 @@ export type Database = {
           last_contact_date: string | null
           last_name: string | null
           linkedin_url: string | null
+          met_date: string | null
+          met_source: string | null
           notes: string | null
           phone: string | null
           position: string | null
@@ -1063,6 +1065,8 @@ export type Database = {
           last_contact_date?: string | null
           last_name?: string | null
           linkedin_url?: string | null
+          met_date?: string | null
+          met_source?: string | null
           notes?: string | null
           phone?: string | null
           position?: string | null
@@ -1091,6 +1095,8 @@ export type Database = {
           last_contact_date?: string | null
           last_name?: string | null
           linkedin_url?: string | null
+          met_date?: string | null
+          met_source?: string | null
           notes?: string | null
           phone?: string | null
           position?: string | null
