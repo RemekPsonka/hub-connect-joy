@@ -67,6 +67,8 @@ interface UseAIImportReturn {
   parseText: (text: string) => Promise<void>;
   checkAllDuplicates: () => Promise<void>;
   updateDuplicateDecision: (index: number, decision: 'merge' | 'new' | 'skip') => void;
+  updateParsedContact: (index: number, updates: Partial<ParsedContact>) => void;
+  removeParsedContact: (index: number) => void;
   importContacts: (groupId?: string, metSource?: string, metDate?: string) => Promise<ImportResult>;
   reset: () => void;
 }
@@ -241,6 +243,18 @@ export function useAIImport(): UseAIImportReturn {
       setIsParsing(false);
       setProgress({ current: 0, total: 0, stage: '' });
     }
+  }, []);
+
+  const updateParsedContact = useCallback((index: number, updates: Partial<ParsedContact>) => {
+    setParsedContacts(prev => prev.map((contact, i) => 
+      i === index ? { ...contact, ...updates } : contact
+    ));
+  }, []);
+
+  const removeParsedContact = useCallback((index: number) => {
+    setParsedContacts(prev => prev.filter((_, i) => i !== index));
+    // Update metadata
+    setMetadata(prev => prev ? { ...prev, totalParsed: prev.totalParsed - 1 } : null);
   }, []);
 
   const checkAllDuplicates = useCallback(async () => {
@@ -462,6 +476,8 @@ export function useAIImport(): UseAIImportReturn {
     parseText,
     checkAllDuplicates,
     updateDuplicateDecision,
+    updateParsedContact,
+    removeParsedContact,
     importContacts,
     reset
   };
