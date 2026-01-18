@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2, Check } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -322,20 +322,27 @@ export function ContactsTable({
                   <GroupBadge group={contact.contact_groups} />
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={generatingId === contact.id}
-                    onClick={(e) => handleGenerateProfile(e, contact.id)}
-                    className="gap-1"
-                  >
-                    {generatingId === contact.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3 w-3" />
-                    )}
-                    Generuj AI
-                  </Button>
+                  {contact.profile_summary ? (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Check className="h-3 w-3 text-green-600" />
+                      Wygenerowano
+                    </span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={generatingId === contact.id}
+                      onClick={(e) => handleGenerateProfile(e, contact.id)}
+                      className="gap-1"
+                    >
+                      {generatingId === contact.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      Generuj AI
+                    </Button>
+                  )}
                 </TableCell>
                 <TableCell>
                   <RelationshipStrengthBar value={contact.relationship_strength || 5} />
