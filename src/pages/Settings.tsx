@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar } from 'lucide-react';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -14,6 +14,8 @@ import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { GroupManagementModal } from '@/components/settings/GroupManagementModal';
 import { DefaultPositionsManager } from '@/components/settings/DefaultPositionsManager';
+import { TwoFactorSettings } from '@/components/settings/TwoFactorSettings';
+import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -46,10 +48,8 @@ export default function Settings() {
   const { data: biStats } = useBIStatistics(tenantId || undefined);
   const { data: contactsWithoutBI = [] } = useContactsWithoutBI(tenantId || undefined);
 
-  // For assistants, show only password change form
+  // For assistants, show only password change and 2FA
   if (isAssistant) {
-    // Lazy import to avoid circular deps
-    const PasswordChangeForm = require('@/components/settings/PasswordChangeForm').PasswordChangeForm;
     return (
       <div className="space-y-6">
         <div>
@@ -57,6 +57,7 @@ export default function Settings() {
           <p className="text-muted-foreground">Zarządzaj ustawieniami konta</p>
         </div>
         <PasswordChangeForm />
+        <TwoFactorSettings />
       </div>
     );
   }
@@ -285,6 +286,10 @@ export default function Settings() {
       <Tabs defaultValue="general" className="space-y-6">
         <TabsList>
           <TabsTrigger value="general">Ogólne</TabsTrigger>
+          <TabsTrigger value="security">
+            <Shield className="h-4 w-4 mr-1" />
+            Bezpieczeństwo
+          </TabsTrigger>
           <TabsTrigger value="bi">Business Intelligence</TabsTrigger>
           <TabsTrigger value="ai">AI & Embeddingi</TabsTrigger>
         </TabsList>
@@ -346,6 +351,12 @@ export default function Settings() {
 
           {/* Synonyms Dictionary */}
           <SynonymsDictionary />
+        </TabsContent>
+
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-6">
+          <PasswordChangeForm />
+          <TwoFactorSettings />
         </TabsContent>
 
         {/* BI Tab */}

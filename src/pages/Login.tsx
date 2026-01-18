@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Network } from 'lucide-react';
+import { MFAVerification } from '@/components/auth/MFAVerification';
 
 const loginSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
@@ -19,7 +20,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const { signIn, user, loading: authLoading } = useAuth();
+  const { signIn, user, loading: authLoading, mfaState, completeMFAVerification, cancelMFA } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,22 +40,42 @@ export default function Login() {
     );
   }
 
-  if (user) {
+  // If user is logged in and MFA is not required, redirect
+  if (user && !mfaState.required) {
     return <Navigate to="/" replace />;
+  }
+
+  // Show MFA verification screen if needed
+  if (mfaState.required && mfaState.factorId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+        <MFAVerification
+          factorId={mfaState.factorId}
+          onSuccess={completeMFAVerification}
+          onCancel={cancelMFA}
+        />
+      </div>
+    );
   }
 
   const onSubmit = async (data: LoginFormData) => {
     setIsSubmitting(true);
     setError(null);
 
-    const { error } = await signIn(data.email, data.password);
+    const result = await signIn(data.email, data.password);
 
-    if (error) {
-      if (error.message.includes('Invalid login credentials')) {
+    if (result.error) {
+      if (result.error.message.includes('Invalid login credentials')) {
         setError('Nieprawidłowy email lub hasło');
       } else {
         setError('Wystąpił błąd podczas logowania. Spróbuj ponownie.');
       }
+      setIsSubmitting(false);
+    } else if (result.needsMFA) {
+      // MFA flow will be handled by mfaState change
+      setIsSubmitting(false);
+    } else {
+      // Login successful without MFA
       setIsSubmitting(false);
     }
   };
