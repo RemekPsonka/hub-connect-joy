@@ -19,11 +19,13 @@ import {
   Brain,
   Link2,
   Zap,
-  Rocket
+  Rocket,
+  Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 import { useMasterAgent, MasterAgentResponse } from '@/hooks/useContactAgent';
 import { MasterAgentMessage } from '@/components/ai/MasterAgentMessage';
 import { classifyIntent, needsMasterAgent, getIntentDisplay, Intent } from '@/hooks/useIntentClassifier';
@@ -128,6 +130,28 @@ export default function AIChat() {
     queryTurboAgent,
     reset: resetTurbo 
   } = useTurboAgent();
+
+  // Fetch tenant name
+  const { data: tenantName } = useQuery({
+    queryKey: ['tenant-name', director?.tenant_id],
+    queryFn: async () => {
+      if (!director?.tenant_id) return null;
+      
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', director.tenant_id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching tenant name:', error);
+        return null;
+      }
+      
+      return data.name;
+    },
+    enabled: !!director?.tenant_id,
+  });
 
   const isAnyLoading = isLoading || masterLoading || turboLoading;
 
@@ -363,6 +387,12 @@ export default function AIChat() {
               <Bot className="h-6 w-6 text-primary" />
               Inteligentny Asystent AI
             </h1>
+            {tenantName && (
+              <p className="text-sm text-primary font-medium flex items-center gap-1 mt-1">
+                <Building2 className="h-4 w-4" />
+                {tenantName}
+              </p>
+            )}
             <p className="text-muted-foreground">
               Automatycznie dobiera najlepsze źródło wiedzy do Twojego pytania
             </p>
