@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse, verifyResourceAccess, accessDeniedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,18 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // ============= AUTHORIZATION CHECK =============
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+    const { tenantId } = authResult;
+    // ============= END AUTHORIZATION CHECK =============
+
     const { contact_id, action, session_id } = await req.json() as {
       contact_id: string;
       action: AgentAction;
@@ -31,11 +44,14 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // ============= RESOURCE ACCESS CHECK =============
+    const hasAccess = await verifyResourceAccess(supabase, 'contacts', contact_id, tenantId);
+    if (!hasAccess) {
+      return accessDeniedResponse(corsHeaders, 'Access denied to this contact');
+    }
+    // ============= END RESOURCE ACCESS CHECK =============
 
-    // Fetch contact to get tenant_id
+    // Fetch contact data
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .select('tenant_id, full_name, notes')
@@ -49,18 +65,16 @@ serve(async (req) => {
       );
     }
 
-    const tenant_id = contact.tenant_id;
     let result: any = { success: false };
 
-    console.log(`Executing agent action: ${action.type} for contact ${contact_id}`);
+    console.log(`Executing agent action: ${action.type} for contact ${contact_id} in tenant ${tenantId}`);
 
     switch (action.type) {
       case 'CREATE_TASK': {
-        // Create a task and link it to the contact
         const { data: task, error: taskError } = await supabase
           .from('tasks')
           .insert({
-            tenant_id,
+            tenant_id: tenantId,
             title: action.data.title,
             description: action.data.description || action.reason,
             priority: action.data.priority || 'medium',
@@ -73,7 +87,6 @@ serve(async (req) => {
 
         if (taskError) throw taskError;
 
-        // Link task to contact
         await supabase.from('task_contacts').insert({
           task_id: task.id,
           contact_id,
@@ -85,7 +98,6 @@ serve(async (req) => {
       }
 
       case 'ADD_NOTE': {
-        // Append note to contact's notes field
         const currentNotes = contact.notes || '';
         const timestamp = new Date().toLocaleDateString('pl-PL', {
           day: 'numeric',
@@ -111,7 +123,6 @@ serve(async (req) => {
       }
 
       case 'UPDATE_PROFILE': {
-        // Update specific contact field
         const allowedFields = ['position', 'phone', 'email', 'city', 'linkedin_url', 'company'];
         const field = action.data.field;
         
@@ -133,43 +144,11 @@ serve(async (req) => {
         break;
       }
 
-      case 'ADD_INSIGHT': {
-        // Add insight to agent memory
-        const { data: agentMemory, error: agentError } = await supabase
-          .from('contact_agent_memory')
-          .select('insights')
-          .eq('contact_id', contact_id)
-          .single();
-
-        if (agentError) throw agentError;
-
-        const currentInsights = agentMemory?.insights || [];
-        const newInsight = {
-          text: action.data.text,
-          source: action.data.source || 'user_action',
-          importance: action.data.importance || 'medium',
-          added_at: new Date().toISOString()
-        };
-
-        const { error: updateError } = await supabase
-          .from('contact_agent_memory')
-          .update({
-            insights: [...currentInsights, newInsight],
-            updated_at: new Date().toISOString()
-          })
-          .eq('contact_id', contact_id);
-
-        if (updateError) throw updateError;
-
-        result = { success: true, type: 'insight', data: newInsight };
-        break;
-      }
-
       case 'CREATE_NEED': {
         const { data: need, error: needError } = await supabase
           .from('needs')
           .insert({
-            tenant_id,
+            tenant_id: tenantId,
             contact_id,
             title: action.data.title,
             description: action.data.description,
@@ -189,7 +168,7 @@ serve(async (req) => {
         const { data: offer, error: offerError } = await supabase
           .from('offers')
           .insert({
-            tenant_id,
+            tenant_id: tenantId,
             contact_id,
             title: action.data.title,
             description: action.data.description,
@@ -205,11 +184,10 @@ serve(async (req) => {
       }
 
       case 'SCHEDULE_FOLLOWUP': {
-        // Create a follow-up task
         const { data: task, error: taskError } = await supabase
           .from('tasks')
           .insert({
-            tenant_id,
+            tenant_id: tenantId,
             title: `Follow-up: ${contact.full_name}`,
             description: action.data.reason || action.reason || 'Follow-up zaplanowany przez Agent AI',
             priority: 'medium',
@@ -234,23 +212,6 @@ serve(async (req) => {
 
       default:
         throw new Error(`Unknown action type: ${action.type}`);
-    }
-
-    // Log the action to conversation if session_id provided
-    if (session_id) {
-      try {
-        await supabase.from('agent_conversations').insert({
-          tenant_id,
-          contact_id,
-          session_id,
-          role: 'assistant',
-          content: `[ACTION EXECUTED] ${action.type}: ${action.data.title || action.data.text || action.data.field || 'completed'}`,
-          extracted_data: {},
-          actions_taken: [{ action, result }]
-        });
-      } catch (e) {
-        console.error('Error logging action:', e);
-      }
     }
 
     console.log(`Action ${action.type} completed successfully`);
