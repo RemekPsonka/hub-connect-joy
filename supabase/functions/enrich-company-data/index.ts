@@ -34,6 +34,13 @@ async function isLogoValid(logoUrl: string): Promise<boolean> {
   }
 }
 
+interface FirecrawlSearchResult {
+  url: string;
+  title: string;
+  description?: string;
+  markdown?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -61,7 +68,9 @@ serve(async (req) => {
       );
     }
 
+    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    
     if (!LOVABLE_API_KEY) {
       console.error('LOVABLE_API_KEY is not configured');
       return new Response(
@@ -87,7 +96,116 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Call Lovable AI Gateway for company analysis
+    // Step 2: Search for company information using Firecrawl
+    let searchResults: FirecrawlSearchResult[] = [];
+    let searchPerformed = false;
+    
+    if (FIRECRAWL_API_KEY) {
+      try {
+        const searchQuery = `${company_name} firma profil działalność usługi`;
+        console.log('Firecrawl search query:', searchQuery);
+        
+        const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            limit: 5,
+            scrapeOptions: { formats: ['markdown'] }
+          }),
+        });
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          searchResults = searchData.data || [];
+          searchPerformed = true;
+          console.log(`Firecrawl found ${searchResults.length} results for company`);
+        } else {
+          console.warn('Firecrawl search failed:', searchResponse.status);
+        }
+      } catch (e) {
+        console.warn('Firecrawl search error:', e);
+      }
+    } else {
+      console.log('FIRECRAWL_API_KEY not configured, skipping web search');
+    }
+
+    // Step 3: Analyze with AI (with or without Firecrawl results)
+    const hasSearchResults = searchResults.length > 0;
+    
+    const systemPrompt = hasSearchResults
+      ? `Jesteś ekspertem w analizie firm polskich.
+
+🔍 MASZ wyniki wyszukiwania internetowego dla tej firmy.
+Przeanalizuj je i wyodrębnij ZWERYFIKOWANE informacje.
+
+ZASADY:
+- Podawaj TYLKO informacje znalezione w źródłach
+- Każda informacja musi być potwierdzona źródłem
+- Jeśli coś NIE wynika ze źródeł - nie wymyślaj, wpisz null
+
+Zwróć JSON:
+{
+  "name": "Oficjalna nazwa firmy",
+  "industry": "✅ Branża (ze źródeł)",
+  "description": "✅ Opis działalności (ze źródeł)",
+  "services": "✅ Usługi/produkty (ze źródeł)",
+  "collaboration_areas": "✅ Obszary współpracy (ze źródeł)",
+  "employee_count_estimate": "Szacunek lub null",
+  "confidence": "high" lub "medium",
+  "suggested_website": "URL strony jeśli znaleziono",
+  "sources": ["lista URL źródeł"],
+  "data_notes": ["Dane zweryfikowane online"]
+}`
+      : `Jesteś ekspertem w analizie firm polskich.
+
+⚠️ NIE MASZ dostępu do internetu ani baz danych.
+Możesz TYLKO sugerować prawdopodobną branżę na podstawie nazwy firmy.
+
+ZASADY:
+- Wszystko co podajesz to SUGESTIE, nie fakty
+- Oznacz wszystko jako "💡 SUGESTIA:"
+- NIE wymyślaj NIP, REGON, KRS, adresów
+
+Zwróć JSON:
+{
+  "name": "Nazwa firmy",
+  "industry": "💡 SUGESTIA: Prawdopodobna branża",
+  "description": "💡 SUGESTIA: Prawdopodobny opis",
+  "services": "💡 SUGESTIA: Prawdopodobne usługi",
+  "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
+  "employee_count_estimate": null,
+  "confidence": "low",
+  "suggested_website": null,
+  "sources": [],
+  "data_notes": ["Wszystkie dane to SUGESTIE - wymaga weryfikacji"]
+}`;
+
+    const userContent = hasSearchResults
+      ? `Przeanalizuj firmę na podstawie wyników wyszukiwania:
+
+Nazwa firmy: ${company_name}
+${website ? `Strona www: ${website}` : ''}
+${industry_hint ? `Wskazówka: ${industry_hint}` : ''}
+
+WYNIKI WYSZUKIWANIA:
+${searchResults.map((r, i) => `
+[Źródło ${i + 1}] ${r.url}
+Tytuł: ${r.title}
+${r.description ? `Opis: ${r.description}` : ''}
+${r.markdown ? `Treść: ${r.markdown.substring(0, 1500)}` : ''}
+---`).join('\n')}`
+      : `Zasugeruj profil firmy (tylko sugestie!):
+
+Nazwa firmy: ${company_name}
+${website ? `Strona www: ${website}` : 'Strona www: Nie podano'}
+${industry_hint ? `Wskazówka: ${industry_hint}` : ''}
+
+UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -97,62 +215,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-3-flash-preview',
         messages: [
-          {
-            role: 'system',
-            content: `Jesteś ekspertem w analizie firm polskich.
-
-⚠️ KLUCZOWA ZASADA - ŹRÓDŁA DANYCH:
-NIE MASZ dostępu do baz REGON, KRS, CEIDG ani internetu.
-Możesz TYLKO:
-1. Sugerować prawdopodobną branżę na podstawie nazwy firmy
-2. Podać ogólny opis działalności na podstawie nazwy
-
-NIE WYMYŚLAJ konkretnych danych rejestrowych (NIP, REGON, KRS, adres)!
-Jeśli nie znasz - zwróć null.
-
-📊 OZNACZENIA W ODPOWIEDZI:
-- Pola z wartością = SUGESTIA AI (nie fakt!)
-- Pole "data_certainty" = jakie dane są pewne vs sugestie
-
-Zwróć TYLKO poprawny JSON:
-{
-  "name": "Pełna oficjalna nazwa firmy (lub oryginalna jeśli nieznana)",
-  "nip": null,
-  "regon": null,
-  "krs": null,
-  "address": null,
-  "city": null,
-  "postal_code": null,
-  "country": "Polska",
-  "industry": "💡 SUGESTIA: Prawdopodobna branża na podstawie nazwy",
-  "description": "💡 SUGESTIA: Ogólny opis prawdopodobnej działalności",
-  "services": "💡 SUGESTIA: Prawdopodobne usługi/produkty",
-  "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
-  "employee_count_estimate": null,
-  "confidence": "low",
-  "data_certainty": {
-    "industry": "sugestia",
-    "description": "sugestia",
-    "nip": "brak_danych",
-    "address": "brak_danych"
-  },
-  "suggested_website": null,
-  "data_notes": ["Wszystkie dane to SUGESTIE - wymaga weryfikacji w REGON/KRS"]
-}`
-          },
-          {
-            role: 'user',
-            content: `Przeanalizuj firmę i zasugeruj profil (oznacz jako sugestie!):
-
-Nazwa firmy: ${company_name}
-${website ? `Strona www: ${website}` : 'Strona www: Nie podano'}
-${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
-
-UWAGA: NIE masz dostępu do REGON/KRS. Nie wymyślaj NIP, adresu itp.
-Możesz tylko sugerować branżę na podstawie nazwy.`
-          }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent }
         ],
-        max_tokens: 1000,
+        max_tokens: 1500,
         temperature: 0.3,
       }),
     });
@@ -196,8 +262,7 @@ Możesz tylko sugerować branżę na podstawie nazwy.`
       const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       enrichedData = JSON.parse(cleanedContent);
       
-      // Ensure we don't return fake NIP/REGON/KRS
-      // These should only come from verified sources
+      // Always null out registration data - only real verification should provide these
       enrichedData.nip = null;
       enrichedData.regon = null;
       enrichedData.krs = null;
@@ -205,11 +270,8 @@ Możesz tylko sugerować branżę na podstawie nazwy.`
       enrichedData.postal_code = null;
       enrichedData.city = null;
       
-      // Add note about data source
-      if (!enrichedData.data_notes) {
-        enrichedData.data_notes = [];
-      }
-      enrichedData.data_notes.push('NIP/REGON/KRS/adres wymaga weryfikacji w oficjalnych rejestrach');
+      // Add search info
+      enrichedData.search_performed = searchPerformed;
       
     } catch (parseError) {
       console.error('Failed to parse AI response:', content);
@@ -219,7 +281,7 @@ Możesz tylko sugerować branżę na podstawie nazwy.`
       );
     }
 
-    // Step 3: If no logo yet and AI suggested a website, try to get logo from it
+    // Step 4: If no logo yet and we found/AI suggested a website, try to get logo
     if (!logo_url && enrichedData.suggested_website) {
       const suggestedDomain = extractDomain(enrichedData.suggested_website);
       if (suggestedDomain) {
@@ -228,7 +290,7 @@ Możesz tylko sugerować branżę na podstawie nazwy.`
           const isValid = await isLogoValid(clearbitUrl);
           if (isValid) {
             logo_url = clearbitUrl;
-            console.log('Found logo via AI-suggested website:', logo_url);
+            console.log('Found logo via suggested website:', logo_url);
           }
         }
       }
@@ -237,7 +299,12 @@ Możesz tylko sugerować branżę na podstawie nazwy.`
     // Add logo_url to response
     enrichedData.logo_url = logo_url;
 
-    console.log('Successfully enriched company data:', enrichedData);
+    console.log('Successfully enriched company data:', {
+      name: enrichedData.name,
+      confidence: enrichedData.confidence,
+      search_performed: searchPerformed,
+      sources_count: enrichedData.sources?.length || 0
+    });
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),

@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useBusinessCardOCR, ExtractedContactData, EnrichedCompanyData } from '@/hooks/useBusinessCardOCR';
+import { useBusinessCardOCR, ExtractedContactData, EnrichedCompanyData, EnrichedPersonData } from '@/hooks/useBusinessCardOCR';
 import { useContactGroups } from '@/hooks/useContacts';
 import { toast } from 'sonner';
 
@@ -49,9 +49,11 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
   const { 
     scanBusinessCard, 
     enrichCompanyData, 
+    enrichPersonData,
     createContactWithCompany,
     isScanning, 
     isEnriching,
+    isEnrichingPerson,
     isCreating 
   } = useBusinessCardOCR();
 
@@ -97,9 +99,37 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
     }
 
     try {
-      const data = await scanBusinessCard(imagePreview);
-      setExtractedData(data);
-      setFormData(data);
+      // Step 1: OCR - extract text from business card
+      const ocrData = await scanBusinessCard(imagePreview);
+      
+      // Step 2: Enrich person data using Firecrawl (internet search)
+      let enrichedProfile = ocrData.profile_summary;
+      try {
+        toast.info('Szukam informacji online...', { duration: 2000 });
+        const personData = await enrichPersonData(
+          ocrData.first_name,
+          ocrData.last_name,
+          ocrData.company,
+          ocrData.email,
+          ocrData.linkedin_url
+        );
+        
+        if (personData.profile_summary) {
+          enrichedProfile = personData.profile_summary;
+          toast.success('Znaleziono informacje online');
+        }
+      } catch (e) {
+        console.warn('Person enrichment failed, using OCR data:', e);
+        // Keep original OCR profile_summary as fallback
+      }
+      
+      const finalData = {
+        ...ocrData,
+        profile_summary: enrichedProfile
+      };
+      
+      setExtractedData(finalData);
+      setFormData(finalData);
       setStep('extracted');
       toast.success('Wizytówka przeanalizowana');
     } catch (error) {
@@ -274,12 +304,17 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
                 <Button 
                   className="flex-1"
                   onClick={handleScan}
-                  disabled={!imagePreview || isScanning}
+                  disabled={!imagePreview || isScanning || isEnrichingPerson}
                 >
                   {isScanning ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Analizuję...
+                    </>
+                  ) : isEnrichingPerson ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Szukam online...
                     </>
                   ) : (
                     <>

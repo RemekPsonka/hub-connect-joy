@@ -58,10 +58,19 @@ export interface CreateContactWithCompanyData {
   };
 }
 
+export interface EnrichedPersonData {
+  profile_summary: string;
+  sources: string[];
+  search_performed: boolean;
+  confidence: 'verified' | 'partial' | 'not_found';
+  data_notes: string[];
+}
+
 export function useBusinessCardOCR() {
   const queryClient = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
+  const [isEnrichingPerson, setIsEnrichingPerson] = useState(false);
 
   // Scan business card using OCR
   const scanBusinessCard = async (imageBase64: string): Promise<ExtractedContactData> => {
@@ -210,12 +219,49 @@ export function useBusinessCardOCR() {
     }
   });
 
+  // Enrich person data using AI + Firecrawl (internet search)
+  const enrichPersonData = async (
+    firstName: string,
+    lastName: string,
+    company?: string | null,
+    email?: string | null,
+    linkedinUrl?: string | null
+  ): Promise<EnrichedPersonData> => {
+    setIsEnrichingPerson(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
+        body: { 
+          first_name: firstName,
+          last_name: lastName,
+          company: company || undefined,
+          email: email || undefined,
+          linkedin_url: linkedinUrl || undefined
+        }
+      });
+
+      if (error) {
+        console.error('Enrich person error:', error);
+        throw new Error(error.message || 'Błąd podczas wzbogacania danych osoby');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Nie udało się wzbogacić danych osoby');
+      }
+
+      return data.data as EnrichedPersonData;
+    } finally {
+      setIsEnrichingPerson(false);
+    }
+  };
+
   return {
     scanBusinessCard,
     enrichCompanyData,
+    enrichPersonData,
     createContactWithCompany: createContactWithCompanyMutation.mutateAsync,
     isScanning,
     isEnriching,
+    isEnrichingPerson,
     isCreating: createContactWithCompanyMutation.isPending
   };
 }
