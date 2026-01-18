@@ -22,6 +22,11 @@ interface Assistant {
   allowed_group_ids: string[];
 }
 
+interface MFAState {
+  required: boolean;
+  factorId: string | null;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -29,9 +34,12 @@ interface AuthContextType {
   assistant: Assistant | null;
   isAssistant: boolean;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  mfaState: MFAState;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; needsMFA?: boolean; factorId?: string }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  completeMFAVerification: () => void;
+  cancelMFA: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [director, setDirector] = useState<Director | null>(null);
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaState, setMFAState] = useState<MFAState>({ required: false, factorId: null });
 
   const fetchDirector = async (userId: string) => {
     const { data, error } = await supabase
@@ -138,11 +147,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { error: error as Error | null };
+
+    if (error) {
+      return { error: error as Error };
+    }
+
+    // Check if MFA is required
+    if (data.user) {
+      try {
+        const { data: factorsData } = await supabase.auth.mfa.listFactors();
+        const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
+        
+        if (verifiedFactors.length > 0) {
+          // MFA is required - set state and return
+          setMFAState({
+            required: true,
+            factorId: verifiedFactors[0].id,
+          });
+          return { 
+            error: null, 
+            needsMFA: true, 
+            factorId: verifiedFactors[0].id 
+          };
+        }
+      } catch (err) {
+        console.error('Error checking MFA factors:', err);
+      }
+    }
+
+    return { error: null };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -167,12 +204,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setDirector(null);
     setAssistant(null);
+    setMFAState({ required: false, factorId: null });
+  };
+
+  const completeMFAVerification = () => {
+    setMFAState({ required: false, factorId: null });
+  };
+
+  const cancelMFA = async () => {
+    await supabase.auth.signOut();
+    setMFAState({ required: false, factorId: null });
+    setUser(null);
+    setSession(null);
   };
 
   const isAssistant = assistant !== null && director === null;
 
   return (
-    <AuthContext.Provider value={{ user, session, director, assistant, isAssistant, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      director, 
+      assistant, 
+      isAssistant, 
+      loading, 
+      mfaState,
+      signIn, 
+      signUp, 
+      signOut,
+      completeMFAVerification,
+      cancelMFA,
+    }}>
       {children}
     </AuthContext.Provider>
   );
