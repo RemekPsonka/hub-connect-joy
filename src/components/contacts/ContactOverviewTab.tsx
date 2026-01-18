@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,10 +7,17 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, Phone, Building, MapPin, Linkedin, Tag, Globe, Users, 
-  Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw, Search 
+  Sparkles, Briefcase, Pencil, User, Loader2, RefreshCw, Search, Link2
 } from 'lucide-react';
 import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
-import { useCompanyContacts, useRegenerateCompanyAI, getCompanyLogoUrl } from '@/hooks/useCompanies';
+import { 
+  useCompanyContacts, 
+  useRegenerateCompanyAI, 
+  getCompanyLogoUrl, 
+  extractEmailDomain,
+  extractWebsiteDomain,
+  useAssignContactsByDomain
+} from '@/hooks/useCompanies';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
 import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
@@ -40,11 +47,42 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const { data: stats } = useContactStats(contact.id);
   const company = contact.companies;
-  const { data: companyContacts = [], isLoading: isLoadingContacts } = useCompanyContacts(company?.id, contact.id);
+  
+  // Extract email domain for contact grouping
+  const emailDomain = useMemo(() => {
+    return extractEmailDomain(contact.email);
+  }, [contact.email]);
+  
+  // Also consider company website domain
+  const companyDomain = useMemo(() => {
+    return extractWebsiteDomain(company?.website);
+  }, [company?.website]);
+  
+  // Use either email domain or company website domain
+  const effectiveDomain = emailDomain || companyDomain;
+  
+  // Fetch contacts by company_id AND/OR email domain
+  const { data: companyContacts = [], isLoading: isLoadingContacts } = useCompanyContacts(
+    company?.id, 
+    contact.id,
+    effectiveDomain
+  );
   
   const generateContactProfile = useGenerateContactProfile();
   const regenerateCompanyAI = useRegenerateCompanyAI();
   const linkedInAnalysis = useLinkedInAnalysis();
+  const assignContactsByDomain = useAssignContactsByDomain();
+  
+  // Count unassigned contacts (those with matching domain but no company_id)
+  const unassignedContacts = useMemo(() => {
+    if (!company?.id) return [];
+    return companyContacts.filter(c => c.company_id !== company.id);
+  }, [companyContacts, company?.id]);
+  
+  const handleAssignContacts = () => {
+    if (!company?.id || !effectiveDomain) return;
+    assignContactsByDomain.mutate({ companyId: company.id, domain: effectiveDomain });
+  };
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -471,10 +509,29 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           {/* People from this company */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                Osoby z tej firmy {companyContacts.length > 0 && `(${companyContacts.length})`}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Osoby z tej firmy {companyContacts.length > 0 && `(${companyContacts.length})`}
+                </CardTitle>
+                {unassignedContacts.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAssignContacts}
+                    disabled={assignContactsByDomain.isPending}
+                  >
+                    {assignContactsByDomain.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Link2 className="h-4 w-4 mr-1" />
+                        Przypisz {unassignedContacts.length} do firmy
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingContacts ? (
@@ -483,39 +540,49 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
                 <p className="text-sm text-muted-foreground italic">Brak innych osób z tej firmy</p>
               ) : (
                 <div className="space-y-2">
-                  {companyContacts.map((person) => (
-                    <Link
-                      key={person.id}
-                      to={`/contacts/${person.id}`}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                          {getInitials(person.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{person.full_name}</p>
-                        {person.position && (
-                          <p className="text-xs text-muted-foreground truncate">{person.position}</p>
-                        )}
-                      </div>
-                      <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-                        {person.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            <span className="truncate max-w-[150px]">{person.email}</span>
-                          </span>
-                        )}
-                        {person.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {person.phone}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
+                  {companyContacts.map((person) => {
+                    const isUnassigned = person.company_id !== company.id;
+                    return (
+                      <Link
+                        key={person.id}
+                        to={`/contacts/${person.id}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                            {getInitials(person.full_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate">{person.full_name}</p>
+                            {isUnassigned && (
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                nieprzypisany
+                              </Badge>
+                            )}
+                          </div>
+                          {person.position && (
+                            <p className="text-xs text-muted-foreground truncate">{person.position}</p>
+                          )}
+                        </div>
+                        <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+                          {person.email && (
+                            <span className="flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              <span className="truncate max-w-[150px]">{person.email}</span>
+                            </span>
+                          )}
+                          {person.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {person.phone}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
