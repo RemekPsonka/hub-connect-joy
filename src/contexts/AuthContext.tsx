@@ -36,6 +36,7 @@ interface AuthContextType {
   loading: boolean;
   mfaState: MFAState;
   signIn: (email: string, password: string) => Promise<{ error: Error | null; needsMFA?: boolean; factorId?: string }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   completeMFAVerification: () => void;
@@ -182,6 +183,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   };
 
+  const signInWithGoogle = async () => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+    
+    return { error: error as Error | null };
+  };
+
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
@@ -229,7 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAssistant, 
       loading, 
       mfaState,
-      signIn, 
+      signIn,
+      signInWithGoogle,
       signUp, 
       signOut,
       completeMFAVerification,

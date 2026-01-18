@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Network } from 'lucide-react';
 import { MFAVerification } from '@/components/auth/MFAVerification';
+import { GoogleIcon } from '@/components/icons/GoogleIcon';
 
 const loginSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
@@ -20,8 +21,9 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const { signIn, user, loading: authLoading, mfaState, completeMFAVerification, cancelMFA } = useAuth();
+  const { signIn, signInWithGoogle, user, loading: authLoading, mfaState, completeMFAVerification, cancelMFA } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -80,6 +82,22 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    setError(null);
+
+    const { error } = await signInWithGoogle();
+
+    if (error) {
+      if (error.message.includes('popup')) {
+        setError('Popup został zablokowany. Zezwól na wyskakujące okna.');
+      } else {
+        setError('Wystąpił błąd podczas logowania przez Google.');
+      }
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-md">
@@ -123,10 +141,35 @@ export default function Login() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Zaloguj się
             </Button>
+            
+            <div className="relative w-full">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">lub</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleLogin}
+              disabled={isSubmitting || isGoogleLoading}
+            >
+              {isGoogleLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GoogleIcon className="mr-2 h-4 w-4" />
+              )}
+              Zaloguj się przez Google
+            </Button>
+
             <p className="text-sm text-muted-foreground text-center">
               Nie masz konta?{' '}
               <Link to="/signup" className="text-primary hover:underline font-medium">

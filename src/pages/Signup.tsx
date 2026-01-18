@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Network } from 'lucide-react';
+import { GoogleIcon } from '@/components/icons/GoogleIcon';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Imię i nazwisko musi mieć co najmniej 2 znaki').max(100, 'Imię i nazwisko jest za długie'),
@@ -20,8 +21,9 @@ const signupSchema = z.object({
 type SignupFormData = z.infer<typeof signupSchema>;
 
 export default function Signup() {
-  const { signUp, user, loading: authLoading } = useAuth();
+  const { signUp, signInWithGoogle, user, loading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -59,6 +61,22 @@ export default function Signup() {
         setError('Wystąpił błąd podczas rejestracji. Spróbuj ponownie.');
       }
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setIsGoogleLoading(true);
+    setError(null);
+
+    const { error } = await signInWithGoogle();
+
+    if (error) {
+      if (error.message.includes('popup')) {
+        setError('Popup został zablokowany. Zezwól na wyskakujące okna.');
+      } else {
+        setError('Wystąpił błąd podczas rejestracji przez Google.');
+      }
+      setIsGoogleLoading(false);
     }
   };
 
@@ -118,10 +136,35 @@ export default function Signup() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Zarejestruj się
             </Button>
+
+            <div className="relative w-full">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">lub</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignup}
+              disabled={isSubmitting || isGoogleLoading}
+            >
+              {isGoogleLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GoogleIcon className="mr-2 h-4 w-4" />
+              )}
+              Zarejestruj się przez Google
+            </Button>
+
             <p className="text-sm text-muted-foreground text-center">
               Masz już konto?{' '}
               <Link to="/login" className="text-primary hover:underline font-medium">
