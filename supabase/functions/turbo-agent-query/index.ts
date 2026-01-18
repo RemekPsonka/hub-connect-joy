@@ -37,7 +37,7 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    console.log(`[Turbo] Starting for tenant ${tenantId}`);
+    console.log(`[Turbo] Starting for tenant ${tenantId}: ${query.substring(0, 50)}...`);
 
     // Create session
     const { data: session, error: sessionError } = await supabase
@@ -48,10 +48,16 @@ serve(async (req) => {
 
     if (sessionError) throw sessionError;
 
-    // Get all Contact Agents
+    // Get all Contact Agents with FULL contact data including companies
     const { data: allAgents } = await supabase
       .from('contact_agent_memory')
-      .select(`id, contact_id, agent_persona, agent_profile, insights, contacts (id, full_name, company, position, city, notes)`)
+      .select(`
+        id, contact_id, agent_persona, agent_profile, insights,
+        contacts (
+          id, full_name, company, position, city, notes, tags, profile_summary,
+          companies (id, name, industry, description)
+        )
+      `)
       .eq('tenant_id', tenantId);
 
     const validAgents = (allAgents || []).filter(a => a.contacts && !Array.isArray(a.contacts));
@@ -59,10 +65,42 @@ serve(async (req) => {
     // Update session
     await supabase.from('turbo_agent_sessions').update({ total_agents_available: validAgents.length, status: 'selecting' }).eq('id', session.id);
 
-    // AI selects agents
-    const agentSummaries = validAgents.map(a => ({ contact_id: a.contact_id, name: (a.contacts as any).full_name, company: (a.contacts as any).company, position: (a.contacts as any).position }));
+    // Build rich agent summaries for selection with industry, tags, profile
+    const agentSummaries = validAgents.map(a => {
+      const contact = a.contacts as any;
+      return {
+        contact_id: a.contact_id,
+        name: contact.full_name,
+        company: contact.company,
+        position: contact.position,
+        industry: contact.companies?.industry || null,
+        tags: contact.tags || [],
+        profile_excerpt: contact.profile_summary?.substring(0, 200) || null
+      };
+    });
 
-    const selectionPrompt = `Wybierz max ${max_agents} agentów dla pytania: "${query}"\n\nAgenci:\n${JSON.stringify(agentSummaries)}\n\nZwróć JSON:\n\`\`\`json\n{"selected_agents": [{"contact_id": "uuid", "reason": "powód"}], "query_intent": "intent", "sub_query_template": "pytanie dla {contact_name}"}\n\`\`\``;
+    // AI selects agents with richer context
+    const selectionPrompt = `Analizujesz pytanie użytkownika i wybierasz najbardziej odpowiednich agentów kontaktowych.
+
+PYTANIE: "${query}"
+
+DOSTĘPNI AGENCI (${agentSummaries.length}):
+${agentSummaries.map((a, i) => `${i + 1}. ${a.name} | Firma: ${a.company || '-'} | Branża: ${a.industry || '-'} | Stanowisko: ${a.position || '-'} | Tagi: ${a.tags?.join(', ') || '-'} | Profil: ${a.profile_excerpt || '-'}`).join('\n')}
+
+Wybierz maksymalnie ${max_agents} agentów, którzy mogą odpowiedzieć na pytanie. Uwzględnij:
+- Branżę kontaktu (industry)
+- Tagi i oznaczenia
+- Profil AI i opis
+- Stanowisko i firmę
+
+Zwróć JSON:
+\`\`\`json
+{
+  "selected_agents": [{"contact_id": "uuid", "reason": "powód wyboru"}],
+  "query_intent": "intencja pytania",
+  "sub_query_template": "pytanie do zadania każdemu agentowi"
+}
+\`\`\``;
 
     const selectionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -80,7 +118,11 @@ serve(async (req) => {
       const jsonMatch = selectionText.match(/```json\s*([\s\S]*?)\s*```/);
       selectionPlan = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(selectionText);
     } catch {
-      selectionPlan = { selected_agents: agentSummaries.slice(0, max_agents).map(a => ({ contact_id: a.contact_id, reason: 'Fallback' })), query_intent: 'general', sub_query_template: `{contact_name}: ${query}?` };
+      selectionPlan = { 
+        selected_agents: agentSummaries.slice(0, max_agents).map(a => ({ contact_id: a.contact_id, reason: 'Fallback' })), 
+        query_intent: 'general', 
+        sub_query_template: query 
+      };
     }
 
     const selectedAgentIds = selectionPlan.selected_agents?.map((a: any) => a.contact_id) || [];
@@ -88,10 +130,47 @@ serve(async (req) => {
 
     await supabase.from('turbo_agent_sessions').update({ agents_selected: selectedAgents.length, query_intent: selectionPlan.query_intent, status: 'querying' }).eq('id', session.id);
 
-    // Query agents in parallel
+    console.log(`[Turbo] Selected ${selectedAgents.length} agents for query`);
+
+    // Query agents in parallel with richer context
     const queryAgent = async (agent: any) => {
       try {
-        const agentPrompt = `Agent dla: ${(agent.contacts as any).full_name}\nFirma: ${(agent.contacts as any).company}\nNotatki: ${(agent.contacts as any).notes?.substring(0, 500) || 'Brak'}\nPytanie: "${query}"\n\nZwróć JSON: {"answer": "", "confidence": 0.0, "relevance": 0.0, "evidence": []}`;
+        const contact = agent.contacts as any;
+        const industry = contact.companies?.industry || 'nieznana';
+        const tags = contact.tags?.join(', ') || 'brak';
+        
+        const agentPrompt = `Jesteś agentem AI reprezentującym kontakt biznesowy.
+
+KONTAKT: ${contact.full_name}
+FIRMA: ${contact.company || 'brak'}
+BRANŻA: ${industry}
+STANOWISKO: ${contact.position || 'brak'}
+MIASTO: ${contact.city || 'brak'}
+TAGI: ${tags}
+
+PROFIL AI:
+${contact.profile_summary || 'Brak profilu'}
+
+NOTATKI:
+${contact.notes?.substring(0, 800) || 'Brak notatek'}
+
+PERSONA AGENTA:
+${agent.agent_persona?.substring(0, 300) || 'Brak persony'}
+
+PYTANIE: "${query}"
+
+Odpowiedz na podstawie danych tego kontaktu. Czy ten kontakt jest relevantny dla pytania?
+
+Zwróć JSON:
+\`\`\`json
+{
+  "answer": "odpowiedź na pytanie w kontekście tego kontaktu",
+  "confidence": 0.0-1.0,
+  "relevance": 0.0-1.0,
+  "industry_match": true/false,
+  "evidence": ["dowody z danych kontaktu"]
+}
+\`\`\``;
 
         const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
@@ -107,16 +186,53 @@ serve(async (req) => {
         try {
           const m = text.match(/```json\s*([\s\S]*?)\s*```/);
           result = m ? JSON.parse(m[1]) : JSON.parse(text);
-        } catch { result = { answer: text.substring(0, 300), confidence: 0.5, relevance: 0.5, evidence: [] }; }
+        } catch { 
+          result = { answer: text.substring(0, 300), confidence: 0.5, relevance: 0.5, industry_match: false, evidence: [] }; 
+        }
 
-        return { contact_id: agent.contact_id, contact_name: (agent.contacts as any).full_name, ...result };
-      } catch { return null; }
+        return { 
+          contact_id: agent.contact_id, 
+          contact_name: contact.full_name,
+          company: contact.company,
+          industry: industry,
+          ...result 
+        };
+      } catch (err) { 
+        console.error(`[Turbo] Agent query error:`, err);
+        return null; 
+      }
     };
 
-    const responses = (await Promise.all(selectedAgents.map(queryAgent))).filter(r => r !== null && r.relevance >= threshold);
+    const responses = (await Promise.all(selectedAgents.map(queryAgent)))
+      .filter(r => r !== null && r.relevance >= threshold);
 
-    // Aggregate
-    const aggregationPrompt = `Agreguj odpowiedzi dla: "${query}"\n\nOdpowiedzi:\n${responses.map((r: any) => `- ${r.contact_name}: ${r.answer}`).join('\n')}\n\nZwróć JSON: {"summary": "", "top_recommendations": [], "insights": []}`;
+    console.log(`[Turbo] Got ${responses.length} relevant responses`);
+
+    // Aggregate with richer context
+    const aggregationPrompt = `Jesteś Master Agent agregującym odpowiedzi od ${responses.length} agentów kontaktowych.
+
+ORYGINALNE PYTANIE: "${query}"
+
+ODPOWIEDZI AGENTÓW:
+${responses.map((r: any, i: number) => `
+${i + 1}. ${r.contact_name} (${r.company || '-'}, ${r.industry})
+   Odpowiedź: ${r.answer}
+   Pewność: ${r.confidence}, Relevancja: ${r.relevance}
+   Dowody: ${r.evidence?.join(', ') || '-'}
+`).join('\n')}
+
+Na podstawie powyższych odpowiedzi, stwórz kompleksową odpowiedź na pytanie użytkownika.
+
+Zwróć JSON:
+\`\`\`json
+{
+  "summary": "szczegółowa odpowiedź zbiorcza z konkretnymi liczbami i danymi",
+  "categories": [{"name": "kategoria", "count": 0, "contacts": [{"name": "", "company": "", "industry": ""}]}],
+  "top_recommendations": [{"contact_name": "", "score": 0.0, "reason": "", "suggested_action": ""}],
+  "insights": ["insight 1", "insight 2"],
+  "data_confidence": 0.0-1.0
+}
+\`\`\``;
 
     const aggResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -131,17 +247,34 @@ serve(async (req) => {
       try {
         const m = aggText.match(/```json\s*([\s\S]*?)\s*```/);
         finalResult = m ? JSON.parse(m[1]) : JSON.parse(aggText);
-      } catch { finalResult = { summary: aggText.substring(0, 500), top_recommendations: [], insights: [] }; }
+      } catch { 
+        finalResult = { summary: aggText.substring(0, 500), categories: [], top_recommendations: [], insights: [], data_confidence: 0.5 }; 
+      }
     } else {
-      finalResult = { summary: 'Nie udało się zagregować', top_recommendations: [], insights: [] };
+      finalResult = { summary: 'Nie udało się zagregować odpowiedzi', categories: [], top_recommendations: [], insights: [], data_confidence: 0 };
     }
 
     const duration = Date.now() - startTime;
 
-    await supabase.from('turbo_agent_sessions').update({ status: 'completed', master_response: finalResult.summary, top_results: finalResult, total_processing_time_ms: duration, completed_at: new Date().toISOString() }).eq('id', session.id);
+    await supabase.from('turbo_agent_sessions').update({ 
+      status: 'completed', 
+      master_response: finalResult.summary, 
+      top_results: finalResult, 
+      total_processing_time_ms: duration, 
+      completed_at: new Date().toISOString() 
+    }).eq('id', session.id);
+
+    console.log(`[Turbo] Completed in ${duration}ms`);
 
     return new Response(
-      JSON.stringify({ success: true, session_id: session.id, agents_queried: selectedAgents.length, responses_received: responses.length, processing_time_ms: duration, ...finalResult }),
+      JSON.stringify({ 
+        success: true, 
+        session_id: session.id, 
+        agents_queried: selectedAgents.length, 
+        responses_received: responses.length, 
+        processing_time_ms: duration, 
+        ...finalResult 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

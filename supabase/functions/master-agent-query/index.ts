@@ -33,50 +33,122 @@ serve(async (req) => {
 
     console.log(`Master Agent Query for tenant ${tenantId}: ${query.substring(0, 50)}...`);
 
-    // Fetch all Contact Agents for this tenant
+    // Fetch all Contact Agents with FULL contact data including companies
     const { data: allAgents } = await supabase
       .from('contact_agent_memory')
-      .select(`*, contacts(id, full_name, company, position, email, city, relationship_strength)`)
+      .select(`
+        *,
+        contacts (
+          id, full_name, company, position, email, city, 
+          relationship_strength, notes, tags, profile_summary,
+          companies (id, name, industry, description)
+        )
+      `)
       .eq('tenant_id', tenantId);
 
-    // Fetch active needs/offers
+    // Fetch active needs/offers with full contact data
     const [needsResult, offersResult, connectionsResult] = await Promise.all([
-      supabase.from('needs').select('*, contacts(full_name, company)').eq('tenant_id', tenantId).eq('status', 'active'),
-      supabase.from('offers').select('*, contacts(full_name, company)').eq('tenant_id', tenantId).eq('status', 'active'),
-      supabase.from('connections').select(`*, contact_a:contacts!connections_contact_a_id_fkey(id, full_name), contact_b:contacts!connections_contact_b_id_fkey(id, full_name)`).eq('tenant_id', tenantId)
+      supabase
+        .from('needs')
+        .select('*, contacts(full_name, company, position, tags, profile_summary, companies(name, industry))')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'active'),
+      supabase
+        .from('offers')
+        .select('*, contacts(full_name, company, position, tags, profile_summary, companies(name, industry))')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'active'),
+      supabase
+        .from('connections')
+        .select(`
+          *, 
+          contact_a:contacts!connections_contact_a_id_fkey(id, full_name, company, position, companies(name, industry)), 
+          contact_b:contacts!connections_contact_b_id_fkey(id, full_name, company, position, companies(name, industry))
+        `)
+        .eq('tenant_id', tenantId)
     ]);
 
-    const agentsSummary = (allAgents || []).map(agent => `- ${agent.contacts?.full_name} (${agent.contacts?.company || '-'}): ${agent.agent_persona?.substring(0, 100) || 'brak'}`).join('\n');
-    const needsSummary = (needsResult.data || []).map(n => `- ${n.contacts?.full_name}: ${n.title}`).join('\n');
-    const offersSummary = (offersResult.data || []).map(o => `- ${o.contacts?.full_name}: ${o.title}`).join('\n');
-    const connectionsSummary = (connectionsResult.data || []).slice(0, 20).map(c => `- ${c.contact_a?.full_name} <-> ${c.contact_b?.full_name}`).join('\n');
+    // Build rich agent summaries with industry, tags, and profile
+    const agentsSummary = (allAgents || []).map(agent => {
+      const contact = agent.contacts as any;
+      if (!contact) return null;
+      
+      const industry = contact.companies?.industry || 'brak';
+      const tags = contact.tags?.join(', ') || 'brak';
+      const profileExcerpt = contact.profile_summary?.substring(0, 150) || '';
+      
+      return `- ${contact.full_name} | Firma: ${contact.company || '-'} | Branża: ${industry} | Stanowisko: ${contact.position || '-'} | Tagi: ${tags} | Profil: ${profileExcerpt}`;
+    }).filter(Boolean).join('\n');
+
+    // Build needs summary with industry context
+    const needsSummary = (needsResult.data || []).map(n => {
+      const contact = n.contacts as any;
+      const industry = contact?.companies?.industry || 'brak';
+      return `- ${contact?.full_name} (${industry}): ${n.title} - ${n.description?.substring(0, 100) || ''}`;
+    }).join('\n');
+
+    // Build offers summary with industry context
+    const offersSummary = (offersResult.data || []).map(o => {
+      const contact = o.contacts as any;
+      const industry = contact?.companies?.industry || 'brak';
+      return `- ${contact?.full_name} (${industry}): ${o.title} - ${o.description?.substring(0, 100) || ''}`;
+    }).join('\n');
+
+    // Build connections summary with industry
+    const connectionsSummary = (connectionsResult.data || []).slice(0, 30).map(c => {
+      const a = c.contact_a as any;
+      const b = c.contact_b as any;
+      return `- ${a?.full_name} (${a?.companies?.industry || '-'}) <-> ${b?.full_name} (${b?.companies?.industry || '-'})`;
+    }).join('\n');
+
+    // Calculate industry statistics
+    const industryStats: Record<string, number> = {};
+    (allAgents || []).forEach(agent => {
+      const contact = agent.contacts as any;
+      const industry = contact?.companies?.industry || contact?.profile_summary?.match(/branż[aąy]?\s*:?\s*(\w+)/i)?.[1] || 'nieznana';
+      industryStats[industry] = (industryStats[industry] || 0) + 1;
+    });
+    const industryStatsSummary = Object.entries(industryStats)
+      .sort((a, b) => b[1] - a[1])
+      .map(([industry, count]) => `${industry}: ${count}`)
+      .join(', ');
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const masterPrompt = `Jesteś Master Agent koordynujący ${allAgents?.length || 0} Contact Agents.
+    const masterPrompt = `Jesteś Master Agent koordynujący ${allAgents?.length || 0} Contact Agents w systemie zarządzania relacjami biznesowymi.
 
-## AGENCI
-${agentsSummary || 'Brak'}
+## STATYSTYKI BRANŻOWE
+${industryStatsSummary || 'Brak danych o branżach'}
 
-## POTRZEBY
-${needsSummary || 'Brak'}
+## AGENCI I ICH PROFILE (${allAgents?.length || 0} kontaktów)
+${agentsSummary || 'Brak agentów'}
 
-## OFERTY
-${offersSummary || 'Brak'}
+## AKTYWNE POTRZEBY
+${needsSummary || 'Brak aktywnych potrzeb'}
 
-## POŁĄCZENIA
-${connectionsSummary || 'Brak'}
+## AKTYWNE OFERTY
+${offersSummary || 'Brak aktywnych ofert'}
 
-## PYTANIE: "${query}"
+## POŁĄCZENIA W SIECI (próbka)
+${connectionsSummary || 'Brak połączeń'}
+
+## PYTANIE UŻYTKOWNIKA: "${query}"
+
+Przeanalizuj dokładnie dane powyżej i odpowiedz na pytanie. Uwzględnij:
+- Branże kontaktów (z pola industry lub profile_summary)
+- Tagi i oznaczenia kontaktów
+- Profile AI i opisy
+- Potrzeby i oferty
 
 Zwróć JSON:
 \`\`\`json
 {
-  "answer": "odpowiedź",
-  "agents_consulted": ["contact_id"],
+  "answer": "szczegółowa odpowiedź na pytanie z konkretnymi danymi i liczbami",
+  "agents_consulted": ["contact_id1", "contact_id2"],
+  "data_sources": ["źródła danych użyte do odpowiedzi"],
   "recommendations": [{"action": "akcja", "reason": "powód", "contacts_involved": ["id"]}],
   "potential_matches": [{"contact_a": {"id": "", "name": ""}, "contact_b": {"id": "", "name": ""}, "match_reason": ""}]
 }
@@ -89,6 +161,7 @@ Zwróć JSON:
     });
 
     if (!aiResponse.ok) {
+      console.error('AI response error:', aiResponse.status, await aiResponse.text());
       return new Response(JSON.stringify({ error: 'AI service error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -104,10 +177,17 @@ Zwróć JSON:
     }
 
     // Log query
-    await supabase.from('master_agent_queries').insert({ tenant_id: tenantId, query, query_type, agents_consulted: response.agents_consulted || [], reasoning: {}, response: response.answer });
+    await supabase.from('master_agent_queries').insert({ 
+      tenant_id: tenantId, 
+      query, 
+      query_type, 
+      agents_consulted: response.agents_consulted || [], 
+      reasoning: { data_sources: response.data_sources || [], industry_stats: industryStats }, 
+      response: response.answer 
+    });
 
     return new Response(
-      JSON.stringify({ success: true, total_agents: allAgents?.length || 0, ...response }),
+      JSON.stringify({ success: true, total_agents: allAgents?.length || 0, industry_stats: industryStats, ...response }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
