@@ -3,20 +3,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, Plus, X, Star, Loader2 } from 'lucide-react';
+import { Briefcase, Plus, X, Star, Loader2, Pencil, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   useDefaultPositions,
   useCreateDefaultPosition,
   useDeleteDefaultPosition,
-  useSetDefaultPosition
+  useSetDefaultPosition,
+  useUpdateDefaultPosition
 } from '@/hooks/useDefaultPositions';
 
 export function DefaultPositionsManager() {
   const [newPositionName, setNewPositionName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
   const { data: positions = [], isLoading } = useDefaultPositions();
   const createPosition = useCreateDefaultPosition();
   const deletePosition = useDeleteDefaultPosition();
   const setDefaultPosition = useSetDefaultPosition();
+  const updatePosition = useUpdateDefaultPosition();
 
   const handleAddPosition = async () => {
     if (!newPositionName.trim()) return;
@@ -27,6 +32,35 @@ export function DefaultPositionsManager() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleAddPosition();
+    }
+  };
+
+  const startEditing = (id: string, name: string) => {
+    setEditingId(id);
+    setEditingName(name);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editingName.trim()) return;
+    try {
+      await updatePosition.mutateAsync({ id: editingId, name: editingName.trim() });
+      toast.success('Zaktualizowano stanowisko');
+      cancelEditing();
+    } catch (error) {
+      toast.error('Błąd podczas aktualizacji');
+    }
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      cancelEditing();
     }
   };
 
@@ -55,37 +89,81 @@ export function DefaultPositionsManager() {
                   key={position.id}
                   className="flex items-center justify-between p-3 bg-muted rounded-lg"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{position.name}</span>
-                    {position.is_default && (
-                      <Badge variant="secondary" className="text-xs">
-                        <Star className="h-3 w-3 mr-1 fill-current" />
-                        domyślne
-                      </Badge>
+                  <div className="flex items-center gap-2 flex-1">
+                    {editingId === position.id ? (
+                      <>
+                        <Input
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={handleEditKeyDown}
+                          className="h-8 flex-1 max-w-xs"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleSaveEdit}
+                          disabled={updatePosition.isPending}
+                        >
+                          {updatePosition.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4 text-green-600" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={cancelEditing}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium">{position.name}</span>
+                        {position.is_default && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Star className="h-3 w-3 mr-1 fill-current" />
+                            domyślne
+                          </Badge>
+                        )}
+                      </>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {!position.is_default && (
+                  {editingId !== position.id && (
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setDefaultPosition.mutate(position.id)}
-                        disabled={setDefaultPosition.isPending}
-                        title="Ustaw jako domyślne"
+                        onClick={() => startEditing(position.id, position.name)}
+                        title="Edytuj nazwę"
                       >
-                        <Star className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deletePosition.mutate(position.id)}
-                      disabled={deletePosition.isPending}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      {!position.is_default && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDefaultPosition.mutate(position.id)}
+                          disabled={setDefaultPosition.isPending}
+                          title="Ustaw jako domyślne"
+                        >
+                          <Star className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deletePosition.mutate(position.id)}
+                        disabled={deletePosition.isPending}
+                        className="text-destructive hover:text-destructive"
+                        title="Usuń stanowisko"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
 
