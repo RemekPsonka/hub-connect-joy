@@ -196,60 +196,122 @@ serve(async (req) => {
     };
 
     const systemPrompt = hasSearchResults
-      ? `Jesteś ekspertem w analizie firm polskich.
+      ? `Jesteś ekspertem w dogłębnej analizie firm polskich.
 
 🔍 MASZ wyniki wyszukiwania internetowego dla tej firmy.
-Przeanalizuj je i wyodrębnij ZWERYFIKOWANE informacje.
+Przeanalizuj je DOKŁADNIE i wyodrębnij WSZYSTKIE możliwe informacje.
+
+📋 CO MUSISZ USTALIĆ:
+
+1. CO DOKŁADNIE FIRMA ROBI?
+   - Główna działalność i specjalizacja
+   - Produkty i usługi - SZCZEGÓŁOWO
+   - Realizowane projekty, inwestycje, klienci
+
+2. CO FIRMA OFERUJE?
+   - Pełna oferta dla klientów i partnerów
+   - Unikalna propozycja wartości
+   - Przewagi konkurencyjne
+
+3. CZEGO FIRMA SZUKA?
+   - Poszukiwani klienci, partnerzy, dostawcy
+   - Rekrutacja - jakie stanowiska?
+   - Kierunki rozwoju, ekspansji
+
+4. KTO ZARZĄDZA FIRMĄ?
+   - Zarząd: imiona, nazwiska, stanowiska
+   - Właściciele
+   - Kluczowe osoby decyzyjne
+
+5. DANE REJESTROWE I KONTAKTOWE
+   - NIP, REGON, KRS (jeśli znalezione)
+   - Adres siedziby
+   - Forma prawna, rok założenia
 
 ZASADY:
 - Podawaj TYLKO informacje znalezione w źródłach
-- Każda informacja musi być potwierdzona źródłem
-- Jeśli coś NIE wynika ze źródeł - nie wymyślaj, wpisz null
-- NIP/REGON/KRS podawaj TYLKO jeśli wyraźnie znalazłeś w źródle (stopka, kontakt, o firmie)
+- NIP/REGON/KRS podawaj TYLKO jeśli wyraźnie znalazłeś
+- Dla zarządu podawaj źródło dla każdej osoby
 
 Zwróć JSON:
 {
-  "name": "Oficjalna nazwa firmy",
-  "industry": "✅ Branża (ze źródeł)",
-  "description": "✅ Opis działalności (ze źródeł)",
-  "services": "✅ Usługi/produkty (ze źródeł)",
-  "collaboration_areas": "✅ Obszary współpracy (ze źródeł)",
-  "employee_count_estimate": "Szacunek lub null",
-  "nip": "✅ NIP jeśli znaleziono w źródłach (10 cyfr) lub null",
-  "regon": "✅ REGON jeśli znaleziono w źródłach lub null",
-  "krs": "✅ KRS jeśli znaleziono w źródłach lub null",
-  "address": "✅ Adres siedziby jeśli znaleziono lub null",
-  "city": "✅ Miasto siedziby jeśli znaleziono lub null",
-  "postal_code": "✅ Kod pocztowy jeśli znaleziono lub null",
-  "confidence": "high" lub "medium",
-  "suggested_website": "URL strony jeśli znaleziono",
+  "name": "Oficjalna nazwa firmy ze źródeł",
+  "industry": "Branża (ze źródeł)",
+  "description": "Pełny opis działalności firmy (2-3 zdania)",
+  
+  "what_company_does": "SZCZEGÓŁOWY opis co firma robi: główna działalność, specjalizacja, realizowane projekty",
+  "main_products_services": ["Lista głównych produktów/usług - każdy osobno"],
+  "what_company_offers": "Co firma oferuje klientom i partnerom - pełna oferta",
+  "what_company_seeks": "Czego firma szuka: klienci, partnerzy, dostawcy, pracownicy (jeśli rekrutuje)",
+  "target_clients": "Kto jest docelowym klientem firmy",
+  "competitive_advantage": "Co wyróżnia firmę na rynku",
+  
+  "management": [
+    {"name": "Imię Nazwisko", "position": "Stanowisko", "source": "URL źródła"}
+  ],
+  "company_type": "Forma prawna (sp. z o.o., S.A., JDG, itp.)",
+  "founding_year": "Rok założenia lub null",
+  "employee_count_estimate": "Szacunek liczby pracowników lub null",
+  
+  "recent_news": "Ostatnie wiadomości, aktywności, projekty firmy",
+  "company_culture": "Kultura firmy, wartości (jeśli znalezione)",
+  
+  "services": "Usługi/produkty - skrócona lista",
+  "collaboration_areas": "Obszary możliwej współpracy",
+  
+  "nip": "NIP (10 cyfr) lub null",
+  "regon": "REGON lub null",
+  "krs": "KRS lub null",
+  "address": "Adres siedziby lub null",
+  "city": "Miasto lub null",
+  "postal_code": "Kod pocztowy lub null",
+  
+  "confidence": "high/medium",
+  "suggested_website": "URL strony firmy",
   "sources": ["lista URL źródeł"],
-  "data_notes": ["Dane zweryfikowane online"]
+  "data_notes": ["Uwagi o jakości danych"]
 }`
       : `Jesteś ekspertem w analizie firm polskich.
 
 ⚠️ NIE MASZ dostępu do internetu ani baz danych.
-Możesz TYLKO sugerować prawdopodobną branżę na podstawie nazwy firmy.
+Możesz TYLKO sugerować prawdopodobną branżę i profil na podstawie nazwy firmy.
 
 ZASADY:
 - Wszystko co podajesz to SUGESTIE, nie fakty
 - Oznacz wszystko jako "💡 SUGESTIA:"
-- NIE wymyślaj NIP, REGON, KRS, adresów
+- NIE wymyślaj NIP, REGON, KRS, adresów, osób z zarządu
 
 Zwróć JSON:
 {
   "name": "Nazwa firmy",
   "industry": "💡 SUGESTIA: Prawdopodobna branża",
-  "description": "💡 SUGESTIA: Prawdopodobny opis",
+  "description": "💡 SUGESTIA: Prawdopodobny opis działalności",
+  
+  "what_company_does": "💡 SUGESTIA: Co prawdopodobnie firma robi",
+  "main_products_services": ["💡 SUGESTIA: Prawdopodobne usługi"],
+  "what_company_offers": "💡 SUGESTIA: Prawdopodobna oferta",
+  "what_company_seeks": null,
+  "target_clients": "💡 SUGESTIA: Prawdopodobni klienci",
+  "competitive_advantage": null,
+  
+  "management": [],
+  "company_type": null,
+  "founding_year": null,
+  "employee_count_estimate": null,
+  
+  "recent_news": null,
+  "company_culture": null,
+  
   "services": "💡 SUGESTIA: Prawdopodobne usługi",
   "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
-  "employee_count_estimate": null,
+  
   "nip": null,
   "regon": null,
   "krs": null,
   "address": null,
   "city": null,
   "postal_code": null,
+  
   "confidence": "low",
   "suggested_website": null,
   "sources": [],
@@ -257,19 +319,27 @@ Zwróć JSON:
 }`;
 
     const userContent = hasSearchResults
-      ? `Przeanalizuj firmę na podstawie wyników wyszukiwania:
+      ? `Przeprowadź DOGŁĘBNĄ analizę firmy na podstawie wyników wyszukiwania:
 
 Nazwa firmy: ${company_name}
 ${website ? `Strona www: ${website}` : ''}
-${industry_hint ? `Wskazówka: ${industry_hint}` : ''}
+${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
 
-WYNIKI WYSZUKIWANIA:
+📊 WYNIKI WYSZUKIWANIA DO ANALIZY:
 ${searchResults.map((r, i) => `
-[Źródło ${i + 1}] ${r.url}
+═══════════════════════════════════════
+[ŹRÓDŁO ${i + 1}] ${r.url}
 Tytuł: ${r.title}
 ${r.description ? `Opis: ${r.description}` : ''}
-${r.markdown ? `Treść: ${r.markdown.substring(0, 2000)}` : ''}
----`).join('\n')}`
+${r.markdown ? `TREŚĆ:\n${r.markdown.substring(0, 3000)}` : ''}
+═══════════════════════════════════════`).join('\n')}
+
+🎯 ZADANIE:
+1. Ustal DOKŁADNIE co firma robi - jakie produkty/usługi
+2. Zidentyfikuj co OFERUJE i czego SZUKA
+3. Znajdź osoby z ZARZĄDU (z linkami źródłowymi)
+4. Wyodrębnij dane rejestrowe (NIP, REGON, KRS, adres)
+5. Oceń pozycję rynkową i przewagi konkurencyjne`
       : `Zasugeruj profil firmy (tylko sugestie!):
 
 Nazwa firmy: ${company_name}
@@ -290,7 +360,7 @@ UWAGA: NIE masz dostępu do internetu. Podaj tylko sugestie.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 2000,
+        max_tokens: 3000,
         temperature: 0.3,
       }),
     });

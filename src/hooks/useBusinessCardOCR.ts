@@ -21,12 +21,41 @@ export interface ExtractedContactData {
 }
 
 export interface EnrichedCompanyData {
+  name?: string;
   industry: string;
   description: string;
   services: string;
   collaboration_areas: string;
   employee_count_estimate: string | null;
   confidence: 'high' | 'medium' | 'low';
+  
+  // Extended company analysis fields
+  what_company_does?: string;
+  main_products_services?: string[];
+  what_company_offers?: string;
+  what_company_seeks?: string;
+  target_clients?: string;
+  competitive_advantage?: string;
+  management?: Array<{ name: string; position: string; source?: string }>;
+  company_type?: string;
+  founding_year?: string;
+  recent_news?: string;
+  company_culture?: string;
+  
+  // Registration data
+  nip?: string;
+  regon?: string;
+  krs?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  
+  // Metadata
+  suggested_website?: string;
+  logo_url?: string;
+  sources?: string[];
+  data_notes?: string[];
+  search_performed?: boolean;
 }
 
 export interface CreateContactWithCompanyData {
@@ -51,10 +80,15 @@ export interface CreateContactWithCompanyData {
     website?: string;
     address?: string;
     city?: string;
+    postal_code?: string;
     industry?: string;
     description?: string;
     ai_analysis?: string;
     employee_count?: string;
+    nip?: string;
+    regon?: string;
+    krs?: string;
+    logo_url?: string;
   };
 }
 

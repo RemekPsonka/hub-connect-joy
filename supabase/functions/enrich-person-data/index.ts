@@ -79,8 +79,18 @@ serve(async (req) => {
 
     console.log('[enrich-person-data] Starting Firecrawl search for:', first_name, last_name, company);
 
-    // Step 1: Search for the person using Firecrawl
-    const searchQuery = `${first_name} ${last_name} ${company || ''} LinkedIn stanowisko zawodowe`;
+    // Step 1: Search for the person using Firecrawl - expanded queries
+    const searchQueries = [
+      `"${first_name} ${last_name}" ${company || ''} LinkedIn`,
+      `"${first_name} ${last_name}" ${company || ''} stanowisko kariera`,
+      `"${first_name} ${last_name}" ${company || ''} zarząd prezes dyrektor`
+    ];
+    
+    let allSearchResults: FirecrawlSearchResult[] = [];
+    
+    // Primary search
+    const primaryQuery = `"${first_name} ${last_name}" ${company || ''} LinkedIn stanowisko zawodowe kariera`;
+    console.log('[enrich-person-data] Firecrawl search query:', primaryQuery);
     
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/search', {
       method: 'POST',
@@ -89,8 +99,8 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query: searchQuery,
-        limit: 5,
+        query: primaryQuery,
+        limit: 7,
         lang: 'pl',
         scrapeOptions: {
           formats: ['markdown']
@@ -120,7 +130,7 @@ serve(async (req) => {
     
     console.log(`[enrich-person-data] Firecrawl returned ${searchResults.length} results`);
 
-    // Step 2: Analyze results with Lovable AI
+    // Step 2: Analyze results with Lovable AI - ENHANCED PROMPT
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -132,81 +142,154 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie wyników wyszukiwania o osobach.
+            content: `Jesteś ekspertem w analizie profili zawodowych osób.
 
-TWOJE ZADANIE:
-Przeanalizuj wyniki wyszukiwania i wyodrębnij ZWERYFIKOWANE informacje o szukanej osobie.
+🎯 TWOJE ZADANIE:
+Przeanalizuj wyniki wyszukiwania i stwórz SZCZEGÓŁOWY profil zawodowy szukanej osoby.
+
+📋 CO MUSISZ USTALIĆ:
+
+1. AKTUALNE STANOWISKO
+   - Dokładna nazwa stanowiska
+   - W jakiej firmie pracuje
+   - Od kiedy (jeśli dostępne)
+
+2. HISTORIA ZAWODOWA / KARIERA
+   - Poprzednie stanowiska i firmy
+   - Ścieżka kariery (awanse, zmiany)
+   - Kluczowe osiągnięcia
+
+3. KOMPETENCJE I SPECJALIZACJA
+   - Główne umiejętności
+   - Branża/specjalizacja
+   - Certyfikaty, wykształcenie (jeśli dostępne)
+
+4. OBECNOŚĆ ONLINE
+   - LinkedIn (URL profilu)
+   - Publikacje, artykuły
+   - Wystąpienia, konferencje, wywiady
+
+5. ROLA W FIRMIE ${company ? `(${company})` : ''}
+   - Czy jest w zarządzie/kierownictwie?
+   - Obszar odpowiedzialności
+   - Kluczowe projekty/zadania
+
+6. KONTEKST BIZNESOWY
+   - Branża w której działa
+   - Sieć kontaktów (jeśli widoczna)
+   - Aktywność zawodowa
 
 ZASADY KRYTYCZNE:
-1. Podawaj TYLKO informacje które BEZPOŚREDNIO dotyczą szukanej osoby
-2. Każda informacja MUSI mieć oznaczone źródło [źródło: URL]
-3. Jeśli informacja jest niepewna lub dotyczy innej osoby - NIE uwzględniaj jej
-4. Jeśli brak danych - jasno to zaznacz
+- Podawaj TYLKO informacje które BEZPOŚREDNIO dotyczą szukanej osoby
+- Każda informacja MUSI mieć oznaczone źródło [📎 Źródło: URL]
+- Jeśli coś dotyczy INNEJ osoby o podobnym nazwisku - NIE uwzględniaj
+- Brak danych = jasno to zaznacz (nie wymyślaj!)
 
 FORMAT ODPOWIEDZI (markdown):
 
-## 🔍 Wyniki wyszukiwania online
+## 👤 Profil zawodowy: ${first_name} ${last_name}
 
-### Stanowisko i firma
-✅ [informacja] 
+### 💼 Aktualna pozycja
+✅ **[Stanowisko]** w **[Firma]**
+📅 Od: [data jeśli znana]
 📎 Źródło: [URL]
 
 LUB
 
-📭 Nie znaleziono informacji o stanowisku
+📭 Nie znaleziono informacji o aktualnym stanowisku
 
-### Doświadczenie zawodowe
-✅ [informacja]
+---
+
+### 📈 Historia kariery
+| Okres | Stanowisko | Firma |
+|-------|------------|-------|
+| [data] | [stanowisko] | [firma] |
+
+📎 Źródła: [URLs]
+
+LUB
+
+📭 Nie znaleziono informacji o historii kariery
+
+---
+
+### 🎯 Specjalizacja i kompetencje
+- **Branża:** [branża]
+- **Kompetencje:** [lista]
+- **Wykształcenie:** [jeśli znane]
+
+📎 Źródło: [URL]
+
+---
+
+### 🌐 Obecność online
+- **LinkedIn:** [URL lub brak]
+- **Publikacje:** [jeśli są]
+- **Wystąpienia:** [jeśli są]
+
+---
+
+### 🏢 Rola w ${company || 'firmie'}
+✅ [Opis roli, odpowiedzialności, projektów]
 📎 Źródło: [URL]
 
 LUB
 
-📭 Nie znaleziono informacji o doświadczeniu
+📭 Brak szczegółów o roli w firmie
 
-### LinkedIn
-✅ Profil: [URL]
+---
 
-LUB
+### 💡 Podsumowanie i uwagi
+- **Wiarygodność danych:** [wysoka/średnia/niska]
+- **Uwagi:** [komentarz o jakości źródeł, potencjalnych rozbieżnościach]
 
-📭 Nie znaleziono profilu LinkedIn
+---
 
-### Inne informacje
-✅ [informacja]
-📎 Źródło: [URL]
-
-### Uwagi
-💡 [komentarz o jakości/wiarygodności znalezionych danych]
-
-UŻYJ:
-- ✅ dla zweryfikowanych faktów ze źródeł
-- 📎 dla oznaczenia źródła
-- 📭 dla brakujących informacji
-- 💡 dla uwag i komentarzy AI`
+OZNACZENIA:
+- ✅ = Zweryfikowany fakt ze źródła
+- 📎 = Link do źródła
+- 📭 = Brak informacji
+- 💡 = Uwaga/komentarz AI
+- ⚠️ = Informacja niepewna`
           },
           {
             role: 'user',
-            content: `Szukam informacji o osobie:
+            content: `🔍 Szukam SZCZEGÓŁOWYCH informacji o osobie:
+
+👤 DANE PODSTAWOWE:
 - Imię: ${first_name}
 - Nazwisko: ${last_name}
 ${company ? `- Firma: ${company}` : '- Firma: Nie podano'}
 ${email ? `- Email: ${email}` : ''}
 ${linkedin_url ? `- LinkedIn: ${linkedin_url}` : ''}
 
-WYNIKI WYSZUKIWANIA (${searchResults.length} wyników):
+═══════════════════════════════════════════════════════════════
+📊 WYNIKI WYSZUKIWANIA (${searchResults.length} źródeł):
+═══════════════════════════════════════════════════════════════
 
-${searchResults.length === 0 ? 'Brak wyników wyszukiwania.' : searchResults.map((r, i) => `
---- WYNIK ${i + 1} ---
-URL: ${r.url}
-Tytuł: ${r.title || 'Brak tytułu'}
-Opis: ${r.description || 'Brak opisu'}
-Treść: ${r.markdown?.substring(0, 1500) || 'Brak treści'}
+${searchResults.length === 0 ? '⚠️ Brak wyników wyszukiwania.' : searchResults.map((r, i) => `
+┌─────────────────────────────────────────────────────────────
+│ ŹRÓDŁO ${i + 1}: ${r.url}
+├─────────────────────────────────────────────────────────────
+│ Tytuł: ${r.title || 'Brak tytułu'}
+│ Opis: ${r.description || 'Brak opisu'}
+├─────────────────────────────────────────────────────────────
+│ TREŚĆ:
+${r.markdown?.substring(0, 2500) || 'Brak treści'}
+└─────────────────────────────────────────────────────────────
 `).join('\n')}
 
-Przeanalizuj te wyniki i wyodrębnij tylko te informacje, które BEZPOŚREDNIO dotyczą osoby ${first_name} ${last_name}${company ? ` z firmy ${company}` : ''}.
-Jeśli wyniki nie dotyczą tej osoby lub brak konkretnych danych - zaznacz to jasno.`
+═══════════════════════════════════════════════════════════════
+
+🎯 ZADANIE:
+1. Przeanalizuj WSZYSTKIE źródła
+2. Wyodrębnij TYLKO informacje o ${first_name} ${last_name}${company ? ` z firmy ${company}` : ''}
+3. Zbuduj pełny profil zawodowy z historią kariery
+4. Jeśli dane są o INNEJ osobie - zaznacz to jasno
+5. Oceń wiarygodność każdej informacji`
           }
         ],
-        max_tokens: 1500,
+        max_tokens: 2500,
         temperature: 0.2,
       }),
     });
