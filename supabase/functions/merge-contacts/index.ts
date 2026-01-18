@@ -56,12 +56,30 @@ serve(async (req) => {
     }
 
     const mergedData: Record<string, any> = {};
-    const simpleFields = ['email', 'phone', 'company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id', 'company_id'];
+    
+    // Fields that should only be filled if empty (not overwritten)
+    // IMPORTANT: phone (private) is NOT in this list - we never overwrite it
+    const simpleFields = ['email', 'company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id', 'company_id'];
 
     for (const field of simpleFields) {
       if (!existingContact[field] && newContactData[field]) {
         mergedData[field] = newContactData[field];
       }
+    }
+
+    // Handle phone_business from business card (newContactData.phone goes to phone_business)
+    // This preserves the private phone and adds business phone separately
+    if (newContactData.phone) {
+      // If there's a phone in new data, it's likely from a business card - put it in phone_business
+      if (!existingContact.phone_business) {
+        mergedData.phone_business = newContactData.phone;
+        console.log(`Setting phone_business to: ${newContactData.phone}`);
+      }
+    }
+    
+    // If newContactData explicitly has phone_business, use that directly
+    if (newContactData.phone_business && !existingContact.phone_business) {
+      mergedData.phone_business = newContactData.phone_business;
     }
 
     // Merge tags

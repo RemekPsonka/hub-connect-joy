@@ -11,6 +11,7 @@ export interface ParsedContact {
   last_name: string | null;
   email: string | null;
   phone: string | null;
+  phone_business: string | null; // Business phone from business card
   company: string | null;
   position: string | null;
   city: string | null;
@@ -221,6 +222,7 @@ export function useAIImport(): UseAIImportReturn {
     last_name: contact.last_name || null,
     email: contact.email || null,
     phone: contact.phone || null,
+    phone_business: contact.phone_business || null,
     company: contact.company || null,
     position: contact.position || null,
     city: contact.city || null,
@@ -894,22 +896,26 @@ export function useAIImport(): UseAIImportReturn {
                 tags.push(contact.met_source);
               }
 
-          await mergeContacts(contact.duplicate_contact_id, {
-            full_name: fullName || undefined,
-            first_name: contact.first_name,
-            last_name: contact.last_name,
-            email: contact.email,
-            phone: contact.phone,
-            company: contact.company,
-            position: contact.position,
-            city: contact.city,
-            notes: contact.comment || contact.notes,
-            tags: tags.length > 0 ? tags : undefined,
-            primary_group_id: contact.group_id || undefined,
-            met_source: contact.met_source || undefined,
-            met_date: contact.met_date || undefined,
-            profile_summary: contact.ai_person_info || undefined,
-          });
+              // When merging from business card import:
+              // - phone from business card goes to phone_business (not phone - which is private)
+              // - company data gets filled if empty
+              await mergeContacts(contact.duplicate_contact_id, {
+                full_name: fullName || undefined,
+                first_name: contact.first_name,
+                last_name: contact.last_name,
+                email: contact.email,
+                // Phone from business card goes to phone_business, not phone (private)
+                phone_business: contact.phone || undefined,
+                company: contact.company,
+                position: contact.position,
+                city: contact.city,
+                notes: contact.comment || contact.notes,
+                tags: tags.length > 0 ? tags : undefined,
+                primary_group_id: contact.group_id || undefined,
+                met_source: contact.met_source || undefined,
+                met_date: contact.met_date || undefined,
+                profile_summary: contact.ai_person_info || undefined,
+              });
               result.merged++;
               continue;
             }
