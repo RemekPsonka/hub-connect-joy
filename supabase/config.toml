@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.bi-agent-interview]
 verify_jwt = false
+
+[functions.create-tenant-user]
+verify_jwt = false
