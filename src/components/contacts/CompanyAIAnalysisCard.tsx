@@ -22,6 +22,9 @@ interface Service {
   target?: string;
 }
 
+// Services can be either array (new) or string (legacy)
+type ServicesType = Service[] | string;
+
 interface ManagementPerson {
   name: string;
   position: string;
@@ -62,8 +65,8 @@ interface CompanyAIAnalysis {
   market_share_info?: string;
   
   core_activities?: string[];
-  products?: Product[];
-  services?: Service[];
+  products?: Product[] | string[];
+  services?: ServicesType;
   key_projects?: string[];
   
   offer_summary?: string;
@@ -358,10 +361,16 @@ export function CompanyAIAnalysisCard({
                 <div className="space-y-2">
                   {aiAnalysis.products.map((product, i) => (
                     <div key={i} className="p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-medium">{product.name}</p>
-                      <p className="text-xs text-muted-foreground">{product.description}</p>
-                      {product.target && (
-                        <p className="text-xs text-primary mt-1">→ {product.target}</p>
+                      {typeof product === 'string' ? (
+                        <p className="text-sm">{product}</p>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">{product.description}</p>
+                          {product.target && (
+                            <p className="text-xs text-primary mt-1">→ {product.target}</p>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
@@ -369,23 +378,28 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.services && aiAnalysis.services.length > 0 && (
+            {/* Services - handle both string (legacy) and array (new) formats */}
+            {aiAnalysis?.services && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                   <Briefcase className="h-3 w-3" />
-                  Usługi ({aiAnalysis.services.length})
+                  Usługi
                 </p>
-                <div className="space-y-2">
-                  {aiAnalysis.services.map((service, i) => (
-                    <div key={i} className="p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-medium">{service.name}</p>
-                      <p className="text-xs text-muted-foreground">{service.description}</p>
-                      {service.target && (
-                        <p className="text-xs text-primary mt-1">→ {service.target}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {typeof aiAnalysis.services === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.services}</p>
+                ) : aiAnalysis.services.length > 0 ? (
+                  <div className="space-y-2">
+                    {aiAnalysis.services.map((service, i) => (
+                      <div key={i} className="p-2 bg-muted/50 rounded-lg">
+                        <p className="text-sm font-medium">{service.name}</p>
+                        <p className="text-xs text-muted-foreground">{service.description}</p>
+                        {service.target && (
+                          <p className="text-xs text-primary mt-1">→ {service.target}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
