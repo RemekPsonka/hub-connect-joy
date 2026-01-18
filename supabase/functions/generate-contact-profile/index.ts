@@ -87,64 +87,76 @@ serve(async (req) => {
 
     console.log("Generating AI profile for contact:", contact.full_name, "| Data quality score:", qualityScore);
 
-    // Build rich system prompt
-    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych i tworzenia kompleksowych profili osób.
+    // Build rich system prompt with STRICT data rules
+    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych.
 
-TWOJE ZADANIE:
-Stwórz rozbudowany, profesjonalny profil osoby podzielony na sekcje.
-Profil służy dyrektorowi zarządzającemu siecią kontaktów biznesowych.
+⚠️ ABSOLUTNIE KLUCZOWA ZASADA - ŹRÓDŁA DANYCH:
+Masz dostęp TYLKO do danych dostarczonych poniżej z systemu CRM.
+NIE MASZ dostępu do internetu, LinkedIn, wyszukiwarek ani innych źródeł zewnętrznych.
+KATEGORYCZNIE ZABRANIA SIĘ wymyślania informacji których nie ma w danych!
 
-STRUKTURA PROFILU (użyj nagłówków markdown ## z emoji):
+📊 SYSTEM OZNACZANIA (OBOWIĄZKOWY przy KAŻDEJ informacji):
+- ✅ POTWIERDZONE - informacja dosłownie znajduje się w danych (cytuj źródło: notatka, konsultacja, potrzeba itp.)
+- 💡 DEDUKCJA - logiczny wniosek na podstawie stanowiska/branży (ZAWSZE zaznacz "Dedukcja:")
+- 📭 BRAK DANYCH - informacja nie występuje w danych, do uzupełnienia przy następnym kontakcie
+
+STRUKTURA PROFILU (WSZYSTKIE sekcje są obowiązkowe):
 
 ## 👤 Kim jest ta osoba
-Krótkie intro - rola zawodowa, pozycja w firmie (1-2 zdania)
+[✅ lub 💡] Krótkie intro o osobie (1-2 zdania) ze wskazaniem źródła
 
 ## 💼 Historia kariery
-Przebieg zawodowy, wcześniejsze stanowiska/firmy jeśli znane z notatek lub LinkedIn
+[✅] Poprzednie stanowiska TYLKO jeśli wspomniane w notatkach z cytatem źródła
+[📭] Jeśli brak danych: "Brak informacji w bazie. Pytanie: Gdzie Pan/Pani wcześniej pracował/a?"
 
 ## 🎓 Wykształcenie
-Uczelnie, kierunki studiów, certyfikaty (jeśli znane)
+[✅] Uczelnie, kierunki, certyfikaty TYLKO jeśli wprost wspomniane
+[📭] Jeśli brak: "Brak informacji w bazie."
 
 ## 🏢 Członkostwo w organizacjach
-Zarządy spółek, stowarzyszenia branżowe, kluby biznesowe, fundacje, rady nadzorcze
+[✅] Zarządy, stowarzyszenia, kluby biznesowe TYLKO jeśli wspomniane
+[📭] Jeśli brak: "Brak informacji. Pytanie: Czy należy Pan/Pani do organizacji branżowych?"
 
-## 📰 Informacje prasowe
-Wzmianki w mediach, wywiady, nagrody, publiczne wystąpienia (jeśli znane)
+## 📰 Informacje prasowe / Media
+[📭] "Wymaga sprawdzenia w źródłach zewnętrznych - dane niedostępne w CRM"
 
 ## 👨‍👩‍👧‍👦 Rodzina
-Informacje o rodzinie, dzieci, małżonek/partner (jeśli dostępne w notatkach)
+[✅] TYLKO jeśli WPROST wspomniane w notatkach (np. "ma syna Tomka", "żona Anna")
+[📭] Jeśli brak: "Brak informacji w bazie."
 
 ## 🎯 Hobby i zainteresowania
-Pasje, sport, podróże, kultura, kolekcje (jeśli wspomniane w notatkach)
+[✅] TYLKO jeśli WPROST wspomniane w notatkach lub konsultacjach
+[📭] Jeśli brak: "Brak informacji. Pytanie: Czym się Pan/Pani interesuje poza pracą?"
 
 ## 💡 Kompetencje i ekspertyza
-Obszary specjalizacji zawodowej, unikalne umiejętności
+[✅] Z ofert, potrzeb lub notatek - z cytatem źródła
+[💡] Dedukcja: logiczne wnioski ze stanowiska (ZAZNACZ że to dedukcja!)
 
 ## 🤝 Wartość dla sieci kontaktów
-Jak może pomóc innym członkom sieci, jakie korzyści wnosi, czym może się podzielić
+[✅] Z zdefiniowanych ofert w systemie
+[💡] Dedukcja na podstawie stanowiska/firmy (ZAZNACZ!)
 
-## 📋 Aktualne potrzeby
-Czego aktywnie szuka (na podstawie zdefiniowanych potrzeb)
+## 📋 Aktualne potrzeby biznesowe
+[✅] Z listy potrzeb w systemie
 
 ## 📞 Rekomendowany sposób kontaktu
-Jak i kiedy najlepiej kontaktować, preferencje komunikacyjne
+[💡] Sugestia: na podstawie stanowiska i historii kontaktów
 
-## 📝 Notatki dodatkowe
-Inne istotne informacje, które warto zapamiętać przy następnym spotkaniu
+## 📝 Pytania do następnego spotkania
+Lista 3-5 konkretnych pytań aby uzupełnić brakujące informacje o tej osobie
 
-ZASADY:
-- Pisz po polsku, profesjonalnym ale ciepłym tonem
-- Maksymalnie 600 słów
-- WAŻNE: Sekcje bez danych CAŁKOWICIE POMIŃ (nie pisz "brak danych", "nieznane" itp.)
-- Uważnie przeczytaj notatki - często zawierają informacje osobiste (rodzina, hobby, zainteresowania)
-- Bazuj TYLKO na dostarczonych danych - NIE WYMYŚLAJ informacji
-- Każdą sekcję rozpoczynaj od nagłówka ## z odpowiednim emoji
-- Bądź konkretny i precyzyjny, unikaj ogólników
+ZASADY BEZWZGLĘDNE:
+- Maksymalnie 700 słów
+- KAŻDA informacja MUSI mieć oznaczenie źródła (✅/💡/📭)
+- Przy ✅ ZAWSZE podaj skąd (np. "✅ z notatki: ...", "✅ z konsultacji z dnia...")
+- Przy 💡 ZAWSZE napisz "Dedukcja:" przed tekstem
+- Przy 📭 podaj konkretne pytanie do zadania lub "Brak informacji w bazie"
+- NIGDY nie wymyślaj danych osobowych (rodzina, hobby, wykształcenie) - tylko jeśli są w notatkach!
+- Sekcje z TYLKO 📭 nadal pokazuj - to lista rzeczy do uzupełnienia!
 
 ${qualityScore < 2 ? `
 UWAGA: Dostępnych jest bardzo mało danych o tej osobie.
-Wygeneruj tylko sekcję "Kim jest ta osoba" z 1-2 zdaniami podsumowania.
-Nie twórz innych sekcji jeśli brak danych.` : ''}`;
+Większość sekcji będzie miała oznaczenie 📭 - to jest OK, pokaż co trzeba uzupełnić.` : ''}`;
 
     // Build rich user prompt with all available data
     const formatDate = (dateStr: string | null) => {
