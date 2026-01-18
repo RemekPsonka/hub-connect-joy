@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Shield, Users, UserPlus, Trash2, Crown, UserCog } from 'lucide-react';
+import { Shield, Users, UserPlus, Trash2, Crown, UserCog, Pencil } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,11 +31,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useOwnerPanel, AppRole } from '@/hooks/useOwnerPanel';
+import { useOwnerPanel, AppRole, TenantUser } from '@/hooks/useOwnerPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import AddUserModal from '@/components/owner/AddUserModal';
+import EditUserModal from '@/components/owner/EditUserModal';
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'Właściciel',
@@ -62,9 +63,22 @@ export default function Owner() {
     isUpdatingRole,
     removeUser,
     isRemovingUser,
+    updateUser,
+    isUpdatingUser,
   } = useOwnerPanel();
   
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<TenantUser | null>(null);
+
+  const handleEditUser = (user: TenantUser) => {
+    setEditingUser(user);
+    setIsEditUserOpen(true);
+  };
+
+  const handleSaveUser = async (data: { userId: string; email?: string; fullName?: string; password?: string }) => {
+    await updateUser(data);
+  };
 
   // Loading state
   if (isAdminLoading) {
@@ -143,8 +157,9 @@ export default function Owner() {
                   <TableHead>Użytkownik</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Rola</TableHead>
-                  <TableHead>Data utworzenia</TableHead>
-                  <TableHead className="w-[100px]">Akcje</TableHead>
+                      <TableHead>Data utworzenia</TableHead>
+                      <TableHead className="w-[50px]">Edycja</TableHead>
+                      <TableHead className="w-[50px]">Usuń</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,42 +220,52 @@ export default function Owner() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {format(new Date(user.created_at), 'd MMM yyyy', { locale: pl })}
-                      </TableCell>
-                      <TableCell>
-                        {canRemoveUser(user.user_id, user.roles) && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Usuń użytkownika</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Czy na pewno chcesz usunąć użytkownika <strong>{user.full_name}</strong> z organizacji?
-                                  Ta operacja jest nieodwracalna.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Anuluj</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => removeUser(user.user_id)}
-                                  disabled={isRemovingUser}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Usuń
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </TableCell>
+                          {format(new Date(user.created_at), 'd MMM yyyy', { locale: pl })}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditUser(user)}
+                              title="Edytuj dane użytkownika"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            {canRemoveUser(user.user_id, user.roles) ? (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Usuń użytkownika</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Czy na pewno chcesz usunąć użytkownika <strong>{user.full_name}</strong> z organizacji?
+                                      Ta operacja jest nieodwracalna.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => removeUser(user.user_id)}
+                                      disabled={isRemovingUser}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Usuń
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            ) : null}
+                          </TableCell>
                     </TableRow>
                   );
                 })}
@@ -254,6 +279,18 @@ export default function Owner() {
       <AddUserModal 
         isOpen={isAddUserOpen} 
         onClose={() => setIsAddUserOpen(false)} 
+      />
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        isOpen={isEditUserOpen}
+        onClose={() => {
+          setIsEditUserOpen(false);
+          setEditingUser(null);
+        }}
+        user={editingUser}
+        onSave={handleSaveUser}
+        isLoading={isUpdatingUser}
       />
     </div>
   );

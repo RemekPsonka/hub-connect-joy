@@ -177,6 +177,34 @@ export function useOwnerPanel() {
     }
   });
 
+  // Update user data (email, name, password)
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, email, fullName, password }: { 
+      userId: string; 
+      email?: string; 
+      fullName?: string; 
+      password?: string;
+    }) => {
+      if (!tenantId) throw new Error('No tenant ID');
+      
+      const { data, error } = await supabase.functions.invoke('update-tenant-user', {
+        body: { userId, email, fullName, password, tenantId }
+      });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-users', tenantId] });
+      toast.success('Dane użytkownika zaktualizowane');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Błąd aktualizacji danych');
+    }
+  });
+
   return {
     isAdmin,
     isAdminLoading,
@@ -189,5 +217,7 @@ export function useOwnerPanel() {
     isRemovingUser: removeUserMutation.isPending,
     createUser: createUserMutation.mutateAsync,
     isCreatingUser: createUserMutation.isPending,
+    updateUser: updateUserMutation.mutateAsync,
+    isUpdatingUser: updateUserMutation.isPending,
   };
 }
