@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { GroupManagementModal } from '@/components/settings/GroupManagementModal';
+import { DefaultPositionsManager } from '@/components/settings/DefaultPositionsManager';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -339,6 +340,9 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+          {/* Default Positions */}
+          <DefaultPositionsManager />
 
           {/* Synonyms Dictionary */}
           <SynonymsDictionary />
