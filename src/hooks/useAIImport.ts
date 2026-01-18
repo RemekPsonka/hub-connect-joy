@@ -67,7 +67,7 @@ interface UseAIImportReturn {
   parseText: (text: string) => Promise<void>;
   checkAllDuplicates: () => Promise<void>;
   updateDuplicateDecision: (index: number, decision: 'merge' | 'new' | 'skip') => void;
-  importContacts: (groupId?: string, sourceTags?: string[]) => Promise<ImportResult>;
+  importContacts: (groupId?: string, metSource?: string, metDate?: string) => Promise<ImportResult>;
   reset: () => void;
 }
 
@@ -310,7 +310,11 @@ export function useAIImport(): UseAIImportReturn {
     ));
   }, []);
 
-  const importContacts = useCallback(async (groupId?: string, sourceTags?: string[]): Promise<ImportResult> => {
+  const importContacts = useCallback(async (
+    groupId?: string, 
+    metSource?: string, 
+    metDate?: string
+  ): Promise<ImportResult> => {
     if (!tenantId) {
       return { created: 0, merged: 0, skipped: 0, errors: ['Brak tenant_id'] };
     }
@@ -333,7 +337,11 @@ export function useAIImport(): UseAIImportReturn {
 
         try {
           const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Bez nazwy';
-          const tags = [...(contact.tags || []), ...(sourceTags || [])];
+          const tags = contact.tags || [];
+          // Add met_source as tag if provided
+          if (metSource && !tags.includes(metSource)) {
+            tags.push(metSource);
+          }
 
           await createContact.mutateAsync({
             full_name: fullName,
@@ -347,7 +355,9 @@ export function useAIImport(): UseAIImportReturn {
             notes: contact.notes,
             tags: tags.length > 0 ? tags : null,
             primary_group_id: groupId || null,
-            source: 'ai_import'
+            source: 'ai_import',
+            met_source: metSource || null,
+            met_date: metDate || null,
           });
           result.created++;
         } catch (err) {
@@ -373,7 +383,10 @@ export function useAIImport(): UseAIImportReturn {
         if (dup.decision === 'merge') {
           try {
             const fullName = [dup.parsedContact.first_name, dup.parsedContact.last_name].filter(Boolean).join(' ');
-            const tags = [...(dup.parsedContact.tags || []), ...(sourceTags || [])];
+            const tags = dup.parsedContact.tags || [];
+            if (metSource && !tags.includes(metSource)) {
+              tags.push(metSource);
+            }
 
             await mergeContacts(dup.existingContact.id, {
               full_name: fullName || undefined,
@@ -387,6 +400,8 @@ export function useAIImport(): UseAIImportReturn {
               notes: dup.parsedContact.notes,
               tags: tags.length > 0 ? tags : undefined,
               primary_group_id: groupId || undefined,
+              met_source: metSource || undefined,
+              met_date: metDate || undefined,
             });
             result.merged++;
           } catch (err) {
@@ -396,7 +411,10 @@ export function useAIImport(): UseAIImportReturn {
         } else if (dup.decision === 'new') {
           try {
             const fullName = [dup.parsedContact.first_name, dup.parsedContact.last_name].filter(Boolean).join(' ') || 'Bez nazwy';
-            const tags = [...(dup.parsedContact.tags || []), ...(sourceTags || [])];
+            const tags = dup.parsedContact.tags || [];
+            if (metSource && !tags.includes(metSource)) {
+              tags.push(metSource);
+            }
 
             await createContact.mutateAsync({
               full_name: fullName,
@@ -410,7 +428,9 @@ export function useAIImport(): UseAIImportReturn {
               notes: dup.parsedContact.notes,
               tags: tags.length > 0 ? tags : null,
               primary_group_id: groupId || null,
-              source: 'ai_import'
+              source: 'ai_import',
+              met_source: metSource || null,
+              met_date: metDate || null,
             });
             result.created++;
           } catch (err) {

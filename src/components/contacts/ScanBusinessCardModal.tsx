@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Camera, Upload, Loader2, Sparkles, X } from 'lucide-react';
+import { Camera, Upload, Loader2, Sparkles, X, MapPin, Calendar } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,13 +12,26 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBusinessCardOCR, ExtractedContactData, EnrichedCompanyData } from '@/hooks/useBusinessCardOCR';
+import { useContactGroups } from '@/hooks/useContacts';
 import { toast } from 'sonner';
 
 interface ScanBusinessCardModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+// Suggested "met at" sources
+const metSourceSuggestions = [
+  'Poznany na CC',
+  'Poznany na EKG',
+  'NARVIL2025',
+  'Konferencja',
+  'LinkedIn',
+  'Networking'
+];
 
 export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +40,11 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
   const [enrichedData, setEnrichedData] = useState<EnrichedCompanyData | null>(null);
   const [enrichCompany, setEnrichCompany] = useState(true);
   const [step, setStep] = useState<'upload' | 'extracted' | 'enriched'>('upload');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [metSource, setMetSource] = useState('');
+  const [metDate, setMetDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const { data: groups } = useContactGroups();
 
   const { 
     scanBusinessCard, 
@@ -114,6 +132,12 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
       return;
     }
 
+    // Add met_source as tag
+    const tags: string[] = [];
+    if (metSource) {
+      tags.push(metSource);
+    }
+
     try {
       await createContactWithCompany({
         contact: {
@@ -127,6 +151,10 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
           city: formData.city || undefined,
           notes: formData.notes || undefined,
           profile_summary: formData.profile_summary || undefined,
+          primary_group_id: selectedGroupId || undefined,
+          met_source: metSource || undefined,
+          met_date: metDate || undefined,
+          tags: tags.length > 0 ? tags : undefined,
         },
         company: formData.company ? {
           name: formData.company,
@@ -151,6 +179,9 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
     setExtractedData(null);
     setEnrichedData(null);
     setStep('upload');
+    setSelectedGroupId('');
+    setMetSource('');
+    setMetDate(new Date().toISOString().split('T')[0]);
     setFormData({
       title: null,
       first_name: '',
@@ -386,6 +417,62 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
                     placeholder="Dodatkowe informacje..."
                     rows={2}
                   />
+                </div>
+
+                {/* Met Source and Group Selection */}
+                <div className="col-span-2 space-y-3 pt-2 border-t">
+                  <div>
+                    <Label>Grupa docelowa</Label>
+                    <Select value={selectedGroupId || 'none'} onValueChange={(val) => setSelectedGroupId(val === 'none' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Wybierz grupę..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Bez grupy</SelectItem>
+                        {groups?.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Skąd poznany?
+                    </Label>
+                    <Input
+                      placeholder="np. CC WAW 2025, NARVIL..."
+                      value={metSource}
+                      onChange={(e) => setMetSource(e.target.value)}
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {metSourceSuggestions.map((s) => (
+                        <Badge
+                          key={s}
+                          variant="outline"
+                          className="cursor-pointer hover:bg-primary/10 text-xs"
+                          onClick={() => setMetSource(s)}
+                        >
+                          {s}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Data poznania
+                    </Label>
+                    <Input
+                      type="date"
+                      value={metDate}
+                      onChange={(e) => setMetDate(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
 

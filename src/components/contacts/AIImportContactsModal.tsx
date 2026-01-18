@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { 
   FileSpreadsheet, 
   Upload, 
@@ -22,7 +23,9 @@ import {
   Users,
   Merge,
   Plus,
-  X
+  X,
+  MapPin,
+  Calendar
 } from 'lucide-react';
 import { useAIImport, ParsedContact, DuplicateMatch } from '@/hooks/useAIImport';
 import { useContactGroups } from '@/hooks/useContacts';
@@ -35,14 +38,28 @@ interface AIImportContactsModalProps {
   onSuccess?: () => void;
 }
 
-type Step = 'source' | 'preview' | 'duplicates' | 'importing' | 'complete';
+type Step = 'source' | 'preview' | 'settings' | 'duplicates' | 'importing' | 'complete';
+
+// Suggested "met at" sources
+const metSourceSuggestions = [
+  'Poznany na CC',
+  'Poznany na EKG',
+  'NARVIL2025',
+  'Konferencja',
+  'LinkedIn',
+  'Rekomendacja',
+  'Networking'
+];
 
 export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImportContactsModalProps) {
   const [step, setStep] = useState<Step>('source');
   const [pastedText, setPastedText] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [metSource, setMetSource] = useState('');
+  const [metDate, setMetDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [listAccepted, setListAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: groups } = useContactGroups();
@@ -64,13 +81,19 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     reset
   } = useAIImport();
 
+  // Find "Inne" group as default
+  const defaultGroup = groups?.find(g => g.name.toLowerCase() === 'inne');
+
   // Reset on close
   useEffect(() => {
     if (!open) {
       setStep('source');
       setPastedText('');
       setSelectedGroupId('');
+      setMetSource('');
+      setMetDate(new Date().toISOString().split('T')[0]);
       setUploadedFiles([]);
+      setListAccepted(false);
       reset();
     }
   }, [open, reset]);
@@ -114,9 +137,22 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
       await parseText(pastedText);
     }
     
+    // Move to preview step if we have contacts
     if (parsedContacts.length > 0 || !errors.length) {
       setStep('preview');
     }
+  };
+
+  // After parsing - check if we got contacts and transition
+  useEffect(() => {
+    if (step === 'source' && parsedContacts.length > 0 && !isParsing) {
+      setStep('preview');
+    }
+  }, [parsedContacts, isParsing, step]);
+
+  const handleAcceptList = () => {
+    setListAccepted(true);
+    setStep('settings');
   };
 
   const handleCheckDuplicates = async () => {
@@ -130,7 +166,9 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
 
   const handleImport = async () => {
     setStep('importing');
-    const result = await importContacts(selectedGroupId || undefined);
+    // Use selected group or default to "Inne"
+    const groupToUse = selectedGroupId || defaultGroup?.id;
+    const result = await importContacts(groupToUse, metSource || undefined, metDate || undefined);
     setStep('complete');
     
     if (result.errors.length === 0) {
@@ -157,6 +195,17 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     return <FileText className="h-4 w-4" />;
   };
 
+  const getStepNumber = () => {
+    switch (step) {
+      case 'source': return 1;
+      case 'preview': return 2;
+      case 'settings': return 3;
+      case 'duplicates': return 4;
+      case 'importing': return 5;
+      case 'complete': return 5;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
@@ -164,10 +213,14 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
             Import kontaktów przez AI
+            <span className="text-sm font-normal text-muted-foreground ml-2">
+              Krok {getStepNumber()} z 5
+            </span>
           </DialogTitle>
           <DialogDescription>
             {step === 'source' && 'Wgraj pliki lub wklej dane do automatycznego rozpoznania kontaktów'}
-            {step === 'preview' && 'Sprawdź rozpoznane kontakty przed importem'}
+            {step === 'preview' && 'Sprawdź rozpoznane kontakty i zaakceptuj listę'}
+            {step === 'settings' && 'Skonfiguruj ustawienia importu'}
             {step === 'duplicates' && 'Zdecyduj co zrobić z wykrytymi duplikatami'}
             {step === 'importing' && 'Trwa importowanie kontaktów...'}
             {step === 'complete' && 'Import zakończony'}
@@ -202,6 +255,9 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Obsługiwane formaty: PNG, JPG (zrzuty ekranu), PDF, Excel, CSV
+                    </p>
+                    <p className="text-xs text-primary mt-2">
+                      Możesz dodać wiele plików naraz
                     </p>
                     <input
                       ref={fileInputRef}
@@ -245,23 +301,6 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                   />
                 </TabsContent>
               </Tabs>
-
-              <div className="space-y-2">
-                <Label>Grupa docelowa (opcjonalnie)</Label>
-                <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Wybierz grupę..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Bez grupy</SelectItem>
-                    {groups?.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
               {errors.length > 0 && (
                 <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
@@ -335,6 +374,97 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                   </table>
                 </div>
               </ScrollArea>
+
+              <div className="p-3 bg-muted/50 rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  Sprawdź czy rozpoznane dane są poprawne. Po zaakceptowaniu przejdziesz do konfiguracji importu.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Settings */}
+          {step === 'settings' && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label>Grupa docelowa</Label>
+                <Select 
+                  value={selectedGroupId || 'none'} 
+                  onValueChange={(val) => setSelectedGroupId(val === 'none' ? '' : val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Wybierz grupę..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <span className="text-muted-foreground">Bez wyboru (→ Inne)</span>
+                    </SelectItem>
+                    {groups?.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: group.color || '#6366f1' }}
+                          />
+                          {group.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Jeśli nie wybierzesz grupy, kontakty trafią do grupy "Inne"
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Skąd poznany? (opcjonalne)
+                </Label>
+                <Input
+                  placeholder="np. CC WAW 2025, NARVIL, EKG..."
+                  value={metSource}
+                  onChange={(e) => setMetSource(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-1">
+                  {metSourceSuggestions.map((suggestion) => (
+                    <Badge
+                      key={suggestion}
+                      variant="outline"
+                      className="cursor-pointer hover:bg-primary/10 transition-colors"
+                      onClick={() => setMetSource(suggestion)}
+                    >
+                      {suggestion}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ta informacja pomoże Ci później przypomnieć sobie skąd znasz te osoby
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Data poznania (opcjonalne)
+                </Label>
+                <Input
+                  type="date"
+                  value={metDate}
+                  onChange={(e) => setMetDate(e.target.value)}
+                />
+              </div>
+
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h4 className="font-medium mb-2">Podsumowanie importu</h4>
+                <div className="text-sm space-y-1">
+                  <p><strong>Liczba kontaktów:</strong> {parsedContacts.length}</p>
+                  <p><strong>Grupa docelowa:</strong> {selectedGroupId ? groups?.find(g => g.id === selectedGroupId)?.name : 'Inne'}</p>
+                  {metSource && <p><strong>Skąd poznani:</strong> {metSource}</p>}
+                  {metDate && <p><strong>Data poznania:</strong> {new Date(metDate).toLocaleDateString('pl-PL')}</p>}
+                </div>
+              </div>
             </div>
           )}
 
@@ -438,8 +568,25 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                 Wróć
               </Button>
               <Button 
+                onClick={handleAcceptList}
+                disabled={parsedContacts.length === 0}
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Zaakceptuj listę
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </>
+          )}
+
+          {step === 'settings' && (
+            <>
+              <Button variant="outline" onClick={() => setStep('preview')}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Wróć
+              </Button>
+              <Button 
                 onClick={handleCheckDuplicates}
-                disabled={isCheckingDuplicates || parsedContacts.length === 0}
+                disabled={isCheckingDuplicates}
               >
                 {isCheckingDuplicates ? (
                   <>
@@ -458,13 +605,13 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
 
           {step === 'duplicates' && (
             <>
-              <Button variant="outline" onClick={() => setStep('preview')}>
+              <Button variant="outline" onClick={() => setStep('settings')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Wróć
               </Button>
               <Button onClick={handleImport}>
-                <Check className="h-4 w-4 mr-2" />
-                Importuj kontakty
+                Importuj
+                <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </>
           )}
@@ -480,34 +627,34 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
   );
 }
 
-function DuplicateCard({ 
-  duplicate, 
-  onDecisionChange 
-}: { 
-  duplicate: DuplicateMatch; 
+// Duplicate Card Component
+interface DuplicateCardProps {
+  duplicate: DuplicateMatch;
   onDecisionChange: (decision: 'merge' | 'new' | 'skip') => void;
-}) {
+}
+
+function DuplicateCard({ duplicate, onDecisionChange }: DuplicateCardProps) {
   const { parsedContact, existingContact, decision } = duplicate;
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <AlertCircle className="h-4 w-4 text-yellow-500" />
+      <div className="flex items-center justify-between">
         <span className="font-medium">
           {parsedContact.first_name} {parsedContact.last_name}
         </span>
+        <Badge variant="outline">Potencjalny duplikat</Badge>
       </div>
 
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground font-medium uppercase">W systemie</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase">W systemie:</p>
           <p>{existingContact.full_name}</p>
           <p className="text-muted-foreground">{existingContact.email || 'brak email'}</p>
           <p className="text-muted-foreground">{existingContact.phone || 'brak telefonu'}</p>
           <p className="text-muted-foreground">{existingContact.company || 'brak firmy'}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground font-medium uppercase">Z importu</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase">Z importu:</p>
           <p>{parsedContact.first_name} {parsedContact.last_name}</p>
           <p className="text-muted-foreground">{parsedContact.email || 'brak email'}</p>
           <p className="text-muted-foreground">{parsedContact.phone || 'brak telefonu'}</p>
@@ -517,27 +664,24 @@ function DuplicateCard({
 
       <RadioGroup 
         value={decision} 
-        onValueChange={(val) => onDecisionChange(val as 'merge' | 'new' | 'skip')}
+        onValueChange={(value) => onDecisionChange(value as 'merge' | 'new' | 'skip')}
         className="flex gap-4"
       >
         <div className="flex items-center space-x-2">
           <RadioGroupItem value="merge" id={`merge-${existingContact.id}`} />
-          <Label htmlFor={`merge-${existingContact.id}`} className="flex items-center gap-1 cursor-pointer">
-            <Merge className="h-3 w-3" />
-            Scal
+          <Label htmlFor={`merge-${existingContact.id}`} className="text-sm cursor-pointer">
+            Scal (uzupełnij dane)
           </Label>
         </div>
         <div className="flex items-center space-x-2">
           <RadioGroupItem value="new" id={`new-${existingContact.id}`} />
-          <Label htmlFor={`new-${existingContact.id}`} className="flex items-center gap-1 cursor-pointer">
-            <Plus className="h-3 w-3" />
+          <Label htmlFor={`new-${existingContact.id}`} className="text-sm cursor-pointer">
             Utwórz nowy
           </Label>
         </div>
         <div className="flex items-center space-x-2">
           <RadioGroupItem value="skip" id={`skip-${existingContact.id}`} />
-          <Label htmlFor={`skip-${existingContact.id}`} className="flex items-center gap-1 cursor-pointer">
-            <X className="h-3 w-3" />
+          <Label htmlFor={`skip-${existingContact.id}`} className="text-sm cursor-pointer">
             Pomiń
           </Label>
         </div>
