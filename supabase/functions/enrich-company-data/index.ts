@@ -55,7 +55,7 @@ async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<{ url: 
         url,
         formats: ['markdown'],
         onlyMainContent: true,
-        waitFor: 2000
+        waitFor: 3000
       }),
     });
     
@@ -136,65 +136,152 @@ serve(async (req) => {
     }
 
     // ==========================================
-    // PHASE 1: PERPLEXITY DEEP RESEARCH
+    // PHASE 1: PERPLEXITY INTERNET SEARCH (3 PARALLEL QUERIES)
     // ==========================================
-    let perplexityInsights: string | null = null;
+    let perplexityProfileInsights: string | null = null;
+    let perplexityNewsInsights: string | null = null;
+    let perplexityRegistryInsights: string | null = null;
     let perplexityCitations: string[] = [];
     
     if (PERPLEXITY_API_KEY) {
-      console.log('=== PHASE 1: PERPLEXITY DEEP RESEARCH ===');
+      console.log('=== PHASE 1: PERPLEXITY INTERNET SEARCH (3 queries) ===');
       
-      const perplexityQuery = `"${company_name}" firma Polska:
-- profil działalności firmy i historia
-- właściciele, zarząd, kluczowe osoby decyzyjne
-- ostatnie inwestycje, projekty, realizacje
-- opinie klientów i partnerów biznesowych
-- pozycja rynkowa, główni konkurenci
-- rekrutacja, otwarte stanowiska, kultura organizacyjna
-- dane rejestrowe: NIP, REGON, KRS, adres
-- branża, produkty, usługi, specjalizacja
-- plany rozwoju, ekspansji, strategia`;
+      // QUERY 1: Profil firmy i działalność
+      const profileQuery = `"${company_name}" Polska firma:
+- profil działalności firmy, historia, rok założenia
+- właściciele, zarząd, kluczowe osoby decyzyjne  
+- główne produkty i usługi
+- branża, specjalizacja, pozycja rynkowa
+- wielkość firmy, liczba pracowników
+- forma prawna, struktura właścicielska`;
 
-      try {
-        const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      // QUERY 2: Newsy, aktualności, informacje prasowe
+      const newsQuery = `"${company_name}" Polska aktualności newsy 2024 2025:
+- artykuły prasowe, wywiady z zarządem
+- inwestycje, przejęcia, fuzje, nowe projekty  
+- otwarcia nowych lokalizacji, ekspansja
+- nagrody, wyróżnienia, certyfikaty
+- problemy, kontrowersje, zmiany
+- rekrutacje, nowe stanowiska`;
+
+      // QUERY 3: Dane rejestrowe i formalne
+      const registryQuery = `"${company_name}" Polska NIP REGON KRS dane rejestrowe:
+- numer NIP firmy
+- numer REGON
+- numer KRS  
+- adres siedziby, miasto, kod pocztowy
+- forma prawna (sp. z o.o., S.A., itp.)
+- data rejestracji, rok założenia
+- kapitał zakładowy`;
+
+      const perplexityHeaders = {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      // Execute all 3 queries in parallel
+      const [profileResponse, newsResponse, registryResponse] = await Promise.all([
+        // Profile query
+        fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
+          headers: perplexityHeaders,
           body: JSON.stringify({
             model: 'sonar-pro',
             messages: [
               { 
                 role: 'system', 
-                content: 'Jesteś ekspertem w analizie polskich firm. Dostarczaj szczegółowe, dokładne informacje z podaniem źródeł. Skup się na: działalności operacyjnej, zarządzie, produktach/usługach, pozycji rynkowej, aktualnych news.'
+                content: 'Jesteś ekspertem w analizie polskich firm. Dostarczaj szczegółowe, dokładne informacje o profilu działalności firmy. Skup się na: czym firma się zajmuje, produkty, usługi, zarząd, historia.'
               },
-              { role: 'user', content: perplexityQuery }
+              { role: 'user', content: profileQuery }
+            ],
+          }),
+        }).catch(e => { console.warn('Profile query error:', e); return null; }),
+        
+        // News query
+        fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: perplexityHeaders,
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { 
+                role: 'system', 
+                content: 'Jesteś dziennikarzem śledczym. Szukaj NAJNOWSZYCH artykułów prasowych, newsów i doniesień medialnych o firmie z ostatnich 2 lat. Podawaj źródła i daty.'
+              },
+              { role: 'user', content: newsQuery }
             ],
             search_recency_filter: 'year',
           }),
-        });
+        }).catch(e => { console.warn('News query error:', e); return null; }),
+        
+        // Registry query
+        fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: perplexityHeaders,
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { 
+                role: 'system', 
+                content: 'Szukaj OFICJALNYCH danych rejestrowych firmy z polskich rejestrów: KRS, CEIDG, GUS. Podawaj TYLKO zweryfikowane dane z oficjalnych źródeł. NIE wymyślaj numerów.'
+              },
+              { role: 'user', content: registryQuery }
+            ],
+          }),
+        }).catch(e => { console.warn('Registry query error:', e); return null; }),
+      ]);
 
-        if (perplexityResponse.ok) {
-          const perplexityData = await perplexityResponse.json();
-          perplexityInsights = perplexityData.choices?.[0]?.message?.content || null;
-          perplexityCitations = perplexityData.citations || [];
-          console.log('Perplexity insights received, length:', perplexityInsights?.length || 0);
-          console.log('Perplexity citations:', perplexityCitations.length);
-        } else {
-          console.warn('Perplexity request failed:', perplexityResponse.status);
-          const errorText = await perplexityResponse.text();
-          console.warn('Perplexity error:', errorText);
+      // Process profile response
+      if (profileResponse?.ok) {
+        try {
+          const data = await profileResponse.json();
+          perplexityProfileInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('Profile insights received, length:', perplexityProfileInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing profile response:', e);
         }
-      } catch (e) {
-        console.warn('Perplexity error:', e);
+      } else if (profileResponse) {
+        console.warn('Profile query failed:', profileResponse.status);
       }
+
+      // Process news response
+      if (newsResponse?.ok) {
+        try {
+          const data = await newsResponse.json();
+          perplexityNewsInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('News insights received, length:', perplexityNewsInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing news response:', e);
+        }
+      } else if (newsResponse) {
+        console.warn('News query failed:', newsResponse.status);
+      }
+
+      // Process registry response
+      if (registryResponse?.ok) {
+        try {
+          const data = await registryResponse.json();
+          perplexityRegistryInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('Registry insights received, length:', perplexityRegistryInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing registry response:', e);
+        }
+      } else if (registryResponse) {
+        console.warn('Registry query failed:', registryResponse.status);
+      }
+
+      // Deduplicate citations
+      perplexityCitations = [...new Set(perplexityCitations)];
+      console.log('Total unique Perplexity citations:', perplexityCitations.length);
     } else {
-      console.log('Perplexity not configured, skipping deep research');
+      console.log('Perplexity not configured, skipping internet search');
     }
 
     // ==========================================
-    // PHASE 2: FIRECRAWL MULTI-PAGE SCRAPING
+    // PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING
     // ==========================================
     interface ScrapedPage {
       url: string;
@@ -203,14 +290,13 @@ serve(async (req) => {
     }
     
     let scrapedPages: ScrapedPage[] = [];
-    let firecrawlSearchResults: Array<{ url: string; title: string; markdown?: string }> = [];
     
     if (FIRECRAWL_API_KEY && (website || domain)) {
-      console.log('=== PHASE 2: FIRECRAWL MULTI-PAGE SCRAPING ===');
+      console.log('=== PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING ===');
       
       const baseUrl = website?.startsWith('http') ? website : `https://${website || domain}`;
       
-      // 2a. Map the website to discover all URLs
+      // 2a. Map the website to discover all URLs (increased limit)
       let discoveredUrls: string[] = [];
       try {
         console.log('Mapping website:', baseUrl);
@@ -222,8 +308,8 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             url: baseUrl,
-            limit: 50,
-            search: 'o nas kontakt usługi oferta produkty kariera zespół zarząd o firmie realizacje projekty'
+            limit: 100, // Increased from 50
+            search: 'o nas kontakt usługi oferta produkty marki salony kariera zespół zarząd o firmie realizacje projekty historia poznaj-nas kierownictwo właściciele klienci referencje partnerzy cennik aktualności'
           }),
         });
         
@@ -238,36 +324,87 @@ serve(async (req) => {
         console.warn('Map error:', e);
       }
       
-      // 2b. Select key pages to scrape
-      const keyPagePatterns = [
-        /o-nas|about|o-firmie|kim-jestesmy|historia/i,
-        /kontakt|contact/i,
-        /uslugi|services|oferta|offer/i,
-        /produkty|products/i,
-        /kariera|career|praca|jobs|rekrutacja/i,
-        /zespol|team|zarzad|management|ludzie|people/i,
-        /realizacje|projekty|projects|portfolio|case-study/i,
-        /klienci|clients|partnerzy|partners/i,
+      // 2b. IMPROVED PAGE SELECTION - 3-level prioritization with exclusions
+      
+      // PRIORITY 1: Must-have pages (About, Contact, Brands)
+      const priorityOnePatterns = [
+        /o-nas|about|o-firmie|kim-jestesmy|historia|poznaj-nas|about-us/i,
+        /kontakt|contact|lokalizacje|locations/i,
+        /marki|brands|dealerstwa|salony|przedstawicielstwa/i,
       ];
       
-      // Always include homepage
-      const pagesToScrape: string[] = [baseUrl];
+      // PRIORITY 2: Offer and products
+      const priorityTwoPatterns = [
+        /oferta|offer|produkty|products|uslugi|services/i,
+        /realizacje|projekty|projects|portfolio|case-study|referencje/i,
+        /cennik|pricing|pakiety|packages/i,
+        /dla-firm|dla-klientow|b2b|business/i,
+      ];
       
-      // Add discovered URLs matching key patterns
+      // PRIORITY 3: Team and careers
+      const priorityThreePatterns = [
+        /zespol|team|zarzad|management|ludzie|people|kierownictwo|zaloga/i,
+        /kariera|career|praca|jobs|rekrutacja|dolacz|zatrudnienie/i,
+        /klienci|clients|partnerzy|partners|wspolpraca/i,
+        /aktualnosci|news|blog|wydarzenia|media/i,
+      ];
+      
+      // EXCLUSIONS - do not scrape these
+      const excludePatterns = [
+        /promocj|promo|rabat|okazj|wyprzedaz|sale|przecena|gratisy/i,
+        /regulamin|polityka|privacy|cookies|rodo|gdpr|terms/i,
+        /blog\/\d|news\/\d|artykul\/\d|post\/\d/i, // Single blog posts
+        /login|logowanie|rejestracja|register|koszyk|cart|checkout/i,
+        /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i, // Files
+        /page=|sort=|filter=|utm_/i, // Pagination and tracking params
+      ];
+      
+      const pagesToScrape: string[] = [baseUrl]; // Always include homepage
+      const usedUrls = new Set([baseUrl.toLowerCase()]);
+      
+      // Helper to check if URL should be excluded
+      const shouldExclude = (url: string) => excludePatterns.some(p => p.test(url));
+      const matchesPriority = (url: string, patterns: RegExp[]) => patterns.some(p => p.test(url));
+      
+      // Add Priority 1 pages
       for (const url of discoveredUrls) {
-        if (pagesToScrape.length >= 10) break;
-        if (url === baseUrl) continue;
-        
-        const matchesPattern = keyPagePatterns.some(pattern => pattern.test(url));
-        if (matchesPattern && !pagesToScrape.includes(url)) {
+        if (usedUrls.has(url.toLowerCase())) continue;
+        if (shouldExclude(url)) continue;
+        if (matchesPriority(url, priorityOnePatterns)) {
           pagesToScrape.push(url);
+          usedUrls.add(url.toLowerCase());
         }
       }
+      console.log(`After Priority 1: ${pagesToScrape.length} pages`);
       
-      console.log(`Selected ${pagesToScrape.length} pages to scrape:`, pagesToScrape);
+      // Add Priority 2 pages
+      for (const url of discoveredUrls) {
+        if (pagesToScrape.length >= 12) break;
+        if (usedUrls.has(url.toLowerCase())) continue;
+        if (shouldExclude(url)) continue;
+        if (matchesPriority(url, priorityTwoPatterns)) {
+          pagesToScrape.push(url);
+          usedUrls.add(url.toLowerCase());
+        }
+      }
+      console.log(`After Priority 2: ${pagesToScrape.length} pages`);
       
-      // 2c. Scrape pages in parallel (max 8)
-      const scrapePromises = pagesToScrape.slice(0, 8).map(url => 
+      // Add Priority 3 pages
+      for (const url of discoveredUrls) {
+        if (pagesToScrape.length >= 15) break;
+        if (usedUrls.has(url.toLowerCase())) continue;
+        if (shouldExclude(url)) continue;
+        if (matchesPriority(url, priorityThreePatterns)) {
+          pagesToScrape.push(url);
+          usedUrls.add(url.toLowerCase());
+        }
+      }
+      console.log(`After Priority 3: ${pagesToScrape.length} pages`);
+      
+      console.log('Pages selected for scraping:', pagesToScrape);
+      
+      // 2c. Scrape pages in parallel (max 15)
+      const scrapePromises = pagesToScrape.slice(0, 15).map(url => 
         scrapeWithFirecrawl(url, FIRECRAWL_API_KEY)
       );
       
@@ -275,50 +412,31 @@ serve(async (req) => {
       const successfulScrapes = scrapedPages.filter(p => p.content).length;
       console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
       
-      // 2d. Additional search for external sources about the company
-      try {
-        console.log('Searching for additional external sources...');
-        const searchQuery = `"${company_name}" Polska firma profil działalność opinie`;
-        
-        const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            query: searchQuery,
-            limit: 5,
-            scrapeOptions: { formats: ['markdown'] }
-          }),
-        });
-
-        if (searchResponse.ok) {
-          const searchData = await searchResponse.json();
-          firecrawlSearchResults = searchData.data || [];
-          console.log(`Found ${firecrawlSearchResults.length} external sources`);
-        }
-      } catch (e) {
-        console.warn('External search error:', e);
+      // Log which pages were scraped
+      for (const page of scrapedPages) {
+        console.log(`  - ${page.title}: ${page.content ? page.content.length + ' chars' : 'FAILED'}`);
       }
     } else {
       console.log('Firecrawl not configured or no website, skipping scraping');
     }
 
     // ==========================================
-    // PHASE 3: AI SYNTHESIS WITH EXPANDED PROMPT
+    // PHASE 3: AI SYNTHESIS WITH EXPANDED DATA
     // ==========================================
     console.log('=== PHASE 3: AI SYNTHESIS ===');
     
-    const hasPerplexity = !!perplexityInsights;
+    const hasProfileInsights = !!perplexityProfileInsights;
+    const hasNewsInsights = !!perplexityNewsInsights;
+    const hasRegistryInsights = !!perplexityRegistryInsights;
+    const hasPerplexity = hasProfileInsights || hasNewsInsights || hasRegistryInsights;
     const hasScrapedContent = scrapedPages.some(p => p.content);
-    const hasExternalSources = firecrawlSearchResults.length > 0;
-    const hasAnyData = hasPerplexity || hasScrapedContent || hasExternalSources;
+    const hasAnyData = hasPerplexity || hasScrapedContent;
     
     console.log('Data sources:', {
-      perplexity: hasPerplexity,
+      perplexityProfile: hasProfileInsights,
+      perplexityNews: hasNewsInsights,
+      perplexityRegistry: hasRegistryInsights,
       scrapedPages: scrapedPages.filter(p => p.content).length,
-      externalSources: firecrawlSearchResults.length
     });
 
     // Build comprehensive system prompt
@@ -328,9 +446,10 @@ serve(async (req) => {
 🎯 CEL: Stwórz KOMPLEKSOWY profil firmy dla wewnętrznych agentów AI do matchowania kontaktów i znajdowania synergii biznesowych.
 
 📊 MASZ DANE Z WIELU ŹRÓDEŁ:
-${hasPerplexity ? '✅ Wyniki deep research z internetu (Perplexity)' : ''}
-${hasScrapedContent ? '✅ Zawartość strony internetowej firmy (multi-page scraping)' : ''}
-${hasExternalSources ? '✅ Dodatkowe źródła zewnętrzne' : ''}
+${hasProfileInsights ? '✅ Profil firmy i działalność (z internetu)' : ''}
+${hasNewsInsights ? '✅ Aktualności i newsy prasowe (z internetu)' : ''}
+${hasRegistryInsights ? '✅ Dane rejestrowe (z internetu)' : ''}
+${hasScrapedContent ? `✅ Zawartość strony WWW (${scrapedPages.filter(p => p.content).length} stron)` : ''}
 
 📋 STRUKTURA ANALIZY:
 
@@ -377,7 +496,7 @@ ${hasExternalSources ? '✅ Dodatkowe źródła zewnętrzne' : ''}
    - Kultura organizacyjna
 
 8. AKTUALNOŚCI I SYGNAŁY RYNKOWE
-   - Ostatnie newsy o firmie
+   - Ostatnie newsy o firmie (z datami!)
    - Ostatnie inwestycje i projekty
    - Sygnały: wzrost, problemy, zmiany strategiczne
 
@@ -388,7 +507,7 @@ ${hasExternalSources ? '✅ Dodatkowe źródła zewnętrzne' : ''}
 
 ZASADY:
 - Podawaj TYLKO informacje znalezione w dostarczonych źródłach
-- NIE WYMYŚLAJ danych rejestrowych (NIP, REGON, KRS)
+- NIE WYMYŚLAJ danych rejestrowych (NIP, REGON, KRS) - podawaj tylko jeśli są w źródłach
 - Dla każdej kluczowej informacji wskaż źródło
 - Oceń pewność danych (high/medium/low)
 - Skup się na informacjach przydatnych dla agentów matchujących
@@ -481,18 +600,51 @@ ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
 
 `;
 
-    if (hasPerplexity) {
+    // Add Perplexity Profile Insights
+    if (hasProfileInsights) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
-📡 WYNIKI DEEP RESEARCH Z INTERNETU (Perplexity):
+📊 PROFIL FIRMY I DZIAŁALNOŚĆ (z internetu - Perplexity):
 ═══════════════════════════════════════════════════════════════════
-${perplexityInsights}
-
-${perplexityCitations.length > 0 ? `Źródła Perplexity:\n${perplexityCitations.map((c, i) => `[${i + 1}] ${c}`).join('\n')}` : ''}
+${perplexityProfileInsights}
 
 `;
     }
 
+    // Add Perplexity News Insights
+    if (hasNewsInsights) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+📰 AKTUALNOŚCI I NEWSY PRASOWE (z internetu - Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityNewsInsights}
+
+`;
+    }
+
+    // Add Perplexity Registry Insights
+    if (hasRegistryInsights) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+📋 DANE REJESTROWE (z internetu - Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityRegistryInsights}
+
+`;
+    }
+
+    // Add Perplexity Citations
+    if (perplexityCitations.length > 0) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+🔗 ŹRÓDŁA PERPLEXITY:
+═══════════════════════════════════════════════════════════════════
+${perplexityCitations.map((c, i) => `[${i + 1}] ${c}`).join('\n')}
+
+`;
+    }
+
+    // Add Scraped Website Content (with increased character limit)
     if (hasScrapedContent) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
@@ -502,21 +654,7 @@ ${perplexityCitations.length > 0 ? `Źródła Perplexity:\n${perplexityCitations
       for (const page of scrapedPages.filter(p => p.content)) {
         userContent += `
 --- [${page.title}] ${page.url} ---
-${page.content!.substring(0, 4000)}
-`;
-      }
-    }
-
-    if (hasExternalSources) {
-      userContent += `
-═══════════════════════════════════════════════════════════════════
-📰 DODATKOWE ŹRÓDŁA ZEWNĘTRZNE:
-═══════════════════════════════════════════════════════════════════
-`;
-      for (const source of firecrawlSearchResults) {
-        userContent += `
---- [${source.title}] ${source.url} ---
-${source.markdown?.substring(0, 2000) || '(brak treści)'}
+${page.content!.substring(0, 10000)}
 `;
       }
     }
@@ -530,8 +668,9 @@ ${jsonStructure}
 2. Wyodrębnij SZCZEGÓŁOWE informacje o produktach, usługach, ofercie
 3. Określ CZEGO FIRMA SZUKA - to kluczowe dla matchowania!
 4. Zidentyfikuj osoby z zarządu z podaniem źródeł
-5. Oceń potencjał współpracy i możliwe synergie
-6. Podaj TYLKO dane rejestrowe znalezione w źródłach`;
+5. Wyodrębnij WSZYSTKIE newsy i aktualności z datami
+6. Oceń potencjał współpracy i możliwe synergie
+7. Podaj TYLKO dane rejestrowe znalezione w źródłach - NIE WYMYŚLAJ`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -545,7 +684,7 @@ ${jsonStructure}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 8000,
+        max_tokens: 10000, // Increased from 8000
         temperature: 0.2,
       }),
     });
@@ -656,9 +795,11 @@ ${jsonStructure}
       
       // Add metadata about the enrichment process
       enrichedData.enrichment_metadata = {
-        perplexity_used: hasPerplexity,
+        perplexity_profile_used: hasProfileInsights,
+        perplexity_news_used: hasNewsInsights,
+        perplexity_registry_used: hasRegistryInsights,
         pages_scraped: scrapedPages.filter(p => p.content).length,
-        external_sources: firecrawlSearchResults.length,
+        pages_scraped_urls: scrapedPages.filter(p => p.content).map(p => p.url),
         perplexity_citations: perplexityCitations,
         analyzed_at: new Date().toISOString()
       };
@@ -701,6 +842,7 @@ ${jsonStructure}
     console.log('Products:', enrichedData.products?.length || 0);
     console.log('Services:', enrichedData.services?.length || 0);
     console.log('Management:', enrichedData.management?.length || 0);
+    console.log('Recent News:', enrichedData.recent_news?.length || 0);
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),
