@@ -28,6 +28,7 @@ import Search from "./pages/Search";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
 import Owner from "./pages/Owner";
+import Superadmin from "./pages/Superadmin";
 import NotFound from "./pages/NotFound";
 
 // Lazy load Network page to isolate sigma library issues
@@ -84,6 +85,7 @@ const App = () => (
               <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
               <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
               <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
+              <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
               
               {/* Routes accessible by both directors and assistants */}
               <Route path="/contacts" element={<Contacts />} />

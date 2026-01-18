@@ -12,8 +12,10 @@ import {
   Handshake,
   Share2,
   Shield,
+  Building2,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
+import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -54,15 +56,22 @@ export function AppSidebar() {
   const isCollapsed = state === 'collapsed';
   const { isAdmin } = useOwnerPanel();
   const { isAssistant } = useAuth();
+  const { isSuperadmin } = useSuperadmin();
 
   // Dla asystenta - ograniczona nawigacja
   // Dla admina - pełna nawigacja + zarządzanie
   // Dla dyrektora - pełna nawigacja
-  const allNavItems = isAssistant
+  // Dla superadmina - dodatkowy panel superadmina
+  let allNavItems = isAssistant
     ? assistantNavigationItems
     : isAdmin 
       ? [...navigationItems, { title: 'Zarządzanie', url: '/owner', icon: Shield }]
       : navigationItems;
+  
+  // Superadmin ma dostęp do panelu superadmina
+  if (isSuperadmin) {
+    allNavItems = [...allNavItems, { title: 'Superadmin', url: '/superadmin', icon: Building2 }];
+  }
 
   return (
     <Sidebar collapsible="icon">

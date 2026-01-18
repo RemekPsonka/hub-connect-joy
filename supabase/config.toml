@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.parse-contacts-list]
 verify_jwt = false
+
+[functions.create-new-tenant]
+verify_jwt = false

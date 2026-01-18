@@ -2055,6 +2055,27 @@ export type Database = {
         }
         Relationships: []
       }
+      superadmins: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       task_contacts: {
         Row: {
           contact_id: string
@@ -2440,6 +2461,7 @@ export type Database = {
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
+      is_superadmin: { Args: never; Returns: boolean }
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
