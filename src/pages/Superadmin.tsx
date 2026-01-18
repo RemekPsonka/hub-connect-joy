@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Plus, Trash2, Building2, User, Calendar, Pencil } from 'lucide-react';
+import { Plus, Trash2, Building2, User, Calendar, Pencil, UserCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -44,6 +44,8 @@ export default function Superadmin() {
   const {
     isSuperadmin,
     isCheckingRole,
+    currentUserName,
+    currentTenantName,
     tenants,
     isLoadingTenants,
     createTenant,
@@ -123,10 +125,22 @@ export default function Superadmin() {
             Zarządzaj wszystkimi organizacjami w systemie
           </p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nowa organizacja
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="text-right text-sm">
+            <div className="flex items-center gap-2 justify-end text-foreground">
+              <UserCircle className="h-4 w-4" />
+              <span className="font-medium">{currentUserName || 'Nieznany użytkownik'}</span>
+            </div>
+            <div className="flex items-center gap-2 justify-end text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              <span>{currentTenantName || 'Brak organizacji'}</span>
+            </div>
+          </div>
+          <Button onClick={() => setIsAddModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nowa organizacja
+          </Button>
+        </div>
       </div>
 
       <Card>

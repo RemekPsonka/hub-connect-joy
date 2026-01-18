@@ -32,7 +32,7 @@ interface UpdateTenantData {
 
 export function useSuperadmin() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, director } = useAuth();
 
   // Check if current user is a superadmin
   const { data: isSuperadmin, isLoading: isCheckingRole } = useQuery({
@@ -54,6 +54,28 @@ export function useSuperadmin() {
       return !!data;
     },
     enabled: !!user?.id,
+  });
+
+  // Fetch current user's tenant name
+  const { data: currentTenantName } = useQuery({
+    queryKey: ['current-tenant-name', director?.tenant_id],
+    queryFn: async () => {
+      if (!director?.tenant_id) return null;
+      
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', director.tenant_id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching tenant name:', error);
+        return null;
+      }
+      
+      return data.name;
+    },
+    enabled: !!director?.tenant_id,
   });
 
   // Fetch all tenants with their owners
@@ -213,6 +235,8 @@ export function useSuperadmin() {
   return {
     isSuperadmin: !!isSuperadmin,
     isCheckingRole,
+    currentUserName: director?.full_name || null,
+    currentTenantName: currentTenantName || null,
     tenants: tenants || [],
     isLoadingTenants,
     refetchTenants,
