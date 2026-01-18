@@ -56,7 +56,7 @@ interface EnrichmentMetadata {
 interface CompanyAIAnalysis {
   name?: string;
   industry?: string;
-  sub_industries?: string[];
+  sub_industries?: string[] | string;
   description?: string;
   
   business_model?: string;
@@ -64,36 +64,36 @@ interface CompanyAIAnalysis {
   competitive_position?: string;
   market_share_info?: string;
   
-  core_activities?: string[];
-  products?: Product[] | string[];
+  core_activities?: string[] | string;
+  products?: Product[] | string[] | string;
   services?: ServicesType;
-  key_projects?: string[];
+  key_projects?: string[] | string;
   
   offer_summary?: string;
-  unique_selling_points?: string[];
-  certifications?: string[];
-  partnerships?: string[];
+  unique_selling_points?: string[] | string;
+  certifications?: string[] | string;
+  partnerships?: string[] | string;
   
   seeking_clients?: string;
   seeking_partners?: string;
   seeking_suppliers?: string;
-  hiring_positions?: string[];
+  hiring_positions?: string[] | string;
   expansion_plans?: string;
-  pain_points?: string[];
+  pain_points?: string[] | string;
   
-  collaboration_opportunities?: CollaborationOpportunity[];
+  collaboration_opportunities?: CollaborationOpportunity[] | string;
   ideal_partner_profile?: string;
-  synergy_potential?: string[];
+  synergy_potential?: string[] | string;
   
-  management?: ManagementPerson[];
+  management?: ManagementPerson[] | string;
   company_size?: string;
   employee_count?: string;
   company_culture?: string;
   founding_year?: string;
   founding_story?: string;
   
-  recent_news?: NewsItem[];
-  market_signals?: string[];
+  recent_news?: NewsItem[] | string;
+  market_signals?: string[] | string;
   sentiment?: 'positive' | 'neutral' | 'negative';
   
   legal_form?: string;
@@ -106,8 +106,8 @@ interface CompanyAIAnalysis {
   
   confidence?: 'high' | 'medium' | 'low';
   data_freshness?: string;
-  sources?: string[];
-  analysis_notes?: string[];
+  sources?: string[] | string;
+  analysis_notes?: string[] | string;
   
   enrichment_metadata?: EnrichmentMetadata;
   
@@ -120,6 +120,11 @@ interface CompanyAIAnalysis {
   competitive_advantage?: string;
   collaboration_areas?: string;
 }
+
+// Helper: safely check if value is a non-empty array
+const isNonEmptyArray = <T,>(value: T[] | string | undefined | null): value is T[] => {
+  return Array.isArray(value) && value.length > 0;
+};
 
 interface CompanyAIAnalysisCardProps {
   aiAnalysis: CompanyAIAnalysis | null;
@@ -302,14 +307,18 @@ export function CompanyAIAnalysisCard({
               </p>
             </div>
             
-            {aiAnalysis?.sub_industries && aiAnalysis.sub_industries.length > 0 && (
+            {aiAnalysis?.sub_industries && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Subbranże</p>
-                <div className="flex flex-wrap gap-1">
-                  {aiAnalysis.sub_industries.map((sub, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{sub}</Badge>
-                  ))}
-                </div>
+                {typeof aiAnalysis.sub_industries === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.sub_industries}</p>
+                ) : aiAnalysis.sub_industries.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {aiAnalysis.sub_industries.map((sub, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{sub}</Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -352,29 +361,34 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.products && aiAnalysis.products.length > 0 && (
+            {/* Products - handle string (legacy) and array (new) */}
+            {aiAnalysis?.products && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                   <Briefcase className="h-3 w-3" />
-                  Produkty ({aiAnalysis.products.length})
+                  Produkty
                 </p>
-                <div className="space-y-2">
-                  {aiAnalysis.products.map((product, i) => (
-                    <div key={i} className="p-2 bg-muted/50 rounded-lg">
-                      {typeof product === 'string' ? (
-                        <p className="text-sm">{product}</p>
-                      ) : (
-                        <>
-                          <p className="text-sm font-medium">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">{product.description}</p>
-                          {product.target && (
-                            <p className="text-xs text-primary mt-1">→ {product.target}</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {typeof aiAnalysis.products === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.products}</p>
+                ) : aiAnalysis.products.length > 0 ? (
+                  <div className="space-y-2">
+                    {aiAnalysis.products.map((product, i) => (
+                      <div key={i} className="p-2 bg-muted/50 rounded-lg">
+                        {typeof product === 'string' ? (
+                          <p className="text-sm">{product}</p>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium">{product.name}</p>
+                            <p className="text-xs text-muted-foreground">{product.description}</p>
+                            {product.target && (
+                              <p className="text-xs text-primary mt-1">→ {product.target}</p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -403,45 +417,57 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.unique_selling_points && aiAnalysis.unique_selling_points.length > 0 && (
+            {aiAnalysis?.unique_selling_points && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                   <Award className="h-3 w-3" />
                   Przewagi konkurencyjne
                 </p>
-                <ul className="space-y-1">
-                  {aiAnalysis.unique_selling_points.map((usp, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <span className="text-primary">•</span>
-                      {usp}
-                    </li>
-                  ))}
-                </ul>
+                {typeof aiAnalysis.unique_selling_points === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.unique_selling_points}</p>
+                ) : aiAnalysis.unique_selling_points.length > 0 ? (
+                  <ul className="space-y-1">
+                    {aiAnalysis.unique_selling_points.map((usp, i) => (
+                      <li key={i} className="text-sm flex items-start gap-2">
+                        <span className="text-primary">•</span>
+                        {usp}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
             
-            {aiAnalysis?.key_projects && aiAnalysis.key_projects.length > 0 && (
+            {aiAnalysis?.key_projects && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Kluczowe projekty</p>
-                <ul className="space-y-1">
-                  {aiAnalysis.key_projects.map((project, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <span className="text-primary">•</span>
-                      {project}
-                    </li>
-                  ))}
-                </ul>
+                {typeof aiAnalysis.key_projects === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.key_projects}</p>
+                ) : aiAnalysis.key_projects.length > 0 ? (
+                  <ul className="space-y-1">
+                    {aiAnalysis.key_projects.map((project, i) => (
+                      <li key={i} className="text-sm flex items-start gap-2">
+                        <span className="text-primary">•</span>
+                        {project}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
             
-            {aiAnalysis?.certifications && aiAnalysis.certifications.length > 0 && (
+            {aiAnalysis?.certifications && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Certyfikaty i nagrody</p>
-                <div className="flex flex-wrap gap-1">
-                  {aiAnalysis.certifications.map((cert, i) => (
-                    <Badge key={i} variant="outline" className="text-xs">{cert}</Badge>
-                  ))}
-                </div>
+                {typeof aiAnalysis.certifications === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.certifications}</p>
+                ) : aiAnalysis.certifications.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {aiAnalysis.certifications.map((cert, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">{cert}</Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -490,14 +516,18 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.hiring_positions && aiAnalysis.hiring_positions.length > 0 && (
+            {aiAnalysis?.hiring_positions && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Otwarte rekrutacje</p>
-                <div className="flex flex-wrap gap-1">
-                  {aiAnalysis.hiring_positions.map((pos, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{pos}</Badge>
-                  ))}
-                </div>
+                {typeof aiAnalysis.hiring_positions === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.hiring_positions}</p>
+                ) : aiAnalysis.hiring_positions.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {aiAnalysis.hiring_positions.map((pos, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{pos}</Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -508,39 +538,47 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.pain_points && aiAnalysis.pain_points.length > 0 && (
+            {aiAnalysis?.pain_points && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Wyzwania i problemy</p>
-                <ul className="space-y-1">
-                  {aiAnalysis.pain_points.map((pain, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <span className="text-orange-500">!</span>
-                      {pain}
-                    </li>
-                  ))}
-                </ul>
+                {typeof aiAnalysis.pain_points === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.pain_points}</p>
+                ) : aiAnalysis.pain_points.length > 0 ? (
+                  <ul className="space-y-1">
+                    {aiAnalysis.pain_points.map((pain, i) => (
+                      <li key={i} className="text-sm flex items-start gap-2">
+                        <span className="text-orange-500">!</span>
+                        {pain}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
             
             <Separator />
             
-            {aiAnalysis?.collaboration_opportunities && aiAnalysis.collaboration_opportunities.length > 0 && (
+            {aiAnalysis?.collaboration_opportunities && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                   <Handshake className="h-3 w-3" />
                   Możliwości współpracy
                 </p>
-                <div className="space-y-2">
-                  {aiAnalysis.collaboration_opportunities.map((opp, i) => (
-                    <div key={i} className="p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-medium">{opp.area}</p>
-                      <p className="text-xs text-muted-foreground">{opp.description}</p>
-                      {opp.fit_for && (
-                        <p className="text-xs text-primary mt-1">Pasuje dla: {opp.fit_for}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {typeof aiAnalysis.collaboration_opportunities === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.collaboration_opportunities}</p>
+                ) : aiAnalysis.collaboration_opportunities.length > 0 ? (
+                  <div className="space-y-2">
+                    {aiAnalysis.collaboration_opportunities.map((opp, i) => (
+                      <div key={i} className="p-2 bg-muted/50 rounded-lg">
+                        <p className="text-sm font-medium">{opp.area}</p>
+                        <p className="text-xs text-muted-foreground">{opp.description}</p>
+                        {opp.fit_for && (
+                          <p className="text-xs text-primary mt-1">Pasuje dla: {opp.fit_for}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -551,14 +589,18 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.synergy_potential && aiAnalysis.synergy_potential.length > 0 && (
+            {aiAnalysis?.synergy_potential && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Potencjał synergii</p>
-                <div className="flex flex-wrap gap-1">
-                  {aiAnalysis.synergy_potential.map((syn, i) => (
-                    <Badge key={i} variant="outline" className="text-xs">{syn}</Badge>
-                  ))}
-                </div>
+                {typeof aiAnalysis.synergy_potential === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.synergy_potential}</p>
+                ) : aiAnalysis.synergy_potential.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {aiAnalysis.synergy_potential.map((syn, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">{syn}</Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             
@@ -573,27 +615,35 @@ export function CompanyAIAnalysisCard({
 
           {/* MANAGEMENT TAB */}
           <TabsContent value="management" className="mt-4 space-y-4">
-            {aiAnalysis?.management && aiAnalysis.management.length > 0 ? (
-              <div className="space-y-2">
-                {aiAnalysis.management.map((person, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">{person.name}</p>
-                      <p className="text-xs text-muted-foreground">{person.position}</p>
+            {aiAnalysis?.management ? (
+              typeof aiAnalysis.management === 'string' ? (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm">{aiAnalysis.management}</p>
+                </div>
+              ) : aiAnalysis.management.length > 0 ? (
+                <div className="space-y-2">
+                  {aiAnalysis.management.map((person, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">{person.name}</p>
+                        <p className="text-xs text-muted-foreground">{person.position}</p>
+                      </div>
+                      {person.source && (
+                        <a 
+                          href={person.source.startsWith('http') ? person.source : undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          {person.source.startsWith('http') ? <ExternalLink className="h-3 w-3" /> : person.source}
+                        </a>
+                      )}
                     </div>
-                    {person.source && (
-                      <a 
-                        href={person.source.startsWith('http') ? person.source : undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline"
-                      >
-                        {person.source.startsWith('http') ? <ExternalLink className="h-3 w-3" /> : person.source}
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Brak danych o zarządzie</p>
+              )
             ) : (
               <p className="text-sm text-muted-foreground italic">Brak danych o zarządzie</p>
             )}
@@ -651,47 +701,59 @@ export function CompanyAIAnalysisCard({
               </div>
             )}
             
-            {aiAnalysis?.recent_news && aiAnalysis.recent_news.length > 0 ? (
-              <div className="space-y-3">
-                {aiAnalysis.recent_news.map((news, i) => (
-                  <div key={i} className="p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium">{news.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{news.summary}</p>
+            {aiAnalysis?.recent_news ? (
+              typeof aiAnalysis.recent_news === 'string' ? (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm">{aiAnalysis.recent_news}</p>
+                </div>
+              ) : aiAnalysis.recent_news.length > 0 ? (
+                <div className="space-y-3">
+                  {aiAnalysis.recent_news.map((news, i) => (
+                    <div key={i} className="p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">{news.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{news.summary}</p>
+                        </div>
+                        {news.date && (
+                          <Badge variant="outline" className="text-xs shrink-0">{news.date}</Badge>
+                        )}
                       </div>
-                      {news.date && (
-                        <Badge variant="outline" className="text-xs shrink-0">{news.date}</Badge>
+                      {news.source && (
+                        <a 
+                          href={news.source.startsWith('http') ? news.source : undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline mt-2 inline-block"
+                        >
+                          {news.source.startsWith('http') ? 'Źródło →' : news.source}
+                        </a>
                       )}
                     </div>
-                    {news.source && (
-                      <a 
-                        href={news.source.startsWith('http') ? news.source : undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline mt-2 inline-block"
-                      >
-                        {news.source.startsWith('http') ? 'Źródło →' : news.source}
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Brak ostatnich wiadomości</p>
+              )
             ) : (
               <p className="text-sm text-muted-foreground italic">Brak ostatnich wiadomości</p>
             )}
             
-            {aiAnalysis?.market_signals && aiAnalysis.market_signals.length > 0 && (
+            {aiAnalysis?.market_signals && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Sygnały rynkowe</p>
-                <ul className="space-y-1">
-                  {aiAnalysis.market_signals.map((signal, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <TrendingUp className="h-3 w-3 text-primary mt-1 shrink-0" />
-                      {signal}
-                    </li>
-                  ))}
-                </ul>
+                {typeof aiAnalysis.market_signals === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.market_signals}</p>
+                ) : aiAnalysis.market_signals.length > 0 ? (
+                  <ul className="space-y-1">
+                    {aiAnalysis.market_signals.map((signal, i) => (
+                      <li key={i} className="text-sm flex items-start gap-2">
+                        <TrendingUp className="h-3 w-3 text-primary mt-1 shrink-0" />
+                        {signal}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
           </TabsContent>
@@ -737,39 +799,47 @@ export function CompanyAIAnalysisCard({
             <Separator />
             
             {/* Sources */}
-            {aiAnalysis?.sources && aiAnalysis.sources.length > 0 && (
+            {aiAnalysis?.sources && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Źródła danych</p>
-                <div className="space-y-1">
-                  {aiAnalysis.sources.slice(0, 10).map((source, i) => (
-                    <a 
-                      key={i}
-                      href={source.startsWith('http') ? source : undefined}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline block truncate"
-                    >
-                      {source}
-                    </a>
-                  ))}
-                  {aiAnalysis.sources.length > 10 && (
-                    <p className="text-xs text-muted-foreground">...i {aiAnalysis.sources.length - 10} więcej</p>
-                  )}
-                </div>
+                {typeof aiAnalysis.sources === 'string' ? (
+                  <p className="text-sm text-muted-foreground">{aiAnalysis.sources}</p>
+                ) : aiAnalysis.sources.length > 0 ? (
+                  <div className="space-y-1">
+                    {aiAnalysis.sources.slice(0, 10).map((source, i) => (
+                      <a 
+                        key={i}
+                        href={source.startsWith('http') ? source : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline block truncate"
+                      >
+                        {source}
+                      </a>
+                    ))}
+                    {aiAnalysis.sources.length > 10 && (
+                      <p className="text-xs text-muted-foreground">...i {aiAnalysis.sources.length - 10} więcej</p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
             
-            {aiAnalysis?.analysis_notes && aiAnalysis.analysis_notes.length > 0 && (
+            {aiAnalysis?.analysis_notes && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Uwagi o danych</p>
-                <ul className="space-y-1">
-                  {aiAnalysis.analysis_notes.map((note, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
-                      <span>•</span>
-                      {note}
-                    </li>
-                  ))}
-                </ul>
+                {typeof aiAnalysis.analysis_notes === 'string' ? (
+                  <p className="text-xs text-muted-foreground">{aiAnalysis.analysis_notes}</p>
+                ) : aiAnalysis.analysis_notes.length > 0 ? (
+                  <ul className="space-y-1">
+                    {aiAnalysis.analysis_notes.map((note, i) => (
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                        <span>•</span>
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
           </TabsContent>
