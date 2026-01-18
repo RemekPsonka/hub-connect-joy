@@ -96,13 +96,61 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Search for company information using Firecrawl
+    // Step 2: Scrape company website directly (if available) + search for additional info
     let searchResults: FirecrawlSearchResult[] = [];
+    let websiteContent: string | null = null;
     let searchPerformed = false;
     
     if (FIRECRAWL_API_KEY) {
+      // 2a. First: Scrape the company website directly (most reliable source!)
+      if (website || domain) {
+        const urlToScrape = website?.startsWith('http') ? website : `https://${website || domain}`;
+        console.log('Scraping company website directly:', urlToScrape);
+        
+        try {
+          const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: urlToScrape,
+              formats: ['markdown'],
+              onlyMainContent: true,
+              waitFor: 2000
+            }),
+          });
+          
+          if (scrapeResponse.ok) {
+            const scrapeData = await scrapeResponse.json();
+            websiteContent = scrapeData.data?.markdown || null;
+            searchPerformed = true;
+            console.log('Successfully scraped website, content length:', websiteContent?.length || 0);
+            
+            // Add website as first "search result" for AI analysis
+            if (websiteContent) {
+              searchResults.push({
+                url: urlToScrape,
+                title: `Strona główna ${company_name}`,
+                markdown: websiteContent
+              });
+            }
+          } else {
+            console.warn('Website scrape failed:', scrapeResponse.status);
+          }
+        } catch (e) {
+          console.warn('Website scrape error:', e);
+        }
+      }
+      
+      // 2b. Then: Search for additional info (using site: if we have domain)
       try {
-        const searchQuery = `${company_name} firma profil działalność usługi`;
+        // Use site:domain to limit results to the company's website
+        const searchQuery = domain 
+          ? `site:${domain} ${company_name} "o nas" OR "o firmie" OR "usługi" OR "działalność"`
+          : `"${company_name}" Polska firma profil działalność`;
+        
         console.log('Firecrawl search query:', searchQuery);
         
         const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
@@ -120,9 +168,11 @@ serve(async (req) => {
 
         if (searchResponse.ok) {
           const searchData = await searchResponse.json();
-          searchResults = searchData.data || [];
+          const additionalResults = searchData.data || [];
+          // Append to existing results (website scrape is first)
+          searchResults = [...searchResults, ...additionalResults];
           searchPerformed = true;
-          console.log(`Firecrawl found ${searchResults.length} results for company`);
+          console.log(`Firecrawl search found ${additionalResults.length} additional results`);
         } else {
           console.warn('Firecrawl search failed:', searchResponse.status);
         }
@@ -132,6 +182,8 @@ serve(async (req) => {
     } else {
       console.log('FIRECRAWL_API_KEY not configured, skipping web search');
     }
+    
+    console.log(`Total sources for AI analysis: ${searchResults.length}, website scraped: ${!!websiteContent}`);
 
     // Step 3: Analyze with AI (with or without Firecrawl results)
     const hasSearchResults = searchResults.length > 0;
