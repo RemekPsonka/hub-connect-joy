@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -238,7 +239,9 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           </CardHeader>
           <CardContent>
             {contact.profile_summary ? (
-              <p className="text-sm text-muted-foreground">{contact.profile_summary}</p>
+              <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground [&_h2]:text-foreground [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:first:mt-0 [&_p]:text-sm [&_p]:my-1">
+                <ReactMarkdown>{contact.profile_summary}</ReactMarkdown>
+              </div>
             ) : (
               <div className="text-center py-4">
                 <p className="text-sm text-muted-foreground mb-3">
