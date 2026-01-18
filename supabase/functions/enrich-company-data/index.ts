@@ -33,7 +33,6 @@ async function isLogoValid(logoUrl: string): Promise<boolean> {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -74,7 +73,7 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Call Lovable AI Gateway for company analysis with extended data
+    // Step 2: Call Lovable AI Gateway for company analysis
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -86,36 +85,57 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w analizie firm polskich. Na podstawie nazwy firmy i dostępnych informacji, wygeneruj prawdopodobny profil firmy wraz z danymi rejestracyjnymi.
+            content: `Jesteś ekspertem w analizie firm polskich.
 
-WAŻNE: Generujesz PRZYPUSZCZENIA na podstawie nazwy i kontekstu. Dane rejestrowe (NIP, REGON, KRS) możesz podać tylko jeśli masz pewność - w przeciwnym razie zwróć null.
+⚠️ KLUCZOWA ZASADA - ŹRÓDŁA DANYCH:
+NIE MASZ dostępu do baz REGON, KRS, CEIDG ani internetu.
+Możesz TYLKO:
+1. Sugerować prawdopodobną branżę na podstawie nazwy firmy
+2. Podać ogólny opis działalności na podstawie nazwy
 
-Zwróć TYLKO poprawny JSON (bez markdown, bez \`\`\`) z polami:
-- name: Pełna oficjalna nazwa firmy (string)
-- nip: Numer NIP firmy (10 cyfr bez myślników) lub null jeśli nieznany
-- regon: Numer REGON firmy (9 lub 14 cyfr) lub null jeśli nieznany
-- krs: Numer KRS (10 cyfr) lub null jeśli nieznany
-- address: Ulica i numer budynku lub null
-- city: Miasto siedziby firmy lub null
-- postal_code: Kod pocztowy (XX-XXX) lub null
-- country: Kraj (domyślnie "Polska")
-- industry: Prawdopodobna branża firmy (string)
-- description: Krótki opis działalności, 2-3 zdania (string)
-- services: Lista prawdopodobnych usług/produktów, oddzielone przecinkami (string)
-- collaboration_areas: Potencjalne obszary współpracy biznesowej (string)
-- employee_count_estimate: Szacunkowa wielkość firmy: "micro" (1-9), "small" (10-49), "medium" (50-249), "large" (250+) lub null
-- confidence: Poziom pewności oceny: "high", "medium", "low"
-- suggested_website: Jeśli znasz oficjalną stronę firmy, podaj URL (string lub null)`
+NIE WYMYŚLAJ konkretnych danych rejestrowych (NIP, REGON, KRS, adres)!
+Jeśli nie znasz - zwróć null.
+
+📊 OZNACZENIA W ODPOWIEDZI:
+- Pola z wartością = SUGESTIA AI (nie fakt!)
+- Pole "data_certainty" = jakie dane są pewne vs sugestie
+
+Zwróć TYLKO poprawny JSON:
+{
+  "name": "Pełna oficjalna nazwa firmy (lub oryginalna jeśli nieznana)",
+  "nip": null,
+  "regon": null,
+  "krs": null,
+  "address": null,
+  "city": null,
+  "postal_code": null,
+  "country": "Polska",
+  "industry": "💡 SUGESTIA: Prawdopodobna branża na podstawie nazwy",
+  "description": "💡 SUGESTIA: Ogólny opis prawdopodobnej działalności",
+  "services": "💡 SUGESTIA: Prawdopodobne usługi/produkty",
+  "collaboration_areas": "💡 SUGESTIA: Potencjalne obszary współpracy",
+  "employee_count_estimate": null,
+  "confidence": "low",
+  "data_certainty": {
+    "industry": "sugestia",
+    "description": "sugestia",
+    "nip": "brak_danych",
+    "address": "brak_danych"
+  },
+  "suggested_website": null,
+  "data_notes": ["Wszystkie dane to SUGESTIE - wymaga weryfikacji w REGON/KRS"]
+}`
           },
           {
             role: 'user',
-            content: `Przeanalizuj firmę i wygeneruj pełny profil z danymi rejestracyjnymi:
+            content: `Przeanalizuj firmę i zasugeruj profil (oznacz jako sugestie!):
 
 Nazwa firmy: ${company_name}
-${website ? `Strona www: ${website}` : ''}
+${website ? `Strona www: ${website}` : 'Strona www: Nie podano'}
 ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
 
-Wygeneruj prawdopodobny profil tej firmy wraz z danymi rejestracyjnymi jeśli są dostępne.`
+UWAGA: NIE masz dostępu do REGON/KRS. Nie wymyślaj NIP, adresu itp.
+Możesz tylko sugerować branżę na podstawie nazwy.`
           }
         ],
         max_tokens: 1000,
@@ -161,6 +181,22 @@ Wygeneruj prawdopodobny profil tej firmy wraz z danymi rejestracyjnymi jeśli s�
     try {
       const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       enrichedData = JSON.parse(cleanedContent);
+      
+      // Ensure we don't return fake NIP/REGON/KRS
+      // These should only come from verified sources
+      enrichedData.nip = null;
+      enrichedData.regon = null;
+      enrichedData.krs = null;
+      enrichedData.address = null;
+      enrichedData.postal_code = null;
+      enrichedData.city = null;
+      
+      // Add note about data source
+      if (!enrichedData.data_notes) {
+        enrichedData.data_notes = [];
+      }
+      enrichedData.data_notes.push('NIP/REGON/KRS/adres wymaga weryfikacji w oficjalnych rejestrach');
+      
     } catch (parseError) {
       console.error('Failed to parse AI response:', content);
       return new Response(

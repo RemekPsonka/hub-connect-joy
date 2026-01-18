@@ -15,9 +15,12 @@ interface PersonData {
 
 interface EnrichedPersonData {
   suggested_position: string | null;
+  position_certainty: 'confirmed' | 'likely' | 'guess';
   profile_summary: string | null;
+  summary_source: string;
   linkedin_found: boolean;
   confidence: 'high' | 'medium' | 'low';
+  data_notes: string[];
 }
 
 serve(async (req) => {
@@ -59,27 +62,46 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Jesteś ekspertem w wyszukiwaniu informacji o osobach z polskiego biznesu. Na podstawie imienia, nazwiska i firmy, spróbuj określić kim jest ta osoba i jakie stanowisko może pełnić.
+            content: `Jesteś ekspertem w analizie profili zawodowych osób.
 
-WAŻNE: Generujesz PRZYPUSZCZENIA na podstawie dostępnych informacji. Jeśli nie możesz nic znaleźć, zwróć niską pewność.
+⚠️ KLUCZOWA ZASADA:
+NIE MASZ dostępu do internetu ani LinkedIn.
+Pracujesz TYLKO na danych przekazanych w zapytaniu.
+NIE WYMYŚLAJ informacji o konkretnej osobie!
 
-Zwróć TYLKO poprawny JSON (bez markdown, bez \`\`\`) z polami:
-- suggested_position: Prawdopodobne stanowisko osoby (np. "Prezes", "Dyrektor marketingu", "Właściciel") lub null
-- profile_summary: Krótki opis osoby w 1-2 zdaniach lub null jeśli brak informacji
-- linkedin_found: true jeśli osoba prawdopodobnie ma profil LinkedIn, false jeśli nie wiadomo
-- confidence: "high" jeśli dane są pewne, "medium" jeśli przypuszczenia, "low" jeśli mało informacji`
+TWOJE ZADANIE:
+Na podstawie nazwy firmy i kontekstu, zasugeruj PRAWDOPODOBNE stanowisko.
+Jasno oznacz, że to SUGESTIA, nie fakt.
+
+ZASADY:
+1. Jeśli podano email firmowy → "likely" (prawdopodobne stanowisko)
+2. Jeśli tylko nazwa firmy → "guess" (zgadywanie)
+3. NIE twórz wymyślonego opisu osoby
+4. Profile summary = tylko ogólne info o typowym stanowisku w takiej firmie
+
+Zwróć TYLKO poprawny JSON:
+{
+  "suggested_position": "string lub null",
+  "position_certainty": "confirmed" | "likely" | "guess",
+  "profile_summary": "Krótka OGÓLNA informacja o typowym stanowisku w takiej firmie (nie o konkretnej osobie!) lub null",
+  "summary_source": "AI_DEDUCTION" | "NO_DATA",
+  "linkedin_found": false,
+  "confidence": "low" | "medium",
+  "data_notes": ["lista uwag o tym co jest sugestią a co pewne"]
+}`
           },
           {
             role: 'user',
-            content: `Znajdź informacje o tej osobie:
+            content: `Przeanalizuj dane i zasugeruj stanowisko (oznacz jako sugestię):
 
 Imię: ${first_name}
 Nazwisko: ${last_name}
-${company ? `Firma: ${company}` : ''}
-${email ? `Email: ${email}` : ''}
-${linkedin_url ? `LinkedIn: ${linkedin_url}` : ''}
+${company ? `Firma: ${company}` : 'Firma: Nie podano'}
+${email ? `Email: ${email}` : 'Email: Nie podano'}
+${linkedin_url ? `LinkedIn: ${linkedin_url}` : 'LinkedIn: Nie podano'}
 
-Na podstawie dostępnych informacji, opisz kim może być ta osoba.`
+UWAGA: Nie masz dostępu do internetu. Możesz tylko zgadywać na podstawie nazwy firmy.
+Wszystko co zwracasz to SUGESTIA, nie fakt!`
           }
         ],
         max_tokens: 500,
@@ -130,9 +152,12 @@ Na podstawie dostępnych informacji, opisz kim może być ta osoba.`
       // Return default data on parse error
       enrichedData = {
         suggested_position: null,
+        position_certainty: 'guess',
         profile_summary: null,
+        summary_source: 'NO_DATA',
         linkedin_found: false,
-        confidence: 'low'
+        confidence: 'low',
+        data_notes: ['Nie udało się przetworzyć odpowiedzi AI']
       };
     }
 
