@@ -151,6 +151,15 @@ Zwróć JSON:
       throw saveError;
     }
 
+    // Log AI agent initialization activity
+    await supabase.from('contact_activity_log').insert({
+      tenant_id: tenantId,
+      contact_id: contact_id,
+      activity_type: 'ai_agent_initialized',
+      description: 'Zainicjalizowano agenta AI',
+      metadata: { model: 'google/gemini-2.5-flash' }
+    });
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -95,6 +95,15 @@ serve(async (req) => {
         merged_contact_data: newContactData,
         merge_source: 'manual'
       });
+
+      // Log merge activity
+      await supabase.from('contact_activity_log').insert({
+        tenant_id: tenantId,
+        contact_id: existingContactId,
+        activity_type: 'merged',
+        description: 'Kontakt został scalony z innymi danymi',
+        metadata: { fields_updated: Object.keys(mergedData), source: 'manual' }
+      });
     }
 
     const { data: updatedContact } = await supabase.from('contacts').select('*').eq('id', existingContactId).single();

@@ -457,11 +457,46 @@ export function useGenerateContactProfile() {
     },
     onSuccess: ({ contactId }) => {
       queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['contact_activity_log', contactId] });
       toast.success('Profil AI został wygenerowany');
     },
     onError: (error) => {
       console.error('Error generating contact profile:', error);
       toast.error(error instanceof Error ? error.message : 'Błąd podczas generowania profilu AI');
     },
+  });
+}
+
+// Activity log types
+export interface ContactActivityLog {
+  id: string;
+  tenant_id: string;
+  contact_id: string;
+  activity_type: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export function useContactActivityLog(contactId: string | undefined) {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['contact_activity_log', contactId],
+    queryFn: async () => {
+      if (!contactId || !tenantId) return [];
+
+      const { data, error } = await supabase
+        .from('contact_activity_log')
+        .select('*')
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data as ContactActivityLog[];
+    },
+    enabled: !!contactId && !!tenantId,
   });
 }
