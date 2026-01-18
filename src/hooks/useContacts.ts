@@ -14,6 +14,7 @@ export type Company = Tables<'companies'>;
 export interface ContactsFilters {
   search?: string;
   groupId?: string;
+  companyId?: string;
   page?: number;
   pageSize?: number;
   sortBy?: string;
@@ -36,6 +37,7 @@ export function useContacts(filters: ContactsFilters = {}) {
   const {
     search = '',
     groupId = '',
+    companyId = '',
     page = 1,
     pageSize = 20,
     sortBy = 'full_name',
@@ -43,7 +45,7 @@ export function useContacts(filters: ContactsFilters = {}) {
   } = filters;
 
   return useQuery({
-    queryKey: ['contacts', tenantId, isAssistant, assistant?.allowed_group_ids, search, groupId, page, pageSize, sortBy, sortOrder],
+    queryKey: ['contacts', tenantId, isAssistant, assistant?.allowed_group_ids, search, groupId, companyId, page, pageSize, sortBy, sortOrder],
     queryFn: async () => {
       if (!tenantId) return { data: [], count: 0 };
 
@@ -66,6 +68,11 @@ export function useContacts(filters: ContactsFilters = {}) {
       // Group filter
       if (groupId) {
         query = query.eq('primary_group_id', groupId);
+      }
+
+      // Company filter
+      if (companyId) {
+        query = query.eq('company_id', companyId);
       }
 
       // Sorting

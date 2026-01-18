@@ -7,7 +7,9 @@ import { ContactModal } from '@/components/contacts/ContactModal';
 export default function Contacts() {
   const [search, setSearch] = useState('');
   const [groupId, setGroupId] = useState('');
+  const [companyId, setCompanyId] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [sortBy, setSortBy] = useState('full_name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,8 +17,9 @@ export default function Contacts() {
   const { data, isLoading } = useContacts({
     search,
     groupId: groupId === 'all' ? '' : groupId,
+    companyId: companyId === 'all' ? '' : companyId,
     page,
-    pageSize: 20,
+    pageSize,
     sortBy,
     sortOrder,
   });
@@ -24,6 +27,11 @@ export default function Contacts() {
   const handleSortChange = (newSortBy: string, newSortOrder: 'asc' | 'desc') => {
     setSortBy(newSortBy);
     setSortOrder(newSortOrder);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
     setPage(1);
   };
 
@@ -35,6 +43,8 @@ export default function Contacts() {
         onSearchChange={(value) => { setSearch(value); setPage(1); }}
         groupId={groupId}
         onGroupChange={(value) => { setGroupId(value); setPage(1); }}
+        companyId={companyId}
+        onCompanyChange={(value) => { setCompanyId(value); setPage(1); }}
         onAddContact={() => setIsModalOpen(true)}
       />
 
@@ -42,10 +52,11 @@ export default function Contacts() {
         contacts={data?.data || []}
         totalCount={data?.count || 0}
         page={page}
-        pageSize={20}
+        pageSize={pageSize}
         sortBy={sortBy}
         sortOrder={sortOrder}
         onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
         onSortChange={handleSortChange}
         isLoading={isLoading}
       />

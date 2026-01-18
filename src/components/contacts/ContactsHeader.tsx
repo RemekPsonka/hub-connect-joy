@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Camera, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2 } from 'lucide-react';
 import { ScanBusinessCardModal } from './ScanBusinessCardModal';
 import { AIImportContactsModal } from './AIImportContactsModal';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useContactGroups } from '@/hooks/useContacts';
+import { useCompaniesList } from '@/hooks/useCompanies';
 
 interface ContactsHeaderProps {
   totalCount: number;
@@ -20,6 +21,8 @@ interface ContactsHeaderProps {
   onSearchChange: (value: string) => void;
   groupId: string;
   onGroupChange: (value: string) => void;
+  companyId: string;
+  onCompanyChange: (value: string) => void;
   onAddContact: () => void;
   onImportSuccess?: () => void;
 }
@@ -30,10 +33,13 @@ export function ContactsHeader({
   onSearchChange,
   groupId,
   onGroupChange,
+  companyId,
+  onCompanyChange,
   onAddContact,
   onImportSuccess,
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
+  const { data: companies = [] } = useCompaniesList();
   const [searchInput, setSearchInput] = useState(search);
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -98,6 +104,20 @@ export function ContactsHeader({
                   />
                   {group.name}
                 </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={companyId} onValueChange={onCompanyChange}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <Building2 className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Wszystkie firmy" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Wszystkie firmy</SelectItem>
+            {companies.map((company) => (
+              <SelectItem key={company.id} value={company.id}>
+                {company.name}
               </SelectItem>
             ))}
           </SelectContent>
