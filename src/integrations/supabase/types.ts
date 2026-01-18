@@ -837,7 +837,7 @@ export type Database = {
           bi_profile: Json | null
           bi_status: string | null
           completeness_score: number | null
-          contact_id: string | null
+          contact_id: string
           created_at: string | null
           id: string
           interviewer_name: string | null
@@ -850,7 +850,7 @@ export type Database = {
           bi_profile?: Json | null
           bi_status?: string | null
           completeness_score?: number | null
-          contact_id?: string | null
+          contact_id: string
           created_at?: string | null
           id?: string
           interviewer_name?: string | null
@@ -863,7 +863,7 @@ export type Database = {
           bi_profile?: Json | null
           bi_status?: string | null
           completeness_score?: number | null
-          contact_id?: string | null
+          contact_id?: string
           created_at?: string | null
           id?: string
           interviewer_name?: string | null
