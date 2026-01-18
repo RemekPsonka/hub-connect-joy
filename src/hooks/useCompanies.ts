@@ -171,22 +171,63 @@ export interface CompanyContact {
   position: string | null;
   email: string | null;
   phone: string | null;
+  company_id: string | null;
 }
 
-export function useCompanyContacts(companyId: string | undefined, excludeContactId?: string) {
+// Helper functions for domain extraction
+const GENERIC_EMAIL_DOMAINS = [
+  'gmail.com', 'wp.pl', 'o2.pl', 'onet.pl', 'interia.pl', 'yahoo.com', 
+  'hotmail.com', 'outlook.com', 'icloud.com', 'protonmail.com', 'mail.com',
+  'tlen.pl', 'op.pl', 'gazeta.pl', 'poczta.fm'
+];
+
+export const extractEmailDomain = (email: string | null): string | null => {
+  if (!email) return null;
+  const match = email.match(/@([^@]+)$/);
+  if (!match) return null;
+  const domain = match[1].toLowerCase();
+  return GENERIC_EMAIL_DOMAINS.includes(domain) ? null : domain;
+};
+
+export const extractWebsiteDomain = (website: string | null): string | null => {
+  if (!website) return null;
+  try {
+    const url = new URL(website.startsWith('http') ? website : `https://${website}`);
+    return url.hostname.replace('www.', '').toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+export function useCompanyContacts(
+  companyId: string | undefined, 
+  excludeContactId?: string,
+  emailDomain?: string | null
+) {
   const { director } = useAuth();
 
   return useQuery({
-    queryKey: ['company_contacts', companyId, excludeContactId],
+    queryKey: ['company_contacts', companyId, excludeContactId, emailDomain],
     queryFn: async () => {
-      if (!companyId || !director?.tenant_id) return [];
+      if (!director?.tenant_id) return [];
+      if (!companyId && !emailDomain) return [];
 
+      // Build query to find contacts by company_id OR email domain
       let query = supabase
         .from('contacts')
-        .select('id, full_name, position, email, phone')
-        .eq('company_id', companyId)
+        .select('id, full_name, position, email, phone, company_id')
+        .eq('tenant_id', director.tenant_id)
         .eq('is_active', true)
         .order('full_name', { ascending: true });
+
+      // Use OR filter for company_id and email domain
+      if (companyId && emailDomain) {
+        query = query.or(`company_id.eq.${companyId},email.ilike.%@${emailDomain}`);
+      } else if (companyId) {
+        query = query.eq('company_id', companyId);
+      } else if (emailDomain) {
+        query = query.ilike('email', `%@${emailDomain}`);
+      }
 
       if (excludeContactId) {
         query = query.neq('id', excludeContactId);
@@ -194,9 +235,65 @@ export function useCompanyContacts(companyId: string | undefined, excludeContact
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as CompanyContact[];
+      
+      // Deduplicate by contact id
+      const uniqueContacts = new Map<string, CompanyContact>();
+      for (const contact of data || []) {
+        if (!uniqueContacts.has(contact.id)) {
+          uniqueContacts.set(contact.id, contact as CompanyContact);
+        }
+      }
+      
+      return Array.from(uniqueContacts.values());
     },
-    enabled: !!companyId && !!director?.tenant_id,
+    enabled: !!director?.tenant_id && (!!companyId || !!emailDomain),
+  });
+}
+
+// Hook to assign contacts to company by email domain
+export function useAssignContactsByDomain() {
+  const queryClient = useQueryClient();
+  const { director } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ companyId, domain }: { companyId: string; domain: string }) => {
+      if (!director?.tenant_id) throw new Error('No tenant');
+
+      // Find contacts with matching email domain that don't have company_id
+      const { data: contactsToUpdate, error: fetchError } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('tenant_id', director.tenant_id)
+        .eq('is_active', true)
+        .is('company_id', null)
+        .ilike('email', `%@${domain}`);
+
+      if (fetchError) throw fetchError;
+      if (!contactsToUpdate?.length) return { updated: 0 };
+
+      // Update all matching contacts
+      const { error: updateError } = await supabase
+        .from('contacts')
+        .update({ company_id: companyId })
+        .in('id', contactsToUpdate.map(c => c.id));
+
+      if (updateError) throw updateError;
+      
+      return { updated: contactsToUpdate.length };
+    },
+    onSuccess: ({ updated }) => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['contact'] });
+      queryClient.invalidateQueries({ queryKey: ['company_contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      if (updated > 0) {
+        toast.success(`Przypisano ${updated} kontaktów do firmy`);
+      }
+    },
+    onError: (error) => {
+      console.error('Error assigning contacts:', error);
+      toast.error('Błąd podczas przypisywania kontaktów');
+    },
   });
 }
 export type CompanyUpdate = TablesUpdate<'companies'>;
@@ -261,6 +358,7 @@ export function getCompanyLogoUrl(website: string | null | undefined): string | 
 
 export function useRegenerateCompanyAI() {
   const queryClient = useQueryClient();
+  const { director } = useAuth();
   
   return useMutation({
     mutationFn: async ({ id, companyName, website, industryHint }: { 
@@ -280,6 +378,7 @@ export function useRegenerateCompanyAI() {
       if (enrichError) throw enrichError;
       
       const enriched = result?.data || result;
+      const finalWebsite = website || enriched.suggested_website || null;
       
       const updateData: CompanyUpdate = {
         description: enriched.description || null,
@@ -306,7 +405,7 @@ export function useRegenerateCompanyAI() {
         industry: enriched.industry || null,
         logo_url: enriched.logo_url || null,
         // Wszystkie pola adresowe i rejestrowe
-        website: website || enriched.suggested_website || null,
+        website: finalWebsite,
         address: enriched.address || null,
         city: enriched.city || null,
         postal_code: enriched.postal_code || null,
@@ -324,12 +423,34 @@ export function useRegenerateCompanyAI() {
         .single();
       
       if (updateError) throw updateError;
+      
+      // Auto-assign contacts by domain after company is updated
+      const domain = extractWebsiteDomain(finalWebsite);
+      if (domain && director?.tenant_id) {
+        const { data: contactsToUpdate } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('tenant_id', director.tenant_id)
+          .eq('is_active', true)
+          .is('company_id', null)
+          .ilike('email', `%@${domain}`);
+
+        if (contactsToUpdate?.length) {
+          await supabase
+            .from('contacts')
+            .update({ company_id: id })
+            .in('id', contactsToUpdate.map(c => c.id));
+        }
+      }
+      
       return updated;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['company', data.id] });
       queryClient.invalidateQueries({ queryKey: ['contact'] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['company_contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
       toast.success('Analiza AI została wygenerowana ponownie');
     },
     onError: (error) => {
