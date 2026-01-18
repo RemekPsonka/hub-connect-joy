@@ -207,21 +207,14 @@ export function useSuperadmin() {
   // Delete tenant mutation
   const deleteTenantMutation = useMutation({
     mutationFn: async (tenantId: string) => {
-      // First delete all directors in this tenant
-      const { error: directorsError } = await supabase
-        .from('directors')
-        .delete()
-        .eq('tenant_id', tenantId);
+      const { data, error } = await supabase.functions.invoke('delete-tenant', {
+        body: { tenantId }
+      });
 
-      if (directorsError) throw directorsError;
-
-      // Then delete the tenant
-      const { error: tenantError } = await supabase
-        .from('tenants')
-        .delete()
-        .eq('id', tenantId);
-
-      if (tenantError) throw tenantError;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      return data;
     },
     onSuccess: () => {
       toast.success('Organizacja została usunięta');
