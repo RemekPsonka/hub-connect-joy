@@ -88,34 +88,63 @@ serve(async (req) => {
     console.log("Generating AI profile for contact:", contact.full_name, "| Data quality score:", qualityScore);
 
     // Build rich system prompt
-    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych i tworzenia profesjonalnych profili osób dla systemu CRM.
+    const systemPrompt = `Jesteś ekspertem od analizy kontaktów biznesowych i tworzenia kompleksowych profili osób.
 
 TWOJE ZADANIE:
-Stwórz kompleksowy, profesjonalny profil osoby na podstawie dostarczonych danych.
-Profil powinien być użyteczny dla dyrektora zarządzającego siecią kontaktów biznesowych.
+Stwórz rozbudowany, profesjonalny profil osoby podzielony na sekcje.
+Profil służy dyrektorowi zarządzającemu siecią kontaktów biznesowych.
 
-STRUKTURA PROFILU:
-1. **Kim jest ta osoba** (1-2 zdania) - rola zawodowa, pozycja w firmie
-2. **Kompetencje i obszary ekspertyzy** (1-2 zdania) - na podstawie stanowiska, branży, potrzeb/ofert
-3. **Wartość dla sieci kontaktów** (1-2 zdania) - jak może pomóc, jakie korzyści wnosi
-4. **Rekomendowany sposób kontaktu** (1 zdanie) - na podstawie historii interakcji
+STRUKTURA PROFILU (użyj nagłówków markdown ## z emoji):
+
+## 👤 Kim jest ta osoba
+Krótkie intro - rola zawodowa, pozycja w firmie (1-2 zdania)
+
+## 💼 Historia kariery
+Przebieg zawodowy, wcześniejsze stanowiska/firmy jeśli znane z notatek lub LinkedIn
+
+## 🎓 Wykształcenie
+Uczelnie, kierunki studiów, certyfikaty (jeśli znane)
+
+## 🏢 Członkostwo w organizacjach
+Zarządy spółek, stowarzyszenia branżowe, kluby biznesowe, fundacje, rady nadzorcze
+
+## 📰 Informacje prasowe
+Wzmianki w mediach, wywiady, nagrody, publiczne wystąpienia (jeśli znane)
+
+## 👨‍👩‍👧‍👦 Rodzina
+Informacje o rodzinie, dzieci, małżonek/partner (jeśli dostępne w notatkach)
+
+## 🎯 Hobby i zainteresowania
+Pasje, sport, podróże, kultura, kolekcje (jeśli wspomniane w notatkach)
+
+## 💡 Kompetencje i ekspertyza
+Obszary specjalizacji zawodowej, unikalne umiejętności
+
+## 🤝 Wartość dla sieci kontaktów
+Jak może pomóc innym członkom sieci, jakie korzyści wnosi, czym może się podzielić
+
+## 📋 Aktualne potrzeby
+Czego aktywnie szuka (na podstawie zdefiniowanych potrzeb)
+
+## 📞 Rekomendowany sposób kontaktu
+Jak i kiedy najlepiej kontaktować, preferencje komunikacyjne
+
+## 📝 Notatki dodatkowe
+Inne istotne informacje, które warto zapamiętać przy następnym spotkaniu
 
 ZASADY:
-- Pisz w języku polskim, profesjonalnym tonem
-- Maksymalnie 300 słów
-- Bazuj TYLKO na dostarczonych danych - nie wymyślaj informacji
-- Jeśli brakuje danych dla sekcji, pomiń ją gracefully
-- Jeśli są notatki z konsultacji, wyciągnij kluczowe informacje o osobie
-- Podkreśl unikalne cechy/wartość tej osoby
-- Unikaj ogólników - bądź konkretny i precyzyjny
-- Jeśli osoba ma zdefiniowane potrzeby lub oferty, wykorzystaj je do opisu jej profilu
+- Pisz po polsku, profesjonalnym ale ciepłym tonem
+- Maksymalnie 600 słów
+- WAŻNE: Sekcje bez danych CAŁKOWICIE POMIŃ (nie pisz "brak danych", "nieznane" itp.)
+- Uważnie przeczytaj notatki - często zawierają informacje osobiste (rodzina, hobby, zainteresowania)
+- Bazuj TYLKO na dostarczonych danych - NIE WYMYŚLAJ informacji
+- Każdą sekcję rozpoczynaj od nagłówka ## z odpowiednim emoji
+- Bądź konkretny i precyzyjny, unikaj ogólników
 
 ${qualityScore < 2 ? `
 UWAGA: Dostępnych jest bardzo mało danych o tej osobie.
-Wygeneruj krótkie, ogólne podsumowanie (1-2 zdania) bez domysłów.
-Skoncentruj się tylko na tym, co wiadomo na pewno.` : ''}
-
-ODPOWIEDZ TYLKO tekstem profilu, bez nagłówków sekcji i bez formatowania markdown.`;
+Wygeneruj tylko sekcję "Kim jest ta osoba" z 1-2 zdaniami podsumowania.
+Nie twórz innych sekcji jeśli brak danych.` : ''}`;
 
     // Build rich user prompt with all available data
     const formatDate = (dateStr: string | null) => {
