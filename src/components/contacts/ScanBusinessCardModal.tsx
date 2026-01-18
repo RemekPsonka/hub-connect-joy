@@ -188,13 +188,18 @@ export function ScanBusinessCardModal({ isOpen, onClose }: ScanBusinessCardModal
         },
         company: formData.company ? {
           name: formData.company,
-          website: formData.website || undefined,
-          address: formData.address || undefined,
-          city: formData.city || undefined,
+          website: enrichedData?.suggested_website || formData.website || undefined,
+          address: enrichedData?.address || formData.address || undefined,
+          city: enrichedData?.city || formData.city || undefined,
           industry: enrichedData?.industry,
           description: enrichedData?.description,
           ai_analysis: enrichedData ? JSON.stringify(enrichedData) : undefined,
           employee_count: enrichedData?.employee_count_estimate || undefined,
+          nip: enrichedData?.nip || undefined,
+          regon: enrichedData?.regon || undefined,
+          krs: enrichedData?.krs || undefined,
+          postal_code: enrichedData?.postal_code || undefined,
+          logo_url: enrichedData?.logo_url || undefined,
         } : undefined
       });
 
