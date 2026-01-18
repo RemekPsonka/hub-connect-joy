@@ -26,7 +26,8 @@ import {
   Calendar,
   Sparkles,
   Building2,
-  Search
+  Search,
+  CreditCard
 } from 'lucide-react';
 import { useAIImport, ParsedContact } from '@/hooks/useAIImport';
 import { useContactGroups } from '@/hooks/useContacts';
@@ -62,7 +63,10 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
   const [metDate, setMetDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [businessCardFiles, setBusinessCardFiles] = useState<File[]>([]);
+  const [activeTab, setActiveTab] = useState<'upload' | 'paste' | 'businessCards'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const businessCardInputRef = useRef<HTMLInputElement>(null);
 
   const { data: groups = [] } = useContactGroups();
   const { data: defaultPositions = [] } = useDefaultPositions();
@@ -76,6 +80,7 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     stats,
     parseFiles,
     parseText,
+    parseBatchBusinessCards,
     updateParsedContact,
     removeParsedContact,
     enrichCompany,
@@ -102,6 +107,8 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
       setMetSource('');
       setMetDate(new Date().toISOString().split('T')[0]);
       setUploadedFiles([]);
+      setBusinessCardFiles([]);
+      setActiveTab('upload');
       reset();
     }
   }, [open, reset]);
@@ -145,8 +152,21 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleBusinessCardFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setBusinessCardFiles(prev => [...prev, ...files]);
+    }
+  }, []);
+
+  const removeBusinessCardFile = useCallback((index: number) => {
+    setBusinessCardFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleAnalyze = async () => {
-    if (uploadedFiles.length > 0) {
+    if (activeTab === 'businessCards' && businessCardFiles.length > 0) {
+      await parseBatchBusinessCards(businessCardFiles);
+    } else if (uploadedFiles.length > 0) {
       await parseFiles(uploadedFiles);
     } else if (pastedText.trim()) {
       await parseText(pastedText);
@@ -210,7 +230,7 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
             Profesjonalny import kontaktów
           </DialogTitle>
           <DialogDescription>
-            {step === 'source' && 'Wgraj pliki lub wklej dane do automatycznego rozpoznania kontaktów'}
+            {step === 'source' && 'Wgraj pliki, wklej dane lub zeskanuj wizytówki'}
             {step === 'preview' && 'Sprawdź, edytuj i wzbogać kontakty przed importem'}
             {step === 'importing' && 'Trwa importowanie kontaktów...'}
             {step === 'complete' && 'Import zakończony'}
@@ -221,10 +241,14 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
           {/* Step: Source */}
           {step === 'source' && (
             <div className="space-y-4">
-              <Tabs defaultValue="upload" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upload' | 'paste' | 'businessCards')} className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="upload">Wgraj pliki</TabsTrigger>
                   <TabsTrigger value="paste">Wklej tekst</TabsTrigger>
+                  <TabsTrigger value="businessCards" className="gap-1">
+                    <CreditCard className="h-4 w-4" />
+                    Wizytówki
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="upload" className="space-y-4">
@@ -289,6 +313,63 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
                     onChange={(e) => setPastedText(e.target.value)}
                     className="min-h-[200px] font-mono text-sm"
                   />
+                </TabsContent>
+
+                <TabsContent value="businessCards" className="space-y-4">
+                  <div
+                    className={cn(
+                      "border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer",
+                      dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+                    )}
+                    onClick={() => businessCardInputRef.current?.click()}
+                  >
+                    <CreditCard className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Kliknij aby wybrać zdjęcia wizytówek
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Jedno zdjęcie może zawierać wiele wizytówek (np. rozłożonych na stole)
+                    </p>
+                    <p className="text-xs text-primary mt-2">
+                      AI automatycznie rozpozna i wyekstrahuje dane z każdej wizytówki
+                    </p>
+                    <input
+                      ref={businessCardInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleBusinessCardFileChange}
+                    />
+                  </div>
+
+                  {businessCardFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Wybrane zdjęcia ({businessCardFiles.length}):</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {businessCardFiles.map((file, idx) => (
+                          <div key={idx} className="relative group">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={`Wizytówka ${idx + 1}`}
+                              className="w-full h-24 object-cover rounded-md border"
+                            />
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); removeBusinessCardFile(idx); }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <span className="absolute bottom-1 left-1 text-[10px] bg-background/80 px-1 rounded">
+                              {file.name.slice(0, 15)}...
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
 
@@ -527,7 +608,7 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
               <Button variant="outline" onClick={handleClose}>Anuluj</Button>
               <Button 
                 onClick={handleAnalyze}
-                disabled={isParsing || (uploadedFiles.length === 0 && !pastedText.trim())}
+                disabled={isParsing || (uploadedFiles.length === 0 && !pastedText.trim() && businessCardFiles.length === 0)}
               >
                 {isParsing ? (
                   <>
