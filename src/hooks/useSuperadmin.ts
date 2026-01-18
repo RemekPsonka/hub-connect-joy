@@ -21,6 +21,15 @@ interface CreateTenantData {
   ownerFullName: string;
 }
 
+interface UpdateTenantData {
+  tenantId: string;
+  tenantName: string;
+  ownerId?: string;
+  ownerFullName?: string;
+  ownerEmail?: string;
+  ownerPassword?: string;
+}
+
 export function useSuperadmin() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -112,6 +121,67 @@ export function useSuperadmin() {
     }
   });
 
+  // Update tenant mutation
+  const updateTenantMutation = useMutation({
+    mutationFn: async (data: UpdateTenantData) => {
+      // Update tenant name
+      const { error: tenantError } = await supabase
+        .from('tenants')
+        .update({ name: data.tenantName })
+        .eq('id', data.tenantId);
+
+      if (tenantError) throw tenantError;
+
+      // Update owner data if owner exists
+      if (data.ownerId) {
+        // Update directors table
+        const directorUpdate: { full_name?: string; email?: string } = {};
+        if (data.ownerFullName) directorUpdate.full_name = data.ownerFullName;
+        if (data.ownerEmail) directorUpdate.email = data.ownerEmail;
+
+        if (Object.keys(directorUpdate).length > 0) {
+          const { error: directorError } = await supabase
+            .from('directors')
+            .update(directorUpdate)
+            .eq('id', data.ownerId);
+
+          if (directorError) throw directorError;
+        }
+
+        // Update auth.users via edge function if email or password changed
+        if (data.ownerEmail || data.ownerPassword) {
+          // Get the user_id from director
+          const { data: director, error: fetchError } = await supabase
+            .from('directors')
+            .select('user_id')
+            .eq('id', data.ownerId)
+            .single();
+
+          if (fetchError) throw fetchError;
+
+          const { data: result, error: fnError } = await supabase.functions.invoke('update-tenant-user', {
+            body: {
+              userId: director.user_id,
+              email: data.ownerEmail,
+              password: data.ownerPassword,
+              tenantId: data.tenantId,
+            }
+          });
+
+          if (fnError) throw fnError;
+          if (result?.error) throw new Error(result.error);
+        }
+      }
+    },
+    onSuccess: () => {
+      toast.success('Organizacja została zaktualizowana');
+      queryClient.invalidateQueries({ queryKey: ['all-tenants'] });
+    },
+    onError: (error: Error) => {
+      toast.error('Błąd aktualizacji organizacji: ' + error.message);
+    }
+  });
+
   // Delete tenant mutation
   const deleteTenantMutation = useMutation({
     mutationFn: async (tenantId: string) => {
@@ -148,6 +218,8 @@ export function useSuperadmin() {
     refetchTenants,
     createTenant: createTenantMutation.mutate,
     isCreatingTenant: createTenantMutation.isPending,
+    updateTenant: updateTenantMutation.mutate,
+    isUpdatingTenant: updateTenantMutation.isPending,
     deleteTenant: deleteTenantMutation.mutate,
     isDeletingTenant: deleteTenantMutation.isPending,
   };

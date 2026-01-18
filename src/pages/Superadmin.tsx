@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Plus, Trash2, Building2, User, Calendar } from 'lucide-react';
+import { Plus, Trash2, Building2, User, Calendar, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -27,6 +27,18 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddTenantModal } from '@/components/superadmin/AddTenantModal';
+import { EditTenantModal } from '@/components/superadmin/EditTenantModal';
+
+interface Tenant {
+  id: string;
+  name: string;
+  created_at: string;
+  owner?: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
+}
 
 export default function Superadmin() {
   const {
@@ -36,11 +48,14 @@ export default function Superadmin() {
     isLoadingTenants,
     createTenant,
     isCreatingTenant,
+    updateTenant,
+    isUpdatingTenant,
     deleteTenant,
     isDeletingTenant,
   } = useSuperadmin();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [tenantToEdit, setTenantToEdit] = useState<Tenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Loading state
@@ -67,6 +82,21 @@ export default function Superadmin() {
     createTenant(data, {
       onSuccess: () => {
         setIsAddModalOpen(false);
+      }
+    });
+  };
+
+  const handleUpdateTenant = (data: {
+    tenantId: string;
+    tenantName: string;
+    ownerId?: string;
+    ownerFullName?: string;
+    ownerEmail?: string;
+    ownerPassword?: string;
+  }) => {
+    updateTenant(data, {
+      onSuccess: () => {
+        setTenantToEdit(null);
       }
     });
   };
@@ -125,7 +155,7 @@ export default function Superadmin() {
                   <TableHead>Właściciel</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Data utworzenia</TableHead>
-                  <TableHead className="w-[80px]">Akcje</TableHead>
+                  <TableHead className="w-[100px]">Akcje</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -157,14 +187,23 @@ export default function Superadmin() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setTenantToDelete({ id: tenant.id, name: tenant.name })}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setTenantToEdit(tenant)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setTenantToDelete({ id: tenant.id, name: tenant.name })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -179,6 +218,14 @@ export default function Superadmin() {
         onOpenChange={setIsAddModalOpen}
         onSubmit={handleCreateTenant}
         isLoading={isCreatingTenant}
+      />
+
+      <EditTenantModal
+        open={!!tenantToEdit}
+        onOpenChange={(open) => !open && setTenantToEdit(null)}
+        tenant={tenantToEdit}
+        onSubmit={handleUpdateTenant}
+        isLoading={isUpdatingTenant}
       />
 
       <AlertDialog open={!!tenantToDelete} onOpenChange={(open) => !open && setTenantToDelete(null)}>
