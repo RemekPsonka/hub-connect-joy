@@ -11,7 +11,9 @@ import {
   BarChart3,
   Handshake,
   Share2,
+  Shield,
 } from 'lucide-react';
+import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -43,6 +45,12 @@ const navigationItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
+  const { isAdmin } = useOwnerPanel();
+
+  // Combine nav items - add owner panel if admin
+  const allNavItems = isAdmin 
+    ? [...navigationItems, { title: 'Zarządzanie', url: '/owner', icon: Shield }]
+    : navigationItems;
 
   return (
     <Sidebar collapsible="icon">
@@ -61,7 +69,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => (
+              {allNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink

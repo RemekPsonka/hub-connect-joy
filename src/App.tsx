@@ -26,6 +26,7 @@ import Settings from "./pages/Settings";
 import Search from "./pages/Search";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
+import Owner from "./pages/Owner";
 import NotFound from "./pages/NotFound";
 
 // Lazy load Network page to isolate sigma library issues
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/owner" element={<Owner />} />
             </Route>
             
             {/* Catch-all */}
