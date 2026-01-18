@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2, Users } from 'lucide-react';
+import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2, Users, Link2 } from 'lucide-react';
 import { ScanBusinessCardModal } from './ScanBusinessCardModal';
 import { AIImportContactsModal } from './AIImportContactsModal';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ interface ContactsHeaderProps {
   onImportSuccess?: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  onBulkMergeByDomain?: () => void;
 }
 
 export function ContactsHeader({
@@ -44,6 +45,7 @@ export function ContactsHeader({
   onImportSuccess,
   viewMode,
   onViewModeChange,
+  onBulkMergeByDomain,
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
   const { data: companies = [] } = useCompaniesList();
@@ -85,6 +87,12 @@ export function ContactsHeader({
                 <span className="hidden sm:inline">Dodaj kontakt</span>
               </Button>
             </>
+          )}
+          {viewMode === 'companies' && onBulkMergeByDomain && (
+            <Button variant="outline" onClick={onBulkMergeByDomain} className="gap-2">
+              <Link2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Scal po domenach</span>
+            </Button>
           )}
         </div>
       </div>
