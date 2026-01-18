@@ -30,7 +30,9 @@ export interface ContactWithDetails extends Contact {
 }
 
 export function useContacts(filters: ContactsFilters = {}) {
-  const { director } = useAuth();
+  const { director, assistant, isAssistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+  
   const {
     search = '',
     groupId = '',
@@ -41,15 +43,20 @@ export function useContacts(filters: ContactsFilters = {}) {
   } = filters;
 
   return useQuery({
-    queryKey: ['contacts', director?.tenant_id, search, groupId, page, pageSize, sortBy, sortOrder],
+    queryKey: ['contacts', tenantId, isAssistant, assistant?.allowed_group_ids, search, groupId, page, pageSize, sortBy, sortOrder],
     queryFn: async () => {
-      if (!director?.tenant_id) return { data: [], count: 0 };
+      if (!tenantId) return { data: [], count: 0 };
 
       let query = supabase
         .from('contacts')
         .select('*, contact_groups(*)', { count: 'exact' })
-        .eq('tenant_id', director.tenant_id)
+        .eq('tenant_id', tenantId)
         .eq('is_active', true);
+
+      // For assistants, filter by allowed groups
+      if (isAssistant && assistant?.allowed_group_ids?.length) {
+        query = query.in('primary_group_id', assistant.allowed_group_ids);
+      }
 
       // Search filter
       if (search) {
@@ -75,52 +82,75 @@ export function useContacts(filters: ContactsFilters = {}) {
 
       return { data: data as ContactWithGroup[], count: count || 0 };
     },
-    enabled: !!director?.tenant_id,
+    enabled: !!tenantId,
   });
 }
 
 export function useContact(id: string | undefined) {
-  const { director } = useAuth();
+  const { director, assistant, isAssistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
     queryKey: ['contact', id],
     queryFn: async () => {
-      if (!id || !director?.tenant_id) return null;
+      if (!id || !tenantId) return null;
+
+      // For assistants, verify access to contact's group
+      if (isAssistant && assistant?.allowed_group_ids?.length) {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select('*, contact_groups(*), companies(*)')
+          .eq('id', id)
+          .eq('tenant_id', tenantId)
+          .in('primary_group_id', assistant.allowed_group_ids)
+          .single();
+
+        if (error) throw error;
+        return data as ContactWithDetails;
+      }
 
       const { data, error } = await supabase
         .from('contacts')
         .select('*, contact_groups(*), companies(*)')
         .eq('id', id)
-        .eq('tenant_id', director.tenant_id)
+        .eq('tenant_id', tenantId)
         .single();
 
       if (error) throw error;
 
       return data as ContactWithDetails;
     },
-    enabled: !!id && !!director?.tenant_id,
+    enabled: !!id && !!tenantId,
   });
 }
 
 export function useContactGroups() {
-  const { director } = useAuth();
+  const { director, assistant, isAssistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
 
   return useQuery({
-    queryKey: ['contact_groups', director?.tenant_id],
+    queryKey: ['contact_groups', tenantId, isAssistant, assistant?.allowed_group_ids],
     queryFn: async () => {
-      if (!director?.tenant_id) return [];
+      if (!tenantId) return [];
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('contact_groups')
         .select('*')
-        .eq('tenant_id', director.tenant_id)
+        .eq('tenant_id', tenantId)
         .order('sort_order', { ascending: true });
+
+      // For assistants, only show allowed groups
+      if (isAssistant && assistant?.allowed_group_ids?.length) {
+        query = query.in('id', assistant.allowed_group_ids);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       return data as ContactGroup[];
     },
-    enabled: !!director?.tenant_id,
+    enabled: !!tenantId,
   });
 }
 
