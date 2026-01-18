@@ -975,6 +975,51 @@ export type Database = {
           },
         ]
       }
+      contact_merge_history: {
+        Row: {
+          ai_integrated_fields: string[] | null
+          created_at: string | null
+          id: string
+          merge_source: string | null
+          merged_contact_data: Json
+          primary_contact_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          ai_integrated_fields?: string[] | null
+          created_at?: string | null
+          id?: string
+          merge_source?: string | null
+          merged_contact_data: Json
+          primary_contact_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          ai_integrated_fields?: string[] | null
+          created_at?: string | null
+          id?: string
+          merge_source?: string | null
+          merged_contact_data?: Json
+          primary_contact_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_merge_history_primary_contact_id_fkey"
+            columns: ["primary_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_merge_history_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           city: string | null
@@ -2282,6 +2327,32 @@ export type Database = {
           depth: number
           path: string[]
           path_types: string[]
+        }[]
+      }
+      find_duplicate_contact: {
+        Args: {
+          p_email?: string
+          p_first_name: string
+          p_last_name: string
+          p_phone?: string
+          p_tenant_id: string
+        }
+        Returns: {
+          contact_city: string
+          contact_company: string
+          contact_email: string
+          contact_first_name: string
+          contact_full_name: string
+          contact_id: string
+          contact_last_name: string
+          contact_linkedin_url: string
+          contact_notes: string
+          contact_phone: string
+          contact_position: string
+          contact_primary_group_id: string
+          contact_profile_summary: string
+          contact_source: string
+          contact_tags: string[]
         }[]
       }
       find_mutual_connections: {
