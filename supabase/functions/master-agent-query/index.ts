@@ -33,7 +33,87 @@ serve(async (req) => {
 
     console.log(`Master Agent Query for tenant ${tenantId}: ${query.substring(0, 50)}...`);
 
-    // NEW: Fetch ALL contacts directly (not just from contact_agent_memory)
+    // ============= SEMANTIC SEARCH - Generate query embedding =============
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    let queryEmbedding: number[] | null = null;
+    let semanticContacts: any[] = [];
+
+    if (OPENAI_API_KEY) {
+      console.log(`[Master Agent] Generating query embedding for semantic search...`);
+      try {
+        const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "text-embedding-3-small",
+            input: query.substring(0, 8000),
+            encoding_format: "float"
+          }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingData = await embeddingResponse.json();
+          queryEmbedding = embeddingData.data?.[0]?.embedding;
+          console.log(`[Master Agent] Query embedding generated: ${queryEmbedding?.length} dimensions`);
+        } else {
+          console.warn(`[Master Agent] Embedding generation failed: ${embeddingResponse.status}`);
+        }
+      } catch (e) {
+        console.warn(`[Master Agent] Embedding error:`, e);
+      }
+    }
+
+    // ============= SEMANTIC SEARCH using search_all_hybrid =============
+    if (queryEmbedding) {
+      console.log(`[Master Agent] Performing semantic search with embeddings...`);
+      const { data: hybridResults, error: hybridError } = await supabase.rpc('search_all_hybrid', {
+        p_query: query,
+        p_query_embedding: `[${queryEmbedding.join(',')}]`,
+        p_tenant_id: tenantId,
+        p_types: ['contact'],
+        p_fts_weight: 0.3,
+        p_semantic_weight: 0.7,
+        p_threshold: 0.25,
+        p_limit: 50
+      });
+
+      if (!hybridError && hybridResults?.length > 0) {
+        console.log(`[Master Agent] Semantic search found ${hybridResults.length} matches`);
+        
+        // Get full contact data for semantic matches
+        const contactIds = hybridResults.map((r: any) => r.id);
+        const { data: matchedContactData } = await supabase
+          .from('contacts')
+          .select(`
+            id, full_name, company, position, email, city,
+            relationship_strength, notes, tags, profile_summary,
+            companies (id, name, industry, description)
+          `)
+          .in('id', contactIds)
+          .eq('is_active', true);
+
+        // Merge semantic scores with contact data
+        semanticContacts = (matchedContactData || []).map(contact => {
+          const semanticResult = hybridResults.find((r: any) => r.id === contact.id);
+          return {
+            ...contact,
+            semantic_score: semanticResult?.semantic_score || 0,
+            fts_score: semanticResult?.fts_score || 0,
+            combined_score: semanticResult?.combined_score || 0,
+            match_source: semanticResult?.match_source || 'unknown'
+          };
+        }).sort((a, b) => b.combined_score - a.combined_score);
+
+        console.log(`[Master Agent] Top semantic matches: ${semanticContacts.slice(0, 5).map(c => `${c.full_name} (${c.combined_score.toFixed(2)})`).join(', ')}`);
+      } else if (hybridError) {
+        console.error(`[Master Agent] Semantic search error:`, hybridError);
+      }
+    }
+
+    // Fallback: Fetch all contacts if semantic search didn't find enough
     const { data: allContacts } = await supabase
       .from('contacts')
       .select(`
@@ -43,15 +123,15 @@ serve(async (req) => {
       `)
       .eq('tenant_id', tenantId)
       .eq('is_active', true)
-      .limit(500);
+      .order('profile_summary', { nullsFirst: false })
+      .limit(200);
 
-    // Optionally get agent memory data
+    // Get agent memory data
     const { data: agentMemories } = await supabase
       .from('contact_agent_memory')
       .select('contact_id, agent_persona')
       .eq('tenant_id', tenantId);
 
-    // Create map for quick lookup
     const agentMemoryMap = new Map((agentMemories || []).map(am => [am.contact_id, am]));
 
     // Combine contacts with agent data
@@ -61,26 +141,7 @@ serve(async (req) => {
       agent_persona: agentMemoryMap.get(contact.id)?.agent_persona || null
     }));
 
-    console.log(`[Master Agent] Loaded ${contactsWithAgentData.length} contacts (${agentMemories?.length || 0} with agent memory)`);
-
-    // NEW: Priority search - find contacts matching query terms
-    const searchTerms = query.toLowerCase().match(/\b\w{3,}\b/g) || [];
-    
-    const priorityContacts = contactsWithAgentData.filter(c => {
-      const searchableText = [
-        c.full_name,
-        c.company,
-        c.profile_summary,
-        c.notes,
-        (c.tags || []).join(' '),
-        (c.companies as any)?.industry,
-        (c.companies as any)?.description
-      ].filter(Boolean).join(' ').toLowerCase();
-
-      return searchTerms.some((term: string) => searchableText.includes(term));
-    });
-
-    console.log(`[Master Agent] Found ${priorityContacts.length} priority contacts matching query`);
+    console.log(`[Master Agent] Loaded ${contactsWithAgentData.length} total contacts, ${semanticContacts.length} semantic matches`);
 
     // Fetch active needs/offers with full contact data
     const [needsResult, offersResult, connectionsResult] = await Promise.all([
@@ -104,18 +165,19 @@ serve(async (req) => {
         .eq('tenant_id', tenantId)
     ]);
 
-    // Build PRIORITY contacts summary (matching query)
-    const prioritySummary = priorityContacts.length > 0 
-      ? priorityContacts.slice(0, 30).map(c => {
+    // Build SEMANTIC MATCHES summary (AI understands meaning!)
+    const semanticSummary = semanticContacts.length > 0 
+      ? semanticContacts.slice(0, 30).map(c => {
           const industry = (c.companies as any)?.industry || 'brak';
           const tags = (c.tags || []).join(', ') || 'brak';
-          const profileExcerpt = c.profile_summary?.substring(0, 200) || '';
-          return `- ⭐ ${c.full_name} | Firma: ${c.company || '-'} | Branża: ${industry} | Stanowisko: ${c.position || '-'} | Tagi: ${tags} | Profil: ${profileExcerpt}`;
+          const profileExcerpt = c.profile_summary?.substring(0, 250) || '';
+          const score = c.combined_score?.toFixed(2) || '0';
+          return `- 🎯 [${score}] ${c.full_name} | Firma: ${c.company || '-'} | Branża: ${industry} | Stanowisko: ${c.position || '-'} | Tagi: ${tags} | Profil: ${profileExcerpt}`;
         }).join('\n')
       : '';
 
-    // Build ALL contacts summary
-    const allContactsSummary = contactsWithAgentData.slice(0, 100).map(c => {
+    // Build ALL contacts summary (sample)
+    const allContactsSummary = contactsWithAgentData.slice(0, 50).map(c => {
       const industry = (c.companies as any)?.industry || 'brak';
       const tags = (c.tags || []).join(', ') || 'brak';
       const profileExcerpt = c.profile_summary?.substring(0, 100) || '';
@@ -136,14 +198,14 @@ serve(async (req) => {
       return `- ${contact?.full_name} (${industry}): ${o.title} - ${o.description?.substring(0, 100) || ''}`;
     }).join('\n');
 
-    // Build connections summary with industry
+    // Build connections summary
     const connectionsSummary = (connectionsResult.data || []).slice(0, 30).map(c => {
       const a = c.contact_a as any;
       const b = c.contact_b as any;
       return `- ${a?.full_name} (${a?.companies?.industry || '-'}) <-> ${b?.full_name} (${b?.companies?.industry || '-'})`;
     }).join('\n');
 
-    // Calculate industry statistics from ALL contacts
+    // Calculate industry statistics
     const industryStats: Record<string, number> = {};
     contactsWithAgentData.forEach(contact => {
       const industry = (contact.companies as any)?.industry || 
@@ -162,14 +224,18 @@ serve(async (req) => {
     }
 
     const masterPrompt = `Jesteś Master Agent koordynujący bazę ${contactsWithAgentData.length} kontaktów biznesowych.
+Używasz WYSZUKIWANIA SEMANTYCZNEGO - AI rozumie znaczenie słów, nie tylko dokładne dopasowanie tekstu.
 
 ## STATYSTYKI BRANŻOWE
 ${industryStatsSummary || 'Brak danych o branżach'}
 
-${prioritySummary ? `## ⭐ KONTAKTY PASUJĄCE DO ZAPYTANIA (${priorityContacts.length} wyników - PRIORYTET!)
-${prioritySummary}
+${semanticSummary ? `## 🎯 KONTAKTY ZNALEZIONE SEMANTYCZNIE (AI zrozumiało znaczenie pytania!)
+Uwaga: Te kontakty zostały znalezione przez wyszukiwanie wektorowe - AI zrozumiało, że np. "kurczak" ≈ "drób" ≈ "mięso".
+Wynik [0.00-1.00] oznacza podobieństwo semantyczne.
 
-` : ''}## WSZYSTKIE KONTAKTY (${contactsWithAgentData.length} rekordów, pokazano 100)
+${semanticSummary}
+
+` : ''}## PRÓBKA WSZYSTKICH KONTAKTÓW (${contactsWithAgentData.length} rekordów)
 ${allContactsSummary || 'Brak kontaktów'}
 
 ## AKTYWNE POTRZEBY
@@ -183,19 +249,19 @@ ${connectionsSummary || 'Brak połączeń'}
 
 ## PYTANIE UŻYTKOWNIKA: "${query}"
 
-Przeanalizuj dokładnie dane powyżej i odpowiedz na pytanie. UWAGA:
-- Jeśli są kontakty oznaczone ⭐ (pasujące do zapytania) - NAJPIERW sprawdź te kontakty
-- Uwzględnij branże kontaktów (z pola industry lub profile_summary)
-- Sprawdź tagi i oznaczenia kontaktów
-- Przeszukaj profile AI i opisy
-- Zweryfikuj potrzeby i oferty
+WAŻNE INSTRUKCJE:
+1. Kontakty oznaczone 🎯 zostały znalezione przez AI semantycznie - NAJPIERW przeanalizuj te wyniki!
+2. Wynik [0.85] oznacza 85% podobieństwa semantycznego do pytania
+3. Słowa takie jak "kurczak", "drób", "mięso", "ferma" są semantycznie powiązane
+4. Jeśli pytanie dotyczy branży, kontakty z wysokim wynikiem są najbardziej relevantne
 
 Zwróć JSON:
 \`\`\`json
 {
-  "answer": "szczegółowa odpowiedź na pytanie z konkretnymi danymi, imionami i nazwiskami kontaktów",
+  "answer": "szczegółowa odpowiedź z konkretnymi danymi, imionami i nazwiskami kontaktów",
   "agents_consulted": ["contact_id1", "contact_id2"],
   "data_sources": ["źródła danych użyte do odpowiedzi"],
+  "search_method": "semantic" | "fallback_text",
   "recommendations": [{"action": "akcja", "reason": "powód", "contacts_involved": ["id"]}],
   "potential_matches": [{"contact_a": {"id": "", "name": ""}, "contact_b": {"id": "", "name": ""}, "match_reason": ""}]
 }
@@ -220,7 +286,7 @@ Zwróć JSON:
       const jsonMatch = aiContent.match(/```json\s*([\s\S]*?)\s*```/) || aiContent.match(/\{[\s\S]*\}/);
       response = JSON.parse(jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent);
     } catch {
-      response = { answer: aiContent, agents_consulted: [], recommendations: [], potential_matches: [] };
+      response = { answer: aiContent, agents_consulted: [], recommendations: [], potential_matches: [], search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text' };
     }
 
     // Log query
@@ -229,7 +295,12 @@ Zwróć JSON:
       query, 
       query_type, 
       agents_consulted: response.agents_consulted || [], 
-      reasoning: { data_sources: response.data_sources || [], industry_stats: industryStats }, 
+      reasoning: { 
+        data_sources: response.data_sources || [], 
+        industry_stats: industryStats,
+        semantic_matches: semanticContacts.length,
+        search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text'
+      }, 
       response: response.answer 
     });
 
@@ -237,7 +308,8 @@ Zwróć JSON:
       JSON.stringify({ 
         success: true, 
         total_contacts: contactsWithAgentData.length,
-        priority_matches: priorityContacts.length,
+        semantic_matches: semanticContacts.length,
+        search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text',
         industry_stats: industryStats, 
         ...response 
       }),
