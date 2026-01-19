@@ -1,4 +1,4 @@
-import { MasterAgentResponse, SuggestedAction, ContactWithAgent, ContactWithoutAgent } from '@/hooks/useContactAgent';
+import { MasterAgentResponse, ContactWithAgent, ContactWithoutAgent } from '@/hooks/useContactAgent';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,9 +19,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { TaskModal } from '@/components/tasks/TaskModal';
+import { cn } from '@/lib/utils';
 
 interface MasterAgentMessageProps {
   response: MasterAgentResponse;
+}
+
+interface UnifiedContact {
+  contact_id: string;
+  contact_name: string;
+  company?: string;
+  semantic_score: number;
+  hasAgent: boolean;
+  justification: string;
 }
 
 const getInitials = (name: string) => {
@@ -30,7 +40,6 @@ const getInitials = (name: string) => {
 
 export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
   const { director } = useAuth();
-  const tenantId = director?.tenant_id;
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedContactForTask, setSelectedContactForTask] = useState<{
@@ -39,16 +48,36 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     company?: string;
   } | null>(null);
 
-  const openTaskModal = (contact: ContactWithAgent | ContactWithoutAgent) => {
+  // Combine all contacts into a unified list sorted by score
+  const allContacts: UnifiedContact[] = [
+    ...(response.contacts_with_agents || []).map((c): UnifiedContact => ({
+      contact_id: c.contact_id,
+      contact_name: c.contact_name,
+      company: c.company,
+      semantic_score: c.semantic_score,
+      hasAgent: true,
+      justification: c.agent_answer || 'Dopasowanie semantyczne'
+    })),
+    ...(response.contacts_without_agents || []).map((c): UnifiedContact => ({
+      contact_id: c.contact_id,
+      contact_name: c.contact_name,
+      company: c.company,
+      semantic_score: c.semantic_score,
+      hasAgent: false,
+      justification: c.match_reason || 'Dopasowanie semantyczne'
+    }))
+  ].sort((a, b) => b.semantic_score - a.semantic_score);
+
+  const openTaskModal = (contact: UnifiedContact) => {
     setSelectedContactForTask({
       id: contact.contact_id,
       name: contact.contact_name,
-      company: contact.company || undefined
+      company: contact.company
     });
     setTaskModalOpen(true);
   };
 
-  const handleQuickNote = async (contact: ContactWithAgent | ContactWithoutAgent) => {
+  const handleQuickNote = async (contact: UnifiedContact) => {
     const note = prompt(`Dodaj notatkę dla ${contact.contact_name}:`);
     if (!note) return;
     
@@ -80,218 +109,141 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     }
   };
 
-  const openConsultation = (contact: ContactWithAgent | ContactWithoutAgent) => {
+  const openConsultation = (contact: UnifiedContact) => {
     window.open(`/consultations?contact_id=${contact.contact_id}`, '_blank');
   };
-
-  const totalContacts = 
-    (response.contacts_with_agents?.length || 0) + 
-    (response.contacts_without_agents?.length || 0);
 
   return (
     <div className="space-y-4">
       {/* Summary header */}
-      {totalContacts > 0 && (
+      {allContacts.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Users className="h-4 w-4" />
-          <span>Znaleziono {totalContacts} kontaktów pasujących do zapytania</span>
+          <span>Znaleziono {allContacts.length} kontaktów pasujących do zapytania</span>
         </div>
       )}
 
-      {/* ============= CONTACTS WITH ACTIVE AGENTS ============= */}
-      {response.contacts_with_agents && response.contacts_with_agents.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
-            <Bot className="h-4 w-4" />
-            <span>Z agentem AI ({response.contacts_with_agents.length})</span>
-          </div>
-          
-          <div className="grid gap-3">
-            {response.contacts_with_agents.map((contact) => (
-              <Card 
-                key={contact.contact_id} 
-                className="border-2 border-green-500/40 bg-card hover:shadow-md transition-all"
-              >
-                <CardContent className="p-4 space-y-3">
-                  {/* Header: Avatar + Info + Score Badge */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Avatar className="h-11 w-11 border-2 border-green-500/30 flex-shrink-0">
-                        <AvatarFallback className="bg-green-500/10 text-green-700 dark:text-green-300 font-medium">
-                          {getInitials(contact.contact_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
+      {/* Unified 2-column grid of contacts */}
+      {allContacts.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {allContacts.map((contact) => (
+            <Card 
+              key={contact.contact_id} 
+              className={cn(
+                "flex flex-col h-full transition-all hover:shadow-md",
+                contact.hasAgent 
+                  ? "border-2 border-green-500/40" 
+                  : "border border-border hover:border-primary/30"
+              )}
+            >
+              <CardContent className="p-4 flex flex-col h-full">
+                {/* Header: Avatar + Info + Score Badge */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className={cn(
+                      "h-10 w-10 flex-shrink-0",
+                      contact.hasAgent 
+                        ? "border-2 border-green-500/30" 
+                        : "border border-border"
+                    )}>
+                      <AvatarFallback className={cn(
+                        "font-medium text-sm",
+                        contact.hasAgent 
+                          ? "bg-green-500/10 text-green-700 dark:text-green-300" 
+                          : "bg-primary/10 text-primary"
+                      )}>
+                        {getInitials(contact.contact_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <a 
                           href={`/contacts/${contact.contact_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-semibold hover:text-primary hover:underline flex items-center gap-1.5"
+                          className="font-semibold hover:text-primary hover:underline flex items-center gap-1 text-sm"
                         >
                           {contact.contact_name}
-                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
                         </a>
-                        {contact.company && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
-                            <Building2 className="h-3 w-3 flex-shrink-0" />
-                            {contact.company}
-                          </p>
+                        {contact.hasAgent && (
+                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30">
+                            AI
+                          </Badge>
                         )}
                       </div>
-                    </div>
-                    <Badge className="bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30 flex-shrink-0">
-                      {Math.round(contact.semantic_score * 100)}%
-                    </Badge>
-                  </div>
-
-                  {/* Justification - agent answer */}
-                  {contact.agent_answer && (
-                    <div className="p-3 bg-muted/50 rounded-lg border border-border/50">
-                      <div className="flex items-start gap-2">
-                        <Bot className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm leading-relaxed">{contact.agent_answer}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick actions - 3 buttons */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => openTaskModal(contact)}
-                    >
-                      <ListTodo className="h-3.5 w-3.5" />
-                      Zadanie
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => openConsultation(contact)}
-                    >
-                      <CalendarPlus className="h-3.5 w-3.5" />
-                      Spotkanie
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => handleQuickNote(contact)}
-                      disabled={loadingAction === `note-${contact.contact_id}`}
-                    >
-                      {loadingAction === `note-${contact.contact_id}` ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <StickyNote className="h-3.5 w-3.5" />
+                      {contact.company && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 truncate mt-0.5">
+                          <Building2 className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{contact.company}</span>
+                        </p>
                       )}
-                      Notatka
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ============= CONTACTS WITHOUT AGENTS ============= */}
-      {response.contacts_without_agents && response.contacts_without_agents.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>Dopasowane kontakty ({response.contacts_without_agents.length})</span>
-          </div>
-          
-          <div className="grid gap-3">
-            {response.contacts_without_agents.map((contact) => (
-              <Card 
-                key={contact.contact_id} 
-                className="border border-border hover:border-primary/30 hover:shadow-md transition-all"
-              >
-                <CardContent className="p-4 space-y-3">
-                  {/* Header: Avatar + Info + Score Badge */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Avatar className="h-11 w-11 border border-border flex-shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                          {getInitials(contact.contact_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <a 
-                          href={`/contacts/${contact.contact_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold hover:text-primary hover:underline flex items-center gap-1.5"
-                        >
-                          {contact.contact_name}
-                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
-                        </a>
-                        {contact.company && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
-                            <Building2 className="h-3 w-3 flex-shrink-0" />
-                            {contact.company}
-                          </p>
-                        )}
-                      </div>
                     </div>
-                    <Badge variant="outline" className="flex-shrink-0">
-                      {Math.round(contact.semantic_score * 100)}%
-                    </Badge>
                   </div>
+                  <Badge 
+                    variant={contact.hasAgent ? "default" : "outline"}
+                    className={cn(
+                      "flex-shrink-0 text-xs",
+                      contact.hasAgent && "bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30"
+                    )}
+                  >
+                    {Math.round(contact.semantic_score * 100)}%
+                  </Badge>
+                </div>
 
-                  {/* Justification - match reason */}
-                  <div className="p-3 bg-muted/30 rounded-lg">
-                    <p className="text-sm">{contact.match_reason}</p>
+                {/* Justification - fixed height with line-clamp */}
+                <div className={cn(
+                  "p-3 rounded-lg h-[72px] overflow-hidden mb-3",
+                  contact.hasAgent 
+                    ? "bg-muted/50 border border-border/50" 
+                    : "bg-muted/30"
+                )}>
+                  <div className="flex items-start gap-2">
+                    {contact.hasAgent && (
+                      <Bot className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                    )}
+                    <p className="text-sm leading-relaxed line-clamp-3">{contact.justification}</p>
                   </div>
+                </div>
 
-                  {/* CTA to activate agent */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Bot className="h-3.5 w-3.5" />
-                    <span>Aktywuj agenta AI, aby uzyskać szczegółowe informacje</span>
-                  </div>
-
-                  {/* Quick actions - 3 buttons */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => openTaskModal(contact)}
-                    >
-                      <ListTodo className="h-3.5 w-3.5" />
-                      Zadanie
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => openConsultation(contact)}
-                    >
-                      <CalendarPlus className="h-3.5 w-3.5" />
-                      Spotkanie
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-8 flex-1"
-                      onClick={() => handleQuickNote(contact)}
-                      disabled={loadingAction === `note-${contact.contact_id}`}
-                    >
-                      {loadingAction === `note-${contact.contact_id}` ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <StickyNote className="h-3.5 w-3.5" />
-                      )}
-                      Notatka
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                {/* Quick actions - 3 buttons */}
+                <div className="flex items-center gap-2 mt-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 flex-1"
+                    onClick={() => openTaskModal(contact)}
+                  >
+                    <ListTodo className="h-3.5 w-3.5" />
+                    Zadanie
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 flex-1"
+                    onClick={() => openConsultation(contact)}
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    Spotkanie
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 flex-1"
+                    onClick={() => handleQuickNote(contact)}
+                    disabled={loadingAction === `note-${contact.contact_id}`}
+                  >
+                    {loadingAction === `note-${contact.contact_id}` ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <StickyNote className="h-3.5 w-3.5" />
+                    )}
+                    Notatka
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
