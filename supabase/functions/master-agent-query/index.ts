@@ -126,10 +126,10 @@ serve(async (req) => {
       .order('profile_summary', { nullsFirst: false })
       .limit(200);
 
-    // Get agent memory data with full knowledge (memory_summary, topics)
+    // Get agent memory data with full knowledge (memory_summary, topics, agent_persona, agent_profile)
     const { data: agentMemories } = await supabase
       .from('contact_agent_memory')
-      .select('contact_id, agent_persona, memory_summary, topics, last_learning_at')
+      .select('contact_id, agent_persona, agent_profile, memory_summary, topics, last_learning_at')
       .eq('tenant_id', tenantId);
 
     const agentMemoryMap = new Map((agentMemories || []).map(am => [am.contact_id, am]));
@@ -143,36 +143,44 @@ serve(async (req) => {
       topics: agentMemoryMap.get(contact.id)?.topics || []
     }));
 
-    // ============= FALLBACK: Search agent topics if semantic search yields few results =============
+    // ============= FALLBACK: Search agent_persona, agent_profile, and topics if semantic search yields few results =============
     if (semanticContacts.length < 5) {
-      console.log(`[Master Agent] Low semantic results (${semanticContacts.length}), searching agent topics...`);
+      console.log(`[Master Agent] Low semantic results (${semanticContacts.length}), searching agent_persona and topics...`);
       
       const queryTerms = query.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
       
-      const contactsWithMatchingTopics = contactsWithAgentData.filter(c => {
+      const contactsWithMatchingAgentData = contactsWithAgentData.filter(c => {
         if (semanticContacts.some(sc => sc.id === c.id)) return false; // Skip already matched
         
-        const topics = (c.topics || []).map((t: string) => t.toLowerCase());
-        const memory = (c.memory_summary || '').toLowerCase();
-        const notes = (c.notes || '').toLowerCase();
+        const agentMem = agentMemoryMap.get(c.id);
+        if (!agentMem) return false;
         
-        return queryTerms.some((term: string) => 
-          topics.some((topic: string) => topic.includes(term) || term.includes(topic)) ||
-          memory.includes(term) ||
-          notes.includes(term)
-        );
+        const agentProfile = agentMem.agent_profile as any;
+        
+        // Build comprehensive search text from ALL agent knowledge
+        const searchText = [
+          agentMem.agent_persona,
+          agentMem.memory_summary,
+          (agentMem.topics || []).join(' '),
+          agentProfile?.key_topics?.join(' '),
+          agentProfile?.interests?.join(' '),
+          agentProfile?.business_value,
+          c.notes
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        return queryTerms.some((term: string) => searchText.includes(term));
       });
       
-      if (contactsWithMatchingTopics.length > 0) {
-        console.log(`[Master Agent] Found ${contactsWithMatchingTopics.length} contacts via topic/memory search`);
+      if (contactsWithMatchingAgentData.length > 0) {
+        console.log(`[Master Agent] Found ${contactsWithMatchingAgentData.length} contacts via agent_persona/profile search`);
         
-        // Add them to semantic contacts with lower scores
-        const additionalContacts = contactsWithMatchingTopics.slice(0, 10).map(c => ({
+        // Add them to semantic contacts with moderate scores
+        const additionalContacts = contactsWithMatchingAgentData.slice(0, 15).map(c => ({
           ...c,
-          semantic_score: 0.4, // Lower score for topic-based matches
-          fts_score: 0.5,
-          combined_score: 0.45,
-          match_source: 'topic_fallback'
+          semantic_score: 0.50, // Moderate score for agent-based matches
+          fts_score: 0.50,
+          combined_score: 0.50,
+          match_source: 'agent_persona_fallback'
         }));
         
         semanticContacts = [...semanticContacts, ...additionalContacts];
@@ -189,9 +197,13 @@ serve(async (req) => {
 
     // ============= QUERY CONTACT AGENTS =============
     // Get agents for top semantic matches to ask them directly
+    // IMPORTANT: Also query agents that have agent_persona (even if memory_summary is null)
     const agentsToQuery = semanticContacts
-      .slice(0, 10)
-      .filter(c => agentMemoryMap.has(c.id) && agentMemoryMap.get(c.id)?.memory_summary);
+      .slice(0, 15)
+      .filter(c => {
+        const agentMem = agentMemoryMap.get(c.id);
+        return agentMem && (agentMem.memory_summary || agentMem.agent_persona);
+      });
 
     let contactAgentResponses: Array<{ contact_id: string; contact_name: string; agent_answer: string }> = [];
 
@@ -200,12 +212,24 @@ serve(async (req) => {
 
       const agentPromises = agentsToQuery.map(async (contact) => {
         const agentMem = agentMemoryMap.get(contact.id);
-        if (!agentMem?.memory_summary) return null;
+        // Accept agents with agent_persona OR memory_summary
+        if (!agentMem?.memory_summary && !agentMem?.agent_persona) return null;
 
         try {
+          const agentProfile = agentMem.agent_profile as any;
+          
+          // Build comprehensive knowledge section
+          const knowledgeParts = [
+            agentMem.agent_persona && `Persona: ${agentMem.agent_persona}`,
+            agentMem.memory_summary && `Podsumowanie: ${agentMem.memory_summary}`,
+            agentProfile?.business_value && `Wartość biznesowa: ${agentProfile.business_value}`,
+            agentProfile?.key_topics?.length && `Kluczowe tematy: ${agentProfile.key_topics.join(', ')}`,
+            agentProfile?.interests?.length && `Zainteresowania: ${agentProfile.interests.join(', ')}`,
+          ].filter(Boolean).join('\n');
+          
           const agentPrompt = `Jesteś Contact Agent dla ${contact.full_name}.
-Twoja wiedza o tej osobie:
-${agentMem.memory_summary}
+Twoja pełna wiedza o tej osobie:
+${knowledgeParts}
 
 Tematy/słowa kluczowe: ${(agentMem.topics || []).join(', ')}
 

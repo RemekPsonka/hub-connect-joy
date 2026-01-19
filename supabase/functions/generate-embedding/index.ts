@@ -87,15 +87,17 @@ serve(async (req) => {
 
         // ============= INCLUDE AGENT KNOWLEDGE IN EMBEDDING =============
         // Fetch agent memory to include learned knowledge in the embedding
+        // CRITICAL: Include agent_persona and agent_profile which contain key business context!
         const { data: agentMemory } = await supabase
           .from('contact_agent_memory')
-          .select('memory_summary, topics')
+          .select('memory_summary, topics, agent_persona, agent_profile')
           .eq('contact_id', id)
           .maybeSingle();
 
         const company = contact.companies as any;
+        const agentProfile = agentMemory?.agent_profile as any;
         
-        // Construct rich text for embedding including agent knowledge
+        // Construct rich text for embedding including ALL agent knowledge
         const parts = [
           contact.full_name,
           contact.position && `Stanowisko: ${contact.position}`,
@@ -107,12 +109,20 @@ serve(async (req) => {
           contact.profile_summary && `Profil: ${contact.profile_summary}`,
           contact.notes && `Notatki: ${contact.notes}`,
           contact.tags?.length && `Tagi: ${contact.tags.join(", ")}`,
-          // NEW: Include agent AI knowledge for better semantic search
+          // CRITICAL: Include agent_persona - contains key info like "BMW dealer", "sprzedaje samochody"
+          agentMemory?.agent_persona && `Agent Persona: ${agentMemory.agent_persona}`,
+          // Include key_topics from agent_profile
+          agentProfile?.key_topics?.length && `Tematy kluczowe: ${agentProfile.key_topics.join(", ")}`,
+          // Include interests
+          agentProfile?.interests?.length && `Zainteresowania: ${agentProfile.interests.join(", ")}`,
+          // Include business_value
+          agentProfile?.business_value && `Wartość biznesowa: ${agentProfile.business_value}`,
+          // Include memory_summary and topics
           agentMemory?.memory_summary && `Wiedza agenta AI: ${agentMemory.memory_summary}`,
           agentMemory?.topics?.length && `Tematy kontaktu: ${(agentMemory.topics as string[]).join(", ")}`,
         ].filter(Boolean);
 
-        console.log(`[Embedding] Contact ${contact.full_name}: agent knowledge ${agentMemory ? 'included' : 'not available'}`);
+        console.log(`[Embedding] Contact ${contact.full_name}: agent knowledge ${agentMemory ? 'INCLUDED (persona + profile + topics)' : 'not available'}`);
         textToEmbed = parts.join(". ");
       } else if (type === "need") {
         const { data: need, error } = await supabase
