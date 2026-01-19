@@ -72,19 +72,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Build prompt for AI
+    // Build prompt for AI - now includes memory_summary and topics generation
     const prompt = `Wygeneruj profil agenta AI dla kontaktu biznesowego.
 
 ## DANE KONTAKTU
 - Imię i nazwisko: ${contact.full_name}
 - Stanowisko: ${contact.position || 'nieznane'}
 - Firma: ${contact.company?.name || contact.company || 'nieznana'}
+- Branża: ${contact.company?.industry || 'nieznana'}
+- Miasto: ${contact.city || 'nieznane'}
 - Notatki: ${contact.notes || 'Brak'}
 - AI Profile Summary: ${contact.profile_summary || 'Brak'}
+- Tagi: ${(contact.tags || []).join(', ') || 'brak'}
 
-## POTRZEBY: ${(needs.data || []).map(n => n.title).join(', ') || 'Brak'}
-## OFERTY: ${(offers.data || []).map(o => o.title).join(', ') || 'Brak'}
+## POTRZEBY: ${(needs.data || []).map((n: any) => `${n.title} (${n.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
+## OFERTY: ${(offers.data || []).map((o: any) => `${o.title} (${o.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
 ## KONSULTACJI: ${consultations.data?.length || 0}
+${consultations.data?.slice(0, 3).map((c: any) => `- ${c.notes?.substring(0, 100) || c.ai_summary?.substring(0, 100) || 'brak notatek'}`).join('\n') || ''}
 
 Zwróć JSON:
 \`\`\`json
@@ -98,6 +102,8 @@ Zwróć JSON:
     "key_topics": ["tematy do poruszenia"],
     "business_value": "wartość biznesowa"
   },
+  "memory_summary": "Zwięzłe podsumowanie (max 500 znaków): kim jest, czym się zajmuje, czego szuka, co oferuje",
+  "topics": ["słowa kluczowe", "branża", "specjalizacja", "produkty", "usługi", "zainteresowania biznesowe"],
   "insights": [{"text": "insight", "source": "źródło", "importance": "high/medium/low"}],
   "next_steps": ["następne kroki"],
   "warnings": ["ostrzeżenia"]
@@ -122,16 +128,35 @@ Zwróć JSON:
       const jsonMatch = aiContent.match(/```json\s*([\s\S]*?)\s*```/) || aiContent.match(/\{[\s\S]*\}/);
       agentData = JSON.parse(jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent);
     } catch {
+      // Fallback - generate basic data from available info
+      const fallbackTopics = [
+        contact.company?.industry,
+        contact.position,
+        ...(contact.tags || [])
+      ].filter(Boolean);
+      
       agentData = {
         agent_persona: `${contact.full_name} - kontakt biznesowy`,
         agent_profile: { pain_points: [], interests: [], goals: [], communication_style: 'Do ustalenia', key_topics: [], business_value: 'Do oceny' },
+        memory_summary: `${contact.full_name}${contact.position ? `, ${contact.position}` : ''}${contact.company?.name ? ` w ${contact.company.name}` : ''}. ${contact.profile_summary || ''}`.substring(0, 500),
+        topics: fallbackTopics.slice(0, 10),
         insights: [{ text: 'Wymaga więcej danych', source: 'system', importance: 'high' }],
         next_steps: ['Uzupełnij dane'],
         warnings: []
       };
     }
 
-    // Upsert agent memory
+    // Build knowledge sources for initialization
+    const knowledgeSources = [
+      { type: 'profile', count: 1, updated: new Date().toISOString() },
+      { type: 'consultations', count: consultations.data?.length || 0, updated: new Date().toISOString() },
+      { type: 'needs', count: needs.data?.length || 0, updated: new Date().toISOString() },
+      { type: 'offers', count: offers.data?.length || 0, updated: new Date().toISOString() },
+      { type: 'connections', count: connections.data?.length || 0, updated: new Date().toISOString() },
+      { type: 'bi_data', count: biData.data ? 1 : 0, updated: new Date().toISOString() }
+    ];
+
+    // Upsert agent memory with memory_summary and topics
     const { data: savedAgent, error: saveError } = await supabase
       .from('contact_agent_memory')
       .upsert({
@@ -139,8 +164,13 @@ Zwróć JSON:
         contact_id: contact_id,
         agent_persona: agentData.agent_persona,
         agent_profile: { ...agentData.agent_profile, next_steps: agentData.next_steps, warnings: agentData.warnings },
+        memory_summary: agentData.memory_summary?.substring(0, 1000) || null,
+        topics: agentData.topics || [],
         insights: agentData.insights || [],
         last_refresh_at: new Date().toISOString(),
+        last_learning_at: new Date().toISOString(),
+        conversation_count: 0,
+        knowledge_sources: knowledgeSources,
         refresh_sources: { initialized_at: new Date().toISOString(), data_sources: ['contacts', 'needs', 'offers', 'consultations'] }
       }, { onConflict: 'contact_id' })
       .select()
@@ -166,6 +196,9 @@ Zwróć JSON:
         contact_id,
         contact_name: contact.full_name,
         agent: savedAgent,
+        memory_summary: agentData.memory_summary,
+        topics: agentData.topics,
+        topics_count: agentData.topics?.length || 0,
         data_sources: { consultations: consultations.data?.length || 0, needs: needs.data?.length || 0, offers: offers.data?.length || 0, connections: connections.data?.length || 0, bi_data: !!biData.data }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -126,10 +126,10 @@ serve(async (req) => {
       .order('profile_summary', { nullsFirst: false })
       .limit(200);
 
-    // Get agent memory data
+    // Get agent memory data with full knowledge (memory_summary, topics)
     const { data: agentMemories } = await supabase
       .from('contact_agent_memory')
-      .select('contact_id, agent_persona')
+      .select('contact_id, agent_persona, memory_summary, topics, last_learning_at')
       .eq('tenant_id', tenantId);
 
     const agentMemoryMap = new Map((agentMemories || []).map(am => [am.contact_id, am]));
@@ -138,10 +138,82 @@ serve(async (req) => {
     const contactsWithAgentData = (allContacts || []).map(contact => ({
       ...contact,
       has_agent: agentMemoryMap.has(contact.id),
-      agent_persona: agentMemoryMap.get(contact.id)?.agent_persona || null
+      agent_persona: agentMemoryMap.get(contact.id)?.agent_persona || null,
+      memory_summary: agentMemoryMap.get(contact.id)?.memory_summary || null,
+      topics: agentMemoryMap.get(contact.id)?.topics || []
     }));
 
     console.log(`[Master Agent] Loaded ${contactsWithAgentData.length} total contacts, ${semanticContacts.length} semantic matches`);
+
+    // ============= QUERY CONTACT AGENTS =============
+    // Get agents for top semantic matches to ask them directly
+    const agentsToQuery = semanticContacts
+      .slice(0, 10)
+      .filter(c => agentMemoryMap.has(c.id) && agentMemoryMap.get(c.id)?.memory_summary);
+
+    let contactAgentResponses: Array<{ contact_id: string; contact_name: string; agent_answer: string }> = [];
+
+    if (agentsToQuery.length > 0) {
+      console.log(`[Master Agent] Querying ${agentsToQuery.length} Contact Agents...`);
+
+      const agentPromises = agentsToQuery.map(async (contact) => {
+        const agentMem = agentMemoryMap.get(contact.id);
+        if (!agentMem?.memory_summary) return null;
+
+        try {
+          const agentPrompt = `Jesteś Contact Agent dla ${contact.full_name}.
+Twoja wiedza o tej osobie:
+${agentMem.memory_summary}
+
+Tematy/słowa kluczowe: ${(agentMem.topics || []).join(', ')}
+
+Master Agent pyta: "${query}"
+
+INSTRUKCJE:
+- Jeśli Twój kontakt jest RELEVANTNY dla tego pytania, odpowiedz KRÓTKO (max 100 słów) co wiesz.
+- Jeśli Twój kontakt NIE JEST relevantny, odpowiedz DOKŁADNIE: "NIE_RELEVANTY"
+- Podaj konkretne fakty, nie domysły.
+
+Odpowiedź:`;
+
+          const agentResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+            body: JSON.stringify({ 
+              model: 'google/gemini-2.5-flash-lite', // Faster model for agent queries
+              messages: [{ role: 'user', content: agentPrompt }] 
+            })
+          });
+
+          if (!agentResponse.ok) {
+            console.warn(`[Contact Agent ${contact.full_name}] Error: ${agentResponse.status}`);
+            return null;
+          }
+
+          const agentData = await agentResponse.json();
+          const agentAnswer = agentData.choices?.[0]?.message?.content?.trim() || '';
+
+          if (agentAnswer.includes('NIE_RELEVANTY') || agentAnswer.length < 10) {
+            console.log(`[Contact Agent ${contact.full_name}] Not relevant`);
+            return null;
+          }
+
+          console.log(`[Contact Agent ${contact.full_name}] Relevant answer: ${agentAnswer.substring(0, 50)}...`);
+          return {
+            contact_id: contact.id,
+            contact_name: contact.full_name,
+            agent_answer: agentAnswer.substring(0, 500)
+          };
+        } catch (e) {
+          console.error(`[Contact Agent ${contact.full_name}] Error:`, e);
+          return null;
+        }
+      });
+
+      const agentResults = await Promise.all(agentPromises);
+      contactAgentResponses = agentResults.filter((r): r is NonNullable<typeof r> => r !== null);
+      console.log(`[Master Agent] Got ${contactAgentResponses.length} relevant Contact Agent responses`);
+    }
 
     // Fetch active needs/offers with full contact data
     const [needsResult, offersResult, connectionsResult] = await Promise.all([
@@ -223,13 +295,22 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Build Contact Agent responses section
+    const contactAgentSection = contactAgentResponses.length > 0
+      ? `## 🤖 ODPOWIEDZI CONTACT AGENTS (agenci znają szczegóły o swoich kontaktach!)
+${contactAgentResponses.map(r => `### Agent dla: ${r.contact_name}
+${r.agent_answer}`).join('\n\n')}`
+      : '';
+
     const masterPrompt = `Jesteś Master Agent koordynujący bazę ${contactsWithAgentData.length} kontaktów biznesowych.
-Używasz WYSZUKIWANIA SEMANTYCZNEGO - AI rozumie znaczenie słów, nie tylko dokładne dopasowanie tekstu.
+Używasz WYSZUKIWANIA SEMANTYCZNEGO i konsultujesz się z Contact Agents - każdy z nich "zna" swojego kontakta.
 
 ## STATYSTYKI BRANŻOWE
 ${industryStatsSummary || 'Brak danych o branżach'}
 
-${semanticSummary ? `## 🎯 KONTAKTY ZNALEZIONE SEMANTYCZNIE (AI zrozumiało znaczenie pytania!)
+${contactAgentSection ? `${contactAgentSection}
+
+` : ''}${semanticSummary ? `## 🎯 KONTAKTY ZNALEZIONE SEMANTYCZNIE (AI zrozumiało znaczenie pytania!)
 Uwaga: Te kontakty zostały znalezione przez wyszukiwanie wektorowe - AI zrozumiało, że np. "kurczak" ≈ "drób" ≈ "mięso".
 Wynik [0.00-1.00] oznacza podobieństwo semantyczne.
 
@@ -250,16 +331,17 @@ ${connectionsSummary || 'Brak połączeń'}
 ## PYTANIE UŻYTKOWNIKA: "${query}"
 
 WAŻNE INSTRUKCJE:
-1. Kontakty oznaczone 🎯 zostały znalezione przez AI semantycznie - NAJPIERW przeanalizuj te wyniki!
-2. Wynik [0.85] oznacza 85% podobieństwa semantycznego do pytania
-3. Słowa takie jak "kurczak", "drób", "mięso", "ferma" są semantycznie powiązane
-4. Jeśli pytanie dotyczy branży, kontakty z wysokim wynikiem są najbardziej relevantne
+1. ${contactAgentResponses.length > 0 ? `NAJPIERW wykorzystaj odpowiedzi od ${contactAgentResponses.length} Contact Agents - oni ZNAJĄ swoich kontaktów!` : 'Brak odpowiedzi od Contact Agents'}
+2. Kontakty oznaczone 🎯 zostały znalezione przez AI semantycznie - przeanalizuj te wyniki!
+3. Wynik [0.85] oznacza 85% podobieństwa semantycznego do pytania
+4. Słowa takie jak "kurczak", "drób", "mięso", "ferma" są semantycznie powiązane
 
 Zwróć JSON:
 \`\`\`json
 {
   "answer": "szczegółowa odpowiedź z konkretnymi danymi, imionami i nazwiskami kontaktów",
   "agents_consulted": ["contact_id1", "contact_id2"],
+  "contact_agent_insights": ["insight z Contact Agent 1", "insight z Contact Agent 2"],
   "data_sources": ["źródła danych użyte do odpowiedzi"],
   "search_method": "semantic" | "fallback_text",
   "recommendations": [{"action": "akcja", "reason": "powód", "contacts_involved": ["id"]}],
@@ -294,11 +376,13 @@ Zwróć JSON:
       tenant_id: tenantId, 
       query, 
       query_type, 
-      agents_consulted: response.agents_consulted || [], 
+      agents_consulted: contactAgentResponses.map(r => r.contact_id), 
       reasoning: { 
         data_sources: response.data_sources || [], 
         industry_stats: industryStats,
         semantic_matches: semanticContacts.length,
+        contact_agents_queried: agentsToQuery.length,
+        contact_agents_responded: contactAgentResponses.length,
         search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text'
       }, 
       response: response.answer 
@@ -309,6 +393,12 @@ Zwróć JSON:
         success: true, 
         total_contacts: contactsWithAgentData.length,
         semantic_matches: semanticContacts.length,
+        contact_agents_queried: agentsToQuery.length,
+        contact_agents_responded: contactAgentResponses.length,
+        contact_agent_insights: contactAgentResponses.map(r => ({
+          contact_name: r.contact_name,
+          insight: r.agent_answer.substring(0, 200)
+        })),
         search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text',
         industry_stats: industryStats, 
         ...response 
