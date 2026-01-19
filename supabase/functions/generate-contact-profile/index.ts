@@ -636,7 +636,18 @@ PEŁNA NAZWA FIRMY - użyj nazwy znalezionej w Perplexity jeśli jest dłuższa/
       throw new Error(`AI Gateway error: ${aiResponse.status}`);
     }
 
-    const aiData = await aiResponse.json();
+    // Safely parse response body
+    let aiData: any;
+    try {
+      const responseText = await aiResponse.text();
+      if (!responseText || responseText.trim() === '') {
+        throw new Error("Empty response from AI Gateway");
+      }
+      aiData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError);
+      throw new Error(`AI response parse error: ${parseError instanceof Error ? parseError.message : 'Unknown'}`);
+    }
     
     // Parse tool call response
     let profileSummary = "";
