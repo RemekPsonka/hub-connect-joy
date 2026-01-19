@@ -61,6 +61,8 @@ export function CompanyView({ contact }: CompanyViewProps) {
   
   const regenerateCompanyAI = useRegenerateCompanyAI();
   const assignContactsByDomain = useAssignContactsByDomain();
+  const updateRevenue = useUpdateCompanyRevenue();
+  const removeGroupCompany = useRemoveGroupCompany();
   
   // Count unassigned contacts (those with matching domain but no company_id)
   const unassignedContacts = useMemo(() => {
@@ -88,15 +90,11 @@ export function CompanyView({ contact }: CompanyViewProps) {
   };
 
   // Parse AI analysis if exists
-  let aiAnalysis: {
-    description?: string;
-    services?: string;
-    collaboration_areas?: string;
-  } | null = null;
+  let aiAnalysis: any = null;
   
   // ai_analysis is now JSONB, not string
   if (company?.ai_analysis && typeof company.ai_analysis === 'object') {
-    aiAnalysis = company.ai_analysis as { description?: string; services?: string; collaboration_areas?: string };
+    aiAnalysis = company.ai_analysis;
   }
 
   if (!company) {
