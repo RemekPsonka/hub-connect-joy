@@ -790,109 +790,226 @@ ZASADY:
       scrapedPages: scrapedPages.filter(p => p.content).length,
     });
 
-    // Build comprehensive system prompt
+    // Build comprehensive system prompt - 16 SECTIONS ULTRA-DETAILED
     const systemPrompt = hasAnyData
-      ? `Jesteś strategicznym analitykiem biznesowym specjalizującym się w analizie polskich firm.
+      ? `Jesteś strategicznym analitykiem biznesowym z 25-letnim doświadczeniem w analizie polskich i międzynarodowych firm.
 
-🎯 CEL: Stwórz KOMPLEKSOWY profil firmy dla wewnętrznych agentów AI do matchowania kontaktów i znajdowania synergii biznesowych.
+🎯 CEL GŁÓWNY: Stwórz ULTRA-SZCZEGÓŁOWY profil firmy służący jako podstawa do:
+- Matchowania potencjalnych partnerów biznesowych
+- Identyfikacji synergii współpracy
+- Oceny potencjału biznesowego
+- Przygotowania strategii networkingu
 
-📊 MASZ DANE Z WIELU ŹRÓDEŁ:
-${hasProfileInsights ? '✅ Profil firmy, historia i działalność (z internetu)' : ''}
-${hasFinancialInsights ? '✅ Dane finansowe i rynkowe (z internetu)' : ''}
-${hasLocationInsights ? '✅ Lokalizacje i zasięg geograficzny (z internetu)' : ''}
-${hasProjectsInsights ? '✅ Klienci, projekty i konkurencja (z internetu)' : ''}
-${hasNewsInsights ? '✅ Aktualności, newsy i CSR (z internetu)' : ''}
-${hasRegistryInsights ? '✅ Dane rejestrowe (z internetu)' : ''}
-${hasScrapedContent ? `✅ Zawartość strony WWW (${scrapedPages.filter(p => p.content).length} stron)` : ''}
+📊 DANE WEJŚCIOWE DO SYNTEZY:
+Otrzymujesz dane z 3 źródeł:
 
-📋 STRUKTURA ANALIZY (14 SEKCJI):
+ŹRÓDŁO 1: PERPLEXITY (6 zapytań)
+${hasProfileInsights ? '✅ Query 1: Profil firmy i historia' : '❌ Query 1: Profil firmy - BRAK DANYCH'}
+${hasFinancialInsights ? '✅ Query 2: Dane finansowe i rynkowe' : '❌ Query 2: Dane finansowe - BRAK DANYCH'}
+${hasLocationInsights ? '✅ Query 3: Lokalizacje i zasięg geograficzny' : '❌ Query 3: Lokalizacje - BRAK DANYCH'}
+${hasProjectsInsights ? '✅ Query 4: Klienci, projekty, konkurencja' : '❌ Query 4: Projekty - BRAK DANYCH'}
+${hasNewsInsights ? '✅ Query 5: Newsy, sygnały rynkowe, CSR' : '❌ Query 5: Newsy - BRAK DANYCH'}
+${hasRegistryInsights ? '✅ Query 6: Dane rejestrowe' : '❌ Query 6: Dane rejestrowe - BRAK DANYCH'}
 
-1. PODSTAWOWE INFORMACJE
-   - Oficjalna nazwa, forma prawna
-   - Branża główna i subbranże
-   - Pełny opis działalności (3-5 zdań)
+ŹRÓDŁO 2: FIRECRAWL (${scrapingStats.successful_scrapes} podstron, ${scrapingStats.total_words} słów)
+Zgrupowane po kategoriach: ${scrapingStats.categories_found.join(', ') || 'brak'}
 
-2. MODEL BIZNESOWY I POZYCJA RYNKOWA
-   - Jak firma zarabia pieniądze
-   - Unikalna propozycja wartości (USP)
-   - Pozycja względem konkurencji
-   - Udział w rynku (jeśli znany)
+ŹRÓDŁO 3: METADATA
+- URL strony głównej: ${website || 'brak'}
+- Statystyki scrapingu: ${scrapingStats.total_words} słów z ${scrapingStats.pages_scraped} stron
 
-3. PRODUKTY I USŁUGI (SZCZEGÓŁOWO!)
-   - Lista wszystkich produktów z opisami
-   - Lista wszystkich usług z opisami
-   - Dla kogo są przeznaczone (target)
-   - Marki własne i dealerstwa
+═══════════════════════════════════════════════════════════════════
+📋 STRUKTURA ANALIZY - 16 SEKCJI
+═══════════════════════════════════════════════════════════════════
 
-4. CO FIRMA OFERUJE (dla agentów matchujących)
-   - Pełna oferta dla klientów
-   - Oferta dla partnerów biznesowych
-   - Unikalne kompetencje i przewagi
-   - Certyfikaty, nagrody, wyróżnienia
+SEKCJA 1: PODSTAWOWE INFORMACJE
+Wymagane pola:
+- name (string) - Pełna oficjalna nazwa z formą prawną (Sp. z o.o., S.A.)
+- short_name (string) - Nazwa skrócona/handlowa używana potocznie
+- legal_form (string) - Forma prawna (sp. z o.o., S.A., sp.k., itp.)
+- industry (string) - Główna branża (konkretna, np. "Automotive - Parts Distribution", NIE ogólne "Motoryzacja")
+- sub_industries (string[]) - Lista pod-branż i specjalizacji (min 2-3, konkretne nisze)
+- description (string) - Szczegółowy opis działalności (200-300 słów) - CO DOKŁADNIE robi firma
+- tagline (string | null) - Hasło firmowe/slogan ze strony
+- year_founded (number | null) - Rok założenia
+- founder_info (string | null) - Założyciele i ich background
 
-5. CZEGO FIRMA SZUKA (KLUCZOWE dla matchowania!)
-   - Jakiego typu klientów poszukuje
-   - Jakiego typu partnerów szuka
-   - Jakich dostawców potrzebuje
-   - Otwarte rekrutacje - jakie stanowiska
-   - Plany ekspansji i rozwoju
-   - Wyzwania i problemy do rozwiązania
+SEKCJA 2: HISTORIA I KAMIENIE MILOWE
+- timeline (array) - Wydarzenia kluczowe (min 5 jeśli firma >10 lat):
+  [{year: number, event: string, impact: string, source: string}]
+- major_transformations (string[]) - Transformacje biznesowe (rebranding, zmiana modelu)
+- mergers_acquisitions (array) - Fuzje/przejęcia:
+  [{target: string, year: number, value_pln: number | null, details: string}]
+- expansion_history (string) - Historia ekspansji geograficznej
 
-6. POTENCJAŁ WSPÓŁPRACY
-   - Konkretne obszary możliwej współpracy
-   - Profil idealnego partnera biznesowego
-   - Potencjalne synergie
+SEKCJA 3: DANE FINANSOWE I RYNKOWE
+- revenue (object) - Ostatni znany przychód:
+  {amount: number | null, year: number, currency: "PLN", source: string}
+- revenue_history (array) - Ostatnie 3 lata:
+  [{year: number, amount: number, growth_pct: number | null}]
+- growth_rate (number | null) - Tempo wzrostu % YoY
+- profit_margin (number | null) - Marża zysku %
+- employee_count (number | null) - Liczba pracowników
+- employee_growth (string | null) - Wzrost zatrudnienia (np. "+15% w 2024")
+- market_share (number | null) - Udział w rynku %
+- market_position (string) - Pozycja rynkowa opisowo (lider, top 5, challenger)
+- ranking_positions (array) - Pozycje w rankingach:
+  [{ranking_name: string, position: number, year: number, source: string}]
+⚠️ KRYTYCZNE: TYLKO konkretne liczby ze źródeł. Jeśli brak → null, NIE SZACUJ!
 
-7. ZARZĄD I ORGANIZACJA
-   - Imiona, nazwiska, stanowiska osób z zarządu
-   - Właściciele (jeśli znani)
-   - Wielkość firmy, liczba pracowników
-   - Kultura organizacyjna
+SEKCJA 4: MODEL BIZNESOWY I STRATEGIA
+- business_model (string) - 200-300 słów: B2B/B2C, model sprzedaży, revenue streams
+- value_proposition (string) - Unikalna wartość dla klientów (100 słów)
+- competitive_advantages (string[]) - Przewagi konkurencyjne (min 3-5, konkretne)
+- pricing_strategy (string | null) - Strategia cenowa (premium/średni/budget)
+- target_markets (string[]) - Docelowe rynki i segmenty
+- go_to_market_strategy (string) - Jak dociera do klientów (kanały, metody)
 
-8. AKTUALNOŚCI I SYGNAŁY RYNKOWE
-   - Ostatnie newsy o firmie (z datami!)
-   - Ostatnie inwestycje i projekty
-   - Sygnały: wzrost, problemy, zmiany strategiczne
+SEKCJA 5: PRODUKTY I USŁUGI
+- products (array) - Lista produktów (min 5):
+  [{
+    name: string,
+    category: string,
+    description: string (50-100 słów, KONKRETNIE),
+    target_customer: string,
+    price_range: string | null,
+    key_features: string[],
+    availability: string
+  }]
+- services (array) - Lista usług (analogiczna struktura)
+- product_categories (string[]) - Główne kategorie produktowe
+- flagship_products (string[]) - Top 3-5 najważniejszych produktów/usług
+- new_products_2024 (string[]) - Nowe produkty z ostatniego roku
 
-9. DANE REJESTROWE
-   - NIP, REGON, KRS (TYLKO jeśli znalezione w źródłach!)
-   - Adres siedziby
-   - Rok założenia
+SEKCJA 6: MARKI I DEALERSTWA
+- own_brands (array) - Marki własne:
+  [{brand_name: string, description: string, market_segment: string, product_categories: string[]}]
+- represented_brands (array) - Marki reprezentowane/dealerstwa:
+  [{brand_name: string, manufacturer: string, distribution_scope: string, product_lines: string[]}]
+- partnerships (string[]) - Kluczowe partnerstwa strategiczne
 
-10. DANE FINANSOWE I RYNKOWE
-    - Przychody (kwoty PLN + dynamika YoY)
-    - Zatrudnienie (liczba + trend)
-    - Pozycja w rankingach branżowych
-    - Udział w rynku
+SEKCJA 7: LOKALIZACJE I ZASIĘG
+- headquarters (object) - Siedziba główna:
+  {address: string, city: string, postal_code: string | null, country: string, coordinates: {lat: number, lng: number} | null}
+- locations (array) - Wszystkie lokalizacje:
+  [{type: string (office/factory/warehouse/showroom/retail), city: string, address: string | null, opening_year: number | null, size_sqm: number | null, employee_count: number | null}]
+- geographic_coverage (object) - Zasięg:
+  {poland_regions: string[], poland_cities: string[], international: string[]}
+- distribution_network (string | null) - Opis sieci dystrybucji
 
-11. LOKALIZACJE I ZASIĘG
-    - Siedziba główna (pełny adres)
-    - Oddziały, fabryki, salony (lista z miastami)
-    - Zasięg geograficzny (województwa, kraje)
+SEKCJA 8: KLIENCI I PROJEKTY REFERENCYJNE
+- key_clients (array) - Kluczowi klienci:
+  [{client_name: string, industry: string, relationship_type: string, collaboration_start: number | null, notable_projects: string[]}]
+- reference_projects (array) - Flagowe projekty:
+  [{project_name: string, client: string, value_pln: number | null, year: number, scope: string, outcome: string, source: string}]
+- case_studies (string[]) - Linki do case studies
+- public_contracts (string[]) - Wygrane przetargi publiczne
 
-12. KLUCZOWI KLIENCI I PROJEKTY
-    - Top 5 klientów (nazwy firm)
-    - Flagowe projekty (nazwa, wartość, rok, klient)
-    - Referencje i case studies
+SEKCJA 9: KONKURENCJA
+- main_competitors (array) - Główni konkurenci:
+  [{company_name: string, comparison: string (wielkość, cena, jakość), competitive_edge: string}]
+- competitive_position (string) - 100 słów: pozycja vs konkurencja
+- market_trends (string) - Trendy rynkowe wpływające na firmę
 
-13. KONKURENCJA
-    - Główni konkurenci (nazwy firm)
-    - Pozycja vs konkurencja
-    - Przewaga konkurencyjna
+SEKCJA 10: CO FIRMA OFERUJE
+- offer_summary (string) - Podsumowanie oferty (100 słów)
+- unique_selling_points (string[]) - Unikalne cechy oferty (min 3-5)
+- certifications (string[]) - Certyfikaty jakości, ISO, branżowe
+- awards (string[]) - Nagrody i wyróżnienia
+- quality_standards (string[]) - Standardy jakości stosowane
 
-14. CSR/ESG
-    - Działania społeczne, fundacje
-    - Polityka środowiskowa
-    - Certyfikaty ESG
+SEKCJA 11: CZEGO FIRMA SZUKA (KLUCZOWE dla matchowania!)
+- seeking_clients (string) - Jakiego typu klientów poszukuje
+- seeking_partners (string) - Jakiego typu partnerów szuka
+- seeking_suppliers (string) - Jakich dostawców potrzebuje
+- seeking_investors (string | null) - Czy szuka inwestorów
+- hiring_positions (string[]) - Otwarte rekrutacje
+- expansion_plans (string) - Plany ekspansji i rozwoju
 
-ZASADY:
-- Podawaj TYLKO informacje znalezione w dostarczonych źródłach
-- NIE WYMYŚLAJ danych rejestrowych (NIP, REGON, KRS) - podawaj tylko jeśli są w źródłach
-- Dla każdej kluczowej informacji wskaż źródło
-- Oceń pewność danych (high/medium/low)
-- Skup się na informacjach przydatnych dla agentów matchujących
+SEKCJA 12: POTENCJAŁ WSPÓŁPRACY
+- collaboration_opportunities (string[]) - Konkretne obszary możliwej współpracy
+- ideal_partner_profile (string) - Profil idealnego partnera (100 słów)
+- synergy_potential (string[]) - Obszary synergii
+- partnership_benefits (string) - Korzyści ze współpracy
 
-Zwróć JSON z następującą strukturą:`
+SEKCJA 13: ZARZĄD I ORGANIZACJA
+- management (array) - Zarząd:
+  [{name: string, position: string, since_year: number | null, background: string}]
+- company_size (string) - mikro/mała/średnia/duża
+- organizational_structure (string | null) - Struktura organizacyjna
+- company_culture (string) - Kultura organizacyjna
+
+SEKCJA 14: NEWSY I SYGNAŁY RYNKOWE
+- recent_news (array) - Ostatnie newsy (min 5):
+  [{date: string (YYYY-MM-DD), title: string, summary: string, source: string, url: string | null, sentiment: "positive" | "neutral" | "negative", importance: "high" | "medium" | "low"}]
+- market_signals (string[]) - Sygnały rynkowe (wzrost, problemy, zmiany)
+- recent_investments (array) - Ostatnie inwestycje:
+  [{amount_pln: number | null, purpose: string, year: number}]
+- overall_sentiment (string) - positive/neutral/negative
+
+SEKCJA 15: CSR I ZRÓWNOWAŻONY ROZWÓJ
+- csr_activities (array) - Działania CSR:
+  [{activity_name: string, description: string, beneficiaries: string, year_started: number | null}]
+- environmental_policy (string | null) - Polityka środowiskowa
+- social_initiatives (string[]) - Inicjatywy społeczne
+- sustainability_goals (string[]) - Cele zrównoważonego rozwoju
+- charity_partnerships (string[]) - Partnerstwa charytatywne
+
+SEKCJA 16: DANE REJESTROWE
+- nip (string | null) - NIP (10 cyfr)
+- regon (string | null) - REGON (9 lub 14 cyfr)
+- krs (string | null) - KRS (10 cyfr)
+- registration_address (string) - Adres rejestrowy
+- registration_date (string | null) - Data rejestracji
+⚠️ KRYTYCZNE: Źródło TYLKO Perplexity Query 6 z oficjalnych rejestrów. NIE WYMYŚLAJ!
+
+METADATA
+- analysis_confidence (string) - overall: high/medium/low
+- data_freshness (string) - ocena aktualności danych
+- missing_sections (string[]) - sekcje bez danych
+- primary_sources (string[]) - główne źródła
+
+═══════════════════════════════════════════════════════════════════
+🎯 ZASADY SYNTEZY
+═══════════════════════════════════════════════════════════════════
+
+Priorytet źródeł:
+1. Perplexity Query 2 - dane finansowe (LICZBY KRYTYCZNE)
+2. Firecrawl products/about - produkty, oferta (SZCZEGÓŁY)
+3. Perplexity Query 1 - profil, historia, model biznesowy
+4. Perplexity Query 5 - newsy, CSR (AKTUALNOŚCI)
+5. Perplexity Query 3 - lokalizacje (ADRESY)
+6. Perplexity Query 6 - dane rejestrowe (NIP, KRS)
+
+Konflikty danych:
+- Różne źródła → priorytet ma nowsze
+- Różne liczby → podaj obie z source
+- Brak potwierdzenia → "unconfirmed" lub null
+
+Jakość opisów:
+- Krótkie: 50-100 słów
+- Średnie: 100-200 słów  
+- Długie: 200-300 słów
+- ZAWSZE KONKRETNIE: nie "oferuje usługi IT" → "oferuje wdrożenia SAP, outsourcing 50+ specjalistów, cloud AWS/Azure"
+
+Confidence per sekcja:
+- "high" - 2+ źródła potwierdzają
+- "medium" - 1 źródło
+- "low" - inferowane/niepełne
+- Dla sekcji bez danych → null lub pusta tablica
+
+═══════════════════════════════════════════════════════════════════
+⚠️ ZASADY KRYTYCZNE - CO NIE ROBIĆ
+═══════════════════════════════════════════════════════════════════
+❌ NIE wymyślaj danych finansowych (przychody, zyski)
+❌ NIE szacuj przychodów bez konkretnych danych
+❌ NIE kopiuj 1:1 tekstów (parafrazuj)
+❌ NIE pomijaj negatywnych newsów
+❌ NIE używaj ogólników ("lider rynku" → "3. miejsce w rankingu Forbes 500")
+❌ NIE podawaj NIP/REGON/KRS bez źródła
+❌ NIE wymyślaj osób z zarządu
+
+Odpowiedź TYLKO w JSON, bez markdown, bez wstępu, bez komentarzy.`
       : `Jesteś ekspertem w analizie firm polskich.
 
 ⚠️ NIE MASZ dostępu do internetu ani baz danych.
@@ -901,127 +1018,172 @@ Możesz TYLKO sugerować prawdopodobną branżę i profil na podstawie nazwy fir
 ZASADY:
 - Wszystko co podajesz to SUGESTIE, nie fakty
 - NIE wymyślaj NIP, REGON, KRS, adresów, osób z zarządu
+- Ustaw confidence: "low" i dodaj analizis_notes o braku danych
 
-Zwróć JSON z następującą strukturą:`;
+Zwróć JSON z podstawową strukturą - większość pól jako null.`;
 
     const jsonStructure = `{
-  "name": "Oficjalna nazwa firmy",
-  "industry": "Branża główna",
-  "sub_industries": ["Subbranże", "Specjalizacje"],
-  "description": "Pełny opis działalności firmy (3-5 zdań)",
+  "name": "Pełna oficjalna nazwa firmy z formą prawną",
+  "short_name": "Nazwa skrócona/handlowa",
+  "legal_form": "Forma prawna lub null",
+  "industry": "Branża główna (konkretna)",
+  "sub_industries": ["Subbranże", "Specjalizacje niszowe"],
+  "description": "Szczegółowy opis działalności (200-300 słów)",
+  "tagline": "Slogan firmowy lub null",
+  "year_founded": 2007,
+  "founder_info": "Informacje o założycielach lub null",
   
-  "business_model": "Jak firma zarabia pieniądze",
-  "value_proposition": "Unikalna propozycja wartości (USP)",
-  "competitive_position": "Pozycja rynkowa vs konkurencja",
-  "market_share_info": "Udział w rynku jeśli znany lub null",
-  
-  "core_activities": ["Główne obszary działalności"],
-  "products": [
-    {"name": "Nazwa produktu", "description": "Opis", "target": "Dla kogo"}
+  "timeline": [
+    {"year": 2007, "event": "Założenie firmy", "impact": "Start działalności", "source": "strona WWW"}
   ],
-  "services": [
-    {"name": "Nazwa usługi", "description": "Opis", "target": "Dla kogo"}
+  "major_transformations": ["Transformacje biznesowe"],
+  "mergers_acquisitions": [
+    {"target": "Nazwa przejętej firmy", "year": 2020, "value_pln": null, "details": "Szczegóły"}
   ],
-  "brands_owned": ["Marki własne firmy"],
-  "brands_represented": ["Marki reprezentowane/dealerstwa"],
-  "key_projects": ["Flagowe projekty - krótki opis tekstowy"],
+  "expansion_history": "Historia ekspansji geograficznej",
   
-  "offer_summary": "Pełna oferta firmy w 2-3 zdaniach",
-  "unique_selling_points": ["Co wyróżnia firmę na rynku"],
-  "certifications": ["Certyfikaty, nagrody, wyróżnienia"],
-  "partnerships": ["Kluczowi partnerzy biznesowi"],
-  
-  "seeking_clients": "Jakiego typu klientów szuka firma",
-  "seeking_partners": "Jakiego typu partnerów biznesowych szuka",
-  "seeking_suppliers": "Jakich dostawców/podwykonawców potrzebuje lub null",
-  "hiring_positions": ["Otwarte rekrutacje - stanowiska"],
-  "expansion_plans": "Plany rozwoju, ekspansji lub null",
-  "pain_points": ["Wyzwania, problemy do rozwiązania"],
-  
-  "collaboration_opportunities": [
-    {"area": "Obszar współpracy", "description": "Opis możliwości", "fit_for": "Kto pasuje"}
+  "revenue": {"amount": 2500000000, "year": 2024, "currency": "PLN", "source": "Forbes"},
+  "revenue_history": [
+    {"year": 2024, "amount": 2500000000, "growth_pct": 15},
+    {"year": 2023, "amount": 2170000000, "growth_pct": 12}
   ],
-  "ideal_partner_profile": "Profil idealnego partnera biznesowego",
-  "synergy_potential": ["Obszary potencjalnych synergii"],
-  
-  "management": [
-    {"name": "Imię Nazwisko", "position": "Stanowisko", "source": "URL źródła lub nazwa źródła"}
-  ],
-  "company_size": "mikro/mała/średnia/duża",
-  "employee_count": "Liczba lub przedział lub null",
-  "company_culture": "Kultura organizacyjna lub null",
-  "founding_year": "Rok założenia lub null",
-  "founding_story": "Historia powstania firmy lub null",
-  
-  "recent_news": [
-    {"date": "YYYY-MM lub rok", "title": "Tytuł newsa", "summary": "Krótkie streszczenie", "source": "URL lub nazwa źródła"}
-  ],
-  "market_signals": ["Sygnały rynkowe: wzrost, problemy, zmiany"],
-  "sentiment": "positive/neutral/negative",
-  
-  "legal_form": "Forma prawna (sp. z o.o., S.A., itp.) lub null",
-  "nip": "NIP (10 cyfr, tylko jeśli znaleziony!) lub null",
-  "regon": "REGON lub null",
-  "krs": "KRS lub null",
-  "address": "Adres siedziby lub null",
-  "city": "Miasto lub null",
-  "postal_code": "Kod pocztowy lub null",
-  
-  "revenue_data": [
-    {"year": 2024, "value_pln": 2500000000, "source": "Forbes/nazwa źródła"}
-  ],
-  "revenue_growth_yoy": "Dynamika wzrostu % YoY lub null",
-  "profit_info": "Informacje o zysku lub null",
-  "employee_count_history": [
-    {"year": 2024, "count": 1200}
-  ],
+  "growth_rate": 15,
+  "profit_margin": null,
+  "employee_count": 1200,
+  "employee_growth": "+10% w 2024",
+  "market_share": 12,
+  "market_position": "Top 5 w Polsce w segmencie X",
   "ranking_positions": [
-    {"ranking": "Nazwa rankingu", "position": 150, "year": 2024, "source": "źródło"}
+    {"ranking_name": "Forbes Diamenty", "position": 150, "year": 2024, "source": "Forbes"}
   ],
-  "market_share_percent": "Udział w rynku % lub null",
   
-  "headquarters_address": "Pełny adres siedziby głównej lub null",
-  "locations": [
-    {"type": "oddział/fabryka/salon/magazyn", "city": "Miasto", "address": "Adres jeśli znany", "region": "Województwo"}
-  ],
-  "geographic_reach": {
-    "provinces": ["Lista województw"],
-    "countries": ["Lista krajów"],
-    "delivery_range": "Zasięg dostaw/obsługi"
-  },
+  "business_model": "Opis modelu biznesowego (200-300 słów)",
+  "value_proposition": "Unikalna propozycja wartości",
+  "competitive_advantages": ["Przewaga 1", "Przewaga 2", "Przewaga 3"],
+  "pricing_strategy": "premium/średni/budget lub null",
+  "target_markets": ["Segment 1", "Segment 2"],
+  "go_to_market_strategy": "Strategia dotarcia do klientów",
   
-  "key_clients": [
-    {"name": "Nazwa firmy klienta", "industry": "Branża klienta", "relationship": "Typ relacji"}
-  ],
-  "flagship_projects": [
+  "products": [
     {
-      "name": "Nazwa projektu",
-      "client": "Nazwa klienta",
-      "value_pln": 10000000,
-      "year": 2024,
-      "scope": "Zakres projektu",
-      "source": "Źródło informacji"
+      "name": "Nazwa produktu",
+      "category": "Kategoria",
+      "description": "Szczegółowy opis (50-100 słów)",
+      "target_customer": "Dla kogo",
+      "price_range": "100-500 PLN lub null",
+      "key_features": ["Cecha 1", "Cecha 2"],
+      "availability": "Dostępność"
     }
   ],
-  "case_studies": ["Linki lub opisy case studies"],
-  "references": ["Referencje od klientów"],
-  
-  "competitors": [
-    {"name": "Nazwa konkurenta", "size": "mała/średnia/duża", "comparison": "Krótkie porównanie"}
+  "services": [
+    {
+      "name": "Nazwa usługi",
+      "category": "Kategoria",
+      "description": "Szczegółowy opis",
+      "target_customer": "Dla kogo",
+      "price_range": null,
+      "key_features": ["Cecha 1"],
+      "availability": "Na zamówienie"
+    }
   ],
-  "competitive_advantage": "Główna przewaga konkurencyjna",
-  "market_position_vs_competitors": "Pozycja vs główni konkurenci",
+  "product_categories": ["Kategoria 1", "Kategoria 2"],
+  "flagship_products": ["Produkt 1", "Produkt 2"],
+  "new_products_2024": ["Nowy produkt 2024"],
   
-  "csr_activities": ["Lista działań CSR"],
-  "esg_certifications": ["Certyfikaty ESG"],
-  "sustainability_initiatives": ["Inicjatywy zrównoważonego rozwoju"],
-  "foundations_supported": ["Wspierane fundacje"],
-  "community_engagement": "Zaangażowanie w lokalną społeczność lub null",
+  "own_brands": [
+    {"brand_name": "Marka własna", "description": "Opis", "market_segment": "Segment", "product_categories": ["Kategoria"]}
+  ],
+  "represented_brands": [
+    {"brand_name": "Marka zewnętrzna", "manufacturer": "Producent", "distribution_scope": "Polska", "product_lines": ["Linia produktów"]}
+  ],
+  "partnerships": ["Partner strategiczny 1"],
   
-  "confidence": "high/medium/low",
-  "data_freshness": "Ocena aktualności danych",
-  "sources": ["Lista URL źródeł"],
-  "analysis_notes": ["Uwagi o jakości danych, brakujących informacjach"]
+  "headquarters": {
+    "address": "ul. Przykładowa 1",
+    "city": "Warszawa",
+    "postal_code": "00-001",
+    "country": "Polska",
+    "coordinates": null
+  },
+  "locations": [
+    {"type": "office", "city": "Kraków", "address": "ul. Inna 5", "opening_year": 2015, "size_sqm": null, "employee_count": 50}
+  ],
+  "geographic_coverage": {
+    "poland_regions": ["mazowieckie", "małopolskie"],
+    "poland_cities": ["Warszawa", "Kraków"],
+    "international": ["Niemcy", "Czechy"]
+  },
+  "distribution_network": "Opis sieci dystrybucji lub null",
+  
+  "key_clients": [
+    {"client_name": "Firma Klient", "industry": "Branża", "relationship_type": "Stały klient", "collaboration_start": 2018, "notable_projects": ["Projekt X"]}
+  ],
+  "reference_projects": [
+    {"project_name": "Nazwa projektu", "client": "Klient", "value_pln": 10000000, "year": 2024, "scope": "Zakres", "outcome": "Rezultat", "source": "Źródło"}
+  ],
+  "case_studies": ["URL do case study"],
+  "public_contracts": ["Przetarg 1"],
+  
+  "main_competitors": [
+    {"company_name": "Konkurent", "comparison": "Porównanie wielkości, cen", "competitive_edge": "Ich przewaga"}
+  ],
+  "competitive_position": "Opis pozycji konkurencyjnej (100 słów)",
+  "market_trends": "Trendy rynkowe",
+  
+  "offer_summary": "Podsumowanie oferty (100 słów)",
+  "unique_selling_points": ["USP 1", "USP 2", "USP 3"],
+  "certifications": ["ISO 9001", "ISO 14001"],
+  "awards": ["Nagroda 1"],
+  "quality_standards": ["Standard 1"],
+  
+  "seeking_clients": "Opis szukanych klientów",
+  "seeking_partners": "Opis szukanych partnerów",
+  "seeking_suppliers": "Opis szukanych dostawców lub null",
+  "seeking_investors": null,
+  "hiring_positions": ["Stanowisko 1", "Stanowisko 2"],
+  "expansion_plans": "Plany ekspansji",
+  
+  "collaboration_opportunities": ["Możliwość 1", "Możliwość 2"],
+  "ideal_partner_profile": "Profil idealnego partnera (100 słów)",
+  "synergy_potential": ["Synergia 1"],
+  "partnership_benefits": "Korzyści ze współpracy",
+  
+  "management": [
+    {"name": "Jan Kowalski", "position": "Prezes Zarządu", "since_year": 2010, "background": "Kariera zawodowa"}
+  ],
+  "company_size": "średnia",
+  "organizational_structure": "Opis struktury lub null",
+  "company_culture": "Opis kultury organizacyjnej",
+  
+  "recent_news": [
+    {"date": "2024-06-15", "title": "Tytuł newsa", "summary": "Streszczenie", "source": "Źródło", "url": null, "sentiment": "positive", "importance": "high"}
+  ],
+  "market_signals": ["Sygnał 1", "Sygnał 2"],
+  "recent_investments": [
+    {"amount_pln": 50000000, "purpose": "Cel inwestycji", "year": 2024}
+  ],
+  "overall_sentiment": "positive",
+  
+  "csr_activities": [
+    {"activity_name": "Nazwa działania", "description": "Opis", "beneficiaries": "Beneficjenci", "year_started": 2020}
+  ],
+  "environmental_policy": "Polityka środowiskowa lub null",
+  "social_initiatives": ["Inicjatywa 1"],
+  "sustainability_goals": ["Cel 1"],
+  "charity_partnerships": ["Fundacja 1"],
+  
+  "nip": "1234567890",
+  "regon": "123456789",
+  "krs": "0000123456",
+  "registration_address": "Adres rejestrowy",
+  "registration_date": "2007-05-15",
+  
+  "analysis_confidence": "high",
+  "data_freshness": "Dane z 2024, częściowo z 2023",
+  "missing_sections": ["sekcje bez danych"],
+  "primary_sources": ["źródło 1", "źródło 2"],
+  "sources": ["URL źródeł"],
+  "analysis_notes": ["Uwagi o jakości danych"]
 }`;
 
     // Build user content with all gathered data
@@ -1180,8 +1342,8 @@ ${jsonStructure}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 12000,
-        temperature: 0.2,
+        max_tokens: 16000,
+        temperature: 0.1,
       }),
     });
 
@@ -1280,29 +1442,66 @@ ${jsonStructure}
         enrichedData.krs = cleanedKrs.length === 10 ? cleanedKrs : null;
       }
       
-      // Add metadata about the enrichment process (with extended scraping stats)
+      // Add metadata about the enrichment process (with extended scraping stats and 16-section analysis info)
+      const perplexityQueriesCount = [
+        hasProfileInsights, hasFinancialInsights, hasLocationInsights,
+        hasProjectsInsights, hasNewsInsights, hasRegistryInsights
+      ].filter(Boolean).length;
+      
+      // Identify missing sections based on what AI returned
+      const missingSections: string[] = [];
+      if (!enrichedData.timeline?.length) missingSections.push('timeline');
+      if (!enrichedData.revenue?.amount) missingSections.push('revenue');
+      if (!enrichedData.products?.length && !enrichedData.services?.length) missingSections.push('products_services');
+      if (!enrichedData.own_brands?.length && !enrichedData.represented_brands?.length) missingSections.push('brands');
+      if (!enrichedData.locations?.length) missingSections.push('locations');
+      if (!enrichedData.key_clients?.length) missingSections.push('key_clients');
+      if (!enrichedData.reference_projects?.length) missingSections.push('reference_projects');
+      if (!enrichedData.main_competitors?.length) missingSections.push('competitors');
+      if (!enrichedData.management?.length) missingSections.push('management');
+      if (!enrichedData.recent_news?.length) missingSections.push('recent_news');
+      if (!enrichedData.csr_activities?.length) missingSections.push('csr');
+      if (!enrichedData.nip && !enrichedData.regon && !enrichedData.krs) missingSections.push('registry_data');
+      
+      // Calculate overall confidence based on data availability
+      let overallConfidence = 'low';
+      if (perplexityQueriesCount >= 4 && scrapingStats.successful_scrapes >= 10) {
+        overallConfidence = 'high';
+      } else if (perplexityQueriesCount >= 2 || scrapingStats.successful_scrapes >= 5) {
+        overallConfidence = 'medium';
+      }
+      
       enrichedData.enrichment_metadata = {
-        perplexity_profile_used: hasProfileInsights,
-        perplexity_financial_used: hasFinancialInsights,
-        perplexity_location_used: hasLocationInsights,
-        perplexity_projects_used: hasProjectsInsights,
-        perplexity_news_used: hasNewsInsights,
-        perplexity_registry_used: hasRegistryInsights,
-        scraping_stats: {
+        completed_at: new Date().toISOString(),
+        perplexity_queries_used: perplexityQueriesCount,
+        perplexity_queries_detail: {
+          profile: hasProfileInsights,
+          financial: hasFinancialInsights,
+          location: hasLocationInsights,
+          projects: hasProjectsInsights,
+          news: hasNewsInsights,
+          registry: hasRegistryInsights
+        },
+        firecrawl_stats: {
           total_urls_found: scrapingStats.total_urls_found,
           pages_scraped: scrapingStats.pages_scraped,
           successful_scrapes: scrapingStats.successful_scrapes,
           total_words: scrapingStats.total_words,
           categories_found: scrapingStats.categories_found
         },
-        pages_scraped_urls: scrapedPages.filter(p => p.content).map(p => ({
+        pages_scraped_detail: scrapedPages.filter(p => p.content).map(p => ({
           url: p.url,
           category: p.category,
           priority: p.priority,
-          word_count: p.word_count
+          word_count: p.word_count,
+          title: p.title
         })),
+        overall_confidence: overallConfidence,
+        data_freshness: new Date().getFullYear().toString(),
+        missing_sections: missingSections,
+        sections_with_data: 16 - missingSections.length,
         perplexity_citations: perplexityCitations,
-        analyzed_at: new Date().toISOString()
+        sources_count: perplexityCitations.length
       };
       
     } catch (parseError) {
