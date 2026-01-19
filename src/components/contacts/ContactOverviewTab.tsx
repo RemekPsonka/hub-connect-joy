@@ -96,12 +96,9 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
     collaboration_areas?: string;
   } | null = null;
   
-  if (company?.ai_analysis) {
-    try {
-      aiAnalysis = JSON.parse(company.ai_analysis);
-    } catch {
-      // Invalid JSON, ignore
-    }
+  // ai_analysis is now JSONB, not string
+  if (company?.ai_analysis && typeof company.ai_analysis === 'object') {
+    aiAnalysis = company.ai_analysis as { description?: string; services?: string; collaboration_areas?: string };
   }
 
   const hasCompanyAI = !!(company?.description || aiAnalysis?.description);

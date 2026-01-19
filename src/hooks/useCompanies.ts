@@ -380,35 +380,48 @@ export function useRegenerateCompanyAI() {
       const enriched = result?.data || result;
       const finalWebsite = website || enriched.suggested_website || null;
       
+      // Wyciągnij metadata z enrichment_metadata
+      const enrichmentMeta = enriched.enrichment_metadata || {};
+      
+      // Oblicz confidence score (0-1) z 'high'/'medium'/'low'
+      const confidenceMap: Record<string, number> = {
+        high: 0.85,
+        medium: 0.55,
+        low: 0.25
+      };
+      const confidenceScore = confidenceMap[enrichmentMeta.overall_confidence as string] || 0.5;
+      
+      // Przygotuj data sources info
+      const dataSources = {
+        perplexity: {
+          queries_used: enrichmentMeta.perplexity_queries_used || 0,
+          queries_detail: enrichmentMeta.perplexity_queries_detail || {}
+        },
+        firecrawl: {
+          pages_scraped: enrichmentMeta.firecrawl_stats?.successful_scrapes || 0,
+          total_words: enrichmentMeta.firecrawl_stats?.total_words || 0,
+          categories: enrichmentMeta.firecrawl_stats?.categories_found || []
+        },
+        ai_model: 'gemini-2.5-pro',
+        completed_at: enrichmentMeta.completed_at || new Date().toISOString()
+      };
+      
+      // ai_analysis jest teraz JSONB - zapisujemy cały obiekt bez stringify
       const updateData: CompanyUpdate = {
         description: enriched.description || null,
-        ai_analysis: JSON.stringify({
-          // Pełne dane z analizy AI
-          what_company_does: enriched.what_company_does || null,
-          what_company_offers: enriched.what_company_offers || null,
-          what_company_seeks: enriched.what_company_seeks || null,
-          main_products_services: enriched.main_products_services || [],
-          target_clients: enriched.target_clients || null,
-          competitive_advantage: enriched.competitive_advantage || null,
-          management: enriched.management || [],
-          company_type: enriched.company_type || null,
-          founding_year: enriched.founding_year || null,
-          recent_news: enriched.recent_news || null,
-          company_culture: enriched.company_culture || null,
-          services: enriched.services || [],
-          collaboration_areas: enriched.collaboration_areas || [],
-          confidence: enriched.confidence || 'medium',
-          employee_count_estimate: enriched.employee_count_estimate || null,
-          sources: enriched.sources || [],
-          analyzed_at: new Date().toISOString(),
-        }),
+        ai_analysis: enriched, // Pełna analiza jako JSONB
+        company_analysis_status: 'completed' as const,
+        company_analysis_date: new Date().toISOString(),
+        analysis_confidence_score: confidenceScore,
+        analysis_data_sources: dataSources,
+        analysis_missing_sections: enrichmentMeta.missing_sections || [],
         industry: enriched.industry || null,
         logo_url: enriched.logo_url || null,
-        // Wszystkie pola adresowe i rejestrowe
+        employee_count: enriched.employee_count?.toString() || null,
         website: finalWebsite,
-        address: enriched.address || null,
-        city: enriched.city || null,
-        postal_code: enriched.postal_code || null,
+        address: enriched.headquarters?.address || enriched.address || null,
+        city: enriched.headquarters?.city || enriched.city || null,
+        postal_code: enriched.headquarters?.postal_code || enriched.postal_code || null,
         nip: enriched.nip || null,
         regon: enriched.regon || null,
         krs: enriched.krs || null,

@@ -250,8 +250,13 @@ export type Database = {
       companies: {
         Row: {
           address: string | null
-          ai_analysis: string | null
+          ai_analysis: Json | null
+          analysis_confidence_score: number | null
+          analysis_data_sources: Json | null
+          analysis_missing_sections: string[] | null
           city: string | null
+          company_analysis_date: string | null
+          company_analysis_status: string | null
           country: string | null
           created_at: string
           description: string | null
@@ -271,8 +276,13 @@ export type Database = {
         }
         Insert: {
           address?: string | null
-          ai_analysis?: string | null
+          ai_analysis?: Json | null
+          analysis_confidence_score?: number | null
+          analysis_data_sources?: Json | null
+          analysis_missing_sections?: string[] | null
           city?: string | null
+          company_analysis_date?: string | null
+          company_analysis_status?: string | null
           country?: string | null
           created_at?: string
           description?: string | null
@@ -292,8 +302,13 @@ export type Database = {
         }
         Update: {
           address?: string | null
-          ai_analysis?: string | null
+          ai_analysis?: Json | null
+          analysis_confidence_score?: number | null
+          analysis_data_sources?: Json | null
+          analysis_missing_sections?: string[] | null
           city?: string | null
+          company_analysis_date?: string | null
+          company_analysis_status?: string | null
           country?: string | null
           created_at?: string
           description?: string | null

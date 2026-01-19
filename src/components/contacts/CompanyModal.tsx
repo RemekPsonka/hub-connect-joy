@@ -69,14 +69,16 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
   const updateCompany = useUpdateCompany();
   const regenerateAI = useRegenerateCompanyAI();
 
-  // Parse AI analysis
-  const parseAIAnalysis = (aiAnalysis: string | null) => {
-    if (!aiAnalysis) return { services: '', collaboration_areas: '' };
+  // Parse AI analysis - now ai_analysis is JSONB, not string
+  const parseAIAnalysis = (aiAnalysis: unknown) => {
+    if (!aiAnalysis || typeof aiAnalysis !== 'object') return { services: '', collaboration_areas: '' };
     try {
-      const parsed = JSON.parse(aiAnalysis);
+      const parsed = aiAnalysis as Record<string, unknown>;
+      const services = parsed.services;
+      const collab = parsed.collaboration_areas;
       return {
-        services: Array.isArray(parsed.services) ? parsed.services.join(', ') : (parsed.services || ''),
-        collaboration_areas: Array.isArray(parsed.collaboration_areas) ? parsed.collaboration_areas.join(', ') : (parsed.collaboration_areas || ''),
+        services: Array.isArray(services) ? services.join(', ') : (typeof services === 'string' ? services : ''),
+        collaboration_areas: Array.isArray(collab) ? collab.join(', ') : (typeof collab === 'string' ? collab : ''),
       };
     } catch {
       return { services: '', collaboration_areas: '' };
@@ -130,10 +132,11 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
   }, [open, company, form]);
 
   const onSubmit = async (data: CompanyFormData) => {
-    const aiAnalysis = JSON.stringify({
+    // ai_analysis is now JSONB, pass as object
+    const aiAnalysis = {
       services: data.services ? data.services.split(',').map(s => s.trim()).filter(Boolean) : [],
       collaboration_areas: data.collaboration_areas ? data.collaboration_areas.split(',').map(s => s.trim()).filter(Boolean) : [],
-    });
+    };
 
     await updateCompany.mutateAsync({
       id: company.id,
@@ -166,7 +169,7 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
       industryHint: values.industry,
     });
 
-    // Update form with new AI data
+    // Update form with new AI data - ai_analysis is now JSONB
     const newAiData = parseAIAnalysis(result.ai_analysis);
     form.setValue('description', result.description || '');
     form.setValue('industry', result.industry || '');

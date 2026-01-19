@@ -41,6 +41,141 @@ function isValidNIP(nip: string | null): boolean {
   return cleaned.length === 10;
 }
 
+// ============= CONFIDENCE SCORE CALCULATOR =============
+// Calculates overall confidence score (0-1) based on data completeness
+function calculateConfidenceScore(analysisData: Record<string, unknown>): number {
+  const sectionScores: Record<string, number> = {
+    basic_info: 0,
+    history: 0,
+    financial: 0,
+    business_model: 0,
+    products: 0,
+    brands: 0,
+    locations: 0,
+    clients_projects: 0,
+    competition: 0,
+    offer: 0,
+    seeking: 0,
+    collaboration: 0,
+    management: 0,
+    news: 0,
+    csr: 0,
+    registry: 0
+  };
+  
+  // Helper to safely get array length
+  const arrLen = (val: unknown): number => Array.isArray(val) ? val.length : 0;
+  const strLen = (val: unknown): number => typeof val === 'string' ? val.length : 0;
+  
+  // SEKCJA 1: Basic Info (max 10 points)
+  if (analysisData.name) sectionScores.basic_info += 3;
+  if (analysisData.industry) sectionScores.basic_info += 2;
+  if (strLen(analysisData.description) > 100) sectionScores.basic_info += 3;
+  if (analysisData.year_founded) sectionScores.basic_info += 2;
+  
+  // SEKCJA 2: History (max 8 points)
+  if (arrLen(analysisData.timeline) >= 3) sectionScores.history += 4;
+  if (arrLen(analysisData.timeline) >= 5) sectionScores.history += 2;
+  if (arrLen(analysisData.major_transformations) > 0) sectionScores.history += 2;
+  
+  // SEKCJA 3: Financial (max 15 points) - NAJWAŻNIEJSZA
+  const revenue = analysisData.revenue as Record<string, unknown> | undefined;
+  if (revenue?.amount) sectionScores.financial += 5;
+  if (arrLen(analysisData.revenue_history) >= 2) sectionScores.financial += 3;
+  if (analysisData.employee_count) sectionScores.financial += 3;
+  if (analysisData.market_position) sectionScores.financial += 2;
+  if (arrLen(analysisData.ranking_positions) > 0) sectionScores.financial += 2;
+  
+  // SEKCJA 4: Business Model (max 8 points)
+  if (strLen(analysisData.business_model) > 100) sectionScores.business_model += 4;
+  if (arrLen(analysisData.competitive_advantages) >= 3) sectionScores.business_model += 4;
+  
+  // SEKCJA 5: Products (max 10 points)
+  if (arrLen(analysisData.products) >= 3) sectionScores.products += 5;
+  if (arrLen(analysisData.products) >= 5) sectionScores.products += 2;
+  if (arrLen(analysisData.flagship_products) > 0) sectionScores.products += 3;
+  
+  // SEKCJA 6: Brands (max 5 points)
+  if (arrLen(analysisData.own_brands) > 0) sectionScores.brands += 3;
+  if (arrLen(analysisData.represented_brands) > 0) sectionScores.brands += 2;
+  
+  // SEKCJA 7: Locations (max 8 points)
+  const headquarters = analysisData.headquarters as Record<string, unknown> | undefined;
+  if (headquarters?.address) sectionScores.locations += 3;
+  if (arrLen(analysisData.locations) >= 2) sectionScores.locations += 3;
+  const geoCoverage = analysisData.geographic_coverage as Record<string, unknown> | undefined;
+  if (arrLen(geoCoverage?.poland_cities) > 0) sectionScores.locations += 2;
+  
+  // SEKCJA 8: Clients & Projects (max 10 points)
+  if (arrLen(analysisData.reference_projects) >= 3) sectionScores.clients_projects += 5;
+  if (arrLen(analysisData.reference_projects) >= 5) sectionScores.clients_projects += 2;
+  if (arrLen(analysisData.key_clients) > 0) sectionScores.clients_projects += 3;
+  
+  // SEKCJA 9: Competition (max 5 points)
+  if (arrLen(analysisData.main_competitors) >= 3) sectionScores.competition += 3;
+  if (analysisData.competitive_position) sectionScores.competition += 2;
+  
+  // SEKCJA 10: Offer (max 5 points)
+  if (arrLen(analysisData.unique_selling_points) >= 3) sectionScores.offer += 3;
+  if (arrLen(analysisData.certifications) > 0) sectionScores.offer += 2;
+  
+  // SEKCJA 11: Seeking (max 3 points)
+  if (analysisData.seeking_clients || analysisData.seeking_partners) sectionScores.seeking += 3;
+  
+  // SEKCJA 12: Collaboration (max 3 points)
+  if (arrLen(analysisData.collaboration_opportunities) > 0) sectionScores.collaboration += 3;
+  
+  // SEKCJA 13: Management (max 5 points)
+  if (arrLen(analysisData.management) >= 2) sectionScores.management += 3;
+  if (analysisData.company_culture) sectionScores.management += 2;
+  
+  // SEKCJA 14: News (max 8 points)
+  if (arrLen(analysisData.recent_news) >= 3) sectionScores.news += 4;
+  if (arrLen(analysisData.recent_news) >= 5) sectionScores.news += 2;
+  if (arrLen(analysisData.market_signals) > 0) sectionScores.news += 2;
+  
+  // SEKCJA 15: CSR (max 3 points)
+  if (arrLen(analysisData.csr_activities) > 0) sectionScores.csr += 3;
+  
+  // SEKCJA 16: Registry (max 4 points)
+  if (analysisData.nip) sectionScores.registry += 2;
+  if (analysisData.krs || analysisData.regon) sectionScores.registry += 2;
+  
+  // Suma (max 110 points) → normalize do 0-1
+  const totalScore = Object.values(sectionScores).reduce((sum, score) => sum + score, 0);
+  const confidence = Math.min(totalScore / 110, 1.0);
+  
+  return Math.round(confidence * 100) / 100; // Round to 2 decimals
+}
+
+// Identify missing sections based on analysis data
+function identifyMissingSections(analysisData: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  const arrLen = (val: unknown): number => Array.isArray(val) ? val.length : 0;
+  
+  if (!analysisData.name || !analysisData.industry) missing.push('basic_info');
+  if (arrLen(analysisData.timeline) === 0) missing.push('history');
+  
+  const revenue = analysisData.revenue as Record<string, unknown> | undefined;
+  if (!revenue?.amount && !analysisData.employee_count) missing.push('financial');
+  
+  if (!analysisData.business_model) missing.push('business_model');
+  if (arrLen(analysisData.products) === 0) missing.push('products');
+  
+  const headquarters = analysisData.headquarters as Record<string, unknown> | undefined;
+  if (!headquarters?.address && arrLen(analysisData.locations) === 0) missing.push('locations');
+  
+  if (arrLen(analysisData.reference_projects) === 0 && arrLen(analysisData.key_clients) === 0) {
+    missing.push('clients_projects');
+  }
+  if (arrLen(analysisData.main_competitors) === 0) missing.push('competition');
+  if (arrLen(analysisData.management) === 0) missing.push('management');
+  if (arrLen(analysisData.recent_news) === 0) missing.push('news');
+  if (!analysisData.nip && !analysisData.krs) missing.push('registry');
+  
+  return missing;
+}
+
 // Extended ScrapedPage interface with categorization
 interface ScrapedPage {
   url: string;
@@ -1448,28 +1583,21 @@ ${jsonStructure}
         hasProjectsInsights, hasNewsInsights, hasRegistryInsights
       ].filter(Boolean).length;
       
-      // Identify missing sections based on what AI returned
-      const missingSections: string[] = [];
-      if (!enrichedData.timeline?.length) missingSections.push('timeline');
-      if (!enrichedData.revenue?.amount) missingSections.push('revenue');
-      if (!enrichedData.products?.length && !enrichedData.services?.length) missingSections.push('products_services');
-      if (!enrichedData.own_brands?.length && !enrichedData.represented_brands?.length) missingSections.push('brands');
-      if (!enrichedData.locations?.length) missingSections.push('locations');
-      if (!enrichedData.key_clients?.length) missingSections.push('key_clients');
-      if (!enrichedData.reference_projects?.length) missingSections.push('reference_projects');
-      if (!enrichedData.main_competitors?.length) missingSections.push('competitors');
-      if (!enrichedData.management?.length) missingSections.push('management');
-      if (!enrichedData.recent_news?.length) missingSections.push('recent_news');
-      if (!enrichedData.csr_activities?.length) missingSections.push('csr');
-      if (!enrichedData.nip && !enrichedData.regon && !enrichedData.krs) missingSections.push('registry_data');
+      // Use helper functions for missing sections and confidence
+      const missingSections = identifyMissingSections(enrichedData);
       
-      // Calculate overall confidence based on data availability
+      // Calculate numerical confidence score (0-1)
+      const confidenceScore = calculateConfidenceScore(enrichedData);
+      
+      // Map to text confidence level
       let overallConfidence = 'low';
-      if (perplexityQueriesCount >= 4 && scrapingStats.successful_scrapes >= 10) {
+      if (confidenceScore >= 0.7) {
         overallConfidence = 'high';
-      } else if (perplexityQueriesCount >= 2 || scrapingStats.successful_scrapes >= 5) {
+      } else if (confidenceScore >= 0.5) {
         overallConfidence = 'medium';
       }
+      
+      enrichedData.confidence_score = confidenceScore;
       
       enrichedData.enrichment_metadata = {
         completed_at: new Date().toISOString(),
@@ -1496,6 +1624,7 @@ ${jsonStructure}
           word_count: p.word_count,
           title: p.title
         })),
+        confidence_score: confidenceScore,
         overall_confidence: overallConfidence,
         data_freshness: new Date().getFullYear().toString(),
         missing_sections: missingSections,
