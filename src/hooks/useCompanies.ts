@@ -165,6 +165,34 @@ export function useCompaniesList() {
   });
 }
 
+// Hook to get companies with revenue data for ownership modal
+export function useCompaniesWithRevenue() {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['companies_with_revenue', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name, logo_url, revenue_amount, revenue_currency, revenue_year')
+        .eq('tenant_id', tenantId)
+        .order('name');
+      if (error) throw error;
+      return data as { 
+        id: string; 
+        name: string; 
+        logo_url: string | null;
+        revenue_amount: number | null;
+        revenue_currency: string | null;
+        revenue_year: number | null;
+      }[];
+    },
+    enabled: !!tenantId,
+  });
+}
+
 export interface CompanyContact {
   id: string;
   full_name: string;

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus } from 'lucide-react';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import {
 import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { GroupBadge } from './GroupBadge';
 import { useDeleteContact, type ContactWithDetails } from '@/hooks/useContacts';
+import { useToggleOwnerStatus } from '@/hooks/useOwnership';
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
@@ -29,7 +31,10 @@ interface ContactDetailHeaderProps {
 export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProps) {
   const navigate = useNavigate();
   const deleteContact = useDeleteContact();
+  const toggleOwnerStatus = useToggleOwnerStatus();
   const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
+
+  const isOwner = (contact as any).is_owner || false;
 
   const getInitials = (name: string) => {
     return name
@@ -67,7 +72,15 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
             </AvatarFallback>
           </Avatar>
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-foreground">{contact.full_name}</h1>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              {contact.full_name}
+              {isOwner && (
+                <Badge variant="default" className="gap-1 bg-amber-500 hover:bg-amber-600">
+                  <Crown className="h-3 w-3" />
+                  Właściciel
+                </Badge>
+              )}
+            </h1>
             <div className="space-y-0.5">
               {contact.position && (
                 <p className="text-muted-foreground">{contact.position}</p>
@@ -127,6 +140,16 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
           <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
             <CalendarPlus className="h-4 w-4 mr-2" />
             Konsultacja
+          </Button>
+          <Button 
+            variant={isOwner ? "default" : "outline"} 
+            size="sm" 
+            onClick={() => toggleOwnerStatus.mutate({ contactId: contact.id, isOwner: !isOwner })}
+            disabled={toggleOwnerStatus.isPending}
+            className={isOwner ? "bg-amber-500 hover:bg-amber-600" : ""}
+          >
+            <Crown className="h-4 w-4 mr-2" />
+            {isOwner ? "Właściciel" : "Oznacz właściciela"}
           </Button>
           <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit className="h-4 w-4 mr-2" />
