@@ -1,29 +1,16 @@
-import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { 
-  Mail, Phone, Building, MapPin, Linkedin, Tag, Globe, Users, 
-  Sparkles, Briefcase, Pencil, User, Loader2, Search, Link2
+  Mail, Phone, MapPin, Linkedin, Tag, 
+  Sparkles, Briefcase, User, Loader2, Search
 } from 'lucide-react';
 import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
-import { 
-  useCompanyContacts, 
-  useRegenerateCompanyAI, 
-  getCompanyLogoUrl, 
-  extractEmailDomain,
-  extractWebsiteDomain,
-  useAssignContactsByDomain
-} from '@/hooks/useCompanies';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
-import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
 import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
 import { LinkedInNetworkSection } from './LinkedInNetworkSection';
-import { CompanyAnalysisViewer } from '@/components/company';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -37,84 +24,13 @@ const sourceLabels: Record<string, string> = {
   import: 'Import',
 };
 
-const sizeLabels: Record<string, string> = {
-  'micro': 'Mikro (1-9)',
-  'small': 'Mała (10-49)',
-  'medium': 'Średnia (50-249)',
-  'large': 'Duża (250+)',
-};
-
 export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
-  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const { data: stats } = useContactStats(contact.id);
-  const company = contact.companies;
-  
-  // Extract email domain for contact grouping
-  const emailDomain = useMemo(() => {
-    return extractEmailDomain(contact.email);
-  }, [contact.email]);
-  
-  // Also consider company website domain
-  const companyDomain = useMemo(() => {
-    return extractWebsiteDomain(company?.website);
-  }, [company?.website]);
-  
-  // Use either email domain or company website domain
-  const effectiveDomain = emailDomain || companyDomain;
-  
-  // Fetch contacts by company_id AND/OR email domain
-  const { data: companyContacts = [], isLoading: isLoadingContacts } = useCompanyContacts(
-    company?.id, 
-    contact.id,
-    effectiveDomain
-  );
-  
   const generateContactProfile = useGenerateContactProfile();
-  const regenerateCompanyAI = useRegenerateCompanyAI();
   const linkedInAnalysis = useLinkedInAnalysis();
-  const assignContactsByDomain = useAssignContactsByDomain();
-  
-  // Count unassigned contacts (those with matching domain but no company_id)
-  const unassignedContacts = useMemo(() => {
-    if (!company?.id) return [];
-    return companyContacts.filter(c => c.company_id !== company.id);
-  }, [companyContacts, company?.id]);
-  
-  const handleAssignContacts = () => {
-    if (!company?.id || !effectiveDomain) return;
-    assignContactsByDomain.mutate({ companyId: company.id, domain: effectiveDomain });
-  };
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  // Parse AI analysis if exists
-  let aiAnalysis: {
-    description?: string;
-    services?: string;
-    collaboration_areas?: string;
-  } | null = null;
-  
-  // ai_analysis is now JSONB, not string
-  if (company?.ai_analysis && typeof company.ai_analysis === 'object') {
-    aiAnalysis = company.ai_analysis as { description?: string; services?: string; collaboration_areas?: string };
-  }
-
-  const hasCompanyAI = !!(company?.description || aiAnalysis?.description);
 
   const handleGenerateContactProfile = () => {
     generateContactProfile.mutate(contact.id);
-  };
-
-  const handleGenerateCompanyAI = () => {
-    if (!company) return;
-    regenerateCompanyAI.mutate({
-      id: company.id,
-      companyName: company.name,
-      website: company.website,
-      industryHint: company.industry,
-    });
   };
 
   return (
@@ -151,7 +67,7 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <User className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">OSOBA</h2>
+          <h2 className="text-lg font-semibold">Informacje o osobie</h2>
         </div>
         <Separator />
 
@@ -330,227 +246,6 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           </CardContent>
         </Card>
       </div>
-
-      {/* ===== COMPANY SECTION ===== */}
-      {company && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">FIRMA</h2>
-          </div>
-          <Separator />
-
-          {/* Company info card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {/* Company Logo */}
-                  <Avatar className="h-12 w-12">
-                    {(company.logo_url || getCompanyLogoUrl(company.website)) ? (
-                      <AvatarImage 
-                        src={company.logo_url || getCompanyLogoUrl(company.website) || ''} 
-                        alt={company.name}
-                        onError={(e) => {
-                          // Hide image on error, fallback will show
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : null}
-                    <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                      <Building className="h-6 w-6" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-1">
-                    <CardTitle>{company.name}</CardTitle>
-                    {company.industry && (
-                      <Badge variant="secondary">{company.industry}</Badge>
-                    )}
-                  </div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setIsCompanyModalOpen(true)}
-                >
-                  <Pencil className="h-4 w-4 mr-1" />
-                  Edytuj
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {company.website && (
-                  <div className="flex items-center gap-3">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Strona www</p>
-                      <a
-                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {company.website}
-                      </a>
-                    </div>
-                  </div>
-                )}
-
-                {company.employee_count && (
-                  <div className="flex items-center gap-3">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Wielkość firmy</p>
-                      <p>{sizeLabels[company.employee_count] || company.employee_count}</p>
-                    </div>
-                  </div>
-                )}
-
-                {(company.address || company.city) && (
-                  <div className="flex items-center gap-3">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Adres</p>
-                      <p>
-                        {[company.address, company.postal_code, company.city, company.country]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* AI Analysis Card - 16 Section Viewer */}
-          <CompanyAnalysisViewer
-            analysis={aiAnalysis}
-            confidenceScore={company.analysis_confidence_score || 0.5}
-            missingSections={company.analysis_missing_sections || []}
-            dataSources={company.analysis_data_sources as any}
-            onRegenerate={handleGenerateCompanyAI}
-            isRegenerating={regenerateCompanyAI.isPending}
-          />
-
-          {/* People from this company */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  Osoby z tej firmy {companyContacts.length > 0 && `(${companyContacts.length})`}
-                </CardTitle>
-                {unassignedContacts.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAssignContacts}
-                    disabled={assignContactsByDomain.isPending}
-                  >
-                    {assignContactsByDomain.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Link2 className="h-4 w-4 mr-1" />
-                        Przypisz {unassignedContacts.length} do firmy
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoadingContacts ? (
-                <p className="text-sm text-muted-foreground">Ładowanie...</p>
-              ) : companyContacts.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">Brak innych osób z tej firmy</p>
-              ) : (
-                <div className="space-y-2">
-                  {companyContacts.map((person) => {
-                    const isUnassigned = person.company_id !== company.id;
-                    return (
-                      <Link
-                        key={person.id}
-                        to={`/contacts/${person.id}`}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                            {getInitials(person.full_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate">{person.full_name}</p>
-                            {isUnassigned && (
-                              <Badge variant="outline" className="text-xs shrink-0">
-                                nieprzypisany
-                              </Badge>
-                            )}
-                          </div>
-                          {person.position && (
-                            <p className="text-xs text-muted-foreground truncate">{person.position}</p>
-                          )}
-                        </div>
-                        <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-                          {person.email && (
-                            <span className="flex items-center gap-1">
-                              <Mail className="h-3 w-3" />
-                              <span className="truncate max-w-[150px]">{person.email}</span>
-                            </span>
-                          )}
-                          {person.phone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {person.phone}
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* No Company placeholder */}
-      {!company && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">FIRMA</h2>
-          </div>
-          <Separator />
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-4">
-                <Building className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  {contact.company ? (
-                    <>Firma "{contact.company}" nie została jeszcze powiązana z rekordem w systemie.</>
-                  ) : (
-                    <>Brak przypisanej firmy do tego kontaktu.</>
-                  )}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Company Modal */}
-      {company && (
-        <CompanyModal
-          open={isCompanyModalOpen}
-          onOpenChange={setIsCompanyModalOpen}
-          company={company}
-        />
-      )}
 
       {/* ===== LINKEDIN NETWORK SECTION ===== */}
       <div className="space-y-4">

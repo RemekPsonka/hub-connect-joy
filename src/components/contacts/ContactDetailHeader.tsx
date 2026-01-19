@@ -68,13 +68,30 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
           </Avatar>
           <div className="space-y-1">
             <h1 className="text-2xl font-bold text-foreground">{contact.full_name}</h1>
-            {(contact.company || contact.position) && (
-              <p className="text-muted-foreground">
-                {contact.position}
-                {contact.position && contact.company && ' • '}
-                {contact.company}
-              </p>
-            )}
+            <div className="space-y-0.5">
+              {contact.position && (
+                <p className="text-muted-foreground">{contact.position}</p>
+              )}
+              {contact.companies ? (
+                <>
+                  <p className="text-muted-foreground font-medium">
+                    {contact.companies.name}
+                  </p>
+                  {(contact.companies.address || contact.companies.city) && (
+                    <p className="text-sm text-muted-foreground">
+                      {[
+                        contact.companies.address,
+                        contact.companies.postal_code,
+                        contact.companies.city,
+                        contact.companies.country
+                      ].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                </>
+              ) : contact.company ? (
+                <p className="text-muted-foreground">{contact.company}</p>
+              ) : null}
+            </div>
             <div className="flex items-center gap-2 pt-1">
               <GroupBadge group={contact.contact_groups} />
             </div>

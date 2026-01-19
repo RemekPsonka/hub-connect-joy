@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, User, Building } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContact } from '@/hooks/useContacts';
 import { ContactDetailHeader } from '@/components/contacts/ContactDetailHeader';
@@ -14,6 +15,7 @@ import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactModal } from '@/components/contacts/ContactModal';
 import { BIInterviewChat } from '@/components/agents/BIInterviewChat';
 import { BIDataViewer } from '@/components/agents/BIDataViewer';
+import { CompanyView } from '@/components/contacts/CompanyView';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ContactDetail() {
@@ -22,6 +24,7 @@ export default function ContactDetail() {
   const { director, isAssistant } = useAuth();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
 
   if (isLoading) {
     return (
@@ -52,73 +55,99 @@ export default function ContactDetail() {
         onEdit={() => setIsEditModalOpen(true)}
       />
 
-      <Tabs defaultValue={isAssistant ? "agent" : "overview"} className="w-full">
-        {isAssistant ? (
-          <TabsList>
-            <TabsTrigger value="agent">Agent AI</TabsTrigger>
-          </TabsList>
-        ) : (
-          <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-7">
-            <TabsTrigger value="overview">Przegląd</TabsTrigger>
-            <TabsTrigger value="agent">Agent AI</TabsTrigger>
-            <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
-            <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
-            <TabsTrigger value="history">Historia</TabsTrigger>
-            <TabsTrigger value="tasks">Zadania</TabsTrigger>
-            <TabsTrigger value="notes">Notatki</TabsTrigger>
-          </TabsList>
-        )}
+      {/* Main View Toggle: OSOBA / FIRMA */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant={viewMode === 'person' ? 'default' : 'outline'}
+          onClick={() => setViewMode('person')}
+          className="gap-2"
+        >
+          <User className="h-4 w-4" />
+          OSOBA
+        </Button>
+        <Button
+          variant={viewMode === 'company' ? 'default' : 'outline'}
+          onClick={() => setViewMode('company')}
+          className="gap-2"
+          disabled={!contact.companies && !contact.company}
+        >
+          <Building className="h-4 w-4" />
+          FIRMA
+        </Button>
+      </div>
 
-        <TabsContent value="overview" className="mt-6">
-          <ContactOverviewTab contact={contact} />
-        </TabsContent>
-
-        <TabsContent value="agent" className="mt-6">
-          <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="profile">Profil Agenta</TabsTrigger>
-              <TabsTrigger value="bi-interview">Wywiad BI</TabsTrigger>
-              <TabsTrigger value="bi-data">Dane BI</TabsTrigger>
+      {/* Content based on viewMode */}
+      {viewMode === 'person' ? (
+        <Tabs defaultValue={isAssistant ? "agent" : "overview"} className="w-full">
+          {isAssistant ? (
+            <TabsList>
+              <TabsTrigger value="agent">Agent AI</TabsTrigger>
             </TabsList>
-            
-            <TabsContent value="profile">
-              <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
-            </TabsContent>
-            
-            <TabsContent value="bi-interview">
-              <BIInterviewChat 
-                contactId={contact.id} 
-                contactName={contact.full_name}
-                tenantId={director?.tenant_id}
-              />
-            </TabsContent>
-            
-            <TabsContent value="bi-data">
-              <BIDataViewer contactId={contact.id} />
-            </TabsContent>
-          </Tabs>
-        </TabsContent>
+          ) : (
+            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-7">
+              <TabsTrigger value="overview">Przegląd</TabsTrigger>
+              <TabsTrigger value="agent">Agent AI</TabsTrigger>
+              <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
+              <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
+              <TabsTrigger value="history">Historia</TabsTrigger>
+              <TabsTrigger value="tasks">Zadania</TabsTrigger>
+              <TabsTrigger value="notes">Notatki</TabsTrigger>
+            </TabsList>
+          )}
 
-        <TabsContent value="needs-offers" className="mt-6">
-          <ContactNeedsOffersTab contactId={contact.id} />
-        </TabsContent>
+          <TabsContent value="overview" className="mt-6">
+            <ContactOverviewTab contact={contact} />
+          </TabsContent>
 
-        <TabsContent value="consultations" className="mt-6">
-          <ContactConsultationsTab contactId={contact.id} contactName={contact.full_name} />
-        </TabsContent>
+          <TabsContent value="agent" className="mt-6">
+            <Tabs defaultValue="profile" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="profile">Profil Agenta</TabsTrigger>
+                <TabsTrigger value="bi-interview">Wywiad BI</TabsTrigger>
+                <TabsTrigger value="bi-data">Dane BI</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="profile">
+                <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
+              </TabsContent>
+              
+              <TabsContent value="bi-interview">
+                <BIInterviewChat 
+                  contactId={contact.id} 
+                  contactName={contact.full_name}
+                  tenantId={director?.tenant_id}
+                />
+              </TabsContent>
+              
+              <TabsContent value="bi-data">
+                <BIDataViewer contactId={contact.id} />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
 
-        <TabsContent value="history" className="mt-6">
-          <ContactHistoryTab contactId={contact.id} />
-        </TabsContent>
+          <TabsContent value="needs-offers" className="mt-6">
+            <ContactNeedsOffersTab contactId={contact.id} />
+          </TabsContent>
 
-        <TabsContent value="tasks" className="mt-6">
-          <ContactTasksTab contactId={contact.id} />
-        </TabsContent>
+          <TabsContent value="consultations" className="mt-6">
+            <ContactConsultationsTab contactId={contact.id} contactName={contact.full_name} />
+          </TabsContent>
 
-        <TabsContent value="notes" className="mt-6">
-          <ContactNotesTab contact={contact} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="history" className="mt-6">
+            <ContactHistoryTab contactId={contact.id} />
+          </TabsContent>
+
+          <TabsContent value="tasks" className="mt-6">
+            <ContactTasksTab contactId={contact.id} />
+          </TabsContent>
+
+          <TabsContent value="notes" className="mt-6">
+            <ContactNotesTab contact={contact} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <CompanyView contact={contact} />
+      )}
 
       <ContactModal
         isOpen={isEditModalOpen}
