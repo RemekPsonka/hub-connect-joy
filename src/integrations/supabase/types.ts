@@ -263,14 +263,17 @@ export type Database = {
           created_by: string | null
           description: string | null
           employee_count: string | null
+          group_companies: Json | null
           growth_rate: number | null
           id: string
           industry: string | null
+          is_group: boolean | null
           krs: string | null
           legal_form: string | null
           logo_url: string | null
           name: string
           nip: string | null
+          parent_company_id: string | null
           phone: string | null
           postal_code: string | null
           regon: string | null
@@ -298,14 +301,17 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          group_companies?: Json | null
           growth_rate?: number | null
           id?: string
           industry?: string | null
+          is_group?: boolean | null
           krs?: string | null
           legal_form?: string | null
           logo_url?: string | null
           name: string
           nip?: string | null
+          parent_company_id?: string | null
           phone?: string | null
           postal_code?: string | null
           regon?: string | null
@@ -333,14 +339,17 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          group_companies?: Json | null
           growth_rate?: number | null
           id?: string
           industry?: string | null
+          is_group?: boolean | null
           krs?: string | null
           legal_form?: string | null
           logo_url?: string | null
           name?: string
           nip?: string | null
+          parent_company_id?: string | null
           phone?: string | null
           postal_code?: string | null
           regon?: string | null
@@ -354,6 +363,13 @@ export type Database = {
           website?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "companies_tenant_id_fkey"
             columns: ["tenant_id"]

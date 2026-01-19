@@ -84,12 +84,10 @@ export function AnalysisHeader({
       {/* Main header row */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">{analysis.name || 'Analiza firmy'}</h2>
-          </div>
+          {/* Industry and location info - name is shown in CompanyView header */}
           {(analysis.industry || analysis.headquarters?.city) && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Building className="h-4 w-4 text-primary" />
               {[analysis.industry, analysis.headquarters?.city || analysis.city].filter(Boolean).join(' • ')}
             </p>
           )}

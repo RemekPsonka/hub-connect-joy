@@ -22,8 +22,15 @@ import { ManagementSection } from './sections/ManagementSection';
 import { NewsSignalsSection } from './sections/NewsSignalsSection';
 import { CSRSection } from './sections/CSRSection';
 import { RegistryDataSection } from './sections/RegistryDataSection';
+import { GroupCompaniesSection } from './sections/GroupCompaniesSection';
 
-import type { CompanyAnalysisViewerProps } from './types';
+import type { CompanyAnalysisViewerProps, GroupCompany, ConsolidatedRevenue } from './types';
+
+interface ExtendedCompanyAnalysisViewerProps extends CompanyAnalysisViewerProps {
+  onUpdateRevenue?: () => void;
+  isUpdatingRevenue?: boolean;
+  onRemoveGroupCompany?: (name: string) => void;
+}
 
 export function CompanyAnalysisViewer({
   analysis,
@@ -32,9 +39,16 @@ export function CompanyAnalysisViewer({
   dataSources,
   onRegenerate,
   isRegenerating,
-  companyName
-}: CompanyAnalysisViewerProps) {
+  companyName,
+  onUpdateRevenue,
+  isUpdatingRevenue,
+  onRemoveGroupCompany
+}: ExtendedCompanyAnalysisViewerProps) {
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Extract group companies from analysis
+  const groupCompanies: GroupCompany[] = analysis?.group_companies as GroupCompany[] || [];
+  const consolidatedRevenue: ConsolidatedRevenue | undefined = analysis?.consolidated_revenue as ConsolidatedRevenue | undefined;
 
   // No data state
   if (!analysis || (!analysis.description && !analysis.name && !analysis.industry)) {
@@ -104,11 +118,22 @@ export function CompanyAnalysisViewer({
             <TabsTrigger value="data" className="text-xs px-2 py-1.5">Dane</TabsTrigger>
           </TabsList>
 
-          {/* Tab: Przegląd - sekcje 1, 2, 3 */}
+          {/* Tab: Przegląd - sekcje 1, 2, 3 + grupa kapitałowa */}
           <TabsContent value="overview" className="mt-4 space-y-4">
             <BasicInfoSection data={analysis} />
             <HistoryTimelineSection data={analysis} />
-            <FinancialDataSection data={analysis} />
+            <FinancialDataSection 
+              data={analysis} 
+              onUpdateRevenue={onUpdateRevenue}
+              isUpdatingRevenue={isUpdatingRevenue}
+            />
+            {groupCompanies.length > 0 && (
+              <GroupCompaniesSection 
+                groupCompanies={groupCompanies}
+                consolidatedRevenue={consolidatedRevenue}
+                onRemoveCompany={onRemoveGroupCompany}
+              />
+            )}
           </TabsContent>
 
           {/* Tab: Biznes - sekcje 4, 13 */}

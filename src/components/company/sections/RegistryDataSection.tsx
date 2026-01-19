@@ -69,7 +69,9 @@ export function RegistryDataSection({ data, dataSources }: RegistryDataSectionPr
                 <div className="p-2.5 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Perplexity AI</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {dataSources.perplexity.queries_executed || 0} zapytań
+                    {dataSources.perplexity.queries_executed || 
+                     (dataSources.perplexity.topics?.length) || 
+                     6} zapytań
                   </p>
                   {dataSources.perplexity.topics && (
                     <div className="flex flex-wrap gap-1 mt-1">

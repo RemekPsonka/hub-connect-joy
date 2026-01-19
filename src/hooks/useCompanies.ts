@@ -740,3 +740,109 @@ export function useBulkMergeByDomain() {
     },
   });
 }
+
+// ============= UPDATE COMPANY REVENUE =============
+export function useUpdateCompanyRevenue() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      companyId, 
+      companyName, 
+      isGroup = false 
+    }: { 
+      companyId: string; 
+      companyName: string;
+      isGroup?: boolean;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('update-company-revenue', {
+        body: { 
+          company_id: companyId,
+          company_name: companyName,
+          is_group: isGroup
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Błąd aktualizacji');
+      
+      return data.data;
+    },
+    onSuccess: (data, { companyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['company', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      toast.success(
+        data.revenue_amount 
+          ? `Zaktualizowano przychód: ${(data.revenue_amount / 1_000_000).toFixed(1)}M PLN` 
+          : 'Zaktualizowano dane finansowe'
+      );
+    },
+    onError: (error) => {
+      console.error('Error updating revenue:', error);
+      toast.error('Błąd podczas aktualizacji przychodu');
+    },
+  });
+}
+
+// ============= REMOVE GROUP COMPANY =============
+export function useRemoveGroupCompany() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      companyId, 
+      companyNameToRemove 
+    }: { 
+      companyId: string; 
+      companyNameToRemove: string;
+    }) => {
+      // Get current company data
+      const { data: company, error: fetchError } = await supabase
+        .from('companies')
+        .select('group_companies, ai_analysis')
+        .eq('id', companyId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Filter out the company to remove
+      const currentGroupCompanies = (company?.group_companies || []) as { name: string }[];
+      const updatedGroupCompanies = currentGroupCompanies.filter(
+        (c) => c.name !== companyNameToRemove
+      );
+
+      // Also update ai_analysis if present
+      let updatedAnalysis = company?.ai_analysis;
+      if (updatedAnalysis && typeof updatedAnalysis === 'object' && !Array.isArray(updatedAnalysis)) {
+        const analysisObj = { ...updatedAnalysis } as Record<string, unknown>;
+        if (Array.isArray(analysisObj.group_companies)) {
+          analysisObj.group_companies = (analysisObj.group_companies as { name: string }[]).filter(
+            (c) => c.name !== companyNameToRemove
+          );
+        }
+        updatedAnalysis = analysisObj as typeof company.ai_analysis;
+      }
+
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update({ 
+          group_companies: updatedGroupCompanies,
+          ai_analysis: updatedAnalysis,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', companyId);
+
+      if (updateError) throw updateError;
+      
+      return { removed: companyNameToRemove };
+    },
+    onSuccess: (_, { companyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['company', companyId] });
+      toast.success('Usunięto spółkę z grupy');
+    },
+    onError: (error) => {
+      console.error('Error removing group company:', error);
+      toast.error('Błąd podczas usuwania spółki z grupy');
+    },
+  });
+}
