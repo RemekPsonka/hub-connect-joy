@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Building, RefreshCw, Loader2 } from 'lucide-react';
+import { Building, RefreshCw, Loader2, ImageIcon, Calendar, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -29,13 +29,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Company, useUpdateCompany, useRegenerateCompanyAI, getCompanyLogoUrl } from '@/hooks/useCompanies';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Company, useUpdateCompany, useRegenerateCompanyAI, getCompanyLogoUrl, useScrapeLogo } from '@/hooks/useCompanies';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 
 const companySchema = z.object({
   name: z.string().min(1, 'Nazwa firmy jest wymagana').max(255),
+  short_name: z.string().optional().nullable(),
+  legal_form: z.string().optional().nullable(),
+  tagline: z.string().optional().nullable(),
   website: z.string().optional().nullable(),
   industry: z.string().optional().nullable(),
   employee_count: z.string().optional().nullable(),
+  company_size: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
   city: z.string().optional().nullable(),
   postal_code: z.string().optional().nullable(),
@@ -47,6 +55,10 @@ const companySchema = z.object({
   services: z.string().optional().nullable(),
   collaboration_areas: z.string().optional().nullable(),
   logo_url: z.string().optional().nullable(),
+  revenue_amount: z.string().optional().nullable(),
+  revenue_year: z.string().optional().nullable(),
+  revenue_currency: z.string().optional().nullable(),
+  growth_rate: z.string().optional().nullable(),
 });
 
 type CompanyFormData = z.infer<typeof companySchema>;
@@ -64,10 +76,34 @@ const sizeOptions = [
   { value: 'large', label: 'Duża (250+ pracowników)' },
 ];
 
+const legalFormOptions = [
+  { value: 'sp_z_oo', label: 'Sp. z o.o.' },
+  { value: 'sa', label: 'S.A.' },
+  { value: 'jednoosobowa', label: 'Jednoosobowa działalność' },
+  { value: 'spolka_cywilna', label: 'Spółka cywilna' },
+  { value: 'spolka_jawna', label: 'Spółka jawna' },
+  { value: 'spolka_partnerska', label: 'Spółka partnerska' },
+  { value: 'spolka_komandytowa', label: 'Spółka komandytowa' },
+  { value: 'other', label: 'Inna' },
+];
+
 export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps) {
   const [activeTab, setActiveTab] = useState('basic');
   const updateCompany = useUpdateCompany();
   const regenerateAI = useRegenerateCompanyAI();
+  const scrapeLogo = useScrapeLogo();
+
+  // Get extended company data
+  const extendedCompany = company as Company & {
+    short_name?: string | null;
+    legal_form?: string | null;
+    tagline?: string | null;
+    company_size?: string | null;
+    revenue_amount?: number | null;
+    revenue_year?: number | null;
+    revenue_currency?: string | null;
+    growth_rate?: number | null;
+  };
 
   // Parse AI analysis - now ai_analysis is JSONB, not string
   const parseAIAnalysis = (aiAnalysis: unknown) => {
@@ -91,9 +127,13 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
     resolver: zodResolver(companySchema),
     defaultValues: {
       name: company.name || '',
+      short_name: extendedCompany.short_name || '',
+      legal_form: extendedCompany.legal_form || '',
+      tagline: extendedCompany.tagline || '',
       website: company.website || '',
       industry: company.industry || '',
       employee_count: company.employee_count || '',
+      company_size: extendedCompany.company_size || '',
       address: company.address || '',
       city: company.city || '',
       postal_code: company.postal_code || '',
@@ -105,17 +145,26 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
       services: aiData.services,
       collaboration_areas: aiData.collaboration_areas,
       logo_url: company.logo_url || '',
+      revenue_amount: extendedCompany.revenue_amount?.toString() || '',
+      revenue_year: extendedCompany.revenue_year?.toString() || '',
+      revenue_currency: extendedCompany.revenue_currency || 'PLN',
+      growth_rate: extendedCompany.growth_rate?.toString() || '',
     },
   });
 
   useEffect(() => {
     if (open && company) {
       const aiData = parseAIAnalysis(company.ai_analysis);
+      const ext = company as typeof extendedCompany;
       form.reset({
         name: company.name || '',
+        short_name: ext.short_name || '',
+        legal_form: ext.legal_form || '',
+        tagline: ext.tagline || '',
         website: company.website || '',
         industry: company.industry || '',
         employee_count: company.employee_count || '',
+        company_size: ext.company_size || '',
         address: company.address || '',
         city: company.city || '',
         postal_code: company.postal_code || '',
@@ -127,6 +176,10 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
         services: aiData.services,
         collaboration_areas: aiData.collaboration_areas,
         logo_url: company.logo_url || '',
+        revenue_amount: ext.revenue_amount?.toString() || '',
+        revenue_year: ext.revenue_year?.toString() || '',
+        revenue_currency: ext.revenue_currency || 'PLN',
+        growth_rate: ext.growth_rate?.toString() || '',
       });
     }
   }, [open, company, form]);
@@ -178,6 +231,20 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
     form.setValue('logo_url', result.logo_url || '');
   };
 
+  const handleScrapeLogo = async () => {
+    const website = form.getValues('website');
+    if (!website) return;
+
+    const result = await scrapeLogo.mutateAsync({
+      companyId: company.id,
+      companyWebsite: website,
+    });
+
+    if (result.logo_url) {
+      form.setValue('logo_url', result.logo_url);
+    }
+  };
+
   const isLoading = updateCompany.isPending || regenerateAI.isPending;
 
   return (
@@ -193,10 +260,16 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Podstawowe</TabsTrigger>
                 <TabsTrigger value="registry">Rejestrowe</TabsTrigger>
-                <TabsTrigger value="ai">AI</TabsTrigger>
+                <TabsTrigger value="finance">Finanse</TabsTrigger>
+                <TabsTrigger value="ai" className="flex items-center gap-1">
+                  AI
+                  {company.company_analysis_status === 'completed' && (
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  )}
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4 mt-4">
@@ -208,6 +281,61 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                       <FormLabel>Nazwa firmy *</FormLabel>
                       <FormControl>
                         <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="short_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Skrócona nazwa</FormLabel>
+                        <FormControl>
+                          <Input {...field} value={field.value || ''} placeholder="np. Atlas Ward" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="legal_form"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Forma prawna</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Wybierz formę" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {legalFormOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="tagline"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hasło / Tagline</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ''} placeholder="np. Budujemy przyszłość" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -244,30 +372,111 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="employee_count"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Wielkość firmy</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Wybierz wielkość" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {sizeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="employee_count"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wielkość firmy (legacy)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Wybierz wielkość" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sizeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="company_size"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wielkość firmy</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Wybierz wielkość" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sizeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Logo section */}
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-medium mb-3">Logo firmy</h4>
+                  <FormField
+                    control={form.control}
+                    name="logo_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex gap-3 items-center">
+                          <Avatar className="h-14 w-14 border">
+                            <AvatarImage 
+                              src={field.value || getCompanyLogoUrl(form.watch('website')) || ''} 
+                              alt="Logo firmy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                            <AvatarFallback className="bg-muted">
+                              <Building className="h-6 w-6 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 space-y-2">
+                            <FormControl>
+                              <Input 
+                                {...field} 
+                                value={field.value || ''} 
+                                placeholder="https://logo.clearbit.com/example.com"
+                              />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleScrapeLogo}
+                              disabled={scrapeLogo.isPending || !form.watch('website')}
+                            >
+                              {scrapeLogo.isPending ? (
+                                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                              ) : (
+                                <ImageIcon className="h-3 w-3 mr-2" />
+                              )}
+                              Pobierz logo ze strony
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Zostaw puste, aby automatycznie pobrać logo na podstawie strony www
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium mb-3">Adres</h4>
@@ -376,23 +585,145 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                 />
               </TabsContent>
 
-              <TabsContent value="ai" className="space-y-4 mt-4">
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRegenerateAI}
-                    disabled={regenerateAI.isPending}
-                  >
-                    {regenerateAI.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
+              <TabsContent value="finance" className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="revenue_amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Przychody (PLN)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            value={field.value || ''} 
+                            type="number"
+                            placeholder="np. 10000000"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                    Regeneruj analizę AI
-                  </Button>
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="revenue_year"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rok przychodów</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            value={field.value || ''} 
+                            type="number"
+                            placeholder="np. 2024"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="revenue_currency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Waluta</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || 'PLN'}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Wybierz walutę" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="PLN">PLN</SelectItem>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="growth_rate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wzrost r/r (%)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            value={field.value || ''} 
+                            type="number"
+                            step="0.01"
+                            placeholder="np. 15.5"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="ai" className="space-y-4 mt-4">
+                {/* AI Status Card */}
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {company.company_analysis_status === 'completed' ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        ) : company.company_analysis_status === 'in_progress' ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <p className="font-medium">
+                            {company.company_analysis_status === 'completed' 
+                              ? 'Analiza AI ukończona'
+                              : company.company_analysis_status === 'in_progress'
+                              ? 'Analiza w toku...'
+                              : 'Brak analizy AI'}
+                          </p>
+                          {company.company_analysis_date && (
+                            <p className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Ostatnia: {format(new Date(company.company_analysis_date), 'dd.MM.yyyy HH:mm', { locale: pl })}
+                            </p>
+                          )}
+                          {company.analysis_confidence_score && (
+                            <p className="text-sm text-muted-foreground">
+                              Pewność danych: {(company.analysis_confidence_score * 100).toFixed(0)}%
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRegenerateAI}
+                        disabled={regenerateAI.isPending}
+                      >
+                        {regenerateAI.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 mr-2" />
+                        )}
+                        {company.company_analysis_status === 'completed' ? 'Regeneruj' : 'Uruchom'} analizę AI
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 <FormField
                   control={form.control}
@@ -446,43 +777,6 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                           placeholder="np. doradztwo strategiczne, szkolenia, konsultacje prawne..."
                         />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="logo_url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Logo URL</FormLabel>
-                      <div className="flex gap-3 items-center">
-                        {(field.value || getCompanyLogoUrl(form.watch('website'))) && (
-                          <Avatar className="h-12 w-12 border">
-                            <AvatarImage 
-                              src={field.value || getCompanyLogoUrl(form.watch('website')) || ''} 
-                              alt="Logo firmy"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                            <AvatarFallback className="bg-muted">
-                              <Building className="h-6 w-6 text-muted-foreground" />
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            value={field.value || ''} 
-                            placeholder="https://logo.clearbit.com/example.com"
-                          />
-                        </FormControl>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Zostaw puste, aby automatycznie pobrać logo na podstawie strony www
-                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

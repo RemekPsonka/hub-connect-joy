@@ -30,6 +30,7 @@ import Analytics from "./pages/Analytics";
 import Owner from "./pages/Owner";
 import Superadmin from "./pages/Superadmin";
 import NotFound from "./pages/NotFound";
+import CompanyDetail from "./pages/CompanyDetail";
 
 // Lazy load Network page to isolate sigma library issues
 const Network = lazy(() => import("./pages/Network"));
@@ -90,6 +91,7 @@ const App = () => (
               {/* Routes accessible by both directors and assistants */}
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/contacts/:id" element={<ContactDetail />} />
+              <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             

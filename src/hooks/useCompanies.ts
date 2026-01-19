@@ -473,6 +473,33 @@ export function useRegenerateCompanyAI() {
   });
 }
 
+// ============= SCRAPE COMPANY LOGO =============
+export function useScrapeLogo() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ companyId, companyWebsite }: { companyId: string; companyWebsite: string }) => {
+      const { data, error } = await supabase.functions.invoke('scrape-company-logo', {
+        body: { companyId, companyWebsite },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Logo scraping failed');
+
+      return data as { success: boolean; logo_url: string; method: string };
+    },
+    onSuccess: (_, { companyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['company', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      toast.success('Logo zostało pobrane');
+    },
+    onError: (error) => {
+      console.error('Error scraping logo:', error);
+      toast.error('Błąd podczas pobierania logo');
+    },
+  });
+}
+
 // ============= DOMAIN STATS FOR BULK MERGE =============
 interface DomainStat {
   domain: string;
