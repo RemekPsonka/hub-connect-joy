@@ -235,6 +235,36 @@ export function useExecuteAgentAction() {
   return { executeAction, isLoading, error };
 }
 
+// NEW: Contact with active agent (full response)
+export interface ContactWithAgent {
+  contact_id: string;
+  contact_name: string;
+  company?: string | null;
+  agent_answer: string;
+  has_active_agent: true;
+  semantic_score: number;
+}
+
+// NEW: Contact without agent (match reason only)
+export interface ContactWithoutAgent {
+  contact_id: string;
+  contact_name: string;
+  company?: string | null;
+  match_reason: string;
+  has_active_agent: false;
+  semantic_score: number;
+}
+
+// NEW: Suggested action for user
+export interface SuggestedAction {
+  type: 'CREATE_TASK' | 'ADD_NOTE';
+  contact_id: string;
+  contact_name: string;
+  title?: string;
+  description?: string;
+  note?: string;
+}
+
 export interface MasterAgentResponse {
   success: boolean;
   total_agents: number;
@@ -259,6 +289,10 @@ export interface MasterAgentResponse {
     match_reason: string;
     confidence: number;
   }>;
+  // NEW: Segmented contact responses
+  contacts_with_agents?: ContactWithAgent[];
+  contacts_without_agents?: ContactWithoutAgent[];
+  suggested_actions?: SuggestedAction[];
 }
 
 export function useMasterAgent() {

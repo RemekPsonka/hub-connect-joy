@@ -71,7 +71,10 @@ serve(async (req) => {
       if (type === "contact") {
         const { data: contact, error } = await supabase
           .from("contacts")
-          .select("full_name, company, position, city, profile_summary, notes, tags")
+          .select(`
+            full_name, company, position, city, profile_summary, notes, tags,
+            companies (name, industry, description)
+          `)
           .eq("id", id)
           .single();
 
@@ -82,17 +85,34 @@ serve(async (req) => {
           );
         }
 
-        // Construct rich text for embedding
+        // ============= INCLUDE AGENT KNOWLEDGE IN EMBEDDING =============
+        // Fetch agent memory to include learned knowledge in the embedding
+        const { data: agentMemory } = await supabase
+          .from('contact_agent_memory')
+          .select('memory_summary, topics')
+          .eq('contact_id', id)
+          .maybeSingle();
+
+        const company = contact.companies as any;
+        
+        // Construct rich text for embedding including agent knowledge
         const parts = [
           contact.full_name,
           contact.position && `Stanowisko: ${contact.position}`,
           contact.company && `Firma: ${contact.company}`,
+          company?.name && `Nazwa firmy: ${company.name}`,
+          company?.industry && `Branża: ${company.industry}`,
+          company?.description && `Opis firmy: ${company.description.substring(0, 300)}`,
           contact.city && `Miasto: ${contact.city}`,
           contact.profile_summary && `Profil: ${contact.profile_summary}`,
           contact.notes && `Notatki: ${contact.notes}`,
           contact.tags?.length && `Tagi: ${contact.tags.join(", ")}`,
+          // NEW: Include agent AI knowledge for better semantic search
+          agentMemory?.memory_summary && `Wiedza agenta AI: ${agentMemory.memory_summary}`,
+          agentMemory?.topics?.length && `Tematy kontaktu: ${(agentMemory.topics as string[]).join(", ")}`,
         ].filter(Boolean);
 
+        console.log(`[Embedding] Contact ${contact.full_name}: agent knowledge ${agentMemory ? 'included' : 'not available'}`);
         textToEmbed = parts.join(". ");
       } else if (type === "need") {
         const { data: need, error } = await supabase

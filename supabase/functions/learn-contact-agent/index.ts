@@ -260,6 +260,34 @@ Zwróć JSON:
       throw updateError;
     }
 
+    // ============= TRIGGER EMBEDDING REGENERATION =============
+    // This ensures the contact's profile_embedding includes agent knowledge
+    console.log(`[Learn Agent] Triggering embedding regeneration to include agent knowledge...`);
+    
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const embeddingResponse = await fetch(`${supabaseUrl}/functions/v1/generate-embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': req.headers.get('Authorization') || '',
+        },
+        body: JSON.stringify({
+          type: 'contact',
+          id: contact_id
+        })
+      });
+      
+      if (embeddingResponse.ok) {
+        console.log(`[Learn Agent] Embedding regenerated successfully for ${contact.full_name}`);
+      } else {
+        console.warn(`[Learn Agent] Embedding regeneration failed: ${embeddingResponse.status}`);
+      }
+    } catch (embeddingError) {
+      console.warn(`[Learn Agent] Embedding regeneration error:`, embeddingError);
+      // Don't fail the whole operation if embedding fails
+    }
+
     // Log learning activity
     await supabase.from('contact_activity_log').insert({
       tenant_id: tenantId,
@@ -269,7 +297,8 @@ Zwróć JSON:
       metadata: { 
         trigger, 
         topics_count: learningData.topics?.length || 0,
-        sources: knowledgeSources.filter(s => s.count > 0).map(s => s.type)
+        sources: knowledgeSources.filter(s => s.count > 0).map(s => s.type),
+        embedding_regenerated: true
       }
     });
 
@@ -286,7 +315,8 @@ Zwróć JSON:
         topics_count: learningData.topics?.length || 0,
         can_answer: learningData.can_answer,
         key_insights_count: learningData.key_insights?.length || 0,
-        knowledge_sources: knowledgeSources.filter(s => s.count > 0)
+        knowledge_sources: knowledgeSources.filter(s => s.count > 0),
+        embedding_regenerated: true
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -143,6 +143,42 @@ serve(async (req) => {
       topics: agentMemoryMap.get(contact.id)?.topics || []
     }));
 
+    // ============= FALLBACK: Search agent topics if semantic search yields few results =============
+    if (semanticContacts.length < 5) {
+      console.log(`[Master Agent] Low semantic results (${semanticContacts.length}), searching agent topics...`);
+      
+      const queryTerms = query.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
+      
+      const contactsWithMatchingTopics = contactsWithAgentData.filter(c => {
+        if (semanticContacts.some(sc => sc.id === c.id)) return false; // Skip already matched
+        
+        const topics = (c.topics || []).map((t: string) => t.toLowerCase());
+        const memory = (c.memory_summary || '').toLowerCase();
+        const notes = (c.notes || '').toLowerCase();
+        
+        return queryTerms.some((term: string) => 
+          topics.some((topic: string) => topic.includes(term) || term.includes(topic)) ||
+          memory.includes(term) ||
+          notes.includes(term)
+        );
+      });
+      
+      if (contactsWithMatchingTopics.length > 0) {
+        console.log(`[Master Agent] Found ${contactsWithMatchingTopics.length} contacts via topic/memory search`);
+        
+        // Add them to semantic contacts with lower scores
+        const additionalContacts = contactsWithMatchingTopics.slice(0, 10).map(c => ({
+          ...c,
+          semantic_score: 0.4, // Lower score for topic-based matches
+          fts_score: 0.5,
+          combined_score: 0.45,
+          match_source: 'topic_fallback'
+        }));
+        
+        semanticContacts = [...semanticContacts, ...additionalContacts];
+      }
+    }
+
     console.log(`[Master Agent] Loaded ${contactsWithAgentData.length} total contacts, ${semanticContacts.length} semantic matches`);
 
     // ============= QUERY CONTACT AGENTS =============
@@ -388,6 +424,66 @@ Zwróć JSON:
       response: response.answer 
     });
 
+    // ============= BUILD SEGMENTED RESPONSE =============
+    // Separate contacts into those with active agents (full responses) and those without
+    const contactsWithAgents = contactAgentResponses.map(r => {
+      const contact = semanticContacts.find(c => c.id === r.contact_id) || 
+                      contactsWithAgentData.find(c => c.id === r.contact_id);
+      return {
+        contact_id: r.contact_id,
+        contact_name: r.contact_name,
+        company: contact?.company || (contact?.companies as any)?.name || null,
+        agent_answer: r.agent_answer,
+        has_active_agent: true,
+        semantic_score: contact?.combined_score || contact?.semantic_score || 0.5
+      };
+    });
+
+    const contactsWithoutAgents = semanticContacts
+      .filter(c => !contactAgentResponses.some(r => r.contact_id === c.id))
+      .slice(0, 10)
+      .map(c => ({
+        contact_id: c.id,
+        contact_name: c.full_name,
+        company: c.company || (c.companies as any)?.name || null,
+        match_reason: c.match_source === 'topic_fallback' 
+          ? 'Dopasowanie po tematach/notatkach' 
+          : `Dopasowanie semantyczne (${(c.combined_score * 100).toFixed(0)}%)`,
+        has_active_agent: false,
+        semantic_score: c.combined_score || c.semantic_score || 0
+      }));
+
+    // Generate suggested actions based on results
+    const suggestedActions: Array<{
+      type: 'CREATE_TASK' | 'ADD_NOTE';
+      contact_id: string;
+      contact_name: string;
+      title?: string;
+      description?: string;
+      note?: string;
+    }> = [];
+
+    // Add task suggestions for top contacts with agents
+    contactsWithAgents.slice(0, 2).forEach(c => {
+      suggestedActions.push({
+        type: 'CREATE_TASK',
+        contact_id: c.contact_id,
+        contact_name: c.contact_name,
+        title: `Follow-up: ${query.substring(0, 30)}...`,
+        description: `W związku z zapytaniem: "${query.substring(0, 100)}"`
+      });
+    });
+
+    // Add note suggestions for contacts without agents
+    contactsWithoutAgents.slice(0, 2).forEach(c => {
+      suggestedActions.push({
+        type: 'ADD_NOTE',
+        contact_id: c.contact_id,
+        contact_name: c.contact_name,
+        note: `Potencjalnie relevantny dla: ${query.substring(0, 50)}`
+      });
+    });
+
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -395,10 +491,15 @@ Zwróć JSON:
         semantic_matches: semanticContacts.length,
         contact_agents_queried: agentsToQuery.length,
         contact_agents_responded: contactAgentResponses.length,
+        // Legacy format for backward compatibility
         contact_agent_insights: contactAgentResponses.map(r => ({
           contact_name: r.contact_name,
           insight: r.agent_answer.substring(0, 200)
         })),
+        // NEW: Segmented contacts
+        contacts_with_agents: contactsWithAgents,
+        contacts_without_agents: contactsWithoutAgents,
+        suggested_actions: suggestedActions,
         search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback_text',
         industry_stats: industryStats, 
         ...response 
