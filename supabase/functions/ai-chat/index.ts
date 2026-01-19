@@ -59,40 +59,88 @@ serve(async (req) => {
     // Build context information
     let contextInfo = "";
     
-    // NEW: Extract search terms from last user message and search contacts
+    // ============= SEMANTIC SEARCH - Generate query embedding =============
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
-    const searchTerms = lastUserMessage.toLowerCase().match(/\b\w{3,}\b/g) || [];
-    
-    let matchedContacts: any[] = [];
-    if (searchTerms.length >= 1 && lastUserMessage.length > 5) {
-      // Build search conditions
-      const searchConditions = searchTerms.slice(0, 5).map(term => 
-        `full_name.ilike.%${term}%,profile_summary.ilike.%${term}%,company.ilike.%${term}%,notes.ilike.%${term}%`
-      ).join(',');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    let semanticContacts: any[] = [];
 
-      const { data: searchResults } = await supabase
-        .from("contacts")
-        .select(`
-          id, full_name, company, position, email, profile_summary, tags, notes,
-          companies (name, industry, description)
-        `)
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true)
-        .or(searchConditions)
-        .limit(30);
-      
-      matchedContacts = searchResults || [];
-      console.log(`[ai-chat] Found ${matchedContacts.length} contacts matching query terms`);
+    if (OPENAI_API_KEY && lastUserMessage.length > 5) {
+      console.log(`[ai-chat] Generating query embedding for semantic search...`);
+      try {
+        const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "text-embedding-3-small",
+            input: lastUserMessage.substring(0, 8000),
+            encoding_format: "float"
+          }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingData = await embeddingResponse.json();
+          const queryEmbedding = embeddingData.data?.[0]?.embedding;
+
+          if (queryEmbedding) {
+            console.log(`[ai-chat] Query embedding generated, performing semantic search...`);
+            
+            // Use search_all_hybrid for semantic search
+            const { data: hybridResults, error: hybridError } = await supabase.rpc('search_all_hybrid', {
+              p_query: lastUserMessage,
+              p_query_embedding: `[${queryEmbedding.join(',')}]`,
+              p_tenant_id: tenantId,
+              p_types: ['contact'],
+              p_fts_weight: 0.3,
+              p_semantic_weight: 0.7,
+              p_threshold: 0.25,
+              p_limit: 30
+            });
+
+            if (!hybridError && hybridResults?.length > 0) {
+              console.log(`[ai-chat] Semantic search found ${hybridResults.length} matches`);
+              
+              // Get full contact data
+              const contactIds = hybridResults.map((r: any) => r.id);
+              const { data: matchedContactData } = await supabase
+                .from("contacts")
+                .select(`
+                  id, full_name, company, position, email, profile_summary, tags, notes,
+                  companies (name, industry, description)
+                `)
+                .in('id', contactIds)
+                .eq("is_active", true);
+
+              // Merge with scores
+              semanticContacts = (matchedContactData || []).map(contact => {
+                const semanticResult = hybridResults.find((r: any) => r.id === contact.id);
+                return {
+                  ...contact,
+                  semantic_score: semanticResult?.semantic_score || 0,
+                  combined_score: semanticResult?.combined_score || 0
+                };
+              }).sort((a, b) => b.combined_score - a.combined_score);
+            } else if (hybridError) {
+              console.warn(`[ai-chat] Semantic search error:`, hybridError);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[ai-chat] Semantic search failed, using fallback:`, e);
+      }
     }
 
-    // Add matched contacts to context FIRST (priority)
-    if (matchedContacts.length > 0) {
-      contextInfo += "\n\n🔍 KONTAKTY PASUJĄCE DO PYTANIA (priorytet!):\n";
-      matchedContacts.forEach((c, i) => {
+    // Add semantic matches to context (PRIORITY)
+    if (semanticContacts.length > 0) {
+      contextInfo += "\n\n🎯 KONTAKTY ZNALEZIONE SEMANTYCZNIE (AI zrozumiało znaczenie pytania):\n";
+      semanticContacts.forEach((c, i) => {
         const industry = (c.companies as any)?.industry || 'brak';
         const tags = Array.isArray(c.tags) ? c.tags.join(', ') : 'brak';
+        const score = c.combined_score?.toFixed(2) || '0';
         contextInfo += `
-${i + 1}. **${c.full_name}** - ${c.company || 'brak firmy'}
+${i + 1}. [${score}] **${c.full_name}** - ${c.company || 'brak firmy'}
    Branża: ${industry}
    Stanowisko: ${c.position || 'brak'}
    Email: ${c.email || 'brak'}
@@ -188,6 +236,7 @@ ${i + 1}. **${c.full_name}** - ${c.company || 'brak firmy'}
     }
 
     const systemPrompt = `Jesteś AI Network Assistant - inteligentnym asystentem do zarządzania siecią kontaktów biznesowych i rekomendacji połączeń.
+Używasz WYSZUKIWANIA SEMANTYCZNEGO - AI rozumie znaczenie słów (np. "kurczak" ≈ "drób" ≈ "mięso").
 
 Twoje główne funkcje:
 1. Odpowiadanie na pytania o kontakty i ich relacje
@@ -195,6 +244,11 @@ Twoje główne funkcje:
 3. Pomaganie w przygotowaniu do spotkań
 4. Identyfikowanie dopasowań między potrzebami a ofertami
 5. Analiza zdrowia relacji i sugestie follow-upów
+
+WAŻNE - WYSZUKIWANIE SEMANTYCZNE:
+- Kontakty oznaczone 🎯 zostały znalezione przez AI semantycznie
+- Wynik [0.85] oznacza 85% podobieństwa semantycznego do pytania
+- Te kontakty są PRIORYTETOWE - analizuj je najpierw!
 
 FORMATOWANIE ODPOWIEDZI:
 - Używaj Markdown do formatowania: nagłówki (##, ###), listy (-, 1.), pogrubienie (**tekst**)
@@ -208,7 +262,7 @@ Bądź konkretny i pomocny. Gdy nie masz pewnych informacji, powiedz to wprost.
 
 ${contextInfo ? `\n--- KONTEKST UŻYTKOWNIKA ---${contextInfo}` : ""}`;
 
-    console.log("Chat request with context length:", contextInfo.length);
+    console.log(`[ai-chat] Context length: ${contextInfo.length}, semantic matches: ${semanticContacts.length}`);
 
     // Call Lovable AI Gateway with streaming
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

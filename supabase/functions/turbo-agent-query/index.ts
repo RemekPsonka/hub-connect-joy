@@ -48,16 +48,73 @@ serve(async (req) => {
 
     if (sessionError) throw sessionError;
 
-    // NEW: Get ALL contacts directly (not just from contact_agent_memory)
-    const { data: allContacts } = await supabase
-      .from('contacts')
-      .select(`
-        id, full_name, company, position, city, notes, tags, profile_summary,
-        companies (id, name, industry, description)
-      `)
-      .eq('tenant_id', tenantId)
-      .eq('is_active', true)
-      .limit(500);
+    // ============= SEMANTIC SEARCH - Generate query embedding =============
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    let semanticContacts: any[] = [];
+
+    if (OPENAI_API_KEY) {
+      console.log(`[Turbo] Generating query embedding for semantic search...`);
+      try {
+        const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "text-embedding-3-small",
+            input: query.substring(0, 8000),
+            encoding_format: "float"
+          }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingData = await embeddingResponse.json();
+          const queryEmbedding = embeddingData.data?.[0]?.embedding;
+
+          if (queryEmbedding) {
+            console.log(`[Turbo] Query embedding generated, performing semantic search...`);
+            
+            const { data: hybridResults, error: hybridError } = await supabase.rpc('search_all_hybrid', {
+              p_query: query,
+              p_query_embedding: `[${queryEmbedding.join(',')}]`,
+              p_tenant_id: tenantId,
+              p_types: ['contact'],
+              p_fts_weight: 0.3,
+              p_semantic_weight: 0.7,
+              p_threshold: 0.2,
+              p_limit: 50
+            });
+
+            if (!hybridError && hybridResults?.length > 0) {
+              console.log(`[Turbo] Semantic search found ${hybridResults.length} matches`);
+              
+              // Get full contact data
+              const contactIds = hybridResults.map((r: any) => r.id);
+              const { data: matchedContactData } = await supabase
+                .from('contacts')
+                .select(`
+                  id, full_name, company, position, city, notes, tags, profile_summary,
+                  companies (id, name, industry, description)
+                `)
+                .in('id', contactIds)
+                .eq('is_active', true);
+
+              semanticContacts = (matchedContactData || []).map(contact => {
+                const semanticResult = hybridResults.find((r: any) => r.id === contact.id);
+                return {
+                  ...contact,
+                  semantic_score: semanticResult?.semantic_score || 0,
+                  combined_score: semanticResult?.combined_score || 0
+                };
+              }).sort((a, b) => b.combined_score - a.combined_score);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[Turbo] Semantic search failed:`, e);
+      }
+    }
 
     // Get agent memory data for enrichment
     const { data: agentMemories } = await supabase
@@ -67,24 +124,56 @@ serve(async (req) => {
 
     const agentMemoryMap = new Map((agentMemories || []).map(am => [am.contact_id, am]));
 
-    // Combine contacts with agent data
-    const validAgents = (allContacts || []).map(contact => {
-      const agentData = agentMemoryMap.get(contact.id);
-      return {
-        contact_id: contact.id,
-        contacts: contact,
-        agent_persona: agentData?.agent_persona || null,
-        agent_profile: agentData?.agent_profile || null,
-        insights: agentData?.insights || null
-      };
-    });
+    // If semantic search found contacts, use those as priority
+    let validAgents: any[];
+    
+    if (semanticContacts.length > 0) {
+      // Use semantic results as primary source
+      validAgents = semanticContacts.map(contact => {
+        const agentData = agentMemoryMap.get(contact.id);
+        return {
+          contact_id: contact.id,
+          contacts: contact,
+          agent_persona: agentData?.agent_persona || null,
+          agent_profile: agentData?.agent_profile || null,
+          insights: agentData?.insights || null,
+          semantic_score: contact.semantic_score,
+          combined_score: contact.combined_score
+        };
+      });
+      console.log(`[Turbo] Using ${validAgents.length} semantically matched agents`);
+    } else {
+      // Fallback: Get all contacts
+      const { data: allContacts } = await supabase
+        .from('contacts')
+        .select(`
+          id, full_name, company, position, city, notes, tags, profile_summary,
+          companies (id, name, industry, description)
+        `)
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .limit(200);
 
-    console.log(`[Turbo] Loaded ${validAgents.length} contacts (${agentMemories?.length || 0} with agent memory)`);
+      validAgents = (allContacts || []).map(contact => {
+        const agentData = agentMemoryMap.get(contact.id);
+        return {
+          contact_id: contact.id,
+          contacts: contact,
+          agent_persona: agentData?.agent_persona || null,
+          agent_profile: agentData?.agent_profile || null,
+          insights: agentData?.insights || null
+        };
+      });
+      console.log(`[Turbo] Fallback: loaded ${validAgents.length} contacts`);
+    }
 
     // Update session
-    await supabase.from('turbo_agent_sessions').update({ total_agents_available: validAgents.length, status: 'selecting' }).eq('id', session.id);
+    await supabase.from('turbo_agent_sessions').update({ 
+      total_agents_available: validAgents.length, 
+      status: 'selecting' 
+    }).eq('id', session.id);
 
-    // Build rich agent summaries for selection with industry, tags, profile
+    // Build agent summaries with semantic scores
     const agentSummaries = validAgents.map(a => {
       const contact = a.contacts as any;
       return {
@@ -94,23 +183,25 @@ serve(async (req) => {
         position: contact.position,
         industry: contact.companies?.industry || null,
         tags: contact.tags || [],
-        profile_excerpt: contact.profile_summary?.substring(0, 200) || null
+        profile_excerpt: contact.profile_summary?.substring(0, 200) || null,
+        semantic_score: a.semantic_score || null
       };
     });
 
-    // AI selects agents with richer context
+    // AI selects agents with semantic context
     const selectionPrompt = `Analizujesz pytanie użytkownika i wybierasz najbardziej odpowiednich agentów kontaktowych.
+${semanticContacts.length > 0 ? 'UWAGA: Kontakty zostały już posortowane przez WYSZUKIWANIE SEMANTYCZNE - AI zrozumiało znaczenie pytania!' : ''}
 
 PYTANIE: "${query}"
 
 DOSTĘPNI AGENCI (${agentSummaries.length}):
-${agentSummaries.map((a, i) => `${i + 1}. ${a.name} | Firma: ${a.company || '-'} | Branża: ${a.industry || '-'} | Stanowisko: ${a.position || '-'} | Tagi: ${a.tags?.join(', ') || '-'} | Profil: ${a.profile_excerpt || '-'}`).join('\n')}
+${agentSummaries.map((a, i) => {
+  const scoreInfo = a.semantic_score ? ` | 🎯 Wynik semantyczny: ${a.semantic_score.toFixed(2)}` : '';
+  return `${i + 1}. ${a.name} | Firma: ${a.company || '-'} | Branża: ${a.industry || '-'} | Stanowisko: ${a.position || '-'} | Tagi: ${a.tags?.join(', ') || '-'}${scoreInfo} | Profil: ${a.profile_excerpt || '-'}`;
+}).join('\n')}
 
-Wybierz maksymalnie ${max_agents} agentów, którzy mogą odpowiedzieć na pytanie. Uwzględnij:
-- Branżę kontaktu (industry)
-- Tagi i oznaczenia
-- Profil AI i opis
-- Stanowisko i firmę
+Wybierz maksymalnie ${max_agents} agentów, którzy mogą odpowiedzieć na pytanie.
+${semanticContacts.length > 0 ? 'Kontakty z wysokim wynikiem semantycznym (🎯) są PRIORYTETOWE - zostały już dopasowane przez AI!' : ''}
 
 Zwróć JSON:
 \`\`\`json
@@ -137,8 +228,9 @@ Zwróć JSON:
       const jsonMatch = selectionText.match(/```json\s*([\s\S]*?)\s*```/);
       selectionPlan = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(selectionText);
     } catch {
+      // Fallback: use top semantic matches or first N agents
       selectionPlan = { 
-        selected_agents: agentSummaries.slice(0, max_agents).map(a => ({ contact_id: a.contact_id, reason: 'Fallback' })), 
+        selected_agents: agentSummaries.slice(0, max_agents).map(a => ({ contact_id: a.contact_id, reason: 'Semantic match / fallback' })), 
         query_intent: 'general', 
         sub_query_template: query 
       };
@@ -147,16 +239,21 @@ Zwróć JSON:
     const selectedAgentIds = selectionPlan.selected_agents?.map((a: any) => a.contact_id) || [];
     const selectedAgents = validAgents.filter(a => selectedAgentIds.includes(a.contact_id));
 
-    await supabase.from('turbo_agent_sessions').update({ agents_selected: selectedAgents.length, query_intent: selectionPlan.query_intent, status: 'querying' }).eq('id', session.id);
+    await supabase.from('turbo_agent_sessions').update({ 
+      agents_selected: selectedAgents.length, 
+      query_intent: selectionPlan.query_intent, 
+      status: 'querying' 
+    }).eq('id', session.id);
 
     console.log(`[Turbo] Selected ${selectedAgents.length} agents for query`);
 
-    // Query agents in parallel with richer context
+    // Query agents in parallel
     const queryAgent = async (agent: any) => {
       try {
         const contact = agent.contacts as any;
         const industry = contact.companies?.industry || 'nieznana';
         const tags = contact.tags?.join(', ') || 'brak';
+        const semanticInfo = agent.semantic_score ? `\nWYNIK SEMANTYCZNY: ${agent.semantic_score.toFixed(2)} (wysoki wynik = dobre dopasowanie do pytania)` : '';
         
         const agentPrompt = `Jesteś agentem AI reprezentującym kontakt biznesowy.
 
@@ -165,7 +262,7 @@ FIRMA: ${contact.company || 'brak'}
 BRANŻA: ${industry}
 STANOWISKO: ${contact.position || 'brak'}
 MIASTO: ${contact.city || 'brak'}
-TAGI: ${tags}
+TAGI: ${tags}${semanticInfo}
 
 PROFIL AI:
 ${contact.profile_summary || 'Brak profilu'}
@@ -214,6 +311,7 @@ Zwróć JSON:
           contact_name: contact.full_name,
           company: contact.company,
           industry: industry,
+          semantic_score: agent.semantic_score || null,
           ...result 
         };
       } catch (err) { 
@@ -227,18 +325,22 @@ Zwróć JSON:
 
     console.log(`[Turbo] Got ${responses.length} relevant responses`);
 
-    // Aggregate with richer context
+    // Aggregate with semantic context
     const aggregationPrompt = `Jesteś Master Agent agregującym odpowiedzi od ${responses.length} agentów kontaktowych.
+Użyto WYSZUKIWANIA SEMANTYCZNEGO - AI zrozumiało znaczenie pytania (np. "kurczak" ≈ "drób" ≈ "mięso").
 
 ORYGINALNE PYTANIE: "${query}"
 
 ODPOWIEDZI AGENTÓW:
-${responses.map((r: any, i: number) => `
-${i + 1}. ${r.contact_name} (${r.company || '-'}, ${r.industry})
+${responses.map((r: any, i: number) => {
+  const semanticInfo = r.semantic_score ? ` | 🎯 Wynik semantyczny: ${r.semantic_score.toFixed(2)}` : '';
+  return `
+${i + 1}. ${r.contact_name} (${r.company || '-'}, ${r.industry})${semanticInfo}
    Odpowiedź: ${r.answer}
    Pewność: ${r.confidence}, Relevancja: ${r.relevance}
    Dowody: ${r.evidence?.join(', ') || '-'}
-`).join('\n')}
+`;
+}).join('\n')}
 
 Na podstawie powyższych odpowiedzi, stwórz kompleksową odpowiedź na pytanie użytkownika.
 
@@ -283,7 +385,7 @@ Zwróć JSON:
       completed_at: new Date().toISOString() 
     }).eq('id', session.id);
 
-    console.log(`[Turbo] Completed in ${duration}ms`);
+    console.log(`[Turbo] Completed in ${duration}ms, semantic matches: ${semanticContacts.length}`);
 
     return new Response(
       JSON.stringify({ 
@@ -291,6 +393,8 @@ Zwróć JSON:
         session_id: session.id, 
         agents_queried: selectedAgents.length, 
         responses_received: responses.length, 
+        semantic_matches: semanticContacts.length,
+        search_method: semanticContacts.length > 0 ? 'semantic' : 'fallback',
         processing_time_ms: duration, 
         ...finalResult 
       }),
