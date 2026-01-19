@@ -41,10 +41,112 @@ function isValidNIP(nip: string | null): boolean {
   return cleaned.length === 10;
 }
 
-// Helper to scrape a single page with Firecrawl
-async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<{ url: string; content: string | null; title: string }> {
+// Extended ScrapedPage interface with categorization
+interface ScrapedPage {
+  url: string;
+  content: string | null;
+  html: string | null;
+  title: string;
+  category: string;
+  priority: 'critical' | 'high' | 'medium' | 'low' | 'none';
+  word_count: number;
+  metadata: {
+    description?: string;
+    sourceURL?: string;
+    statusCode?: number;
+  } | null;
+}
+
+interface ScrapingStats {
+  total_urls_found: number;
+  pages_scraped: number;
+  successful_scrapes: number;
+  total_words: number;
+  categories_found: string[];
+}
+
+interface CategorizedContent {
+  home: ScrapedPage[];
+  about: ScrapedPage[];
+  products: ScrapedPage[];
+  portfolio: ScrapedPage[];
+  brands: ScrapedPage[];
+  locations: ScrapedPage[];
+  team: ScrapedPage[];
+  csr: ScrapedPage[];
+  news: ScrapedPage[];
+  contact: ScrapedPage[];
+  careers: ScrapedPage[];
+  other: ScrapedPage[];
+}
+
+// Priority pages with categories for intelligent URL matching
+const priorityPagesConfig = {
+  critical: {
+    about: ['/o-nas', '/about-us', '/about', '/o-firmie', '/kim-jestesmy', '/poznaj-nas'],
+    contact: ['/kontakt', '/contact', '/kontakt-do-nas'],
+    brands: ['/marki', '/brands', '/dealerstwa', '/przedstawicielstwa']
+  },
+  high: {
+    products: ['/oferta', '/produkty', '/products', '/services', '/uslugi', '/dla-firm', '/asortyment', '/katalog'],
+    portfolio: ['/realizacje', '/projekty', '/projects', '/portfolio', '/case-studies', '/referencje', '/klienci-realizacje'],
+    locations: ['/lokalizacje', '/oddzialy', '/locations', '/where-to-buy', '/salony', '/punkty-sprzedazy', '/gdzie-kupic']
+  },
+  medium: {
+    about: ['/historia', '/history', '/o-nas/historia', '/misja', '/wizja', '/wartosci'],
+    team: ['/zespol', '/team', '/zarzad', '/management', '/ludzie', '/kierownictwo', '/wlasciciele'],
+    csr: ['/csr', '/odpowiedzialnosc-spoleczna', '/sustainability', '/ekologia', '/esg', '/spoleczna-odpowiedzialnosc']
+  },
+  low: {
+    news: ['/aktualnosci', '/news', '/blog', '/wydarzenia', '/media', '/press'],
+    careers: ['/kariera', '/praca', '/careers', '/rekrutacja', '/dolacz-do-nas', '/oferty-pracy'],
+    contact: ['/kontakt/formularz', '/napisz-do-nas']
+  }
+};
+
+// Function to match URL to category and priority
+function matchUrlToCategory(url: string): { category: string; priority: 'critical' | 'high' | 'medium' | 'low' | 'none' } {
   try {
-    console.log(`Scraping page: ${url}`);
+    const path = new URL(url).pathname.toLowerCase();
+    
+    for (const [priority, categories] of Object.entries(priorityPagesConfig)) {
+      for (const [category, patterns] of Object.entries(categories as Record<string, string[]>)) {
+        for (const pattern of patterns) {
+          if (path.includes(pattern)) {
+            return { category, priority: priority as 'critical' | 'high' | 'medium' | 'low' };
+          }
+        }
+      }
+    }
+    
+    // Fallback category detection from path
+    if (path.includes('produkt') || path.includes('product') || path.includes('ofert')) return { category: 'products', priority: 'none' };
+    if (path.includes('uslug') || path.includes('service')) return { category: 'products', priority: 'none' };
+    if (path.includes('portfolio') || path.includes('realiz') || path.includes('projekt')) return { category: 'portfolio', priority: 'none' };
+    if (path.includes('zespol') || path.includes('team') || path.includes('zarzad')) return { category: 'team', priority: 'none' };
+    if (path.includes('lokal') || path.includes('oddzia') || path.includes('salon')) return { category: 'locations', priority: 'none' };
+    if (path.includes('o-nas') || path.includes('about') || path.includes('histor')) return { category: 'about', priority: 'none' };
+    if (path.includes('kontakt') || path.includes('contact')) return { category: 'contact', priority: 'none' };
+    if (path.includes('news') || path.includes('aktual') || path.includes('blog')) return { category: 'news', priority: 'none' };
+    if (path.includes('karier') || path.includes('prac') || path.includes('career')) return { category: 'careers', priority: 'none' };
+    if (path.includes('marka') || path.includes('brand') || path.includes('dealer')) return { category: 'brands', priority: 'none' };
+    if (path.includes('csr') || path.includes('ekolog') || path.includes('sustain')) return { category: 'csr', priority: 'none' };
+    
+    return { category: 'other', priority: 'none' };
+  } catch {
+    return { category: 'other', priority: 'none' };
+  }
+}
+
+// Helper to scrape a single page with Firecrawl (with category and priority)
+async function scrapeWithFirecrawl(
+  url: string, 
+  apiKey: string,
+  category: string,
+  priority: 'critical' | 'high' | 'medium' | 'low' | 'none'
+): Promise<ScrapedPage> {
+  try {
+    console.log(`Scraping [${priority}] ${category}: ${url}`);
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -53,25 +155,36 @@ async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<{ url: 
       },
       body: JSON.stringify({
         url,
-        formats: ['markdown'],
+        formats: ['markdown', 'html'],
         onlyMainContent: true,
-        waitFor: 3000
+        waitFor: 3000,
+        timeout: 20000
       }),
     });
     
     if (response.ok) {
       const data = await response.json();
+      const markdown = data.data?.markdown || '';
       return {
         url,
-        content: data.data?.markdown || null,
-        title: data.data?.metadata?.title || url
+        content: markdown || null,
+        html: data.data?.html || null,
+        title: data.data?.metadata?.title || url,
+        category,
+        priority,
+        word_count: markdown ? markdown.split(/\s+/).length : 0,
+        metadata: data.data?.metadata ? {
+          description: data.data.metadata.description,
+          sourceURL: data.data.metadata.sourceURL,
+          statusCode: data.data.metadata.statusCode
+        } : null
       };
     }
     console.warn(`Scrape failed for ${url}: ${response.status}`);
-    return { url, content: null, title: url };
+    return { url, content: null, html: null, title: url, category, priority, word_count: 0, metadata: null };
   } catch (e) {
     console.warn(`Scrape error for ${url}:`, e);
-    return { url, content: null, title: url };
+    return { url, content: null, html: null, title: url, category, priority, word_count: 0, metadata: null };
   }
 }
 
@@ -482,22 +595,38 @@ ZASADY:
     }
 
     // ==========================================
-    // PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING
+    // PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING WITH CATEGORIZATION
     // ==========================================
-    interface ScrapedPage {
-      url: string;
-      content: string | null;
-      title: string;
-    }
     
     let scrapedPages: ScrapedPage[] = [];
+    let scrapingStats: ScrapingStats = {
+      total_urls_found: 0,
+      pages_scraped: 0,
+      successful_scrapes: 0,
+      total_words: 0,
+      categories_found: []
+    };
+    let categorizedContent: CategorizedContent = {
+      home: [],
+      about: [],
+      products: [],
+      portfolio: [],
+      brands: [],
+      locations: [],
+      team: [],
+      csr: [],
+      news: [],
+      contact: [],
+      careers: [],
+      other: []
+    };
     
     if (FIRECRAWL_API_KEY && (website || domain)) {
       console.log('=== PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING ===');
       
       const baseUrl = website?.startsWith('http') ? website : `https://${website || domain}`;
       
-      // 2a. Map the website to discover all URLs (increased limit)
+      // 2a. Map the website to discover all URLs (up to 100)
       let discoveredUrls: string[] = [];
       try {
         console.log('Mapping website:', baseUrl);
@@ -510,14 +639,15 @@ ZASADY:
           body: JSON.stringify({
             url: baseUrl,
             limit: 100,
-            search: 'o nas kontakt usługi oferta produkty marki salony kariera zespół zarząd o firmie realizacje projekty historia poznaj-nas kierownictwo właściciele klienci referencje partnerzy cennik aktualności'
+            search: 'o nas, oferta, produkty, usługi, realizacje, portfolio, zespół, kontakt, historia, marki, lokalizacje, oddziały, csr, kariera, cennik, partnerzy, klienci, zarzad, kierownictwo'
           }),
         });
         
         if (mapResponse.ok) {
           const mapData = await mapResponse.json();
           discoveredUrls = mapData.links || [];
-          console.log(`Discovered ${discoveredUrls.length} URLs`);
+          scrapingStats.total_urls_found = discoveredUrls.length;
+          console.log(`Discovered ${discoveredUrls.length} URLs from website map`);
         } else {
           console.warn('Map failed:', mapResponse.status);
         }
@@ -525,30 +655,7 @@ ZASADY:
         console.warn('Map error:', e);
       }
       
-      // 2b. IMPROVED PAGE SELECTION - 3-level prioritization with exclusions
-      
-      // PRIORITY 1: Must-have pages (About, Contact, Brands)
-      const priorityOnePatterns = [
-        /o-nas|about|o-firmie|kim-jestesmy|historia|poznaj-nas|about-us/i,
-        /kontakt|contact|lokalizacje|locations/i,
-        /marki|brands|dealerstwa|salony|przedstawicielstwa/i,
-      ];
-      
-      // PRIORITY 2: Offer and products
-      const priorityTwoPatterns = [
-        /oferta|offer|produkty|products|uslugi|services/i,
-        /realizacje|projekty|projects|portfolio|case-study|referencje/i,
-        /cennik|pricing|pakiety|packages/i,
-        /dla-firm|dla-klientow|b2b|business/i,
-      ];
-      
-      // PRIORITY 3: Team and careers
-      const priorityThreePatterns = [
-        /zespol|team|zarzad|management|ludzie|people|kierownictwo|zaloga/i,
-        /kariera|career|praca|jobs|rekrutacja|dolacz|zatrudnienie/i,
-        /klienci|clients|partnerzy|partners|wspolpraca/i,
-        /aktualnosci|news|blog|wydarzenia|media/i,
-      ];
+      // 2b. INTELLIGENT URL PRIORITIZATION WITH CATEGORIES
       
       // EXCLUSIONS - do not scrape these
       const excludePatterns = [
@@ -557,63 +664,102 @@ ZASADY:
         /blog\/\d|news\/\d|artykul\/\d|post\/\d/i,
         /login|logowanie|rejestracja|register|koszyk|cart|checkout/i,
         /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i,
-        /page=|sort=|filter=|utm_/i,
+        /page=|sort=|filter=|utm_|#/i,
+        /\?/i, // Skip URLs with query params
       ];
       
-      const pagesToScrape: string[] = [baseUrl];
-      const usedUrls = new Set([baseUrl.toLowerCase()]);
-      
       const shouldExclude = (url: string) => excludePatterns.some(p => p.test(url));
-      const matchesPriority = (url: string, patterns: RegExp[]) => patterns.some(p => p.test(url));
       
-      // Add Priority 1 pages
+      // Build prioritized URL list with categories
+      interface PrioritizedUrl {
+        url: string;
+        category: string;
+        priority: 'critical' | 'high' | 'medium' | 'low' | 'none';
+      }
+      
+      const prioritizedUrls: PrioritizedUrl[] = [];
+      const usedUrls = new Set<string>();
+      
+      // Always add base URL as 'home' with critical priority
+      prioritizedUrls.push({ url: baseUrl, category: 'home', priority: 'critical' });
+      usedUrls.add(baseUrl.toLowerCase());
+      
+      // Process discovered URLs and assign categories
       for (const url of discoveredUrls) {
-        if (usedUrls.has(url.toLowerCase())) continue;
+        const urlLower = url.toLowerCase();
+        if (usedUrls.has(urlLower)) continue;
         if (shouldExclude(url)) continue;
-        if (matchesPriority(url, priorityOnePatterns)) {
-          pagesToScrape.push(url);
-          usedUrls.add(url.toLowerCase());
+        
+        const { category, priority } = matchUrlToCategory(url);
+        prioritizedUrls.push({ url, category, priority });
+        usedUrls.add(urlLower);
+      }
+      
+      // Sort by priority (critical > high > medium > low > none)
+      const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
+      prioritizedUrls.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+      
+      // Limit to 20 pages for scraping
+      const urlsToScrape = prioritizedUrls.slice(0, 20);
+      
+      console.log('=== PAGES TO SCRAPE (by priority) ===');
+      urlsToScrape.forEach(p => console.log(`  [${p.priority}] ${p.category}: ${p.url}`));
+      
+      // 2c. SEQUENTIAL SCRAPING with rate limiting (500ms delay)
+      scrapedPages = [];
+      for (let i = 0; i < urlsToScrape.length; i++) {
+        const { url, category, priority } = urlsToScrape[i];
+        
+        const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
+        scrapedPages.push(page);
+        
+        // Rate limiting - wait 500ms between requests (except for last one)
+        if (i < urlsToScrape.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
-      console.log(`After Priority 1: ${pagesToScrape.length} pages`);
       
-      // Add Priority 2 pages
-      for (const url of discoveredUrls) {
-        if (pagesToScrape.length >= 12) break;
-        if (usedUrls.has(url.toLowerCase())) continue;
-        if (shouldExclude(url)) continue;
-        if (matchesPriority(url, priorityTwoPatterns)) {
-          pagesToScrape.push(url);
-          usedUrls.add(url.toLowerCase());
-        }
-      }
-      console.log(`After Priority 2: ${pagesToScrape.length} pages`);
-      
-      // Add Priority 3 pages
-      for (const url of discoveredUrls) {
-        if (pagesToScrape.length >= 15) break;
-        if (usedUrls.has(url.toLowerCase())) continue;
-        if (shouldExclude(url)) continue;
-        if (matchesPriority(url, priorityThreePatterns)) {
-          pagesToScrape.push(url);
-          usedUrls.add(url.toLowerCase());
-        }
-      }
-      console.log(`After Priority 3: ${pagesToScrape.length} pages`);
-      
-      console.log('Pages selected for scraping:', pagesToScrape);
-      
-      // 2c. Scrape pages in parallel (max 15)
-      const scrapePromises = pagesToScrape.slice(0, 15).map(url => 
-        scrapeWithFirecrawl(url, FIRECRAWL_API_KEY)
-      );
-      
-      scrapedPages = await Promise.all(scrapePromises);
+      // 2d. Calculate stats and categorize content
       const successfulScrapes = scrapedPages.filter(p => p.content).length;
-      console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
+      const totalWords = scrapedPages.reduce((sum, p) => sum + p.word_count, 0);
       
+      console.log(`=== SCRAPING COMPLETE ===`);
+      console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
+      console.log(`Total words collected: ${totalWords}`);
+      
+      // Group scraped pages by category
       for (const page of scrapedPages) {
-        console.log(`  - ${page.title}: ${page.content ? page.content.length + ' chars' : 'FAILED'}`);
+        const cat = page.category as keyof CategorizedContent;
+        if (categorizedContent[cat]) {
+          categorizedContent[cat].push(page);
+        } else {
+          categorizedContent.other.push(page);
+        }
+      }
+      
+      // Update scraping stats
+      scrapingStats = {
+        total_urls_found: discoveredUrls.length,
+        pages_scraped: scrapedPages.length,
+        successful_scrapes: successfulScrapes,
+        total_words: totalWords,
+        categories_found: Object.keys(categorizedContent).filter(
+          k => categorizedContent[k as keyof CategorizedContent].length > 0
+        )
+      };
+      
+      // Log category summary
+      console.log('=== CATEGORY SUMMARY ===');
+      for (const [category, pages] of Object.entries(categorizedContent)) {
+        if (pages.length > 0) {
+          const words = (pages as ScrapedPage[]).reduce((sum: number, p: ScrapedPage) => sum + p.word_count, 0);
+          console.log(`  ${category}: ${pages.length} pages, ${words} words`);
+        }
+      }
+      
+      // Log individual pages
+      for (const page of scrapedPages) {
+        console.log(`  - [${page.priority}] ${page.category} | ${page.title}: ${page.content ? page.word_count + ' words' : 'FAILED'}`);
       }
     } else {
       console.log('Firecrawl not configured or no website, skipping scraping');
@@ -964,19 +1110,44 @@ ${perplexityCitations.map((c, i) => `[${i + 1}] ${c}`).join('\n')}
 `;
     }
 
-    // Add Scraped Website Content
+    // Add Scraped Website Content - CATEGORIZED
     if (hasScrapedContent) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
-🌐 ZAWARTOŚĆ STRONY INTERNETOWEJ FIRMY (multi-page scraping):
+🌐 ZAWARTOŚĆ STRONY INTERNETOWEJ FIRMY (${scrapingStats.successful_scrapes} stron, ${scrapingStats.total_words} słów):
 ═══════════════════════════════════════════════════════════════════
 `;
-      for (const page of scrapedPages.filter(p => p.content)) {
+      
+      // Helper to add category section
+      const addCategorySection = (emoji: string, title: string, pages: ScrapedPage[]) => {
+        const pagesWithContent = pages.filter(p => p.content);
+        if (pagesWithContent.length === 0) return;
+        
+        const totalWords = pagesWithContent.reduce((sum, p) => sum + p.word_count, 0);
         userContent += `
---- [${page.title}] ${page.url} ---
-${page.content!.substring(0, 10000)}
+--- ${emoji} ${title} (${pagesWithContent.length} stron, ${totalWords} słów) ---
 `;
-      }
+        for (const page of pagesWithContent) {
+          userContent += `
+📄 [${page.title}] ${page.url}
+${page.content!.substring(0, 8000)}
+`;
+        }
+      };
+      
+      // Add content by category (prioritized order)
+      addCategorySection('🏠', 'STRONA GŁÓWNA', categorizedContent.home);
+      addCategorySection('📋', 'O FIRMIE', categorizedContent.about);
+      addCategorySection('🛒', 'PRODUKTY I USŁUGI', categorizedContent.products);
+      addCategorySection('🏗️', 'REALIZACJE I PORTFOLIO', categorizedContent.portfolio);
+      addCategorySection('🏷️', 'MARKI I DEALERSTWA', categorizedContent.brands);
+      addCategorySection('📍', 'LOKALIZACJE', categorizedContent.locations);
+      addCategorySection('👥', 'ZESPÓŁ I ZARZĄD', categorizedContent.team);
+      addCategorySection('🌱', 'CSR I EKOLOGIA', categorizedContent.csr);
+      addCategorySection('📰', 'AKTUALNOŚCI', categorizedContent.news);
+      addCategorySection('💼', 'KARIERA', categorizedContent.careers);
+      addCategorySection('📄', 'INNE', categorizedContent.other);
+      addCategorySection('📞', 'KONTAKT', categorizedContent.contact);
     }
 
     userContent += `
@@ -1109,7 +1280,7 @@ ${jsonStructure}
         enrichedData.krs = cleanedKrs.length === 10 ? cleanedKrs : null;
       }
       
-      // Add metadata about the enrichment process
+      // Add metadata about the enrichment process (with extended scraping stats)
       enrichedData.enrichment_metadata = {
         perplexity_profile_used: hasProfileInsights,
         perplexity_financial_used: hasFinancialInsights,
@@ -1117,8 +1288,19 @@ ${jsonStructure}
         perplexity_projects_used: hasProjectsInsights,
         perplexity_news_used: hasNewsInsights,
         perplexity_registry_used: hasRegistryInsights,
-        pages_scraped: scrapedPages.filter(p => p.content).length,
-        pages_scraped_urls: scrapedPages.filter(p => p.content).map(p => p.url),
+        scraping_stats: {
+          total_urls_found: scrapingStats.total_urls_found,
+          pages_scraped: scrapingStats.pages_scraped,
+          successful_scrapes: scrapingStats.successful_scrapes,
+          total_words: scrapingStats.total_words,
+          categories_found: scrapingStats.categories_found
+        },
+        pages_scraped_urls: scrapedPages.filter(p => p.content).map(p => ({
+          url: p.url,
+          category: p.category,
+          priority: p.priority,
+          word_count: p.word_count
+        })),
         perplexity_citations: perplexityCitations,
         analyzed_at: new Date().toISOString()
       };
