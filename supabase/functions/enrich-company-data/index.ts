@@ -1363,7 +1363,7 @@ ${jsonStructure}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 10000, // Reduced for faster response
+        max_tokens: 16000, // Full 16-section analysis needs more tokens
         temperature: 0.1,
       }),
     });
@@ -1482,28 +1482,66 @@ ${jsonStructure}
       } catch (initialParseError) {
         console.warn('Initial parse failed, attempting to fix truncated JSON');
         
-        const openBraces = (cleanedContent.match(/\{/g) || []).length;
-        const closeBraces = (cleanedContent.match(/\}/g) || []).length;
-        const openBrackets = (cleanedContent.match(/\[/g) || []).length;
-        const closeBrackets = (cleanedContent.match(/\]/g) || []).length;
-        
         let fixedContent = cleanedContent;
         
-        if (fixedContent.match(/"[^"]*$/)) {
+        // Remove trailing incomplete strings/values more aggressively
+        // Find last complete key-value pair by looking for last complete string or number
+        fixedContent = fixedContent
+          .replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\],]*$/g, '') // incomplete key:value
+          .replace(/,\s*\[[^\]]*$/g, '') // incomplete array
+          .replace(/,\s*\{[^}]*$/g, '') // incomplete object
+          .replace(/,\s*"[^"]*$/g, '') // incomplete string
+          .replace(/,\s*$/g, ''); // trailing comma
+        
+        // Close all open brackets and braces
+        const openBraces = (fixedContent.match(/\{/g) || []).length;
+        const closeBraces = (fixedContent.match(/\}/g) || []).length;
+        const openBrackets = (fixedContent.match(/\[/g) || []).length;
+        const closeBrackets = (fixedContent.match(/\]/g) || []).length;
+        
+        // Close unclosed strings
+        const quotes = (fixedContent.match(/"/g) || []).length;
+        if (quotes % 2 !== 0) {
           fixedContent = fixedContent + '"';
         }
         
+        // Close arrays first, then objects
         for (let i = 0; i < openBrackets - closeBrackets; i++) {
-          fixedContent = fixedContent.replace(/,\s*$/, '') + ']';
+          fixedContent = fixedContent + ']';
         }
         
         for (let i = 0; i < openBraces - closeBraces; i++) {
-          fixedContent = fixedContent.replace(/,\s*$/, '') + '}';
+          fixedContent = fixedContent + '}';
         }
         
-        console.log('Attempting to parse fixed content...');
-        enrichedData = JSON.parse(fixedContent);
-        console.log('Fixed JSON parse successful');
+        console.log('Attempting to parse fixed content, length:', fixedContent.length);
+        
+        try {
+          enrichedData = JSON.parse(fixedContent);
+          console.log('Fixed JSON parse successful');
+        } catch (secondParseError) {
+          // Last resort: try to extract as much valid data as possible
+          console.warn('Second parse failed, trying aggressive cleanup');
+          
+          // Find the last valid closing brace that would make valid JSON
+          let lastValidIndex = fixedContent.length;
+          for (let i = fixedContent.length - 1; i > 0; i--) {
+            if (fixedContent[i] === '}' || fixedContent[i] === ']') {
+              const testContent = fixedContent.substring(0, i + 1);
+              try {
+                enrichedData = JSON.parse(testContent);
+                console.log('Aggressive cleanup successful at index:', i);
+                break;
+              } catch {
+                continue;
+              }
+            }
+          }
+          
+          if (!enrichedData) {
+            throw secondParseError;
+          }
+        }
       }
       
       // Validate and clean NIP format (should be 10 digits)
