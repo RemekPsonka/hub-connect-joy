@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.parse-linkedin-network]
 verify_jwt = false
+
+[functions.scrape-company-logo]
+verify_jwt = false

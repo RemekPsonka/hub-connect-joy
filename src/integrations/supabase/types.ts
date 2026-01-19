@@ -257,19 +257,28 @@ export type Database = {
           city: string | null
           company_analysis_date: string | null
           company_analysis_status: string | null
+          company_size: string | null
           country: string | null
           created_at: string
+          created_by: string | null
           description: string | null
           employee_count: string | null
+          growth_rate: number | null
           id: string
           industry: string | null
           krs: string | null
+          legal_form: string | null
           logo_url: string | null
           name: string
           nip: string | null
           phone: string | null
           postal_code: string | null
           regon: string | null
+          revenue_amount: number | null
+          revenue_currency: string | null
+          revenue_year: number | null
+          short_name: string | null
+          tagline: string | null
           tenant_id: string
           updated_at: string
           website: string | null
@@ -283,19 +292,28 @@ export type Database = {
           city?: string | null
           company_analysis_date?: string | null
           company_analysis_status?: string | null
+          company_size?: string | null
           country?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          growth_rate?: number | null
           id?: string
           industry?: string | null
           krs?: string | null
+          legal_form?: string | null
           logo_url?: string | null
           name: string
           nip?: string | null
           phone?: string | null
           postal_code?: string | null
           regon?: string | null
+          revenue_amount?: number | null
+          revenue_currency?: string | null
+          revenue_year?: number | null
+          short_name?: string | null
+          tagline?: string | null
           tenant_id: string
           updated_at?: string
           website?: string | null
@@ -309,19 +327,28 @@ export type Database = {
           city?: string | null
           company_analysis_date?: string | null
           company_analysis_status?: string | null
+          company_size?: string | null
           country?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          growth_rate?: number | null
           id?: string
           industry?: string | null
           krs?: string | null
+          legal_form?: string | null
           logo_url?: string | null
           name?: string
           nip?: string | null
           phone?: string | null
           postal_code?: string | null
           regon?: string | null
+          revenue_amount?: number | null
+          revenue_currency?: string | null
+          revenue_year?: number | null
+          short_name?: string | null
+          tagline?: string | null
           tenant_id?: string
           updated_at?: string
           website?: string | null
