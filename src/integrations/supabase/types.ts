@@ -889,36 +889,51 @@ export type Database = {
           agent_persona: string | null
           agent_profile: Json | null
           contact_id: string
+          conversation_count: number | null
           created_at: string | null
           id: string
           insights: Json | null
+          knowledge_sources: Json | null
+          last_learning_at: string | null
           last_refresh_at: string | null
+          memory_summary: string | null
           refresh_sources: Json | null
           tenant_id: string
+          topics: string[] | null
           updated_at: string | null
         }
         Insert: {
           agent_persona?: string | null
           agent_profile?: Json | null
           contact_id: string
+          conversation_count?: number | null
           created_at?: string | null
           id?: string
           insights?: Json | null
+          knowledge_sources?: Json | null
+          last_learning_at?: string | null
           last_refresh_at?: string | null
+          memory_summary?: string | null
           refresh_sources?: Json | null
           tenant_id: string
+          topics?: string[] | null
           updated_at?: string | null
         }
         Update: {
           agent_persona?: string | null
           agent_profile?: Json | null
           contact_id?: string
+          conversation_count?: number | null
           created_at?: string | null
           id?: string
           insights?: Json | null
+          knowledge_sources?: Json | null
+          last_learning_at?: string | null
           last_refresh_at?: string | null
+          memory_summary?: string | null
           refresh_sources?: Json | null
           tenant_id?: string
+          topics?: string[] | null
           updated_at?: string | null
         }
         Relationships: [

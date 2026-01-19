@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.sync-contact-agents]
 verify_jwt = false
+
+[functions.learn-contact-agent]
+verify_jwt = false
