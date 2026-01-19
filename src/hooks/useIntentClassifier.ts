@@ -7,9 +7,50 @@ interface ClassifyResult {
   confidence: number;
 }
 
+// Industry keywords for smart routing
+const INDUSTRY_KEYWORDS = [
+  'mięs', 'kurczak', 'drób', 'wędlin', 'spożywcz', 'żywność',
+  'it', 'software', 'programist', 'developer', 'technolog',
+  'logistyk', 'transport', 'spedycj',
+  'produkcj', 'fabryka', 'zakład',
+  'budowlan', 'deweloper', 'nieruchom',
+  'finans', 'bank', 'ubezpiecz', 'księgow',
+  'farmac', 'medycz', 'zdrowie', 'szpital',
+  'motoryz', 'samochod', 'automotive',
+  'energy', 'oze', 'fotowolt', 'energia',
+  'handel', 'detalicz', 'hurt', 'sklep',
+  'usług', 'konsult', 'doradz',
+  'market', 'reklam', 'pr', 'media'
+];
+
+function containsIndustryKeyword(query: string): boolean {
+  const lowerQuery = query.toLowerCase();
+  return INDUSTRY_KEYWORDS.some(keyword => lowerQuery.includes(keyword));
+}
+
+function looksLikePersonQuery(query: string): boolean {
+  const words = query.trim().split(/\s+/);
+  // 2 words, each starting with capital letter = probably name
+  if (words.length === 2) {
+    const bothCapitalized = words.every(w => /^[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(w) && w.length > 1);
+    if (bothCapitalized) return true;
+  }
+  return false;
+}
+
 // Quick local classification for obvious patterns - bypasses AI call
 export function quickClassify(query: string): Intent | null {
   const lowerQuery = query.toLowerCase().trim();
+  
+  // NEW: If query looks like "name surname" → route to briefing/master
+  if (looksLikePersonQuery(query)) {
+    return 'briefing';
+  }
+  
+  // NEW: If query contains industry keywords → route to briefing/master
+  if (containsIndustryKeyword(lowerQuery)) {
+    return 'briefing';
+  }
   
   // Network patterns
   if (
@@ -64,8 +105,7 @@ export function quickClassify(query: string): Intent | null {
     lowerQuery.includes('cześć') ||
     lowerQuery.includes('dzień dobry') ||
     lowerQuery.includes('pomóż mi napisać') ||
-    lowerQuery.includes('co to jest') ||
-    lowerQuery.length < 20
+    lowerQuery.includes('co to jest')
   ) {
     return 'simple';
   }

@@ -59,6 +59,50 @@ serve(async (req) => {
     // Build context information
     let contextInfo = "";
     
+    // NEW: Extract search terms from last user message and search contacts
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+    const searchTerms = lastUserMessage.toLowerCase().match(/\b\w{3,}\b/g) || [];
+    
+    let matchedContacts: any[] = [];
+    if (searchTerms.length >= 1 && lastUserMessage.length > 5) {
+      // Build search conditions
+      const searchConditions = searchTerms.slice(0, 5).map(term => 
+        `full_name.ilike.%${term}%,profile_summary.ilike.%${term}%,company.ilike.%${term}%,notes.ilike.%${term}%`
+      ).join(',');
+
+      const { data: searchResults } = await supabase
+        .from("contacts")
+        .select(`
+          id, full_name, company, position, email, profile_summary, tags, notes,
+          companies (name, industry, description)
+        `)
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .or(searchConditions)
+        .limit(30);
+      
+      matchedContacts = searchResults || [];
+      console.log(`[ai-chat] Found ${matchedContacts.length} contacts matching query terms`);
+    }
+
+    // Add matched contacts to context FIRST (priority)
+    if (matchedContacts.length > 0) {
+      contextInfo += "\n\n🔍 KONTAKTY PASUJĄCE DO PYTANIA (priorytet!):\n";
+      matchedContacts.forEach((c, i) => {
+        const industry = (c.companies as any)?.industry || 'brak';
+        const tags = Array.isArray(c.tags) ? c.tags.join(', ') : 'brak';
+        contextInfo += `
+${i + 1}. **${c.full_name}** - ${c.company || 'brak firmy'}
+   Branża: ${industry}
+   Stanowisko: ${c.position || 'brak'}
+   Email: ${c.email || 'brak'}
+   Tagi: ${tags}
+   Profil: ${c.profile_summary?.substring(0, 300) || 'brak opisu'}
+   Notatki: ${c.notes?.substring(0, 200) || 'brak'}
+`;
+      });
+    }
+
     // Fetch relevant data for context using the verified tenant_id
     if (context?.includeContacts !== false) {
       const { data: contacts } = await supabase

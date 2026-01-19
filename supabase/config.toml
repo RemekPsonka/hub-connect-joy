@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.update-company-revenue]
 verify_jwt = false
+
+[functions.sync-contact-agents]
+verify_jwt = false
