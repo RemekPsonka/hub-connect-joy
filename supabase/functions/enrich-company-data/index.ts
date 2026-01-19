@@ -190,6 +190,7 @@ interface ScrapedPage {
     sourceURL?: string;
     statusCode?: number;
   } | null;
+  blocked?: boolean; // Flag for 408/429 blocked responses
 }
 
 interface ScrapingStats {
@@ -290,12 +291,28 @@ async function scrapeWithFirecrawl(
       },
       body: JSON.stringify({
         url,
-        formats: ['markdown', 'html'],
+        formats: ['markdown'],
         onlyMainContent: true,
-        waitFor: 3000,
-        timeout: 20000
+        waitFor: 2000,
+        timeout: 12000
       }),
     });
+    
+    // Detect blocked/rate-limited responses (408 Timeout, 429 Rate Limit)
+    if (response.status === 408 || response.status === 429) {
+      console.warn(`Scraping blocked for ${url}: ${response.status}`);
+      return { 
+        url, 
+        content: null, 
+        html: null, 
+        title: url, 
+        category, 
+        priority, 
+        word_count: 0, 
+        metadata: null,
+        blocked: true
+      };
+    }
     
     if (response.ok) {
       const data = await response.json();
@@ -840,13 +857,29 @@ ZASADY:
       console.log('=== PAGES TO SCRAPE (by priority) ===');
       urlsToScrape.forEach(p => console.log(`  [${p.priority}] ${p.category}: ${p.url}`));
       
-      // 2c. SEQUENTIAL SCRAPING with rate limiting (500ms delay)
+      // 2c. SEQUENTIAL SCRAPING with rate limiting and early exit on blocked sites
       scrapedPages = [];
+      let blockedCount = 0;
+      const BLOCKED_THRESHOLD = 3; // Exit early after 3 blocked requests
+      
       for (let i = 0; i < urlsToScrape.length; i++) {
+        // Early exit if site appears to block scraping
+        if (blockedCount >= BLOCKED_THRESHOLD) {
+          console.warn(`Early exit: ${blockedCount} URLs blocked by site, skipping remaining ${urlsToScrape.length - i} URLs`);
+          console.log(`Website ${website} appears to block scraping. Proceeding with Perplexity data only.`);
+          break;
+        }
+        
         const { url, category, priority } = urlsToScrape[i];
         
         const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
-        scrapedPages.push(page);
+        
+        if (page.blocked) {
+          blockedCount++;
+          console.warn(`Blocked ${blockedCount}/${BLOCKED_THRESHOLD}: ${url}`);
+        } else {
+          scrapedPages.push(page);
+        }
         
         // Rate limiting - wait 500ms between requests (except for last one)
         if (i < urlsToScrape.length - 1) {
