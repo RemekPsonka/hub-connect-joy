@@ -199,6 +199,7 @@ interface ScrapingStats {
   successful_scrapes: number;
   total_words: number;
   categories_found: string[];
+  error?: string; // Info about Firecrawl phase failure
 }
 
 interface CategorizedContent {
@@ -773,164 +774,183 @@ ZASADY:
       other: []
     };
     
-    if (FIRECRAWL_API_KEY && (website || domain)) {
-      console.log('=== PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING ===');
-      
-      const baseUrl = website?.startsWith('http') ? website : `https://${website || domain}`;
-      
-      // 2a. Map the website to discover all URLs (up to 100)
-      let discoveredUrls: string[] = [];
-      try {
-        console.log('Mapping website:', baseUrl);
-        const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: baseUrl,
-            limit: 100,
-            search: 'o nas, oferta, produkty, usługi, realizacje, portfolio, zespół, kontakt, historia, marki, lokalizacje, oddziały, csr, kariera, cennik, partnerzy, klienci, zarzad, kierownictwo'
-          }),
-        });
+    // Wrap entire Firecrawl phase in try-catch to ensure we always proceed with Perplexity data
+    try {
+      if (FIRECRAWL_API_KEY && (website || domain)) {
+        console.log('=== PHASE 2: FIRECRAWL COMPREHENSIVE WEBSITE SCRAPING ===');
         
-        if (mapResponse.ok) {
-          const mapData = await mapResponse.json();
-          discoveredUrls = mapData.links || [];
-          scrapingStats.total_urls_found = discoveredUrls.length;
-          console.log(`Discovered ${discoveredUrls.length} URLs from website map`);
-        } else {
-          console.warn('Map failed:', mapResponse.status);
-        }
-      } catch (e) {
-        console.warn('Map error:', e);
-      }
-      
-      // 2b. INTELLIGENT URL PRIORITIZATION WITH CATEGORIES
-      
-      // EXCLUSIONS - do not scrape these
-      const excludePatterns = [
-        /promocj|promo|rabat|okazj|wyprzedaz|sale|przecena|gratisy/i,
-        /regulamin|polityka|privacy|cookies|rodo|gdpr|terms/i,
-        /blog\/\d|news\/\d|artykul\/\d|post\/\d/i,
-        /login|logowanie|rejestracja|register|koszyk|cart|checkout/i,
-        /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i,
-        /page=|sort=|filter=|utm_|#/i,
-        /\?/i, // Skip URLs with query params
-      ];
-      
-      const shouldExclude = (url: string) => excludePatterns.some(p => p.test(url));
-      
-      // Build prioritized URL list with categories
-      interface PrioritizedUrl {
-        url: string;
-        category: string;
-        priority: 'critical' | 'high' | 'medium' | 'low' | 'none';
-      }
-      
-      const prioritizedUrls: PrioritizedUrl[] = [];
-      const usedUrls = new Set<string>();
-      
-      // Always add base URL as 'home' with critical priority
-      prioritizedUrls.push({ url: baseUrl, category: 'home', priority: 'critical' });
-      usedUrls.add(baseUrl.toLowerCase());
-      
-      // Process discovered URLs and assign categories
-      for (const url of discoveredUrls) {
-        const urlLower = url.toLowerCase();
-        if (usedUrls.has(urlLower)) continue;
-        if (shouldExclude(url)) continue;
+        const baseUrl = website?.startsWith('http') ? website : `https://${website || domain}`;
         
-        const { category, priority } = matchUrlToCategory(url);
-        prioritizedUrls.push({ url, category, priority });
-        usedUrls.add(urlLower);
-      }
-      
-      // Sort by priority (critical > high > medium > low > none)
-      const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
-      prioritizedUrls.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-      
-      // Limit to 20 pages for scraping
-      const urlsToScrape = prioritizedUrls.slice(0, 20);
-      
-      console.log('=== PAGES TO SCRAPE (by priority) ===');
-      urlsToScrape.forEach(p => console.log(`  [${p.priority}] ${p.category}: ${p.url}`));
-      
-      // 2c. SEQUENTIAL SCRAPING with rate limiting and early exit on blocked sites
-      scrapedPages = [];
-      let blockedCount = 0;
-      const BLOCKED_THRESHOLD = 3; // Exit early after 3 blocked requests
-      
-      for (let i = 0; i < urlsToScrape.length; i++) {
-        // Early exit if site appears to block scraping
-        if (blockedCount >= BLOCKED_THRESHOLD) {
-          console.warn(`Early exit: ${blockedCount} URLs blocked by site, skipping remaining ${urlsToScrape.length - i} URLs`);
-          console.log(`Website ${website} appears to block scraping. Proceeding with Perplexity data only.`);
-          break;
+        // 2a. Map the website to discover all URLs (up to 100)
+        let discoveredUrls: string[] = [];
+        try {
+          console.log('Mapping website:', baseUrl);
+          const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: baseUrl,
+              limit: 100,
+              search: 'o nas, oferta, produkty, usługi, realizacje, portfolio, zespół, kontakt, historia, marki, lokalizacje, oddziały, csr, kariera, cennik, partnerzy, klienci, zarzad, kierownictwo'
+            }),
+          });
+          
+          if (mapResponse.ok) {
+            const mapData = await mapResponse.json();
+            discoveredUrls = mapData.links || [];
+            scrapingStats.total_urls_found = discoveredUrls.length;
+            console.log(`Discovered ${discoveredUrls.length} URLs from website map`);
+          } else {
+            console.warn('Map failed:', mapResponse.status);
+          }
+        } catch (e) {
+          console.warn('Map error:', e);
         }
         
-        const { url, category, priority } = urlsToScrape[i];
+        // 2b. INTELLIGENT URL PRIORITIZATION WITH CATEGORIES
         
-        const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
+        // EXCLUSIONS - do not scrape these
+        const excludePatterns = [
+          /promocj|promo|rabat|okazj|wyprzedaz|sale|przecena|gratisy/i,
+          /regulamin|polityka|privacy|cookies|rodo|gdpr|terms/i,
+          /blog\/\d|news\/\d|artykul\/\d|post\/\d/i,
+          /login|logowanie|rejestracja|register|koszyk|cart|checkout/i,
+          /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i,
+          /page=|sort=|filter=|utm_|#/i,
+          /\?/i, // Skip URLs with query params
+        ];
         
-        if (page.blocked) {
-          blockedCount++;
-          console.warn(`Blocked ${blockedCount}/${BLOCKED_THRESHOLD}: ${url}`);
-        } else {
-          scrapedPages.push(page);
+        const shouldExclude = (url: string) => excludePatterns.some(p => p.test(url));
+        
+        // Build prioritized URL list with categories
+        interface PrioritizedUrl {
+          url: string;
+          category: string;
+          priority: 'critical' | 'high' | 'medium' | 'low' | 'none';
         }
         
-        // Rate limiting - wait 500ms between requests (except for last one)
-        if (i < urlsToScrape.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        const prioritizedUrls: PrioritizedUrl[] = [];
+        const usedUrls = new Set<string>();
+        
+        // Always add base URL as 'home' with critical priority
+        prioritizedUrls.push({ url: baseUrl, category: 'home', priority: 'critical' });
+        usedUrls.add(baseUrl.toLowerCase());
+        
+        // Process discovered URLs and assign categories
+        for (const url of discoveredUrls) {
+          const urlLower = url.toLowerCase();
+          if (usedUrls.has(urlLower)) continue;
+          if (shouldExclude(url)) continue;
+          
+          const { category, priority } = matchUrlToCategory(url);
+          prioritizedUrls.push({ url, category, priority });
+          usedUrls.add(urlLower);
         }
+        
+        // Sort by priority (critical > high > medium > low > none)
+        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
+        prioritizedUrls.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+        
+        // Limit to 20 pages for scraping
+        const urlsToScrape = prioritizedUrls.slice(0, 20);
+        
+        console.log('=== PAGES TO SCRAPE (by priority) ===');
+        urlsToScrape.forEach(p => console.log(`  [${p.priority}] ${p.category}: ${p.url}`));
+        
+        // 2c. SEQUENTIAL SCRAPING with rate limiting and early exit on blocked sites
+        scrapedPages = [];
+        let blockedCount = 0;
+        const BLOCKED_THRESHOLD = 3; // Exit early after 3 blocked requests
+        
+        for (let i = 0; i < urlsToScrape.length; i++) {
+          // Early exit if site appears to block scraping
+          if (blockedCount >= BLOCKED_THRESHOLD) {
+            console.warn(`Early exit: ${blockedCount} URLs blocked by site, skipping remaining ${urlsToScrape.length - i} URLs`);
+            console.log(`Website ${website} appears to block scraping. Proceeding with Perplexity data only.`);
+            break;
+          }
+          
+          const { url, category, priority } = urlsToScrape[i];
+          
+          const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
+          
+          if (page.blocked) {
+            blockedCount++;
+            console.warn(`Blocked ${blockedCount}/${BLOCKED_THRESHOLD}: ${url}`);
+          } else {
+            scrapedPages.push(page);
+          }
+          
+          // Rate limiting - wait 500ms between requests (except for last one)
+          if (i < urlsToScrape.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+        
+        // 2d. Calculate stats and categorize content
+        const successfulScrapes = scrapedPages.filter(p => p.content).length;
+        const totalWords = scrapedPages.reduce((sum, p) => sum + p.word_count, 0);
+        
+        console.log(`=== SCRAPING COMPLETE ===`);
+        console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
+        console.log(`Total words collected: ${totalWords}`);
+        
+        // Group scraped pages by category
+        for (const page of scrapedPages) {
+          const cat = page.category as keyof CategorizedContent;
+          if (categorizedContent[cat]) {
+            categorizedContent[cat].push(page);
+          } else {
+            categorizedContent.other.push(page);
+          }
+        }
+        
+        // Update scraping stats
+        scrapingStats = {
+          total_urls_found: discoveredUrls.length,
+          pages_scraped: scrapedPages.length,
+          successful_scrapes: successfulScrapes,
+          total_words: totalWords,
+          categories_found: Object.keys(categorizedContent).filter(
+            k => categorizedContent[k as keyof CategorizedContent].length > 0
+          )
+        };
+        
+        // Log category summary
+        console.log('=== CATEGORY SUMMARY ===');
+        for (const [category, pages] of Object.entries(categorizedContent)) {
+          if (pages.length > 0) {
+            const words = (pages as ScrapedPage[]).reduce((sum: number, p: ScrapedPage) => sum + p.word_count, 0);
+            console.log(`  ${category}: ${pages.length} pages, ${words} words`);
+          }
+        }
+        
+        // Log individual pages
+        for (const page of scrapedPages) {
+          console.log(`  - [${page.priority}] ${page.category} | ${page.title}: ${page.content ? page.word_count + ' words' : 'FAILED'}`);
+        }
+      } else {
+        console.log('Firecrawl not configured or no website, skipping scraping');
       }
+    } catch (firecrawlError) {
+      // SAFETY NET: If entire Firecrawl phase fails, proceed with Perplexity data only
+      console.warn('=== FIRECRAWL PHASE FAILED ===');
+      console.warn('Error:', firecrawlError);
+      console.log('Proceeding with Perplexity data only - this is expected for some websites');
       
-      // 2d. Calculate stats and categorize content
-      const successfulScrapes = scrapedPages.filter(p => p.content).length;
-      const totalWords = scrapedPages.reduce((sum, p) => sum + p.word_count, 0);
-      
-      console.log(`=== SCRAPING COMPLETE ===`);
-      console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
-      console.log(`Total words collected: ${totalWords}`);
-      
-      // Group scraped pages by category
-      for (const page of scrapedPages) {
-        const cat = page.category as keyof CategorizedContent;
-        if (categorizedContent[cat]) {
-          categorizedContent[cat].push(page);
-        } else {
-          categorizedContent.other.push(page);
-        }
-      }
-      
-      // Update scraping stats
+      // Reset stats to indicate no scraping data available
       scrapingStats = {
-        total_urls_found: discoveredUrls.length,
-        pages_scraped: scrapedPages.length,
-        successful_scrapes: successfulScrapes,
-        total_words: totalWords,
-        categories_found: Object.keys(categorizedContent).filter(
-          k => categorizedContent[k as keyof CategorizedContent].length > 0
-        )
+        total_urls_found: 0,
+        pages_scraped: 0,
+        successful_scrapes: 0,
+        total_words: 0,
+        categories_found: [],
+        error: `Firecrawl phase failed: ${firecrawlError instanceof Error ? firecrawlError.message : 'Unknown error'}. Using Perplexity data only.`
       };
-      
-      // Log category summary
-      console.log('=== CATEGORY SUMMARY ===');
-      for (const [category, pages] of Object.entries(categorizedContent)) {
-        if (pages.length > 0) {
-          const words = (pages as ScrapedPage[]).reduce((sum: number, p: ScrapedPage) => sum + p.word_count, 0);
-          console.log(`  ${category}: ${pages.length} pages, ${words} words`);
-        }
-      }
-      
-      // Log individual pages
-      for (const page of scrapedPages) {
-        console.log(`  - [${page.priority}] ${page.category} | ${page.title}: ${page.content ? page.word_count + ' words' : 'FAILED'}`);
-      }
-    } else {
-      console.log('Firecrawl not configured or no website, skipping scraping');
+      scrapedPages = [];
     }
 
     // ==========================================
@@ -1648,7 +1668,9 @@ ${jsonStructure}
           pages_scraped: scrapingStats.pages_scraped,
           successful_scrapes: scrapingStats.successful_scrapes,
           total_words: scrapingStats.total_words,
-          categories_found: scrapingStats.categories_found
+          categories_found: scrapingStats.categories_found,
+          fallback_to_perplexity: !!scrapingStats.error,
+          error: scrapingStats.error || null
         },
         pages_scraped_detail: scrapedPages.filter(p => p.content).map(p => ({
           url: p.url,
