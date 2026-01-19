@@ -191,6 +191,22 @@ export interface DataSources {
   };
 }
 
+// Group Company structure (for group analysis)
+export interface GroupCompany {
+  name: string;
+  nip?: string;
+  revenue_amount?: number;
+  revenue_year?: number;
+  role?: 'parent' | 'subsidiary' | 'affiliate';
+  ownership_percent?: number;
+}
+
+export interface ConsolidatedRevenue {
+  amount: number;
+  year: number;
+  source?: string;
+}
+
 // ============================================
 // Main Company Analysis Interface - 16 Sections
 // ============================================
@@ -305,6 +321,12 @@ export interface CompanyAnalysis {
   address?: string;
   city?: string;
   postal_code?: string;
+  
+  // SEKCJA 17: Grupa kapitałowa
+  is_group?: boolean;
+  group_companies?: GroupCompany[];
+  consolidated_revenue?: ConsolidatedRevenue;
+  parent_company_id?: string;
   
   // Metadata
   confidence?: 'high' | 'medium' | 'low';

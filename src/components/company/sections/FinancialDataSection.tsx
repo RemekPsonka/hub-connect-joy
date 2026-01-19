@@ -1,10 +1,16 @@
 import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { DollarSign, Users, TrendingUp, Trophy } from 'lucide-react';
+import { DollarSign, Users, TrendingUp, Trophy, RefreshCw, Loader2 } from 'lucide-react';
 import type { SectionProps } from '../types';
 
-export function FinancialDataSection({ data }: SectionProps) {
+interface FinancialDataSectionProps extends SectionProps {
+  onUpdateRevenue?: () => void;
+  isUpdatingRevenue?: boolean;
+}
+
+export function FinancialDataSection({ data, onUpdateRevenue, isUpdatingRevenue }: FinancialDataSectionProps) {
   const revenueHistory = data.revenue_history || [];
   const rankingPositions = data.ranking_positions || [];
   
@@ -21,6 +27,24 @@ export function FinancialDataSection({ data }: SectionProps) {
     <SectionCard
       icon={<DollarSign className="h-4 w-4" />}
       title="Dane finansowe i rynkowe"
+      action={
+        onUpdateRevenue && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={onUpdateRevenue} 
+            disabled={isUpdatingRevenue}
+            className="h-7 text-xs"
+          >
+            {isUpdatingRevenue ? (
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            Aktualizuj przychod
+          </Button>
+        )
+      }
     >
       <div className="space-y-4">
         {/* Key metrics cards */}

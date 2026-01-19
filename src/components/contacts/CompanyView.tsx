@@ -14,7 +14,9 @@ import {
   getCompanyLogoUrl, 
   extractEmailDomain,
   extractWebsiteDomain,
-  useAssignContactsByDomain
+  useAssignContactsByDomain,
+  useUpdateCompanyRevenue,
+  useRemoveGroupCompany
 } from '@/hooks/useCompanies';
 import { CompanyModal } from './CompanyModal';
 import { CompanyAnalysisViewer } from '@/components/company';
@@ -247,6 +249,16 @@ export function CompanyView({ contact }: CompanyViewProps) {
         onRegenerate={handleGenerateCompanyAI}
         isRegenerating={regenerateCompanyAI.isPending}
         companyName={company.name}
+        onUpdateRevenue={() => updateRevenue.mutate({ 
+          companyId: company.id, 
+          companyName: company.name,
+          isGroup: !!(aiAnalysis?.is_group || aiAnalysis?.group_companies?.length)
+        })}
+        isUpdatingRevenue={updateRevenue.isPending}
+        onRemoveGroupCompany={(name) => removeGroupCompany.mutate({ 
+          companyId: company.id, 
+          companyNameToRemove: name 
+        })}
       />
 
       {/* People from this company */}
