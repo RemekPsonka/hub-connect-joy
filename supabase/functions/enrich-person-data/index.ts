@@ -137,7 +137,8 @@ serve(async (req) => {
       profile: PerplexityResult | null;
       media: PerplexityResult | null;
       organizations: PerplexityResult | null;
-    } = { profile: null, media: null, organizations: null };
+      family: PerplexityResult | null;
+    } = { profile: null, media: null, organizations: null, family: null };
     
     let allPerplexityCitations: string[] = [];
     
@@ -192,28 +193,58 @@ Struktura:
 ## Działalność społeczna
 ## ⚠️ OSTRZEŻENIA (kontrowersje, problemy, skandale)`;
 
-      // Execute all three queries in parallel
-      const [profileResult, mediaResult, orgResult] = await Promise.all([
+      // QUERY 4: Family connections and personal life
+      const familyQuery = `"${fullName}" żona mąż dzieci rodzina syn córka rodzice brat siostra partner:
+- małżonek/małżonka (imię, wiek, czym się zajmuje)
+- dzieci (imiona, wiek, zajęcie/szkoła)
+- rodzice (imiona, czy żyją, czym się zajmowali)
+- rodzeństwo (imiona, relacja, zajęcie)
+- inne ważne powiązania rodzinne`;
+
+      const familySystemPrompt = `Jesteś ekspertem w wywiadzie środowiskowym. Znajdź informacje o rodzinie i powiązaniach osobistych tej osoby.
+Odpowiadaj TYLKO po polsku. Podawaj fakty ze źródeł publicznych. Format markdown.
+
+WAŻNE: Dla KAŻDEGO członka rodziny podaj:
+- Imię (jeśli znane publicznie)
+- Pokrewieństwo (żona, mąż, syn, córka, ojciec, matka, brat, siostra, partner/partnerka)
+- Wiek lub przedział wiekowy (jeśli znany)
+- Zawód/zajęcie (np. lekarz, student, emeryt, właściciel firmy X)
+
+Struktura odpowiedzi:
+## Małżonek/Partner
+## Dzieci  
+## Rodzice
+## Rodzeństwo
+## Inne powiązania rodzinne
+
+Jeśli brak publicznie dostępnych informacji - napisz "📭 Brak publicznie dostępnych danych".
+NIE WYMYŚLAJ danych rodzinnych!`;
+
+      // Execute all four queries in parallel
+      const [profileResult, mediaResult, orgResult, familyResult] = await Promise.all([
         queryPerplexity(PERPLEXITY_API_KEY, profileQuery, profileSystemPrompt),
         queryPerplexity(PERPLEXITY_API_KEY, mediaQuery, mediaSystemPrompt, 'year'),
-        queryPerplexity(PERPLEXITY_API_KEY, orgQuery, orgSystemPrompt)
+        queryPerplexity(PERPLEXITY_API_KEY, orgQuery, orgSystemPrompt),
+        queryPerplexity(PERPLEXITY_API_KEY, familyQuery, familySystemPrompt)
       ]);
 
       perplexityResults = {
         profile: profileResult,
         media: mediaResult,
-        organizations: orgResult
+        organizations: orgResult,
+        family: familyResult
       };
 
       // Collect all citations
       if (profileResult?.citations) allPerplexityCitations.push(...profileResult.citations);
       if (mediaResult?.citations) allPerplexityCitations.push(...mediaResult.citations);
       if (orgResult?.citations) allPerplexityCitations.push(...orgResult.citations);
+      if (familyResult?.citations) allPerplexityCitations.push(...familyResult.citations);
       
       // Deduplicate citations
       allPerplexityCitations = [...new Set(allPerplexityCitations)];
       
-      console.log(`[enrich-person-data] Perplexity completed: profile=${!!profileResult}, media=${!!mediaResult}, org=${!!orgResult}`);
+      console.log(`[enrich-person-data] Perplexity completed: profile=${!!profileResult}, media=${!!mediaResult}, org=${!!orgResult}, family=${!!familyResult}`);
       console.log(`[enrich-person-data] Total Perplexity citations: ${allPerplexityCitations.length}`);
     } else {
       console.warn('[enrich-person-data] PERPLEXITY_API_KEY not configured, skipping internet search');
@@ -303,14 +334,22 @@ Przeanalizuj WSZYSTKIE dostarczone źródła i stwórz KOMPLEKSOWY profil osoby.
    - Fundacje, działalność społeczna
    - Powiązania biznesowe
 
-4. **⚠️ OSTRZEŻENIA I CZERWONE FLAGI**
+4. **RODZINA I POWIĄZANIA OSOBISTE**
+   - Małżonek/partner (imię, wiek, zajęcie)
+   - Dzieci (imiona, wiek, zajęcia)
+   - Rodzice (imiona, status, czym się zajmowali)
+   - Rodzeństwo (imiona, relacja, zajęcia)
+   - Inne ważne powiązania rodzinne
+   (Jeśli brak publicznych danych - napisz "📭 Brak publicznie dostępnych informacji")
+
+5. **⚠️ OSTRZEŻENIA I CZERWONE FLAGI**
    - Kontrowersje, skandale
    - Problemy prawne
    - Konflikty interesów
    - Negatywne informacje prasowe
    (Jeśli brak - napisz "Nie znaleziono ostrzeżeń")
 
-5. **TAGI** (5-10 słów kluczowych charakteryzujących osobę)
+6. **TAGI** (5-10 słów kluczowych charakteryzujących osobę)
    Format: #tag1 #tag2 #tag3
 
 ZASADY KRYTYCZNE:
@@ -354,7 +393,14 @@ ${perplexityResults.organizations?.content || '📭 Brak danych'}
 Cytaty: ${perplexityResults.organizations?.citations?.join(', ') || 'brak'}
 
 ═══════════════════════════════════════════════════════════════
-🔍 ŹRÓDŁO 4: FIRECRAWL - WYNIKI WYSZUKIWANIA (${firecrawlResults.length} stron)
+👨‍👩‍👧‍👦 ŹRÓDŁO 4: PERPLEXITY - RODZINA I POWIĄZANIA OSOBISTE
+═══════════════════════════════════════════════════════════════
+${perplexityResults.family?.content || '📭 Brak danych'}
+
+Cytaty: ${perplexityResults.family?.citations?.join(', ') || 'brak'}
+
+═══════════════════════════════════════════════════════════════
+🔍 ŹRÓDŁO 5: FIRECRAWL - WYNIKI WYSZUKIWANIA (${firecrawlResults.length} stron)
 ═══════════════════════════════════════════════════════════════
 ${firecrawlResults.length === 0 ? '📭 Brak wyników wyszukiwania.' : firecrawlResults.map((r, i) => `
 ┌─────────────────────────────────────────────────────────────
@@ -371,8 +417,9 @@ ${r.markdown?.substring(0, 2000) || r.description || 'Brak treści'}
 2. Stwórz spójny, szczegółowy profil
 3. Wyodrębnij wypowiedzi publiczne i cytaty
 4. Wymień WSZYSTKIE organizacje gdzie osoba działa
-5. Zidentyfikuj WSZYSTKIE ostrzeżenia i czerwone flagi
-6. Wygeneruj 5-10 tagów charakteryzujących osobę`
+5. Wyodrębnij informacje o RODZINIE (imiona, pokrewieństwo, wiek, zajęcie)
+6. Zidentyfikuj WSZYSTKIE ostrzeżenia i czerwone flagi
+7. Wygeneruj 5-10 tagów charakteryzujących osobę`
           }
         ],
         max_tokens: 4000,
@@ -463,7 +510,7 @@ ${r.markdown?.substring(0, 2000) || r.description || 'Brak treści'}
     // Build data notes
     const dataNotes: string[] = [];
     if (PERPLEXITY_API_KEY) {
-      dataNotes.push(`Perplexity: profil=${!!perplexityResults.profile}, media=${!!perplexityResults.media}, organizacje=${!!perplexityResults.organizations}`);
+      dataNotes.push(`Perplexity: profil=${!!perplexityResults.profile}, media=${!!perplexityResults.media}, organizacje=${!!perplexityResults.organizations}, rodzina=${!!perplexityResults.family}`);
       dataNotes.push(`Źródła Perplexity: ${allPerplexityCitations.length}`);
     } else {
       dataNotes.push('Perplexity: nie skonfigurowany');
