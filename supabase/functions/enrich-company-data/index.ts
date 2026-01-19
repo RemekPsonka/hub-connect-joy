@@ -978,226 +978,56 @@ ZASADY:
       scrapedPages: scrapedPages.filter(p => p.content).length,
     });
 
-    // Build comprehensive system prompt - 16 SECTIONS ULTRA-DETAILED
+    // Build OPTIMIZED system prompt - shorter for faster response
     const systemPrompt = hasAnyData
-      ? `Jesteś strategicznym analitykiem biznesowym z 25-letnim doświadczeniem w analizie polskich i międzynarodowych firm.
+      ? `Jesteś analitykiem biznesowym. Stwórz szczegółowy profil firmy w JSON.
 
-🎯 CEL GŁÓWNY: Stwórz ULTRA-SZCZEGÓŁOWY profil firmy służący jako podstawa do:
-- Matchowania potencjalnych partnerów biznesowych
-- Identyfikacji synergii współpracy
-- Oceny potencjału biznesowego
-- Przygotowania strategii networkingu
+📊 ŹRÓDŁA DANYCH:
+- Perplexity: ${[hasProfileInsights, hasFinancialInsights, hasLocationInsights, hasProjectsInsights, hasNewsInsights, hasRegistryInsights].filter(Boolean).length}/6 zapytań
+- Firecrawl: ${scrapingStats.successful_scrapes} stron, ${scrapingStats.total_words} słów
 
-📊 DANE WEJŚCIOWE DO SYNTEZY:
-Otrzymujesz dane z 3 źródeł:
+🎯 STRUKTURA JSON (16 sekcji):
 
-ŹRÓDŁO 1: PERPLEXITY (6 zapytań)
-${hasProfileInsights ? '✅ Query 1: Profil firmy i historia' : '❌ Query 1: Profil firmy - BRAK DANYCH'}
-${hasFinancialInsights ? '✅ Query 2: Dane finansowe i rynkowe' : '❌ Query 2: Dane finansowe - BRAK DANYCH'}
-${hasLocationInsights ? '✅ Query 3: Lokalizacje i zasięg geograficzny' : '❌ Query 3: Lokalizacje - BRAK DANYCH'}
-${hasProjectsInsights ? '✅ Query 4: Klienci, projekty, konkurencja' : '❌ Query 4: Projekty - BRAK DANYCH'}
-${hasNewsInsights ? '✅ Query 5: Newsy, sygnały rynkowe, CSR' : '❌ Query 5: Newsy - BRAK DANYCH'}
-${hasRegistryInsights ? '✅ Query 6: Dane rejestrowe' : '❌ Query 6: Dane rejestrowe - BRAK DANYCH'}
+1. PODSTAWOWE: name, short_name, legal_form, industry, sub_industries[], description (200 słów), tagline, year_founded, founder_info
 
-ŹRÓDŁO 2: FIRECRAWL (${scrapingStats.successful_scrapes} podstron, ${scrapingStats.total_words} słów)
-Zgrupowane po kategoriach: ${scrapingStats.categories_found.join(', ') || 'brak'}
+2. HISTORIA: timeline[{year, event, impact, source}], major_transformations[], mergers_acquisitions[{target, year, value_pln, details}], expansion_history
 
-ŹRÓDŁO 3: METADATA
-- URL strony głównej: ${website || 'brak'}
-- Statystyki scrapingu: ${scrapingStats.total_words} słów z ${scrapingStats.pages_scraped} stron
+3. FINANSE (TYLKO konkretne liczby ze źródeł!): revenue{amount, year, currency, source}, revenue_history[{year, amount, growth_pct}], growth_rate, profit_margin, employee_count, employee_growth, market_share, market_position, ranking_positions[{ranking_name, position, year, source}]
 
-═══════════════════════════════════════════════════════════════════
-📋 STRUKTURA ANALIZY - 16 SEKCJI
-═══════════════════════════════════════════════════════════════════
+4. MODEL BIZNESOWY: business_model (200 słów), value_proposition, competitive_advantages[], pricing_strategy, target_markets[], go_to_market_strategy
 
-SEKCJA 1: PODSTAWOWE INFORMACJE
-Wymagane pola:
-- name (string) - Pełna oficjalna nazwa z formą prawną (Sp. z o.o., S.A.)
-- short_name (string) - Nazwa skrócona/handlowa używana potocznie
-- legal_form (string) - Forma prawna (sp. z o.o., S.A., sp.k., itp.)
-- industry (string) - Główna branża (konkretna, np. "Automotive - Parts Distribution", NIE ogólne "Motoryzacja")
-- sub_industries (string[]) - Lista pod-branż i specjalizacji (min 2-3, konkretne nisze)
-- description (string) - Szczegółowy opis działalności (200-300 słów) - CO DOKŁADNIE robi firma
-- tagline (string | null) - Hasło firmowe/slogan ze strony
-- year_founded (number | null) - Rok założenia
-- founder_info (string | null) - Założyciele i ich background
+5. PRODUKTY/USŁUGI: products[{name, category, description, target_customer, price_range, key_features[], availability}], services[], product_categories[], flagship_products[], new_products_2024[]
 
-SEKCJA 2: HISTORIA I KAMIENIE MILOWE
-- timeline (array) - Wydarzenia kluczowe (min 5 jeśli firma >10 lat):
-  [{year: number, event: string, impact: string, source: string}]
-- major_transformations (string[]) - Transformacje biznesowe (rebranding, zmiana modelu)
-- mergers_acquisitions (array) - Fuzje/przejęcia:
-  [{target: string, year: number, value_pln: number | null, details: string}]
-- expansion_history (string) - Historia ekspansji geograficznej
+6. MARKI: own_brands[{brand_name, description, market_segment, product_categories[]}], represented_brands[{brand_name, manufacturer, distribution_scope, product_lines[]}], partnerships[]
 
-SEKCJA 3: DANE FINANSOWE I RYNKOWE
-- revenue (object) - Ostatni znany przychód:
-  {amount: number | null, year: number, currency: "PLN", source: string}
-- revenue_history (array) - Ostatnie 3 lata:
-  [{year: number, amount: number, growth_pct: number | null}]
-- growth_rate (number | null) - Tempo wzrostu % YoY
-- profit_margin (number | null) - Marża zysku %
-- employee_count (number | null) - Liczba pracowników
-- employee_growth (string | null) - Wzrost zatrudnienia (np. "+15% w 2024")
-- market_share (number | null) - Udział w rynku %
-- market_position (string) - Pozycja rynkowa opisowo (lider, top 5, challenger)
-- ranking_positions (array) - Pozycje w rankingach:
-  [{ranking_name: string, position: number, year: number, source: string}]
-⚠️ KRYTYCZNE: TYLKO konkretne liczby ze źródeł. Jeśli brak → null, NIE SZACUJ!
+7. LOKALIZACJE: headquarters{address, city, postal_code, country}, locations[{type, city, address, opening_year, size_sqm, employee_count}], geographic_coverage{poland_regions[], poland_cities[], international[]}, distribution_network
 
-SEKCJA 4: MODEL BIZNESOWY I STRATEGIA
-- business_model (string) - 200-300 słów: B2B/B2C, model sprzedaży, revenue streams
-- value_proposition (string) - Unikalna wartość dla klientów (100 słów)
-- competitive_advantages (string[]) - Przewagi konkurencyjne (min 3-5, konkretne)
-- pricing_strategy (string | null) - Strategia cenowa (premium/średni/budget)
-- target_markets (string[]) - Docelowe rynki i segmenty
-- go_to_market_strategy (string) - Jak dociera do klientów (kanały, metody)
+8. KLIENCI/PROJEKTY: key_clients[{client_name, industry, relationship_type, collaboration_start, notable_projects[]}], reference_projects[{project_name, client, value_pln, year, scope, outcome, source}], case_studies[], public_contracts[]
 
-SEKCJA 5: PRODUKTY I USŁUGI
-- products (array) - Lista produktów (min 5):
-  [{
-    name: string,
-    category: string,
-    description: string (50-100 słów, KONKRETNIE),
-    target_customer: string,
-    price_range: string | null,
-    key_features: string[],
-    availability: string
-  }]
-- services (array) - Lista usług (analogiczna struktura)
-- product_categories (string[]) - Główne kategorie produktowe
-- flagship_products (string[]) - Top 3-5 najważniejszych produktów/usług
-- new_products_2024 (string[]) - Nowe produkty z ostatniego roku
+9. KONKURENCJA: main_competitors[{company_name, comparison, competitive_edge}], competitive_position, market_trends
 
-SEKCJA 6: MARKI I DEALERSTWA
-- own_brands (array) - Marki własne:
-  [{brand_name: string, description: string, market_segment: string, product_categories: string[]}]
-- represented_brands (array) - Marki reprezentowane/dealerstwa:
-  [{brand_name: string, manufacturer: string, distribution_scope: string, product_lines: string[]}]
-- partnerships (string[]) - Kluczowe partnerstwa strategiczne
+10. OFERTA: offer_summary, unique_selling_points[], certifications[], awards[], quality_standards[]
 
-SEKCJA 7: LOKALIZACJE I ZASIĘG
-- headquarters (object) - Siedziba główna:
-  {address: string, city: string, postal_code: string | null, country: string, coordinates: {lat: number, lng: number} | null}
-- locations (array) - Wszystkie lokalizacje:
-  [{type: string (office/factory/warehouse/showroom/retail), city: string, address: string | null, opening_year: number | null, size_sqm: number | null, employee_count: number | null}]
-- geographic_coverage (object) - Zasięg:
-  {poland_regions: string[], poland_cities: string[], international: string[]}
-- distribution_network (string | null) - Opis sieci dystrybucji
+11. CZEGO SZUKA: seeking_clients, seeking_partners, seeking_suppliers, seeking_investors, hiring_positions[], expansion_plans
 
-SEKCJA 8: KLIENCI I PROJEKTY REFERENCYJNE
-- key_clients (array) - Kluczowi klienci:
-  [{client_name: string, industry: string, relationship_type: string, collaboration_start: number | null, notable_projects: string[]}]
-- reference_projects (array) - Flagowe projekty:
-  [{project_name: string, client: string, value_pln: number | null, year: number, scope: string, outcome: string, source: string}]
-- case_studies (string[]) - Linki do case studies
-- public_contracts (string[]) - Wygrane przetargi publiczne
+12. POTENCJAŁ WSPÓŁPRACY: collaboration_opportunities[], ideal_partner_profile, synergy_potential[], partnership_benefits
 
-SEKCJA 9: KONKURENCJA
-- main_competitors (array) - Główni konkurenci:
-  [{company_name: string, comparison: string (wielkość, cena, jakość), competitive_edge: string}]
-- competitive_position (string) - 100 słów: pozycja vs konkurencja
-- market_trends (string) - Trendy rynkowe wpływające na firmę
+13. ZARZĄD: management[{name, position, since_year, background}], company_size, organizational_structure, company_culture
 
-SEKCJA 10: CO FIRMA OFERUJE
-- offer_summary (string) - Podsumowanie oferty (100 słów)
-- unique_selling_points (string[]) - Unikalne cechy oferty (min 3-5)
-- certifications (string[]) - Certyfikaty jakości, ISO, branżowe
-- awards (string[]) - Nagrody i wyróżnienia
-- quality_standards (string[]) - Standardy jakości stosowane
+14. NEWSY: recent_news[{date, title, summary, source, url, sentiment, importance}], market_signals[], recent_investments[{amount_pln, purpose, year}], overall_sentiment
 
-SEKCJA 11: CZEGO FIRMA SZUKA (KLUCZOWE dla matchowania!)
-- seeking_clients (string) - Jakiego typu klientów poszukuje
-- seeking_partners (string) - Jakiego typu partnerów szuka
-- seeking_suppliers (string) - Jakich dostawców potrzebuje
-- seeking_investors (string | null) - Czy szuka inwestorów
-- hiring_positions (string[]) - Otwarte rekrutacje
-- expansion_plans (string) - Plany ekspansji i rozwoju
+15. CSR: csr_activities[{activity_name, description, beneficiaries, year_started}], environmental_policy, social_initiatives[], sustainability_goals[], charity_partnerships[]
 
-SEKCJA 12: POTENCJAŁ WSPÓŁPRACY
-- collaboration_opportunities (string[]) - Konkretne obszary możliwej współpracy
-- ideal_partner_profile (string) - Profil idealnego partnera (100 słów)
-- synergy_potential (string[]) - Obszary synergii
-- partnership_benefits (string) - Korzyści ze współpracy
+16. REJESTROWE (TYLKO ze źródeł!): nip (10 cyfr), regon (9/14 cyfr), krs (10 cyfr), registration_address, registration_date
 
-SEKCJA 13: ZARZĄD I ORGANIZACJA
-- management (array) - Zarząd:
-  [{name: string, position: string, since_year: number | null, background: string}]
-- company_size (string) - mikro/mała/średnia/duża
-- organizational_structure (string | null) - Struktura organizacyjna
-- company_culture (string) - Kultura organizacyjna
+METADATA: analysis_confidence (high/medium/low), data_freshness, missing_sections[], primary_sources[]
 
-SEKCJA 14: NEWSY I SYGNAŁY RYNKOWE
-- recent_news (array) - Ostatnie newsy (min 5):
-  [{date: string (YYYY-MM-DD), title: string, summary: string, source: string, url: string | null, sentiment: "positive" | "neutral" | "negative", importance: "high" | "medium" | "low"}]
-- market_signals (string[]) - Sygnały rynkowe (wzrost, problemy, zmiany)
-- recent_investments (array) - Ostatnie inwestycje:
-  [{amount_pln: number | null, purpose: string, year: number}]
-- overall_sentiment (string) - positive/neutral/negative
+⚠️ ZASADY:
+- NIE wymyślaj danych finansowych/NIP/KRS - użyj null
+- Podawaj źródła
+- Zwróć TYLKO JSON, bez markdown
 
-SEKCJA 15: CSR I ZRÓWNOWAŻONY ROZWÓJ
-- csr_activities (array) - Działania CSR:
-  [{activity_name: string, description: string, beneficiaries: string, year_started: number | null}]
-- environmental_policy (string | null) - Polityka środowiskowa
-- social_initiatives (string[]) - Inicjatywy społeczne
-- sustainability_goals (string[]) - Cele zrównoważonego rozwoju
-- charity_partnerships (string[]) - Partnerstwa charytatywne
-
-SEKCJA 16: DANE REJESTROWE
-- nip (string | null) - NIP (10 cyfr)
-- regon (string | null) - REGON (9 lub 14 cyfr)
-- krs (string | null) - KRS (10 cyfr)
-- registration_address (string) - Adres rejestrowy
-- registration_date (string | null) - Data rejestracji
-⚠️ KRYTYCZNE: Źródło TYLKO Perplexity Query 6 z oficjalnych rejestrów. NIE WYMYŚLAJ!
-
-METADATA
-- analysis_confidence (string) - overall: high/medium/low
-- data_freshness (string) - ocena aktualności danych
-- missing_sections (string[]) - sekcje bez danych
-- primary_sources (string[]) - główne źródła
-
-═══════════════════════════════════════════════════════════════════
-🎯 ZASADY SYNTEZY
-═══════════════════════════════════════════════════════════════════
-
-Priorytet źródeł:
-1. Perplexity Query 2 - dane finansowe (LICZBY KRYTYCZNE)
-2. Firecrawl products/about - produkty, oferta (SZCZEGÓŁY)
-3. Perplexity Query 1 - profil, historia, model biznesowy
-4. Perplexity Query 5 - newsy, CSR (AKTUALNOŚCI)
-5. Perplexity Query 3 - lokalizacje (ADRESY)
-6. Perplexity Query 6 - dane rejestrowe (NIP, KRS)
-
-Konflikty danych:
-- Różne źródła → priorytet ma nowsze
-- Różne liczby → podaj obie z source
-- Brak potwierdzenia → "unconfirmed" lub null
-
-Jakość opisów:
-- Krótkie: 50-100 słów
-- Średnie: 100-200 słów  
-- Długie: 200-300 słów
-- ZAWSZE KONKRETNIE: nie "oferuje usługi IT" → "oferuje wdrożenia SAP, outsourcing 50+ specjalistów, cloud AWS/Azure"
-
-Confidence per sekcja:
-- "high" - 2+ źródła potwierdzają
-- "medium" - 1 źródło
-- "low" - inferowane/niepełne
-- Dla sekcji bez danych → null lub pusta tablica
-
-═══════════════════════════════════════════════════════════════════
-⚠️ ZASADY KRYTYCZNE - CO NIE ROBIĆ
-═══════════════════════════════════════════════════════════════════
-❌ NIE wymyślaj danych finansowych (przychody, zyski)
-❌ NIE szacuj przychodów bez konkretnych danych
-❌ NIE kopiuj 1:1 tekstów (parafrazuj)
-❌ NIE pomijaj negatywnych newsów
-❌ NIE używaj ogólników ("lider rynku" → "3. miejsce w rankingu Forbes 500")
-❌ NIE podawaj NIP/REGON/KRS bez źródła
-❌ NIE wymyślaj osób z zarządu
-
-Odpowiedź TYLKO w JSON, bez markdown, bez wstępu, bez komentarzy.`
+Odpowiedź TYLKO w JSON.`
       : `Jesteś ekspertem w analizie firm polskich.
 
 ⚠️ NIE MASZ dostępu do internetu ani baz danych.
@@ -1518,22 +1348,86 @@ ${jsonStructure}
 11. Wyodrębnij działania CSR/ESG
 12. Podaj TYLKO dane rejestrowe znalezione w źródłach - NIE WYMYŚLAJ`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // AI Synthesis with timeout protection (80s max to avoid 150s edge function limit)
+    const AI_SYNTHESIS_TIMEOUT = 80000;
+    
+    const aiPromise = fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash', // Faster model for better timeout handling
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 16000,
+        max_tokens: 10000, // Reduced for faster response
         temperature: 0.1,
       }),
     });
+    
+    const timeoutPromise = new Promise<Response>((_, reject) => 
+      setTimeout(() => reject(new Error('AI_SYNTHESIS_TIMEOUT')), AI_SYNTHESIS_TIMEOUT)
+    );
+    
+    let response: Response;
+    try {
+      response = await Promise.race([aiPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      if (timeoutError instanceof Error && timeoutError.message === 'AI_SYNTHESIS_TIMEOUT') {
+        console.warn('=== AI SYNTHESIS TIMEOUT - Creating fallback analysis from Perplexity ===');
+        
+        // Create basic analysis from available Perplexity data
+        const fallbackAnalysis = {
+          name: company_name,
+          description: perplexityProfileInsights?.slice(0, 500) || 'Brak opisu - analiza przekroczyła limit czasu',
+          industry: 'Do uzupełnienia',
+          partial_analysis: true,
+          analysis_timeout: true,
+          perplexity_data_available: {
+            profile: !!perplexityProfileInsights,
+            financial: !!perplexityFinancialInsights,
+            locations: !!perplexityLocationInsights,
+            projects: !!perplexityProjectsInsights,
+            news: !!perplexityNewsInsights,
+            registry: !!perplexityRegistryInsights
+          },
+          // Include raw Perplexity data for client-side display
+          raw_perplexity_data: {
+            profile: perplexityProfileInsights,
+            financial: perplexityFinancialInsights,
+            locations: perplexityLocationInsights,
+            projects: perplexityProjectsInsights,
+            news: perplexityNewsInsights,
+            registry: perplexityRegistryInsights
+          },
+          confidence: 'low',
+          analysis_confidence_score: 0.3,
+          missing_sections: ['Pełna analiza AI - przekroczono limit czasu'],
+          metadata: {
+            perplexity_queries: [hasProfileInsights, hasFinancialInsights, hasLocationInsights, hasProjectsInsights, hasNewsInsights, hasRegistryInsights].filter(Boolean).length,
+            firecrawl_pages: scrapingStats.successful_scrapes,
+            ai_synthesis_timeout: true,
+            perplexity_citations: perplexityCitations
+          }
+        };
+        
+        console.log('Returning fallback analysis with Perplexity data');
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            partial: true,
+            message: 'Analiza częściowa - przekroczono limit czasu AI. Dane z Perplexity zostały zapisane.',
+            data: fallbackAnalysis
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw timeoutError;
+    }
 
     if (!response.ok) {
       if (response.status === 429) {
