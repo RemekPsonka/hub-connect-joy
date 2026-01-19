@@ -23,7 +23,7 @@ import { CompanyModal } from './CompanyModal';
 import { AIProfileRenderer } from './AIProfileRenderer';
 import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
 import { LinkedInNetworkSection } from './LinkedInNetworkSection';
-import { CompanyAIAnalysisCard } from './CompanyAIAnalysisCard';
+import { CompanyAnalysisViewer } from '@/components/company';
 
 interface ContactOverviewTabProps {
   contact: ContactWithDetails;
@@ -424,10 +424,12 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
             </CardContent>
           </Card>
 
-          {/* AI Analysis Card - New tabbed component */}
-          <CompanyAIAnalysisCard
-            aiAnalysis={aiAnalysis}
-            companyDescription={company.description}
+          {/* AI Analysis Card - 16 Section Viewer */}
+          <CompanyAnalysisViewer
+            analysis={aiAnalysis}
+            confidenceScore={company.analysis_confidence_score || 0.5}
+            missingSections={company.analysis_missing_sections || []}
+            dataSources={company.analysis_data_sources as any}
             onRegenerate={handleGenerateCompanyAI}
             isRegenerating={regenerateCompanyAI.isPending}
           />
