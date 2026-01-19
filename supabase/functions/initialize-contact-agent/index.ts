@@ -181,13 +181,41 @@ Zwróć JSON:
       throw saveError;
     }
 
+    // ============= REGENERATE EMBEDDING WITH AGENT KNOWLEDGE =============
+    // CRITICAL: Re-generate embedding so semantic search can find this contact
+    // based on agent_persona and agent_profile content (e.g., "BMW", "samochody", "dealer")
+    console.log(`[Init Agent] Triggering embedding regeneration for ${contact.full_name}...`);
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const embeddingResponse = await fetch(`${supabaseUrl}/functions/v1/generate-embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': req.headers.get('Authorization') || '',
+        },
+        body: JSON.stringify({
+          type: 'contact',
+          id: contact_id
+        })
+      });
+      
+      if (embeddingResponse.ok) {
+        console.log(`[Init Agent] ✓ Embedding regenerated for ${contact.full_name} with agent knowledge`);
+      } else {
+        console.warn(`[Init Agent] Embedding regeneration returned ${embeddingResponse.status}`);
+      }
+    } catch (embErr) {
+      console.warn('[Init Agent] Embedding regeneration failed:', embErr);
+      // Don't throw - agent is still initialized, embedding can be regenerated later
+    }
+
     // Log AI agent initialization activity
     await supabase.from('contact_activity_log').insert({
       tenant_id: tenantId,
       contact_id: contact_id,
       activity_type: 'ai_agent_initialized',
-      description: 'Zainicjalizowano agenta AI',
-      metadata: { model: 'google/gemini-2.5-flash' }
+      description: 'Zainicjalizowano agenta AI z regeneracją embeddingu',
+      metadata: { model: 'google/gemini-2.5-flash', embedding_regenerated: true }
     });
 
     return new Response(

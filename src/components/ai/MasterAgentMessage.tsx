@@ -1,4 +1,4 @@
-import { MasterAgentResponse, SuggestedAction } from '@/hooks/useContactAgent';
+import { MasterAgentResponse, SuggestedAction, ContactWithAgent, ContactWithoutAgent } from '@/hooks/useContactAgent';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,21 +15,46 @@ import {
   ListTodo,
   StickyNote,
   MessageSquare,
-  Loader2
+  Loader2,
+  CalendarPlus
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { TaskModal } from '@/components/tasks/TaskModal';
 
 interface MasterAgentMessageProps {
   response: MasterAgentResponse;
 }
 
+// Helper to get initials from name
+const getInitials = (name: string) => {
+  return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+};
+
+// Parse contacts from markdown answer as fallback
+const parseContactsFromAnswer = (answer: string): Array<{name: string; company: string}> => {
+  const contacts: Array<{name: string; company: string}> = [];
+  // Pattern: **Name** (Firma: Company...)
+  const regex = /\*\*([^*]+)\*\*\s*\(Firma:\s*([^,)]+)/g;
+  let match;
+  while ((match = regex.exec(answer)) !== null) {
+    contacts.push({ name: match[1].trim(), company: match[2].trim() });
+  }
+  return contacts;
+};
+
 export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
   const { director } = useAuth();
   const tenantId = director?.tenant_id;
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [selectedContactForTask, setSelectedContactForTask] = useState<{
+    id: string;
+    name: string;
+    company?: string;
+  } | null>(null);
 
   const handleSuggestedAction = async (action: SuggestedAction, index: number) => {
     if (!tenantId) return;
@@ -80,118 +105,228 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     }
   };
 
+  const openTaskModal = (contact: ContactWithAgent | ContactWithoutAgent) => {
+    setSelectedContactForTask({
+      id: contact.contact_id,
+      name: contact.contact_name,
+      company: contact.company || undefined
+    });
+    setTaskModalOpen(true);
+  };
+
+  // Check if we have structured contacts
+  const hasStructuredContacts = 
+    (response.contacts_with_agents?.length || 0) + 
+    (response.contacts_without_agents?.length || 0) > 0;
+
+  // Fallback: parse contacts from markdown if no structured data
+  const parsedContacts = !hasStructuredContacts ? parseContactsFromAnswer(response.answer) : [];
+
   return (
     <div className="space-y-4">
-      {/* Main Answer */}
-      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
-        <ReactMarkdown>{response.answer}</ReactMarkdown>
-      </div>
-
-      {/* ============= CONTACTS WITH ACTIVE AGENTS (Priority - Full Response) ============= */}
-      {response.contacts_with_agents && response.contacts_with_agents.length > 0 && (
-        <Card className="bg-green-500/5 border-green-500/30">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Bot className="h-4 w-4 text-green-500" />
-              Kontakty z aktywnym agentem AI ({response.contacts_with_agents.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4 space-y-3">
-            {response.contacts_with_agents.map((contact) => (
-              <div 
-                key={contact.contact_id}
-                className="p-3 rounded-lg bg-background border border-green-500/20 space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <a 
-                    href={`/contacts/${contact.contact_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-primary hover:underline flex items-center gap-2"
-                  >
-                    {contact.contact_name}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                  {contact.company && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      {contact.company}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Full agent response */}
-                <div className="p-2 bg-green-500/10 rounded-md text-sm border border-green-500/20">
-                  <div className="flex items-start gap-2">
-                    <Bot className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-foreground">{contact.agent_answer}</p>
-                  </div>
-                </div>
-                
-                <Badge variant="outline" className="text-xs">
-                  Dopasowanie: {Math.round(contact.semantic_score * 100)}%
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      {/* Main Answer - only show if no structured contacts OR as intro */}
+      {(!hasStructuredContacts || response.answer.length < 500) && (
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+          <ReactMarkdown>{response.answer}</ReactMarkdown>
+        </div>
       )}
 
-      {/* ============= CONTACTS WITHOUT AGENTS (Lower Priority - Contact to Learn More) ============= */}
-      {response.contacts_without_agents && response.contacts_without_agents.length > 0 && (
-        <Card className="bg-muted/50 border-muted">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              Inne dopasowane kontakty ({response.contacts_without_agents.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4 space-y-2">
-            {response.contacts_without_agents.map((contact) => (
-              <div 
-                key={contact.contact_id}
-                className="p-3 rounded-lg bg-background border space-y-2"
+      {/* ============= CONTACTS WITH ACTIVE AGENTS (Modern Card Design) ============= */}
+      {response.contacts_with_agents && response.contacts_with_agents.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+            <Bot className="h-4 w-4" />
+            <span>Kontakty z aktywnym agentem AI ({response.contacts_with_agents.length})</span>
+          </div>
+          
+          <div className="grid gap-3">
+            {response.contacts_with_agents.map((contact) => (
+              <Card 
+                key={contact.contact_id} 
+                className="border border-green-500/30 bg-green-500/5 hover:border-green-500/50 transition-colors"
               >
-                <div className="flex items-center justify-between">
-                  <a 
-                    href={`/contacts/${contact.contact_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-primary hover:underline flex items-center gap-2"
-                  >
-                    {contact.contact_name}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                  {contact.company && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      {contact.company}
-                    </span>
-                  )}
-                </div>
-                
-                <p className="text-sm text-muted-foreground">{contact.match_reason}</p>
-                
-                {/* Info about no active agent */}
-                <div className="p-2 bg-yellow-500/10 rounded-md text-sm border border-yellow-500/20">
-                  <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
-                    <MessageSquare className="h-4 w-4" />
-                    <span>Skontaktuj się, aby dowiedzieć się więcej</span>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Avatar + Info */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Avatar className="h-10 w-10 flex-shrink-0">
+                        <AvatarFallback className="bg-green-500/20 text-green-700 dark:text-green-300 text-sm font-medium">
+                          {getInitials(contact.contact_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <a 
+                          href={`/contacts/${contact.contact_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-foreground hover:text-primary hover:underline flex items-center gap-1.5 truncate"
+                        >
+                          {contact.contact_name}
+                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+                        </a>
+                        {contact.company && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+                            <Building2 className="h-3 w-3 flex-shrink-0" />
+                            {contact.company}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-8"
+                        onClick={() => openTaskModal(contact)}
+                      >
+                        <ListTodo className="h-3.5 w-3.5" />
+                        Dodaj zadanie
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                
-                <Badge variant="outline" className="text-xs">
-                  Dopasowanie: {Math.round(contact.semantic_score * 100)}%
-                </Badge>
-              </div>
+                  
+                  {/* Agent response */}
+                  {contact.agent_answer && (
+                    <div className="mt-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <div className="flex items-start gap-2">
+                        <Bot className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-foreground">{contact.agent_answer}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Match badge */}
+                  <div className="mt-3 flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20">
+                      {Math.round(contact.semantic_score * 100)}% dopasowania
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ============= CONTACTS WITHOUT AGENTS (Modern Card Design) ============= */}
+      {response.contacts_without_agents && response.contacts_without_agents.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Users className="h-4 w-4" />
+            <span>Inne dopasowane kontakty ({response.contacts_without_agents.length})</span>
+          </div>
+          
+          <div className="grid gap-3">
+            {response.contacts_without_agents.map((contact) => (
+              <Card 
+                key={contact.contact_id} 
+                className="border border-border/50 hover:border-primary/30 transition-colors"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Avatar + Info */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Avatar className="h-10 w-10 flex-shrink-0">
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                          {getInitials(contact.contact_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <a 
+                          href={`/contacts/${contact.contact_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-foreground hover:text-primary hover:underline flex items-center gap-1.5 truncate"
+                        >
+                          {contact.contact_name}
+                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+                        </a>
+                        {contact.company && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+                            <Building2 className="h-3 w-3 flex-shrink-0" />
+                            {contact.company}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-8"
+                        onClick={() => openTaskModal(contact)}
+                      >
+                        <ListTodo className="h-3.5 w-3.5" />
+                        Dodaj zadanie
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Match reason */}
+                  <p className="mt-2 text-sm text-muted-foreground">{contact.match_reason}</p>
+                  
+                  {/* Info about no active agent */}
+                  <div className="mt-3 p-2 bg-yellow-500/10 rounded-md border border-yellow-500/20">
+                    <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 text-xs">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Skontaktuj się, aby dowiedzieć się więcej</span>
+                    </div>
+                  </div>
+                  
+                  {/* Match badge */}
+                  <div className="mt-3">
+                    <Badge variant="outline" className="text-xs">
+                      {Math.round(contact.semantic_score * 100)}% dopasowania
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ============= FALLBACK: Parsed Contacts from Markdown ============= */}
+      {!hasStructuredContacts && parsedContacts.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Users className="h-4 w-4" />
+            <span>Znalezione kontakty ({parsedContacts.length})</span>
+          </div>
+          
+          <div className="grid gap-2">
+            {parsedContacts.map((contact, idx) => (
+              <Card key={idx} className="border border-border/50">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                        {getInitials(contact.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-sm">{contact.name}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {contact.company}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Legacy: Related Contacts (fallback if new structure not available) */}
       {(!response.contacts_with_agents || response.contacts_with_agents.length === 0) && 
        (!response.contacts_without_agents || response.contacts_without_agents.length === 0) &&
+       !parsedContacts.length &&
        response.related_contacts && response.related_contacts.length > 0 && (
         <Card className="bg-muted/50 border-muted">
           <CardHeader className="py-3 px-4">
@@ -365,6 +500,17 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
           </span>
         </div>
       )}
+
+      {/* Task Modal */}
+      <TaskModal 
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        preselectedContactId={selectedContactForTask?.id}
+        initialData={selectedContactForTask ? {
+          title: `Follow-up: ${selectedContactForTask.name}`,
+          taskType: 'standard'
+        } : undefined}
+      />
     </div>
   );
 }
