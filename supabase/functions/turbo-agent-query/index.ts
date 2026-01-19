@@ -48,19 +48,38 @@ serve(async (req) => {
 
     if (sessionError) throw sessionError;
 
-    // Get all Contact Agents with FULL contact data including companies
-    const { data: allAgents } = await supabase
-      .from('contact_agent_memory')
+    // NEW: Get ALL contacts directly (not just from contact_agent_memory)
+    const { data: allContacts } = await supabase
+      .from('contacts')
       .select(`
-        id, contact_id, agent_persona, agent_profile, insights,
-        contacts (
-          id, full_name, company, position, city, notes, tags, profile_summary,
-          companies (id, name, industry, description)
-        )
+        id, full_name, company, position, city, notes, tags, profile_summary,
+        companies (id, name, industry, description)
       `)
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .limit(500);
+
+    // Get agent memory data for enrichment
+    const { data: agentMemories } = await supabase
+      .from('contact_agent_memory')
+      .select('contact_id, agent_persona, agent_profile, insights')
       .eq('tenant_id', tenantId);
 
-    const validAgents = (allAgents || []).filter(a => a.contacts && !Array.isArray(a.contacts));
+    const agentMemoryMap = new Map((agentMemories || []).map(am => [am.contact_id, am]));
+
+    // Combine contacts with agent data
+    const validAgents = (allContacts || []).map(contact => {
+      const agentData = agentMemoryMap.get(contact.id);
+      return {
+        contact_id: contact.id,
+        contacts: contact,
+        agent_persona: agentData?.agent_persona || null,
+        agent_profile: agentData?.agent_profile || null,
+        insights: agentData?.insights || null
+      };
+    });
+
+    console.log(`[Turbo] Loaded ${validAgents.length} contacts (${agentMemories?.length || 0} with agent memory)`);
 
     // Update session
     await supabase.from('turbo_agent_sessions').update({ total_agents_available: validAgents.length, status: 'selecting' }).eq('id', session.id);
