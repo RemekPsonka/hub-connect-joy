@@ -136,35 +136,155 @@ serve(async (req) => {
     }
 
     // ==========================================
-    // PHASE 1: PERPLEXITY INTERNET SEARCH (3 PARALLEL QUERIES)
+    // PHASE 1: PERPLEXITY INTERNET SEARCH (6 PARALLEL QUERIES)
     // ==========================================
     let perplexityProfileInsights: string | null = null;
+    let perplexityFinancialInsights: string | null = null;
+    let perplexityLocationInsights: string | null = null;
+    let perplexityProjectsInsights: string | null = null;
     let perplexityNewsInsights: string | null = null;
     let perplexityRegistryInsights: string | null = null;
     let perplexityCitations: string[] = [];
     
     if (PERPLEXITY_API_KEY) {
-      console.log('=== PHASE 1: PERPLEXITY INTERNET SEARCH (3 queries) ===');
+      console.log('=== PHASE 1: PERPLEXITY INTERNET SEARCH (6 queries) ===');
       
-      // QUERY 1: Profil firmy i działalność
+      // QUERY 1: Profil firmy i historia (ROZBUDOWANE)
       const profileQuery = `"${company_name}" Polska firma:
-- profil działalności firmy, historia, rok założenia
-- właściciele, zarząd, kluczowe osoby decyzyjne  
-- główne produkty i usługi
-- branża, specjalizacja, pozycja rynkowa
-- wielkość firmy, liczba pracowników
-- forma prawna, struktura właścicielska`;
+- rok założenia, założyciele, historia firmy
+- timeline kamieni milowych (fuzje, przejęcia, ekspansje) z DATAMI
+- profil działalności - dokładny opis czym się zajmuje
+- produkty i usługi - KONKRETNA lista z opisami
+- marki własne, dealerstwa - jakie marki reprezentuje/posiada
+- model biznesowy - B2B/B2C, główne źródła przychodów
+- co wyróżnia firmę od konkurencji`;
 
-      // QUERY 2: Newsy, aktualności, informacje prasowe
-      const newsQuery = `"${company_name}" Polska aktualności newsy 2024 2025:
-- artykuły prasowe, wywiady z zarządem
-- inwestycje, przejęcia, fuzje, nowe projekty  
-- otwarcia nowych lokalizacji, ekspansja
-- nagrody, wyróżnienia, certyfikaty
-- problemy, kontrowersje, zmiany
-- rekrutacje, nowe stanowiska`;
+      const profileSystemMessage = `Jesteś ekspertem w analizie polskich firm z 20-letnim doświadczeniem.
+Twoim zadaniem jest stworzenie SZCZEGÓŁOWEGO profilu historycznego i biznesowego firmy.
 
-      // QUERY 3: Dane rejestrowe i formalne
+WYMAGANIA:
+- Historia firmy - timeline od momentu założenia do dziś
+- Kluczowe kamienie milowe z DATAMI
+- Produkty i usługi - KONKRETNA lista z opisami
+- Marki własne i dealerstwa
+- Model biznesowy - jak zarabia
+
+ZASADY:
+- Podawaj DATY dla wszystkich wydarzeń
+- Cytuj źródła (gazeta.pl, forbes.pl, firmowa strona)
+- NIE wymyślaj - jeśli brak danych, napisz "brak informacji"
+- Priorytetyzuj informacje z ostatnich 2 lat`;
+
+      // QUERY 2: Dane finansowe i rynkowe (NOWE)
+      const financialQuery = `"${company_name}" Polska przychody obroty zysk ranking zatrudnienie:
+- przychody roczne w PLN (ostatnie 3 lata)
+- dynamika wzrostu % rok do roku
+- zysk netto (jeśli publiczny)
+- liczba pracowników i jak się zmieniała
+- pozycja w rankingach branżowych
+- udział w rynku %`;
+
+      const financialSystemMessage = `Jesteś analitykiem finansowym specjalizującym się w ocenie kondycji polskich firm.
+
+SZUKAJ W:
+- Biznes.interia.pl, forbes.pl, pulshr.pl - ranking firm
+- Emis.com, dun.pl - bazy danych firm
+- GUS, KRS - dane rejestrowe z przychodami
+- Strona firmowa - raporty roczne, IR
+- LinkedIn - wielkość zespołu
+
+WYMAGANIA:
+- Przychody (wartości w PLN + dynamika YoY)
+- Wielkość zatrudnienia
+- Pozycja w rankingach branżowych
+
+ZASADY:
+- Podawaj KONKRETNE liczby z rokiem
+- Cytuj źródło dla każdej liczby
+- Jeśli brak danych - napisz "brak danych publicznych"`;
+
+      // QUERY 3: Lokalizacje i zasięg geograficzny (NOWE)
+      const locationQuery = `"${company_name}" Polska siedziba oddziały fabryki salony lokalizacje:
+- siedziba główna (pełny adres)
+- oddziały regionalne (miasta, adresy)
+- fabryki, zakłady produkcyjne
+- centra dystrybucyjne, magazyny
+- salony, punkty sprzedaży
+- zasięg działania (województwa, kraje)`;
+
+      const locationSystemMessage = `Jesteś ekspertem w geografii biznesowej i analizie sieci dystrybucji.
+
+SZUKAJ:
+- Siedziby głównej (dokładny adres)
+- Oddziałów regionalnych
+- Fabryk / zakładów produkcyjnych
+- Salonów / punktów sprzedaży
+
+WYMAGANIA:
+- Dla każdej lokalizacji: miasto, ulica (jeśli znana), typ
+- Zasięg geograficzny - w ilu województwach działa
+- Ekspansja zagraniczna - jakie kraje
+
+ZASADY:
+- Podawaj DOKŁADNE adresy jeśli dostępne
+- Grupuj po typach lokalizacji
+- Cytuj źródła`;
+
+      // QUERY 4: Klienci, projekty, konkurencja (NOWE)
+      const projectsQuery = `"${company_name}" Polska klienci projekty realizacje konkurencja case study:
+- kluczowi klienci (nazwy firm)
+- flagowe projekty/realizacje (wartość, rok, klient)
+- referencje i case studies
+- główni konkurenci (nazwy firm)
+- przewaga konkurencyjna`;
+
+      const projectsSystemMessage = `Jesteś analitykiem konkurencji i badaczem case studies.
+
+SZUKAJ W:
+- Strona firmowa (portfolio, realizacje)
+- Newsy o kontraktach/przetargach
+- LinkedIn (posty o projektach)
+- Branżowe portale
+
+WYMAGANIA DLA PROJEKTÓW:
+- Nazwa projektu, klient, wartość (PLN), rok, zakres
+
+WYMAGANIA DLA KONKURENTÓW:
+- Nazwy firm konkurencyjnych (min 3-5)
+- Krótkie porównanie
+
+ZASADY:
+- Priorytetyzuj DUŻE projekty (> 1M PLN)
+- Podawaj konkretne kwoty jeśli znane`;
+
+      // QUERY 5: Newsy, CSR, sygnały rynkowe (ZMODYFIKOWANE)
+      const newsQuery = `"${company_name}" Polska aktualności newsy 2024 2025 CSR ESG:
+- artykuły prasowe (z datami!)
+- inwestycje, plany rozwoju
+- zmiany w zarządzie
+- nagrody, certyfikaty
+- kontrowersje, problemy
+- działania CSR/ESG, fundacje, ekologia
+- rekrutacje`;
+
+      const newsSystemMessage = `Jesteś dziennikarzem śledczym i analitykiem trendów rynkowych.
+
+SZUKAJ W:
+- Rzeczpospolita, Forbes, Puls Biznesu
+- Lokalne media, komunikaty prasowe
+- LinkedIn
+
+WYMAGANIA:
+- Każdy news z DATĄ i ŹRÓDŁEM
+- Sentiment: pozytywny/neutralny/negatywny
+- CSR: darowizny, fundacje, ekologia
+
+ZASADY:
+- Cytuj tytuł artykułu i źródło
+- NIE pomijaj negatywnych newsów
+- Priorytetyzuj wydarzenia z ostatnich 3 miesięcy`;
+
+      // QUERY 6: Dane rejestrowe (BEZ ZMIAN)
       const registryQuery = `"${company_name}" Polska NIP REGON KRS dane rejestrowe:
 - numer NIP firmy
 - numer REGON
@@ -174,57 +294,96 @@ serve(async (req) => {
 - data rejestracji, rok założenia
 - kapitał zakładowy`;
 
+      const registrySystemMessage = `Szukaj OFICJALNYCH danych rejestrowych firmy z polskich rejestrów: KRS, CEIDG, GUS. Podawaj TYLKO zweryfikowane dane z oficjalnych źródeł. NIE wymyślaj numerów.`;
+
       const perplexityHeaders = {
         'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
         'Content-Type': 'application/json',
       };
 
-      // Execute all 3 queries in parallel
-      const [profileResponse, newsResponse, registryResponse] = await Promise.all([
-        // Profile query
+      // Execute all 6 queries in parallel
+      const [
+        profileResponse,
+        financialResponse,
+        locationResponse,
+        projectsResponse,
+        newsResponse,
+        registryResponse
+      ] = await Promise.all([
+        // Query 1: Profile and History
         fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
           headers: perplexityHeaders,
           body: JSON.stringify({
             model: 'sonar-pro',
             messages: [
-              { 
-                role: 'system', 
-                content: 'Jesteś ekspertem w analizie polskich firm. Dostarczaj szczegółowe, dokładne informacje o profilu działalności firmy. Skup się na: czym firma się zajmuje, produkty, usługi, zarząd, historia.'
-              },
+              { role: 'system', content: profileSystemMessage },
               { role: 'user', content: profileQuery }
             ],
           }),
         }).catch(e => { console.warn('Profile query error:', e); return null; }),
         
-        // News query
+        // Query 2: Financial Data (NEW)
         fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
           headers: perplexityHeaders,
           body: JSON.stringify({
             model: 'sonar-pro',
             messages: [
-              { 
-                role: 'system', 
-                content: 'Jesteś dziennikarzem śledczym. Szukaj NAJNOWSZYCH artykułów prasowych, newsów i doniesień medialnych o firmie z ostatnich 2 lat. Podawaj źródła i daty.'
-              },
+              { role: 'system', content: financialSystemMessage },
+              { role: 'user', content: financialQuery }
+            ],
+          }),
+        }).catch(e => { console.warn('Financial query error:', e); return null; }),
+        
+        // Query 3: Locations (NEW)
+        fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: perplexityHeaders,
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { role: 'system', content: locationSystemMessage },
+              { role: 'user', content: locationQuery }
+            ],
+          }),
+        }).catch(e => { console.warn('Location query error:', e); return null; }),
+        
+        // Query 4: Clients, Projects, Competition (NEW)
+        fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: perplexityHeaders,
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { role: 'system', content: projectsSystemMessage },
+              { role: 'user', content: projectsQuery }
+            ],
+          }),
+        }).catch(e => { console.warn('Projects query error:', e); return null; }),
+        
+        // Query 5: News and CSR
+        fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: perplexityHeaders,
+          body: JSON.stringify({
+            model: 'sonar-pro',
+            messages: [
+              { role: 'system', content: newsSystemMessage },
               { role: 'user', content: newsQuery }
             ],
             search_recency_filter: 'year',
           }),
         }).catch(e => { console.warn('News query error:', e); return null; }),
         
-        // Registry query
+        // Query 6: Registry data
         fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
           headers: perplexityHeaders,
           body: JSON.stringify({
             model: 'sonar-pro',
             messages: [
-              { 
-                role: 'system', 
-                content: 'Szukaj OFICJALNYCH danych rejestrowych firmy z polskich rejestrów: KRS, CEIDG, GUS. Podawaj TYLKO zweryfikowane dane z oficjalnych źródeł. NIE wymyślaj numerów.'
-              },
+              { role: 'system', content: registrySystemMessage },
               { role: 'user', content: registryQuery }
             ],
           }),
@@ -243,6 +402,48 @@ serve(async (req) => {
         }
       } else if (profileResponse) {
         console.warn('Profile query failed:', profileResponse.status);
+      }
+
+      // Process financial response (NEW)
+      if (financialResponse?.ok) {
+        try {
+          const data = await financialResponse.json();
+          perplexityFinancialInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('Financial insights received, length:', perplexityFinancialInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing financial response:', e);
+        }
+      } else if (financialResponse) {
+        console.warn('Financial query failed:', financialResponse.status);
+      }
+
+      // Process location response (NEW)
+      if (locationResponse?.ok) {
+        try {
+          const data = await locationResponse.json();
+          perplexityLocationInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('Location insights received, length:', perplexityLocationInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing location response:', e);
+        }
+      } else if (locationResponse) {
+        console.warn('Location query failed:', locationResponse.status);
+      }
+
+      // Process projects response (NEW)
+      if (projectsResponse?.ok) {
+        try {
+          const data = await projectsResponse.json();
+          perplexityProjectsInsights = data.choices?.[0]?.message?.content || null;
+          perplexityCitations = [...perplexityCitations, ...(data.citations || [])];
+          console.log('Projects insights received, length:', perplexityProjectsInsights?.length || 0);
+        } catch (e) {
+          console.warn('Error parsing projects response:', e);
+        }
+      } else if (projectsResponse) {
+        console.warn('Projects query failed:', projectsResponse.status);
       }
 
       // Process news response
@@ -308,7 +509,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             url: baseUrl,
-            limit: 100, // Increased from 50
+            limit: 100,
             search: 'o nas kontakt usługi oferta produkty marki salony kariera zespół zarząd o firmie realizacje projekty historia poznaj-nas kierownictwo właściciele klienci referencje partnerzy cennik aktualności'
           }),
         });
@@ -353,16 +554,15 @@ serve(async (req) => {
       const excludePatterns = [
         /promocj|promo|rabat|okazj|wyprzedaz|sale|przecena|gratisy/i,
         /regulamin|polityka|privacy|cookies|rodo|gdpr|terms/i,
-        /blog\/\d|news\/\d|artykul\/\d|post\/\d/i, // Single blog posts
+        /blog\/\d|news\/\d|artykul\/\d|post\/\d/i,
         /login|logowanie|rejestracja|register|koszyk|cart|checkout/i,
-        /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i, // Files
-        /page=|sort=|filter=|utm_/i, // Pagination and tracking params
+        /\.(pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx)$/i,
+        /page=|sort=|filter=|utm_/i,
       ];
       
-      const pagesToScrape: string[] = [baseUrl]; // Always include homepage
+      const pagesToScrape: string[] = [baseUrl];
       const usedUrls = new Set([baseUrl.toLowerCase()]);
       
-      // Helper to check if URL should be excluded
       const shouldExclude = (url: string) => excludePatterns.some(p => p.test(url));
       const matchesPriority = (url: string, patterns: RegExp[]) => patterns.some(p => p.test(url));
       
@@ -412,7 +612,6 @@ serve(async (req) => {
       const successfulScrapes = scrapedPages.filter(p => p.content).length;
       console.log(`Successfully scraped ${successfulScrapes}/${scrapedPages.length} pages`);
       
-      // Log which pages were scraped
       for (const page of scrapedPages) {
         console.log(`  - ${page.title}: ${page.content ? page.content.length + ' chars' : 'FAILED'}`);
       }
@@ -426,14 +625,20 @@ serve(async (req) => {
     console.log('=== PHASE 3: AI SYNTHESIS ===');
     
     const hasProfileInsights = !!perplexityProfileInsights;
+    const hasFinancialInsights = !!perplexityFinancialInsights;
+    const hasLocationInsights = !!perplexityLocationInsights;
+    const hasProjectsInsights = !!perplexityProjectsInsights;
     const hasNewsInsights = !!perplexityNewsInsights;
     const hasRegistryInsights = !!perplexityRegistryInsights;
-    const hasPerplexity = hasProfileInsights || hasNewsInsights || hasRegistryInsights;
+    const hasPerplexity = hasProfileInsights || hasFinancialInsights || hasLocationInsights || hasProjectsInsights || hasNewsInsights || hasRegistryInsights;
     const hasScrapedContent = scrapedPages.some(p => p.content);
     const hasAnyData = hasPerplexity || hasScrapedContent;
     
     console.log('Data sources:', {
       perplexityProfile: hasProfileInsights,
+      perplexityFinancial: hasFinancialInsights,
+      perplexityLocation: hasLocationInsights,
+      perplexityProjects: hasProjectsInsights,
       perplexityNews: hasNewsInsights,
       perplexityRegistry: hasRegistryInsights,
       scrapedPages: scrapedPages.filter(p => p.content).length,
@@ -446,12 +651,15 @@ serve(async (req) => {
 🎯 CEL: Stwórz KOMPLEKSOWY profil firmy dla wewnętrznych agentów AI do matchowania kontaktów i znajdowania synergii biznesowych.
 
 📊 MASZ DANE Z WIELU ŹRÓDEŁ:
-${hasProfileInsights ? '✅ Profil firmy i działalność (z internetu)' : ''}
-${hasNewsInsights ? '✅ Aktualności i newsy prasowe (z internetu)' : ''}
+${hasProfileInsights ? '✅ Profil firmy, historia i działalność (z internetu)' : ''}
+${hasFinancialInsights ? '✅ Dane finansowe i rynkowe (z internetu)' : ''}
+${hasLocationInsights ? '✅ Lokalizacje i zasięg geograficzny (z internetu)' : ''}
+${hasProjectsInsights ? '✅ Klienci, projekty i konkurencja (z internetu)' : ''}
+${hasNewsInsights ? '✅ Aktualności, newsy i CSR (z internetu)' : ''}
 ${hasRegistryInsights ? '✅ Dane rejestrowe (z internetu)' : ''}
 ${hasScrapedContent ? `✅ Zawartość strony WWW (${scrapedPages.filter(p => p.content).length} stron)` : ''}
 
-📋 STRUKTURA ANALIZY:
+📋 STRUKTURA ANALIZY (14 SEKCJI):
 
 1. PODSTAWOWE INFORMACJE
    - Oficjalna nazwa, forma prawna
@@ -468,7 +676,7 @@ ${hasScrapedContent ? `✅ Zawartość strony WWW (${scrapedPages.filter(p => p.
    - Lista wszystkich produktów z opisami
    - Lista wszystkich usług z opisami
    - Dla kogo są przeznaczone (target)
-   - Flagowe projekty i realizacje
+   - Marki własne i dealerstwa
 
 4. CO FIRMA OFERUJE (dla agentów matchujących)
    - Pełna oferta dla klientów
@@ -504,6 +712,32 @@ ${hasScrapedContent ? `✅ Zawartość strony WWW (${scrapedPages.filter(p => p.
    - NIP, REGON, KRS (TYLKO jeśli znalezione w źródłach!)
    - Adres siedziby
    - Rok założenia
+
+10. DANE FINANSOWE I RYNKOWE
+    - Przychody (kwoty PLN + dynamika YoY)
+    - Zatrudnienie (liczba + trend)
+    - Pozycja w rankingach branżowych
+    - Udział w rynku
+
+11. LOKALIZACJE I ZASIĘG
+    - Siedziba główna (pełny adres)
+    - Oddziały, fabryki, salony (lista z miastami)
+    - Zasięg geograficzny (województwa, kraje)
+
+12. KLUCZOWI KLIENCI I PROJEKTY
+    - Top 5 klientów (nazwy firm)
+    - Flagowe projekty (nazwa, wartość, rok, klient)
+    - Referencje i case studies
+
+13. KONKURENCJA
+    - Główni konkurenci (nazwy firm)
+    - Pozycja vs konkurencja
+    - Przewaga konkurencyjna
+
+14. CSR/ESG
+    - Działania społeczne, fundacje
+    - Polityka środowiskowa
+    - Certyfikaty ESG
 
 ZASADY:
 - Podawaj TYLKO informacje znalezione w dostarczonych źródłach
@@ -542,7 +776,9 @@ Zwróć JSON z następującą strukturą:`;
   "services": [
     {"name": "Nazwa usługi", "description": "Opis", "target": "Dla kogo"}
   ],
-  "key_projects": ["Flagowe projekty, realizacje, inwestycje"],
+  "brands_owned": ["Marki własne firmy"],
+  "brands_represented": ["Marki reprezentowane/dealerstwa"],
+  "key_projects": ["Flagowe projekty - krótki opis tekstowy"],
   
   "offer_summary": "Pełna oferta firmy w 2-3 zdaniach",
   "unique_selling_points": ["Co wyróżnia firmę na rynku"],
@@ -585,6 +821,57 @@ Zwróć JSON z następującą strukturą:`;
   "city": "Miasto lub null",
   "postal_code": "Kod pocztowy lub null",
   
+  "revenue_data": [
+    {"year": 2024, "value_pln": 2500000000, "source": "Forbes/nazwa źródła"}
+  ],
+  "revenue_growth_yoy": "Dynamika wzrostu % YoY lub null",
+  "profit_info": "Informacje o zysku lub null",
+  "employee_count_history": [
+    {"year": 2024, "count": 1200}
+  ],
+  "ranking_positions": [
+    {"ranking": "Nazwa rankingu", "position": 150, "year": 2024, "source": "źródło"}
+  ],
+  "market_share_percent": "Udział w rynku % lub null",
+  
+  "headquarters_address": "Pełny adres siedziby głównej lub null",
+  "locations": [
+    {"type": "oddział/fabryka/salon/magazyn", "city": "Miasto", "address": "Adres jeśli znany", "region": "Województwo"}
+  ],
+  "geographic_reach": {
+    "provinces": ["Lista województw"],
+    "countries": ["Lista krajów"],
+    "delivery_range": "Zasięg dostaw/obsługi"
+  },
+  
+  "key_clients": [
+    {"name": "Nazwa firmy klienta", "industry": "Branża klienta", "relationship": "Typ relacji"}
+  ],
+  "flagship_projects": [
+    {
+      "name": "Nazwa projektu",
+      "client": "Nazwa klienta",
+      "value_pln": 10000000,
+      "year": 2024,
+      "scope": "Zakres projektu",
+      "source": "Źródło informacji"
+    }
+  ],
+  "case_studies": ["Linki lub opisy case studies"],
+  "references": ["Referencje od klientów"],
+  
+  "competitors": [
+    {"name": "Nazwa konkurenta", "size": "mała/średnia/duża", "comparison": "Krótkie porównanie"}
+  ],
+  "competitive_advantage": "Główna przewaga konkurencyjna",
+  "market_position_vs_competitors": "Pozycja vs główni konkurenci",
+  
+  "csr_activities": ["Lista działań CSR"],
+  "esg_certifications": ["Certyfikaty ESG"],
+  "sustainability_initiatives": ["Inicjatywy zrównoważonego rozwoju"],
+  "foundations_supported": ["Wspierane fundacje"],
+  "community_engagement": "Zaangażowanie w lokalną społeczność lub null",
+  
   "confidence": "high/medium/low",
   "data_freshness": "Ocena aktualności danych",
   "sources": ["Lista URL źródeł"],
@@ -604,9 +891,42 @@ ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
     if (hasProfileInsights) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
-📊 PROFIL FIRMY I DZIAŁALNOŚĆ (z internetu - Perplexity):
+📊 PROFIL FIRMY, HISTORIA I DZIAŁALNOŚĆ (Perplexity):
 ═══════════════════════════════════════════════════════════════════
 ${perplexityProfileInsights}
+
+`;
+    }
+
+    // Add Perplexity Financial Insights (NEW)
+    if (hasFinancialInsights) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+💰 DANE FINANSOWE I RYNKOWE (Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityFinancialInsights}
+
+`;
+    }
+
+    // Add Perplexity Location Insights (NEW)
+    if (hasLocationInsights) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+📍 LOKALIZACJE I ZASIĘG GEOGRAFICZNY (Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityLocationInsights}
+
+`;
+    }
+
+    // Add Perplexity Projects Insights (NEW)
+    if (hasProjectsInsights) {
+      userContent += `
+═══════════════════════════════════════════════════════════════════
+🏗️ KLIENCI, PROJEKTY, KONKURENCJA (Perplexity):
+═══════════════════════════════════════════════════════════════════
+${perplexityProjectsInsights}
 
 `;
     }
@@ -615,7 +935,7 @@ ${perplexityProfileInsights}
     if (hasNewsInsights) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
-📰 AKTUALNOŚCI I NEWSY PRASOWE (z internetu - Perplexity):
+📰 AKTUALNOŚCI, NEWSY I CSR (Perplexity):
 ═══════════════════════════════════════════════════════════════════
 ${perplexityNewsInsights}
 
@@ -626,7 +946,7 @@ ${perplexityNewsInsights}
     if (hasRegistryInsights) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
-📋 DANE REJESTROWE (z internetu - Perplexity):
+📋 DANE REJESTROWE (Perplexity):
 ═══════════════════════════════════════════════════════════════════
 ${perplexityRegistryInsights}
 
@@ -644,7 +964,7 @@ ${perplexityCitations.map((c, i) => `[${i + 1}] ${c}`).join('\n')}
 `;
     }
 
-    // Add Scraped Website Content (with increased character limit)
+    // Add Scraped Website Content
     if (hasScrapedContent) {
       userContent += `
 ═══════════════════════════════════════════════════════════════════
@@ -670,7 +990,12 @@ ${jsonStructure}
 4. Zidentyfikuj osoby z zarządu z podaniem źródeł
 5. Wyodrębnij WSZYSTKIE newsy i aktualności z datami
 6. Oceń potencjał współpracy i możliwe synergie
-7. Podaj TYLKO dane rejestrowe znalezione w źródłach - NIE WYMYŚLAJ`;
+7. Uzupełnij dane finansowe (przychody, zatrudnienie, rankingi)
+8. Zmapuj lokalizacje (siedziby, oddziały, salony)
+9. Zidentyfikuj kluczowych klientów i flagowe projekty
+10. Zidentyfikuj konkurentów i przewagi konkurencyjne
+11. Wyodrębnij działania CSR/ESG
+12. Podaj TYLKO dane rejestrowe znalezione w źródłach - NIE WYMYŚLAJ`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -684,7 +1009,7 @@ ${jsonStructure}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 10000, // Increased from 8000
+        max_tokens: 12000,
         temperature: 0.2,
       }),
     });
@@ -728,44 +1053,35 @@ ${jsonStructure}
       // Remove markdown code blocks more aggressively
       let cleanedContent = content;
       
-      // Handle various markdown formats: ```json, ```, with or without newlines
       cleanedContent = cleanedContent.replace(/^```(?:json)?\s*/i, '');
       cleanedContent = cleanedContent.replace(/\s*```\s*$/i, '');
       cleanedContent = cleanedContent.trim();
       
-      // If content still has code blocks somewhere in middle, extract JSON
       const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         cleanedContent = jsonMatch[0];
       }
       
-      // Try to parse - if JSON is truncated, try to fix it
       try {
         enrichedData = JSON.parse(cleanedContent);
       } catch (initialParseError) {
         console.warn('Initial parse failed, attempting to fix truncated JSON');
         
-        // Count brackets to see if JSON is incomplete
         const openBraces = (cleanedContent.match(/\{/g) || []).length;
         const closeBraces = (cleanedContent.match(/\}/g) || []).length;
         const openBrackets = (cleanedContent.match(/\[/g) || []).length;
         const closeBrackets = (cleanedContent.match(/\]/g) || []).length;
         
-        // Add missing closing brackets
         let fixedContent = cleanedContent;
         
-        // Try to close incomplete strings
         if (fixedContent.match(/"[^"]*$/)) {
           fixedContent = fixedContent + '"';
         }
         
-        // Close arrays
         for (let i = 0; i < openBrackets - closeBrackets; i++) {
-          // Find last open array and close it
           fixedContent = fixedContent.replace(/,\s*$/, '') + ']';
         }
         
-        // Close objects
         for (let i = 0; i < openBraces - closeBraces; i++) {
           fixedContent = fixedContent.replace(/,\s*$/, '') + '}';
         }
@@ -796,6 +1112,9 @@ ${jsonStructure}
       // Add metadata about the enrichment process
       enrichedData.enrichment_metadata = {
         perplexity_profile_used: hasProfileInsights,
+        perplexity_financial_used: hasFinancialInsights,
+        perplexity_location_used: hasLocationInsights,
+        perplexity_projects_used: hasProjectsInsights,
         perplexity_news_used: hasNewsInsights,
         perplexity_registry_used: hasRegistryInsights,
         pages_scraped: scrapedPages.filter(p => p.content).length,
@@ -843,6 +1162,10 @@ ${jsonStructure}
     console.log('Services:', enrichedData.services?.length || 0);
     console.log('Management:', enrichedData.management?.length || 0);
     console.log('Recent News:', enrichedData.recent_news?.length || 0);
+    console.log('Key Clients:', enrichedData.key_clients?.length || 0);
+    console.log('Flagship Projects:', enrichedData.flagship_projects?.length || 0);
+    console.log('Competitors:', enrichedData.competitors?.length || 0);
+    console.log('Locations:', enrichedData.locations?.length || 0);
 
     return new Response(
       JSON.stringify({ success: true, data: enrichedData }),
