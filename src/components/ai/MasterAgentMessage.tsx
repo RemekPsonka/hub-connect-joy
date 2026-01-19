@@ -1,22 +1,18 @@
 import { MasterAgentResponse, SuggestedAction, ContactWithAgent, ContactWithoutAgent } from '@/hooks/useContactAgent';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import ReactMarkdown from 'react-markdown';
 import { 
   Brain, 
   Users, 
-  Lightbulb, 
   Building2,
-  Sparkles,
   Bot,
   ExternalLink,
   ListTodo,
   StickyNote,
-  MessageSquare,
-  Loader2,
-  CalendarPlus
+  CalendarPlus,
+  Loader2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,21 +24,8 @@ interface MasterAgentMessageProps {
   response: MasterAgentResponse;
 }
 
-// Helper to get initials from name
 const getInitials = (name: string) => {
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-};
-
-// Parse contacts from markdown answer as fallback
-const parseContactsFromAnswer = (answer: string): Array<{name: string; company: string}> => {
-  const contacts: Array<{name: string; company: string}> = [];
-  // Pattern: **Name** (Firma: Company...)
-  const regex = /\*\*([^*]+)\*\*\s*\(Firma:\s*([^,)]+)/g;
-  let match;
-  while ((match = regex.exec(answer)) !== null) {
-    contacts.push({ name: match[1].trim(), company: match[2].trim() });
-  }
-  return contacts;
 };
 
 export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
@@ -56,55 +39,6 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     company?: string;
   } | null>(null);
 
-  const handleSuggestedAction = async (action: SuggestedAction, index: number) => {
-    if (!tenantId) return;
-    
-    const actionKey = `${action.type}-${index}`;
-    setLoadingAction(actionKey);
-    
-    try {
-      if (action.type === 'CREATE_TASK') {
-        const { error } = await supabase.from('tasks').insert({
-          contact_id: action.contact_id,
-          title: action.title || 'Nowe zadanie',
-          description: action.description || '',
-          priority: 'medium',
-          status: 'todo',
-          tenant_id: tenantId
-        });
-        
-        if (error) throw error;
-        toast.success(`Utworzono zadanie dla ${action.contact_name}`);
-      } else if (action.type === 'ADD_NOTE') {
-        // First get existing notes
-        const { data: contact, error: fetchError } = await supabase
-          .from('contacts')
-          .select('notes')
-          .eq('id', action.contact_id)
-          .single();
-        
-        if (fetchError) throw fetchError;
-        
-        const timestamp = new Date().toLocaleDateString('pl-PL');
-        const newNote = `\n\n[${timestamp}] ${action.note}`;
-        const updatedNotes = (contact?.notes || '') + newNote;
-        
-        const { error: updateError } = await supabase
-          .from('contacts')
-          .update({ notes: updatedNotes })
-          .eq('id', action.contact_id);
-        
-        if (updateError) throw updateError;
-        toast.success(`Dodano notatkę do ${action.contact_name}`);
-      }
-    } catch (err) {
-      console.error('Action error:', err);
-      toast.error('Nie udało się wykonać akcji');
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-
   const openTaskModal = (contact: ContactWithAgent | ContactWithoutAgent) => {
     setSelectedContactForTask({
       id: contact.contact_id,
@@ -114,52 +48,85 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     setTaskModalOpen(true);
   };
 
-  // Check if we have structured contacts
-  const hasStructuredContacts = 
-    (response.contacts_with_agents?.length || 0) + 
-    (response.contacts_without_agents?.length || 0) > 0;
+  const handleQuickNote = async (contact: ContactWithAgent | ContactWithoutAgent) => {
+    const note = prompt(`Dodaj notatkę dla ${contact.contact_name}:`);
+    if (!note) return;
+    
+    setLoadingAction(`note-${contact.contact_id}`);
+    try {
+      const { data: currentContact, error: fetchError } = await supabase
+        .from('contacts')
+        .select('notes')
+        .eq('id', contact.contact_id)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      const timestamp = new Date().toLocaleDateString('pl-PL');
+      const newNote = `\n\n[${timestamp}] ${note}`;
+      
+      const { error: updateError } = await supabase
+        .from('contacts')
+        .update({ notes: (currentContact?.notes || '') + newNote })
+        .eq('id', contact.contact_id);
+        
+      if (updateError) throw updateError;
+      toast.success(`Dodano notatkę dla ${contact.contact_name}`);
+    } catch (err) {
+      console.error('Note error:', err);
+      toast.error('Nie udało się dodać notatki');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
 
-  // Fallback: parse contacts from markdown if no structured data
-  const parsedContacts = !hasStructuredContacts ? parseContactsFromAnswer(response.answer) : [];
+  const openConsultation = (contact: ContactWithAgent | ContactWithoutAgent) => {
+    window.open(`/consultations?contact_id=${contact.contact_id}`, '_blank');
+  };
+
+  const totalContacts = 
+    (response.contacts_with_agents?.length || 0) + 
+    (response.contacts_without_agents?.length || 0);
 
   return (
     <div className="space-y-4">
-      {/* Main Answer - only show if no structured contacts OR as intro */}
-      {(!hasStructuredContacts || response.answer.length < 500) && (
-        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
-          <ReactMarkdown>{response.answer}</ReactMarkdown>
+      {/* Summary header */}
+      {totalContacts > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="h-4 w-4" />
+          <span>Znaleziono {totalContacts} kontaktów pasujących do zapytania</span>
         </div>
       )}
 
-      {/* ============= CONTACTS WITH ACTIVE AGENTS (Modern Card Design) ============= */}
+      {/* ============= CONTACTS WITH ACTIVE AGENTS ============= */}
       {response.contacts_with_agents && response.contacts_with_agents.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
             <Bot className="h-4 w-4" />
-            <span>Kontakty z aktywnym agentem AI ({response.contacts_with_agents.length})</span>
+            <span>Z agentem AI ({response.contacts_with_agents.length})</span>
           </div>
           
           <div className="grid gap-3">
             {response.contacts_with_agents.map((contact) => (
               <Card 
                 key={contact.contact_id} 
-                className="border border-green-500/30 bg-green-500/5 hover:border-green-500/50 transition-colors"
+                className="border-2 border-green-500/40 bg-card hover:shadow-md transition-all"
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Avatar + Info */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <Avatar className="h-10 w-10 flex-shrink-0">
-                        <AvatarFallback className="bg-green-500/20 text-green-700 dark:text-green-300 text-sm font-medium">
+                <CardContent className="p-4 space-y-3">
+                  {/* Header: Avatar + Info + Score Badge */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="h-11 w-11 border-2 border-green-500/30 flex-shrink-0">
+                        <AvatarFallback className="bg-green-500/10 text-green-700 dark:text-green-300 font-medium">
                           {getInitials(contact.contact_name)}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0">
                         <a 
                           href={`/contacts/${contact.contact_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-semibold text-foreground hover:text-primary hover:underline flex items-center gap-1.5 truncate"
+                          className="font-semibold hover:text-primary hover:underline flex items-center gap-1.5"
                         >
                           {contact.contact_name}
                           <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
@@ -172,36 +139,55 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
                         )}
                       </div>
                     </div>
-                    
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs h-8"
-                        onClick={() => openTaskModal(contact)}
-                      >
-                        <ListTodo className="h-3.5 w-3.5" />
-                        Dodaj zadanie
-                      </Button>
-                    </div>
+                    <Badge className="bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30 flex-shrink-0">
+                      {Math.round(contact.semantic_score * 100)}%
+                    </Badge>
                   </div>
-                  
-                  {/* Agent response */}
+
+                  {/* Justification - agent answer */}
                   {contact.agent_answer && (
-                    <div className="mt-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <div className="p-3 bg-muted/50 rounded-lg border border-border/50">
                       <div className="flex items-start gap-2">
                         <Bot className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-foreground">{contact.agent_answer}</p>
+                        <p className="text-sm leading-relaxed">{contact.agent_answer}</p>
                       </div>
                     </div>
                   )}
-                  
-                  {/* Match badge */}
-                  <div className="mt-3 flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20">
-                      {Math.round(contact.semantic_score * 100)}% dopasowania
-                    </Badge>
+
+                  {/* Quick actions - 3 buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => openTaskModal(contact)}
+                    >
+                      <ListTodo className="h-3.5 w-3.5" />
+                      Zadanie
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => openConsultation(contact)}
+                    >
+                      <CalendarPlus className="h-3.5 w-3.5" />
+                      Spotkanie
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => handleQuickNote(contact)}
+                      disabled={loadingAction === `note-${contact.contact_id}`}
+                    >
+                      {loadingAction === `note-${contact.contact_id}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <StickyNote className="h-3.5 w-3.5" />
+                      )}
+                      Notatka
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -210,35 +196,35 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
         </div>
       )}
 
-      {/* ============= CONTACTS WITHOUT AGENTS (Modern Card Design) ============= */}
+      {/* ============= CONTACTS WITHOUT AGENTS ============= */}
       {response.contacts_without_agents && response.contacts_without_agents.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <Users className="h-4 w-4" />
-            <span>Inne dopasowane kontakty ({response.contacts_without_agents.length})</span>
+            <span>Dopasowane kontakty ({response.contacts_without_agents.length})</span>
           </div>
           
           <div className="grid gap-3">
             {response.contacts_without_agents.map((contact) => (
               <Card 
                 key={contact.contact_id} 
-                className="border border-border/50 hover:border-primary/30 transition-colors"
+                className="border border-border hover:border-primary/30 hover:shadow-md transition-all"
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Avatar + Info */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <Avatar className="h-10 w-10 flex-shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                <CardContent className="p-4 space-y-3">
+                  {/* Header: Avatar + Info + Score Badge */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="h-11 w-11 border border-border flex-shrink-0">
+                        <AvatarFallback className="bg-primary/10 text-primary font-medium">
                           {getInitials(contact.contact_name)}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0">
                         <a 
                           href={`/contacts/${contact.contact_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-semibold text-foreground hover:text-primary hover:underline flex items-center gap-1.5 truncate"
+                          className="font-semibold hover:text-primary hover:underline flex items-center gap-1.5"
                         >
                           {contact.contact_name}
                           <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
@@ -251,244 +237,62 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
                         )}
                       </div>
                     </div>
-                    
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs h-8"
-                        onClick={() => openTaskModal(contact)}
-                      >
-                        <ListTodo className="h-3.5 w-3.5" />
-                        Dodaj zadanie
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Match reason */}
-                  <p className="mt-2 text-sm text-muted-foreground">{contact.match_reason}</p>
-                  
-                  {/* Info about no active agent */}
-                  <div className="mt-3 p-2 bg-yellow-500/10 rounded-md border border-yellow-500/20">
-                    <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 text-xs">
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      <span>Skontaktuj się, aby dowiedzieć się więcej</span>
-                    </div>
-                  </div>
-                  
-                  {/* Match badge */}
-                  <div className="mt-3">
-                    <Badge variant="outline" className="text-xs">
-                      {Math.round(contact.semantic_score * 100)}% dopasowania
+                    <Badge variant="outline" className="flex-shrink-0">
+                      {Math.round(contact.semantic_score * 100)}%
                     </Badge>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* ============= FALLBACK: Parsed Contacts from Markdown ============= */}
-      {!hasStructuredContacts && parsedContacts.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>Znalezione kontakty ({parsedContacts.length})</span>
-          </div>
-          
-          <div className="grid gap-2">
-            {parsedContacts.map((contact, idx) => (
-              <Card key={idx} className="border border-border/50">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                        {getInitials(contact.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-sm">{contact.name}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
-                        {contact.company}
-                      </p>
-                    </div>
+                  {/* Justification - match reason */}
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <p className="text-sm">{contact.match_reason}</p>
+                  </div>
+
+                  {/* CTA to activate agent */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Bot className="h-3.5 w-3.5" />
+                    <span>Aktywuj agenta AI, aby uzyskać szczegółowe informacje</span>
+                  </div>
+
+                  {/* Quick actions - 3 buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => openTaskModal(contact)}
+                    >
+                      <ListTodo className="h-3.5 w-3.5" />
+                      Zadanie
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => openConsultation(contact)}
+                    >
+                      <CalendarPlus className="h-3.5 w-3.5" />
+                      Spotkanie
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-8 flex-1"
+                      onClick={() => handleQuickNote(contact)}
+                      disabled={loadingAction === `note-${contact.contact_id}`}
+                    >
+                      {loadingAction === `note-${contact.contact_id}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <StickyNote className="h-3.5 w-3.5" />
+                      )}
+                      Notatka
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         </div>
-      )}
-
-      {/* Legacy: Related Contacts (fallback if new structure not available) */}
-      {(!response.contacts_with_agents || response.contacts_with_agents.length === 0) && 
-       (!response.contacts_without_agents || response.contacts_without_agents.length === 0) &&
-       !parsedContacts.length &&
-       response.related_contacts && response.related_contacts.length > 0 && (
-        <Card className="bg-muted/50 border-muted">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              Powiązane kontakty ({response.related_contacts.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4 space-y-2">
-            {response.related_contacts.map((contact) => (
-              <a
-                key={contact.contact_id}
-                href={`/contacts/${contact.contact_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2 rounded-md hover:bg-muted transition-colors group"
-              >
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                    {contact.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{contact.name}</span>
-                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    {contact.company && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
-                        {contact.company}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {contact.relevance}
-                  </p>
-                </div>
-              </a>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============= SUGGESTED ACTIONS ============= */}
-      {response.suggested_actions && response.suggested_actions.length > 0 && (
-        <Card className="bg-blue-500/5 border-blue-500/30">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-blue-500" />
-              Sugerowane akcje
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4">
-            <div className="flex flex-wrap gap-2">
-              {response.suggested_actions.map((action, idx) => {
-                const actionKey = `${action.type}-${idx}`;
-                const isLoading = loadingAction === actionKey;
-                
-                return (
-                  <Button
-                    key={idx}
-                    variant="outline"
-                    size="sm"
-                    className="gap-2 text-xs"
-                    onClick={() => handleSuggestedAction(action, idx)}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : action.type === 'CREATE_TASK' ? (
-                      <ListTodo className="h-3 w-3" />
-                    ) : (
-                      <StickyNote className="h-3 w-3" />
-                    )}
-                    {action.type === 'CREATE_TASK' 
-                      ? `Zadanie: ${action.contact_name}`
-                      : `Notatka: ${action.contact_name}`
-                    }
-                  </Button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Recommendations */}
-      {response.recommendations && response.recommendations.length > 0 && (
-        <Card className="bg-muted/50 border-muted">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Lightbulb className="h-4 w-4 text-yellow-500" />
-              Rekomendacje ({response.recommendations.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4 space-y-2">
-            {response.recommendations.map((rec, idx) => (
-              <div 
-                key={idx}
-                className="p-2 rounded-md bg-background border space-y-1"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-medium">{rec.action}</span>
-                  <Badge 
-                    variant={rec.confidence >= 0.7 ? "default" : "secondary"}
-                    className="text-xs"
-                  >
-                    {Math.round(rec.confidence * 100)}%
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{rec.reason}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Potential Matches */}
-      {response.potential_matches && response.potential_matches.length > 0 && (
-        <Card className="bg-muted/50 border-muted">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
-              Potencjalne dopasowania ({response.potential_matches.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 px-4 space-y-2">
-            {response.potential_matches.map((match, idx) => (
-              <div 
-                key={idx}
-                className="p-2 rounded-md bg-background border"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <a 
-                    href={`/contacts/${match.contact_a.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    {match.contact_a.name}
-                  </a>
-                  <span className="text-muted-foreground">↔</span>
-                  <a 
-                    href={`/contacts/${match.contact_b.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    {match.contact_b.name}
-                  </a>
-                  <Badge 
-                    variant={match.confidence >= 0.7 ? "default" : "secondary"}
-                    className="ml-auto text-xs"
-                  >
-                    {Math.round(match.confidence * 100)}%
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{match.match_reason}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       )}
 
       {/* Meta info */}
