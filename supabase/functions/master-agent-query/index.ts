@@ -76,7 +76,7 @@ serve(async (req) => {
         p_types: ['contact'],
         p_fts_weight: 0.3,
         p_semantic_weight: 0.7,
-        p_threshold: 0.25,
+        p_threshold: 0.40, // Increased from 0.25 - only show meaningful matches
         p_limit: 50
       });
 
@@ -441,6 +441,7 @@ Zwróć JSON:
 
     const contactsWithoutAgents = semanticContacts
       .filter(c => !contactAgentResponses.some(r => r.contact_id === c.id))
+      .filter(c => (c.combined_score || c.semantic_score || 0) >= 0.40) // Only show meaningful matches
       .slice(0, 10)
       .map(c => ({
         contact_id: c.id,
