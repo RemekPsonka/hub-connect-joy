@@ -16,6 +16,7 @@ import { ContactModal } from '@/components/contacts/ContactModal';
 import { BIInterviewChat } from '@/components/agents/BIInterviewChat';
 import { BIDataViewer } from '@/components/agents/BIDataViewer';
 import { CompanyView } from '@/components/contacts/CompanyView';
+import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ContactDetail() {
@@ -84,9 +85,10 @@ export default function ContactDetail() {
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
             </TabsList>
           ) : (
-            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-7">
+            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-8">
               <TabsTrigger value="overview">Przegląd</TabsTrigger>
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
+              <TabsTrigger value="ownership">Udziały</TabsTrigger>
               <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
               <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
               <TabsTrigger value="history">Historia</TabsTrigger>
@@ -123,6 +125,10 @@ export default function ContactDetail() {
                 <BIDataViewer contactId={contact.id} />
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="ownership" className="mt-6">
+            <ContactOwnershipTab contactId={contact.id} contactName={contact.full_name} />
           </TabsContent>
 
           <TabsContent value="needs-offers" className="mt-6">

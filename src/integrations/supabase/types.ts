@@ -1138,6 +1138,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          is_owner: boolean | null
           last_contact_date: string | null
           last_name: string | null
           linkedin_data: Json | null
@@ -1157,6 +1158,7 @@ export type Database = {
           tags: string[] | null
           tenant_id: string
           title: string | null
+          total_ownership_revenue: number | null
           updated_at: string | null
         }
         Insert: {
@@ -1170,6 +1172,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean | null
+          is_owner?: boolean | null
           last_contact_date?: string | null
           last_name?: string | null
           linkedin_data?: Json | null
@@ -1189,6 +1192,7 @@ export type Database = {
           tags?: string[] | null
           tenant_id: string
           title?: string | null
+          total_ownership_revenue?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -1202,6 +1206,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          is_owner?: boolean | null
           last_contact_date?: string | null
           last_name?: string | null
           linkedin_data?: Json | null
@@ -1221,6 +1226,7 @@ export type Database = {
           tags?: string[] | null
           tenant_id?: string
           title?: string | null
+          total_ownership_revenue?: number | null
           updated_at?: string | null
         }
         Relationships: [
@@ -2159,6 +2165,67 @@ export type Database = {
             columns: ["recommendation_id"]
             isOneToOne: false
             referencedRelation: "meeting_recommendations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ownership_stakes: {
+        Row: {
+          added_by: string | null
+          company_id: string
+          contact_id: string
+          created_at: string | null
+          id: string
+          notes: string | null
+          ownership_percent: number | null
+          revenue_share: number | null
+          role: string | null
+          tenant_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          company_id: string
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          ownership_percent?: number | null
+          revenue_share?: number | null
+          role?: string | null
+          tenant_id: string
+        }
+        Update: {
+          added_by?: string | null
+          company_id?: string
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          ownership_percent?: number | null
+          revenue_share?: number | null
+          role?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ownership_stakes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_stakes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_stakes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
