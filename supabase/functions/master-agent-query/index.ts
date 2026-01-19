@@ -76,7 +76,7 @@ serve(async (req) => {
         p_types: ['contact'],
         p_fts_weight: 0.3,
         p_semantic_weight: 0.7,
-        p_threshold: 0.40, // Increased from 0.25 - only show meaningful matches
+        p_threshold: 0.30, // Lower threshold to catch more semantic matches
         p_limit: 50
       });
 
@@ -180,6 +180,12 @@ serve(async (req) => {
     }
 
     console.log(`[Master Agent] Loaded ${contactsWithAgentData.length} total contacts, ${semanticContacts.length} semantic matches`);
+
+    // ============= GET LOVABLE_API_KEY EARLY (needed for Contact Agent queries) =============
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     // ============= QUERY CONTACT AGENTS =============
     // Get agents for top semantic matches to ask them directly
@@ -326,10 +332,7 @@ Odpowiedź:`;
       .map(([industry, count]) => `${industry}: ${count}`)
       .join(', ');
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    // LOVABLE_API_KEY already defined above
 
     // Build Contact Agent responses section
     const contactAgentSection = contactAgentResponses.length > 0
@@ -441,7 +444,7 @@ Zwróć JSON:
 
     const contactsWithoutAgents = semanticContacts
       .filter(c => !contactAgentResponses.some(r => r.contact_id === c.id))
-      .filter(c => (c.combined_score || c.semantic_score || 0) >= 0.40) // Only show meaningful matches
+      .filter(c => (c.combined_score || c.semantic_score || 0) >= 0.30) // Lower threshold to show more matches
       .slice(0, 10)
       .map(c => ({
         contact_id: c.id,
