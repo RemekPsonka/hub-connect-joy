@@ -545,134 +545,341 @@ function parseFinancialDataFromHtml(html: string): KRSFinancialStatement[] {
   return statements;
 }
 
-// ============= SCRAPE RDF FINANCIAL DATA VIA FIRECRAWL ACTIONS =============
+// ============= SCRAPE RDF FINANCIAL DATA VIA MULTIPLE STRATEGIES =============
 async function scrapeRDFFinancialData(krs: string, firecrawlKey: string): Promise<KRSFinancialStatement[]> {
   const krsNormalized = krs.padStart(10, '0');
-  console.log(`[RDF Scraping] Starting for KRS: ${krsNormalized}`);
+  console.log(`[RDF Scraping] Starting multi-strategy scrape for KRS: ${krsNormalized}`);
   
   const statements: KRSFinancialStatement[] = [];
   
+  // ===== STRATEGY 1: Direct RDF API endpoint (if exists) =====
   try {
-    // Step 1: Scrape RDF search page with Firecrawl actions
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: 'https://ekrs.ms.gov.pl/rdf/pd/search_df',
-        formats: ['html', 'markdown'],
-        waitFor: 3000,
-        actions: [
-          // Wait for page to fully load
-          { type: 'wait', milliseconds: 2000 },
-          // Type KRS number into the search field
-          { type: 'write', text: krsNormalized, selector: 'input[id*="krs"], input[name*="krs"], input[type="text"]' },
-          // Click submit button
-          { type: 'click', selector: 'button[type="submit"], input[type="submit"], button[id*="szukaj"], a[id*="szukaj"]' },
-          // Wait for results to load
-          { type: 'wait', milliseconds: 4000 },
-        ],
-        timeout: 45000,
-      }),
-    });
-
-    if (!response.ok) {
-      console.warn(`[RDF Scraping] Firecrawl request failed: ${response.status}`);
-      return [];
-    }
-
-    const data = await response.json();
-    const html = data.data?.html || data.html || '';
-    const markdown = data.data?.markdown || data.markdown || '';
-    
-    console.log('[RDF Scraping] Got HTML length:', html.length, 'MD length:', markdown.length);
-    
-    if (html.length < 500) {
-      console.log('[RDF Scraping] Response too short, likely no results or page blocked');
-      return [];
-    }
-    
-    // Step 2: Parse results to find document links (XML files)
-    const xmlLinkPatterns = [
-      /href="([^"]*\.xml[^"]*)"/gi,
-      /href="([^"]*pobierz[^"]*xml[^"]*)"/gi,
-      /href="([^"]*download[^"]*\.xml[^"]*)"/gi,
-      /href="([^"]*dokument[^"]*\.xml[^"]*)"/gi,
+    console.log('[RDF Strategy 1] Trying direct RDF API endpoint...');
+    const directApiUrls = [
+      `https://ekrs.ms.gov.pl/rdf-api/pobierz/${krsNormalized}`,
+      `https://ekrs.ms.gov.pl/rdf/pd/pobierz_plik/${krsNormalized}`,
     ];
     
-    const documentLinks: string[] = [];
-    
-    for (const pattern of xmlLinkPatterns) {
-      const matches = html.matchAll(pattern);
-      for (const match of matches) {
-        let link = match[1];
-        if (!link.startsWith('http')) {
-          link = link.startsWith('/') ? `https://ekrs.ms.gov.pl${link}` : `https://ekrs.ms.gov.pl/${link}`;
-        }
-        if (!documentLinks.includes(link)) {
-          documentLinks.push(link);
-        }
-      }
-    }
-    
-    console.log(`[RDF Scraping] Found ${documentLinks.length} XML document links`);
-    
-    // Step 3: If we found XML links, fetch and parse each (max 5 most recent)
-    for (const xmlUrl of documentLinks.slice(0, 5)) {
+    for (const apiUrl of directApiUrls) {
       try {
-        console.log(`[RDF Scraping] Fetching XML: ${xmlUrl}`);
-        const xmlResp = await fetch(xmlUrl, {
+        const resp = await fetch(apiUrl, {
           headers: {
-            'Accept': 'application/xml, text/xml, */*',
+            'Accept': 'application/json, application/xml, text/html, */*',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           },
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(8000)
         });
         
-        if (xmlResp.ok) {
-          const xmlText = await xmlResp.text();
-          console.log(`[RDF Scraping] Got XML content length: ${xmlText.length}`);
+        if (resp.ok) {
+          const content = await resp.text();
+          console.log(`[RDF Strategy 1] Got response from ${apiUrl}: ${content.length} chars`);
           
-          const parsed = parseFinancialXML(xmlText);
-          if (parsed.fiscal_year && (parsed.revenue || parsed.total_assets || parsed.net_profit)) {
-            statements.push({
-              ...parsed,
-              source: 'krs_rdf'
-            } as KRSFinancialStatement);
-            console.log(`[RDF Scraping] Parsed year ${parsed.fiscal_year}: revenue=${parsed.revenue ? formatPLN(parsed.revenue) : 'N/A'}, assets=${parsed.total_assets ? formatPLN(parsed.total_assets) : 'N/A'}`);
+          // Try parsing as XML financial data
+          if (content.includes('PrzychodyNetto') || content.includes('AktywaRazem')) {
+            const parsed = parseFinancialXML(content);
+            if (parsed.fiscal_year && (parsed.revenue || parsed.total_assets)) {
+              statements.push({ ...parsed, source: 'krs_rdf' } as KRSFinancialStatement);
+              console.log(`[RDF Strategy 1] Extracted: year=${parsed.fiscal_year}`);
+            }
           }
         }
       } catch (e) {
-        console.warn('[RDF Scraping] Error fetching XML:', xmlUrl, e);
+        console.log(`[RDF Strategy 1] ${apiUrl} failed:`, e);
       }
-      
-      // Small delay between requests
-      await new Promise(resolve => setTimeout(resolve, 300));
     }
-    
-    // Step 4: If no XML links found or parsing failed, try to extract data from HTML table
-    if (statements.length === 0 && html.length > 1000) {
-      console.log('[RDF Scraping] No XML data extracted, trying HTML table parsing');
-      const parsedFromHtml = parseFinancialDataFromHtml(html);
-      statements.push(...parsedFromHtml);
-    }
-    
   } catch (e) {
-    console.error('[RDF Scraping] Error:', e);
+    console.log('[RDF Strategy 1] Direct API strategy failed:', e);
   }
   
-  // Sort by year descending and dedupe
+  // ===== STRATEGY 2: Scrape RDF search results page with direct URL params =====
+  try {
+    console.log('[RDF Strategy 2] Trying RDF search with URL parameters...');
+    
+    // The RDF portal may accept KRS as a query parameter
+    const searchUrls = [
+      `https://ekrs.ms.gov.pl/rdf/pd/search_df?krs=${krsNormalized}`,
+      `https://ekrs.ms.gov.pl/rdf/pd/search_df?q=${krsNormalized}`,
+    ];
+    
+    for (const searchUrl of searchUrls) {
+      try {
+        const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: searchUrl,
+            formats: ['html', 'markdown'],
+            waitFor: 5000,
+            timeout: 30000,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const html = data.data?.html || data.html || '';
+          
+          if (html.length > 2000 && (html.includes(krsNormalized) || html.includes(krs))) {
+            console.log(`[RDF Strategy 2] Found results in HTML (${html.length} chars)`);
+            
+            // Extract document links
+            const docLinks = extractDocumentLinksFromHtml(html);
+            if (docLinks.length > 0) {
+              console.log(`[RDF Strategy 2] Found ${docLinks.length} document links`);
+              const fetchedStatements = await fetchAndParseDocuments(docLinks, firecrawlKey);
+              statements.push(...fetchedStatements);
+            }
+            
+            // Also try parsing directly from HTML table
+            const htmlStatements = parseFinancialDataFromHtml(html);
+            if (htmlStatements.length > 0) {
+              console.log(`[RDF Strategy 2] Extracted ${htmlStatements.length} statements from HTML`);
+              statements.push(...htmlStatements);
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`[RDF Strategy 2] ${searchUrl} failed:`, e);
+      }
+    }
+  } catch (e) {
+    console.log('[RDF Strategy 2] URL params strategy failed:', e);
+  }
+  
+  // ===== STRATEGY 3: Form interaction with enhanced selectors =====
+  if (statements.length === 0) {
+    try {
+      console.log('[RDF Strategy 3] Trying form interaction with Firecrawl actions...');
+      
+      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: 'https://ekrs.ms.gov.pl/rdf/pd/search_df',
+          formats: ['html', 'markdown', 'screenshot'],
+          waitFor: 5000,
+          actions: [
+            // Wait for JavaScript to initialize
+            { type: 'wait', milliseconds: 3000 },
+            // Try multiple selectors for KRS input
+            { type: 'write', text: krsNormalized, selector: '#unloggedForm\\:krs2, input[id*="krs"], input[name*="krs"], input.form-control[type="text"]:first-of-type' },
+            // Try multiple selectors for submit button
+            { type: 'click', selector: '#unloggedForm\\:szukaj, button[id*="szukaj"], input[type="submit"], button[type="submit"], .btn-primary' },
+            // Wait longer for AJAX results
+            { type: 'wait', milliseconds: 5000 },
+          ],
+          timeout: 60000,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const html = data.data?.html || data.html || '';
+        const markdown = data.data?.markdown || data.markdown || '';
+        
+        console.log(`[RDF Strategy 3] Got HTML: ${html.length} chars, MD: ${markdown.length} chars`);
+        
+        // Check if we got results (look for document table or links)
+        if (html.includes('pobierz') || html.includes('.xml') || html.includes('sprawozdanie')) {
+          console.log('[RDF Strategy 3] Found document references in response');
+          
+          // Extract and fetch documents
+          const docLinks = extractDocumentLinksFromHtml(html);
+          if (docLinks.length > 0) {
+            const fetchedStatements = await fetchAndParseDocuments(docLinks, firecrawlKey);
+            statements.push(...fetchedStatements);
+          }
+          
+          // Parse from HTML
+          const htmlStatements = parseFinancialDataFromHtml(html);
+          statements.push(...htmlStatements);
+        }
+      }
+    } catch (e) {
+      console.log('[RDF Strategy 3] Form interaction failed:', e);
+    }
+  }
+  
+  // ===== STRATEGY 4: Alternative KRS document portal (rejestr.io) =====
+  if (statements.length === 0) {
+    try {
+      console.log('[RDF Strategy 4] Trying alternative data source (rejestr.io)...');
+      
+      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: `https://rejestr.io/krs/${krsNormalized}`,
+          formats: ['html', 'markdown'],
+          waitFor: 3000,
+          timeout: 20000,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const markdown = data.data?.markdown || data.markdown || '';
+        const html = data.data?.html || data.html || '';
+        
+        console.log(`[RDF Strategy 4] Got response: ${markdown.length} chars`);
+        
+        // Parse financial data from rejestr.io format
+        const rejestrStatements = parseRejestrIOFinancials(markdown, html);
+        if (rejestrStatements.length > 0) {
+          console.log(`[RDF Strategy 4] Extracted ${rejestrStatements.length} statements from rejestr.io`);
+          statements.push(...rejestrStatements);
+        }
+      }
+    } catch (e) {
+      console.log('[RDF Strategy 4] Alternative source failed:', e);
+    }
+  }
+  
+  // Deduplicate and sort by year
   const uniqueStatements = new Map<number, KRSFinancialStatement>();
   for (const s of statements) {
-    if (!uniqueStatements.has(s.fiscal_year) || 
-        (s.revenue && !uniqueStatements.get(s.fiscal_year)?.revenue)) {
+    const existing = uniqueStatements.get(s.fiscal_year);
+    if (!existing || (s.revenue && !existing.revenue) || (s.total_assets && !existing.total_assets)) {
       uniqueStatements.set(s.fiscal_year, s);
     }
   }
   
-  return Array.from(uniqueStatements.values()).sort((a, b) => b.fiscal_year - a.fiscal_year);
+  const result = Array.from(uniqueStatements.values()).sort((a, b) => b.fiscal_year - a.fiscal_year);
+  console.log(`[RDF Scraping] Final result: ${result.length} years of financial data`);
+  
+  return result;
+}
+
+// Helper: Extract document links from HTML
+function extractDocumentLinksFromHtml(html: string): string[] {
+  const links: string[] = [];
+  
+  const patterns = [
+    /href="([^"]*\.xml[^"]*)"/gi,
+    /href="([^"]*pobierz[^"]*)"/gi,
+    /href="([^"]*dokument[^"]*)"/gi,
+    /href="([^"]*sprawozdanie[^"]*)"/gi,
+    /href="([^"]*download[^"]*id=\d+[^"]*)"/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = html.matchAll(pattern);
+    for (const match of matches) {
+      let link = match[1];
+      if (!link.startsWith('http')) {
+        link = link.startsWith('/') ? `https://ekrs.ms.gov.pl${link}` : `https://ekrs.ms.gov.pl/${link}`;
+      }
+      if (!links.includes(link) && !link.includes('javascript:')) {
+        links.push(link);
+      }
+    }
+  }
+  
+  return links.slice(0, 10); // Limit to 10 documents
+}
+
+// Helper: Fetch and parse documents
+async function fetchAndParseDocuments(links: string[], firecrawlKey: string): Promise<KRSFinancialStatement[]> {
+  const statements: KRSFinancialStatement[] = [];
+  
+  for (const link of links.slice(0, 5)) {
+    try {
+      console.log(`[Document Fetch] Fetching: ${link}`);
+      
+      // Try direct fetch first
+      const directResp = await fetch(link, {
+        headers: {
+          'Accept': 'application/xml, text/xml, text/html, */*',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      
+      if (directResp.ok) {
+        const content = await directResp.text();
+        
+        // Parse XML content
+        const parsed = parseFinancialXML(content);
+        if (parsed.fiscal_year && (parsed.revenue || parsed.total_assets || parsed.net_profit)) {
+          statements.push({ ...parsed, source: 'krs_rdf' } as KRSFinancialStatement);
+          console.log(`[Document Fetch] Parsed year ${parsed.fiscal_year}`);
+        }
+      }
+    } catch (e) {
+      console.log(`[Document Fetch] Failed for ${link}:`, e);
+    }
+    
+    // Small delay between requests
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  return statements;
+}
+
+// Helper: Parse financial data from rejestr.io format
+function parseRejestrIOFinancials(markdown: string, html: string): KRSFinancialStatement[] {
+  const statements: KRSFinancialStatement[] = [];
+  const content = markdown + '\n' + html;
+  
+  // Look for patterns like "Przychody: 1 234 567 zł" or "Revenue: 1,234,567 PLN"
+  // Also look for table rows with years and financial figures
+  
+  // Pattern 1: Year-based sections with financials
+  const yearSections = content.matchAll(/(?:rok|year|20[12]\d)[:\s]*(\d{4})[^]*?(?:przychod|revenue)[^]*?([\d\s.,]+)(?:\s*(?:zł|PLN|tys|mln))/gi);
+  
+  for (const match of yearSections) {
+    const year = parseInt(match[1]);
+    let amount = parsePolishNumber(match[2]);
+    
+    // Detect if in thousands or millions
+    if (match[0].toLowerCase().includes('mln') || match[0].toLowerCase().includes('milion')) {
+      amount *= 1000000;
+    } else if (match[0].toLowerCase().includes('tys') || match[0].toLowerCase().includes('tysi')) {
+      amount *= 1000;
+    }
+    
+    if (year >= 2015 && year <= 2025 && amount > 0) {
+      statements.push({
+        fiscal_year: year,
+        revenue: amount,
+        source: 'krs_rdf'
+      } as KRSFinancialStatement);
+    }
+  }
+  
+  // Pattern 2: Direct revenue mentions with amounts
+  const revenuePatterns = [
+    /przychod[yów\s]+(?:netto)?[:\s]*([\d\s.,]+)\s*(?:zł|PLN)/gi,
+    /revenue[:\s]*([\d\s.,]+)\s*(?:PLN|zł)/gi,
+    /obroty?[:\s]*([\d\s.,]+)\s*(?:zł|PLN)/gi,
+  ];
+  
+  for (const pattern of revenuePatterns) {
+    const matches = content.matchAll(pattern);
+    for (const match of matches) {
+      const amount = parsePolishNumber(match[1]);
+      if (amount > 100000) { // Reasonable minimum
+        const year = new Date().getFullYear() - 1; // Assume last year
+        if (!statements.find(s => s.fiscal_year === year)) {
+          statements.push({
+            fiscal_year: year,
+            revenue: amount,
+            source: 'krs_rdf'
+          } as KRSFinancialStatement);
+        }
+      }
+    }
+  }
+  
+  return statements;
 }
 
 interface KRSApiData {
