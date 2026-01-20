@@ -4,7 +4,6 @@ import { useCompaniesWithContacts } from '@/hooks/useCompanies';
 import { ContactsHeader, type ViewMode } from '@/components/contacts/ContactsHeader';
 import { ContactsTable } from '@/components/contacts/ContactsTable';
 import { CompaniesTable } from '@/components/contacts/CompaniesTable';
-import { ContactModal } from '@/components/contacts/ContactModal';
 import { BulkMergeDomainsModal } from '@/components/contacts/BulkMergeDomainsModal';
 import { FindDuplicatesModal } from '@/components/contacts/FindDuplicatesModal';
 
@@ -18,7 +17,6 @@ export default function Contacts() {
   const [sortBy, setSortBy] = useState('full_name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [companySortBy, setCompanySortBy] = useState('name');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkMergeModalOpen, setIsBulkMergeModalOpen] = useState(false);
   const [isFindDuplicatesModalOpen, setIsFindDuplicatesModalOpen] = useState(false);
 
@@ -66,7 +64,6 @@ export default function Contacts() {
   };
 
   const currentData = viewMode === 'people' ? contactsQuery.data : companiesQuery.data;
-  const isLoading = viewMode === 'people' ? contactsQuery.isLoading : companiesQuery.isLoading;
 
   return (
     <div className="space-y-6">
@@ -78,7 +75,6 @@ export default function Contacts() {
         onGroupChange={(value) => { setGroupId(value); setPage(1); }}
         companyId={companyId}
         onCompanyChange={(value) => { setCompanyId(value); setPage(1); }}
-        onAddContact={() => setIsModalOpen(true)}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         onBulkMergeByDomain={() => setIsBulkMergeModalOpen(true)}
@@ -112,11 +108,6 @@ export default function Contacts() {
           isLoading={companiesQuery.isLoading}
         />
       )}
-
-      <ContactModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
 
       <BulkMergeDomainsModal
         open={isBulkMergeModalOpen}

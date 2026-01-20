@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Camera, FileSpreadsheet, Building2, Users, Link2, GitMerge } from 'lucide-react';
-import { ScanBusinessCardModal } from './ScanBusinessCardModal';
+import { Search, Plus, Filter, Building2, Users, Link2, GitMerge } from 'lucide-react';
 import { AIImportContactsModal } from './AIImportContactsModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,7 +25,6 @@ interface ContactsHeaderProps {
   onGroupChange: (value: string) => void;
   companyId: string;
   onCompanyChange: (value: string) => void;
-  onAddContact: () => void;
   onImportSuccess?: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -42,7 +40,6 @@ export function ContactsHeader({
   onGroupChange,
   companyId,
   onCompanyChange,
-  onAddContact,
   onImportSuccess,
   viewMode,
   onViewModeChange,
@@ -52,8 +49,7 @@ export function ContactsHeader({
   const { data: groups = [] } = useContactGroups();
   const { data: companies = [] } = useCompaniesList();
   const [searchInput, setSearchInput] = useState(search);
-  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -82,15 +78,7 @@ export function ContactsHeader({
                   <span className="hidden sm:inline">Znajdź duplikaty</span>
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="gap-2">
-                <FileSpreadsheet className="h-4 w-4" />
-                <span className="hidden sm:inline">Importuj listę</span>
-              </Button>
-              <Button variant="outline" onClick={() => setIsScanModalOpen(true)} className="gap-2">
-                <Camera className="h-4 w-4" />
-                <span className="hidden sm:inline">Skanuj</span>
-              </Button>
-              <Button onClick={onAddContact} className="gap-2">
+              <Button onClick={() => setIsAddContactModalOpen(true)} className="gap-2">
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Dodaj kontakt</span>
               </Button>
@@ -169,14 +157,9 @@ export function ContactsHeader({
         )}
       </div>
 
-      <ScanBusinessCardModal
-        isOpen={isScanModalOpen}
-        onClose={() => setIsScanModalOpen(false)}
-      />
-
       <AIImportContactsModal
-        open={isImportModalOpen}
-        onOpenChange={setIsImportModalOpen}
+        open={isAddContactModalOpen}
+        onOpenChange={setIsAddContactModalOpen}
         onSuccess={onImportSuccess}
       />
     </div>
