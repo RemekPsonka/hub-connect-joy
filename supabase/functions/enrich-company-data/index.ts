@@ -630,7 +630,7 @@ serve(async (req) => {
 
     console.log(`[enrich-company-data] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    const { company_name, website, industry_hint, contact_email } = await req.json();
+    const { company_name, website, industry_hint, contact_email, existing_krs } = await req.json();
     
     if (!company_name) {
       return new Response(
@@ -638,6 +638,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    console.log('Existing KRS from database:', existing_krs);
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
@@ -880,9 +882,12 @@ serve(async (req) => {
     let krsData: KRSApiData | null = null;
     let hasVerifiedRegistryData = false;
     
-    if (extractedRegistryIds.krs) {
-      console.log(`Fetching KRS data for: ${extractedRegistryIds.krs}`);
-      krsData = await fetchKRSData(extractedRegistryIds.krs);
+    // Priority: existing_krs from database > extracted from website
+    const krsToFetch = existing_krs || extractedRegistryIds.krs;
+    
+    if (krsToFetch) {
+      console.log(`Fetching KRS data for: ${krsToFetch} (source: ${existing_krs ? 'database' : 'extracted'})`);
+      krsData = await fetchKRSData(krsToFetch);
       
       if (krsData) {
         hasVerifiedRegistryData = true;
@@ -891,11 +896,12 @@ serve(async (req) => {
         console.log('Management:', krsData.management.length, 'persons');
         
         // Update extracted IDs with verified data
+        extractedRegistryIds.krs = krsToFetch;
         if (krsData.nip) extractedRegistryIds.nip = krsData.nip;
         if (krsData.regon) extractedRegistryIds.regon = krsData.regon;
       }
     } else {
-      console.log('No KRS found, skipping KRS API');
+      console.log('No KRS found (neither in database nor extracted), skipping KRS API');
     }
 
     // ==========================================

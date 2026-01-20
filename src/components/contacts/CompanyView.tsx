@@ -88,6 +88,8 @@ export function CompanyView({ contact }: CompanyViewProps) {
       companyName: company.name,
       website: company.website,
       industryHint: company.industry,
+      contactEmail: contact.email,
+      existingKrs: company.krs,
     });
   };
 

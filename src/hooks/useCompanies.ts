@@ -389,17 +389,21 @@ export function useRegenerateCompanyAI() {
   const { director } = useAuth();
   
   return useMutation({
-    mutationFn: async ({ id, companyName, website, industryHint }: { 
+    mutationFn: async ({ id, companyName, website, industryHint, contactEmail, existingKrs }: { 
       id: string; 
       companyName: string; 
       website?: string | null;
       industryHint?: string | null;
+      contactEmail?: string | null;
+      existingKrs?: string | null;
     }) => {
       const { data: result, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
         body: { 
           company_name: companyName,
           website: website,
-          industry_hint: industryHint
+          industry_hint: industryHint,
+          contact_email: contactEmail,
+          existing_krs: existingKrs
         }
       });
       
@@ -419,18 +423,28 @@ export function useRegenerateCompanyAI() {
       };
       const confidenceScore = confidenceMap[enrichmentMeta.overall_confidence as string] || 0.5;
       
-      // Przygotuj data sources info
+      // Przygotuj data sources info (including KRS verification status)
+      const dataSourcesConfidence = enrichmentMeta.data_sources_confidence || {};
       const dataSources = {
         perplexity: {
           queries_used: enrichmentMeta.perplexity_queries_used || 0,
-          queries_detail: enrichmentMeta.perplexity_queries_detail || {}
+          queries_detail: enrichmentMeta.perplexity_queries_detail || {},
+          queries_executed: enrichmentMeta.perplexity_queries_used || 0
         },
         firecrawl: {
           pages_scraped: enrichmentMeta.firecrawl_stats?.successful_scrapes || 0,
           total_words: enrichmentMeta.firecrawl_stats?.total_words || 0,
           categories: enrichmentMeta.firecrawl_stats?.categories_found || []
         },
-        ai_model: 'gemini-2.5-pro',
+        lovable_ai: {
+          model: 'gemini-2.5-pro'
+        },
+        krs_api: enrichmentMeta.krs_api_used ? {
+          verified: true,
+          source: 'krs_api'
+        } : undefined,
+        registry_source: dataSourcesConfidence.registry?.source || 
+          (enrichmentMeta.krs_api_used ? 'krs_api' : 'firecrawl'),
         completed_at: enrichmentMeta.completed_at || new Date().toISOString()
       };
       
