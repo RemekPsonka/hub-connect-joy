@@ -1143,11 +1143,14 @@ export type Database = {
       }
       contacts: {
         Row: {
+          address: string | null
+          address_secondary: string | null
           city: string | null
           company: string | null
           company_id: string | null
           created_at: string | null
           email: string | null
+          email_secondary: string | null
           first_name: string | null
           fts: unknown
           full_name: string
@@ -1177,11 +1180,14 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          address?: string | null
+          address_secondary?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
           created_at?: string | null
           email?: string | null
+          email_secondary?: string | null
           first_name?: string | null
           fts?: unknown
           full_name: string
@@ -1211,11 +1217,14 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          address?: string | null
+          address_secondary?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
           created_at?: string | null
           email?: string | null
+          email_secondary?: string | null
           first_name?: string | null
           fts?: unknown
           full_name?: string
