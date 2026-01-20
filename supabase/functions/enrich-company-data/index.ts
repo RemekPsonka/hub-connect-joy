@@ -938,7 +938,7 @@ serve(async (req) => {
 
     console.log(`[enrich-company-data] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    const { company_name, website, industry_hint, contact_email, existing_krs, existing_nip } = await req.json();
+    const { company_name, website, industry_hint, contact_email, existing_krs, existing_nip, company_id } = await req.json();
     
     if (!company_name) {
       return new Response(
@@ -946,6 +946,9 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    // Log company_id for direct DB save on fallback
+    console.log('Company ID for direct save:', company_id || 'NOT PROVIDED - will only return data');
     
     console.log('Existing KRS from database:', existing_krs);
     console.log('Existing NIP from database:', existing_nip);
@@ -965,7 +968,7 @@ serve(async (req) => {
 
     // Track execution time for timeout guard
     const startTime = Date.now();
-    const MAX_EXECUTION_TIME = 55000; // 55s safety margin before 60s timeout
+    const MAX_EXECUTION_TIME = 120000; // 120s safety margin before 150s Supabase limit
 
     // Detect legal form from company name
     const detectedLegalForm = detectLegalFormFromName(company_name);
@@ -1675,9 +1678,9 @@ ${perplexityCitations.slice(0, 15).join('\n')}
 
 WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORYTETOWE dla: nip, regon, krs, headquarters, management.`;
 
-    // Call AI for synthesis
+    // Call AI for synthesis - reduced timeout to leave time for database save
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
+    const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for AI synthesis
     
     let response;
     try {
@@ -1706,7 +1709,9 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
           nip: extractedRegistryIds.nip,
           regon: extractedRegistryIds.regon,
           krs: extractedRegistryIds.krs,
-          legal_form: krsData?.legal_form || null,
+          legal_form: krsData?.legal_form 
+            ? (typeof krsData.legal_form === 'string' ? krsData.legal_form : String(krsData.legal_form))
+            : null,
           headquarters: krsData ? {
             address: krsData.address,
             city: krsData.city,
@@ -1721,18 +1726,68 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
             projects: perplexityProjectsInsights,
             news: perplexityNewsInsights
           },
+          perplexity_citations: perplexityCitations,
+          scraped_pages_summary: scrapedPages.map(p => ({
+            url: p.url,
+            title: p.title,
+            category: p.category,
+            word_count: p.word_count
+          })),
           confidence: hasVerifiedRegistryData ? 'medium' : 'low',
-          analysis_confidence_score: hasVerifiedRegistryData ? 0.5 : 0.3,
+          analysis_confidence_score: hasVerifiedRegistryData ? 0.55 : 0.35,
           missing_sections: ['Pełna analiza AI - przekroczono limit czasu'],
+          fallback_used: true,
           data_sources_confidence: {
             registry: hasVerifiedRegistryData ? { source: 'krs_api', confidence: 100 } : null,
+            perplexity: perplexityCitations.length > 0 ? { confidence: 70 } : null,
+            firecrawl: scrapedPages.length > 0 ? { confidence: 90 } : null
           }
         };
+        
+        // Direct database save on AI timeout to prevent data loss
+        if (company_id) {
+          console.log('AI timeout with company_id - saving directly to database');
+          try {
+            const { error: saveError } = await supabase
+              .from('companies')
+              .update({
+                ai_analysis: fallbackAnalysis,
+                company_analysis_status: 'completed',
+                company_analysis_date: new Date().toISOString(),
+                analysis_confidence_score: fallbackAnalysis.analysis_confidence_score,
+                analysis_missing_sections: fallbackAnalysis.missing_sections,
+                analysis_data_sources: {
+                  krs_api: !!krsData,
+                  ceidg_api: !!ceidgData,
+                  perplexity: perplexityCitations.length > 0,
+                  firecrawl: scrapedPages.length > 0,
+                  fallback: true,
+                  ai_timeout: true
+                },
+                ...(krsData?.nip && { nip: krsData.nip }),
+                ...(krsData?.krs && { krs: krsData.krs }),
+                ...(krsData?.regon && { regon: krsData.regon }),
+                ...(krsData?.legal_form && { 
+                  legal_form: typeof krsData.legal_form === 'string' ? krsData.legal_form : String(krsData.legal_form)
+                }),
+              })
+              .eq('id', company_id);
+            
+            if (saveError) {
+              console.error('Failed to save timeout fallback to database:', saveError);
+            } else {
+              console.log('Timeout fallback saved to database for company:', company_id);
+            }
+          } catch (dbError) {
+            console.error('Database save error on timeout:', dbError);
+          }
+        }
         
         return new Response(
           JSON.stringify({ 
             success: true, 
             partial: true,
+            saved_to_db: !!company_id,
             message: 'Analiza częściowa - przekroczono limit czasu AI.',
             data: fallbackAnalysis
           }),
@@ -1911,6 +1966,51 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         };
         
         console.log('Fallback data built with name:', enrichedData.name, 'citations:', perplexityCitations.length);
+        
+        // ==========================================
+        // DIRECT DATABASE SAVE ON FALLBACK (prevent data loss on timeout)
+        // ==========================================
+        if (company_id && enrichedData) {
+          console.log('Fallback detected with company_id - saving directly to database to prevent data loss');
+          try {
+            const confidenceScore = enrichedData.analysis_confidence_score as number;
+            const { error: saveError } = await supabase
+              .from('companies')
+              .update({
+                ai_analysis: enrichedData,
+                company_analysis_status: 'completed',
+                company_analysis_date: new Date().toISOString(),
+                analysis_confidence_score: confidenceScore,
+                analysis_missing_sections: ['Pełna synteza AI - użyto danych zastępczych'],
+                analysis_data_sources: {
+                  krs_api: !!krsData,
+                  ceidg_api: !!ceidgData,
+                  perplexity: perplexityCitations.length > 0,
+                  firecrawl: scrapedPages.length > 0,
+                  fallback: true
+                },
+                // Also update NIP/KRS if we have verified data
+                ...(krsData?.nip && { nip: krsData.nip }),
+                ...(krsData?.krs && { krs: krsData.krs }),
+                ...(krsData?.regon && { regon: krsData.regon }),
+                ...(krsData?.legal_form && { 
+                  legal_form: typeof krsData.legal_form === 'string' ? krsData.legal_form : String(krsData.legal_form)
+                }),
+                ...(krsData?.city && { city: krsData.city }),
+                ...(krsData?.address && { address: krsData.address }),
+                ...(krsData?.postal_code && { postal_code: krsData.postal_code }),
+              })
+              .eq('id', company_id);
+            
+            if (saveError) {
+              console.error('Failed to save fallback data to database:', saveError);
+            } else {
+              console.log('Fallback data saved directly to database for company:', company_id);
+            }
+          } catch (dbError) {
+            console.error('Database save error:', dbError);
+          }
+        }
       }
       
       // ==========================================

@@ -405,7 +405,8 @@ export function useRegenerateCompanyAI() {
           industry_hint: industryHint,
           contact_email: contactEmail,
           existing_krs: existingKrs,
-          existing_nip: existingNip
+          existing_nip: existingNip,
+          company_id: id  // Pass ID for direct DB save on fallback/timeout
         }
       });
       
