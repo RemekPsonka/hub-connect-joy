@@ -1,6 +1,6 @@
 import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
-import { FileText, ExternalLink, AlertCircle } from 'lucide-react';
+import { FileText, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { SectionProps } from '../types';
 import type { DataSources } from '../types';
 
@@ -19,6 +19,11 @@ export function RegistryDataSection({ data, dataSources }: RegistryDataSectionPr
 
   const hasRegistryData = data.nip || data.regon || data.krs;
   const hasAddress = data.address || data.city;
+  
+  // Check if data comes from KRS API (verified source)
+  const isKrsVerified = dataSources?.krs_api?.verified === true || 
+    (data.data_source === 'krs_api') ||
+    (dataSources as any)?.registry_source === 'krs_api';
 
   if (!hasRegistryData && !hasAddress && sources.length === 0) return null;
 
@@ -28,24 +33,48 @@ export function RegistryDataSection({ data, dataSources }: RegistryDataSectionPr
       title="Dane rejestrowe i źródła"
     >
       <div className="space-y-4">
-        {/* Registry numbers */}
+        {/* Registry numbers with verification badges */}
         {hasRegistryData && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {data.nip && (
               <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-xs font-medium text-muted-foreground">NIP</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">NIP</p>
+                  {isKrsVerified && (
+                    <Badge className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-0.5">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      KRS
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm font-mono mt-0.5">{data.nip}</p>
               </div>
             )}
             {data.regon && (
               <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-xs font-medium text-muted-foreground">REGON</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">REGON</p>
+                  {isKrsVerified && (
+                    <Badge className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-0.5">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      KRS
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm font-mono mt-0.5">{data.regon}</p>
               </div>
             )}
             {data.krs && (
               <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-xs font-medium text-muted-foreground">KRS</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">KRS</p>
+                  {isKrsVerified && (
+                    <Badge className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-0.5">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      zweryfikowano
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm font-mono mt-0.5">{data.krs}</p>
               </div>
             )}

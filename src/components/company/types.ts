@@ -189,6 +189,11 @@ export interface DataSources {
     model?: string;
     tokens_used?: number | null;
   };
+  krs_api?: {
+    verified?: boolean;
+    source?: string;
+  };
+  registry_source?: 'krs_api' | 'firecrawl' | 'perplexity' | 'manual';
 }
 
 // Group Company structure (for group analysis)
