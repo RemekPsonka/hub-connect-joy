@@ -23,6 +23,7 @@ import { NewsSignalsSection } from './sections/NewsSignalsSection';
 import { CSRSection } from './sections/CSRSection';
 import { RegistryDataSection } from './sections/RegistryDataSection';
 import { GroupCompaniesSection } from './sections/GroupCompaniesSection';
+import { FallbackDataSection } from './sections/FallbackDataSection';
 
 import type { CompanyAnalysisViewerProps, GroupCompany, ConsolidatedRevenue } from './types';
 
@@ -100,6 +101,15 @@ export function CompanyAnalysisViewer({
       </CardHeader>
 
       <CardContent className="pt-0 space-y-4">
+        {/* Fallback data section - when AI synthesis failed but we have Perplexity data */}
+        {analysis.fallback_used && analysis.perplexity_raw && (
+          <FallbackDataSection 
+            perplexityRaw={analysis.perplexity_raw}
+            citations={analysis.perplexity_citations}
+            scrapedPages={analysis.scraped_pages_summary}
+          />
+        )}
+
         {/* Missing sections warning */}
         {missingSections.length > 0 && (
           <MissingSectionsWarning sections={missingSections} />
