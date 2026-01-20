@@ -345,6 +345,23 @@ export interface CompanyAnalysis {
   enrichment_metadata?: EnrichmentMetadata;
   analysis_metadata?: EnrichmentMetadata;
   
+  // Fallback data when AI synthesis fails
+  fallback_used?: boolean;
+  perplexity_raw?: {
+    profile?: string;
+    financial?: string;
+    locations?: string;
+    projects?: string;
+    news?: string;
+  };
+  perplexity_citations?: string[];
+  scraped_pages_summary?: Array<{
+    url: string;
+    title?: string;
+    category?: string;
+    word_count?: number;
+  }>;
+  
   // Legacy fields for backwards compatibility
   what_company_does?: string;
   founding_year?: string;

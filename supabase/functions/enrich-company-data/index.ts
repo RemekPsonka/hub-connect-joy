@@ -1804,7 +1804,11 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       
       try {
         enrichedData = JSON.parse(cleanedContent);
-      } catch {
+        console.log('[AI Response] Parsed successfully, keys:', Object.keys(enrichedData).slice(0, 10));
+        console.log('[AI Response] name field:', enrichedData?.name);
+      } catch (firstParseError) {
+        console.error('[AI Parse Error] First parse failed:', firstParseError);
+        console.log('[AI Parse Error] Raw content sample:', cleanedContent.substring(0, 500));
         // Try to fix truncated JSON
         let fixedContent = cleanedContent
           .replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\],]*$/g, '')
@@ -1830,15 +1834,33 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       // ==========================================
       if (!enrichedData || !enrichedData.name || enrichedData.name === 'undefined') {
         console.warn('AI returned invalid data (name missing or undefined), building fallback from registry data');
+        console.log('[Fallback] Available Perplexity insights:', {
+          profile: !!perplexityProfileInsights,
+          financial: !!perplexityFinancialInsights,
+          locations: !!perplexityLocationInsights,
+          projects: !!perplexityProjectsInsights,
+          news: !!perplexityNewsInsights,
+          citations: perplexityCitations.length
+        });
+        
+        // Build description from Perplexity profile if available
+        let fallbackDescription = null;
+        if (perplexityProfileInsights) {
+          // Extract first meaningful paragraph from profile
+          const lines = perplexityProfileInsights.split('\n').filter(l => l.trim().length > 20);
+          fallbackDescription = lines.slice(0, 3).join(' ').substring(0, 500);
+        }
         
         enrichedData = {
           name: krsData?.name || ceidgData?.name || company_name,
           nip: extractedRegistryIds.nip || krsData?.nip || ceidgData?.nip || null,
           regon: extractedRegistryIds.regon || krsData?.regon || ceidgData?.regon || null,
           krs: extractedRegistryIds.krs || krsData?.krs || null,
-          legal_form: krsData?.legal_form || (ceidgData ? 'jdg' : null),
+          legal_form: krsData?.legal_form 
+            ? (typeof krsData.legal_form === 'string' ? krsData.legal_form : String(krsData.legal_form))
+            : (ceidgData ? 'jdg' : null),
           industry: industry_hint || null,
-          description: null,
+          description: fallbackDescription,
           headquarters: krsData ? {
             address: krsData.address,
             city: krsData.city,
@@ -1861,12 +1883,34 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
             source: 'ceidg_api',
             verified: true
           }] : []),
-          confidence: hasVerifiedRegistryData ? 'medium' : 'low',
-          analysis_confidence_score: hasVerifiedRegistryData ? 0.4 : 0.1,
+          
+          // PRESERVE PERPLEXITY RAW DATA for UI display
+          perplexity_raw: {
+            profile: perplexityProfileInsights || null,
+            financial: perplexityFinancialInsights || null,
+            locations: perplexityLocationInsights || null,
+            projects: perplexityProjectsInsights || null,
+            news: perplexityNewsInsights || null
+          },
+          perplexity_citations: perplexityCitations,
+          
+          // Scraped pages summary for reference
+          scraped_pages_summary: scrapedPages.map(p => ({
+            url: p.url,
+            title: p.title,
+            category: p.category,
+            word_count: p.word_count
+          })),
+          
+          // Higher confidence when we have Perplexity data
+          confidence: hasVerifiedRegistryData ? 'medium' : (perplexityCitations.length > 0 ? 'low' : 'low'),
+          analysis_confidence_score: hasVerifiedRegistryData 
+            ? 0.55 
+            : (perplexityCitations.length > 0 ? 0.35 : 0.15),
           fallback_used: true,
         };
         
-        console.log('Fallback data built with name:', enrichedData.name);
+        console.log('Fallback data built with name:', enrichedData.name, 'citations:', perplexityCitations.length);
       }
       
       // ==========================================
@@ -1878,7 +1922,11 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         if (krsData.nip) enrichedData.nip = krsData.nip;
         if (krsData.regon) enrichedData.regon = krsData.regon;
         enrichedData.krs = krsData.krs;
-        if (krsData.legal_form) enrichedData.legal_form = krsData.legal_form;
+        if (krsData.legal_form) {
+          enrichedData.legal_form = typeof krsData.legal_form === 'string' 
+            ? krsData.legal_form 
+            : String(krsData.legal_form);
+        }
         
         const existingHq = enrichedData.headquarters as Record<string, unknown> | undefined;
         enrichedData.headquarters = {
