@@ -1316,11 +1316,30 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       );
     }
 
-    const data = await response.json();
+    // Safely parse AI response
+    let data;
+    try {
+      const responseText = await response.text();
+      if (!responseText || responseText.trim() === '') {
+        console.error('Empty AI response body');
+        return new Response(
+          JSON.stringify({ error: 'Pusta odpowiedź od AI - spróbuj ponownie' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      data = JSON.parse(responseText);
+    } catch (jsonError) {
+      console.error('Failed to parse AI response as JSON:', jsonError);
+      return new Response(
+        JSON.stringify({ error: 'Nieprawidłowa odpowiedź od AI - spróbuj ponownie' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const content = data.choices?.[0]?.message?.content;
     
     if (!content) {
-      console.error('No content in AI response');
+      console.error('No content in AI response. Data:', JSON.stringify(data).substring(0, 500));
       return new Response(
         JSON.stringify({ error: 'Brak odpowiedzi od AI' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
