@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Building, RefreshCw, Loader2, ImageIcon, Calendar, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Building, RefreshCw, Loader2, ImageIcon, Calendar, Sparkles, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Company, useUpdateCompany, useRegenerateCompanyAI, getCompanyLogoUrl, useScrapeLogo } from '@/hooks/useCompanies';
+import { Company, useUpdateCompany, useRegenerateCompanyAI, getCompanyLogoUrl, useScrapeLogo, useFetchKRS } from '@/hooks/useCompanies';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -87,11 +87,19 @@ const legalFormOptions = [
   { value: 'other', label: 'Inna' },
 ];
 
-export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps) {
+interface CompanyModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  company: Company;
+  ownerContactId?: string; // Contact ID to link KRS persons to
+}
+
+export function CompanyModal({ open, onOpenChange, company, ownerContactId }: CompanyModalProps) {
   const [activeTab, setActiveTab] = useState('basic');
   const updateCompany = useUpdateCompany();
   const regenerateAI = useRegenerateCompanyAI();
   const scrapeLogo = useScrapeLogo();
+  const fetchKRS = useFetchKRS();
 
   // Get extended company data
   const extendedCompany = company as Company & {
@@ -242,6 +250,27 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
 
     if (result.logo_url) {
       form.setValue('logo_url', result.logo_url);
+    }
+  };
+
+  const handleFetchKRS = async () => {
+    const krsValue = form.getValues('krs');
+    if (!krsValue) return;
+
+    const result = await fetchKRS.mutateAsync({
+      companyId: company.id,
+      krs: krsValue,
+      ownerContactId: ownerContactId,
+    });
+
+    // Update form fields with KRS data
+    if (result.company) {
+      if (result.company.nip) form.setValue('nip', result.company.nip);
+      if (result.company.regon) form.setValue('regon', result.company.regon);
+      if (result.company.address) form.setValue('address', result.company.address);
+      if (result.company.city) form.setValue('city', result.company.city);
+      if (result.company.postal_code) form.setValue('postal_code', result.company.postal_code);
+      if (result.company.legal_form) form.setValue('legal_form', result.company.legal_form);
     }
   };
 
@@ -576,9 +605,28 @@ export function CompanyModal({ open, onOpenChange, company }: CompanyModalProps)
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>KRS</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value || ''} />
-                      </FormControl>
+                      <div className="flex gap-2">
+                        <FormControl>
+                          <Input {...field} value={field.value || ''} placeholder="0000000000" />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={handleFetchKRS}
+                          disabled={!form.watch('krs') || fetchKRS.isPending}
+                          title="Pobierz dane z KRS"
+                        >
+                          {fetchKRS.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Kliknij ikonę pobierania, aby automatycznie pobrać dane z KRS
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

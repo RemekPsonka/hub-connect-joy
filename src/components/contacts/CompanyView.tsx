@@ -346,6 +346,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
         open={isCompanyModalOpen}
         onOpenChange={setIsCompanyModalOpen}
         company={company}
+        ownerContactId={contact.id}
       />
     </div>
   );

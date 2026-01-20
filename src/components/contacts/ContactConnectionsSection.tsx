@@ -44,6 +44,7 @@ const connectionTypeLabels: Record<string, string> = {
   family: 'Rodzina',
   colleague: 'Współpracownik',
   business_partner: 'Partner biznesowy',
+  krs_associate: 'KRS - Współpracownik',
 };
 
 const connectionTypeColors: Record<string, string> = {
@@ -52,6 +53,7 @@ const connectionTypeColors: Record<string, string> = {
   family: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   colleague: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   business_partner: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+  krs_associate: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
 };
 
 interface ConnectionItemProps {
