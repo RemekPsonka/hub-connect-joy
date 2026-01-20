@@ -57,10 +57,16 @@ serve(async (req) => {
 
     const mergedData: Record<string, any> = {};
     
+    // ============= IMPROVED MERGE LOGIC =============
+    // Priority rules:
+    // 1. Private phone - NEVER overwrite
+    // 2. Business phone - add if empty
+    // 3. Email - add secondary if different
+    // 4. Address - add secondary if different
+    // 5. Company, position - update only if empty
+
     // Fields that should only be filled if empty (not overwritten)
-    // IMPORTANT: phone (private) is NOT in this list - we never overwrite it
-    // IMPORTANT: company_id is handled separately (we may create a company)
-    const simpleFields = ['email', 'company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id'];
+    const simpleFields = ['company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id'];
 
     for (const field of simpleFields) {
       if (!existingContact[field] && newContactData[field]) {
@@ -68,19 +74,53 @@ serve(async (req) => {
       }
     }
 
-    // Handle phone_business from business card (newContactData.phone goes to phone_business)
-    // This preserves the private phone and adds business phone separately
+    // ============= PHONE HANDLING =============
+    // Private phone - NEVER overwrite! It stays as is
+    // Business card phone goes to phone_business
     if (newContactData.phone) {
-      // If there's a phone in new data, it's likely from a business card - put it in phone_business
       if (!existingContact.phone_business) {
         mergedData.phone_business = newContactData.phone;
         console.log(`Setting phone_business to: ${newContactData.phone}`);
+      } else {
+        console.log(`phone_business already exists (${existingContact.phone_business}), keeping it`);
       }
     }
     
     // If newContactData explicitly has phone_business, use that directly
     if (newContactData.phone_business && !existingContact.phone_business) {
       mergedData.phone_business = newContactData.phone_business;
+    }
+
+    // ============= EMAIL HANDLING =============
+    // If new email is different and email_secondary is empty, add as secondary
+    if (newContactData.email) {
+      const newEmail = newContactData.email.toLowerCase().trim();
+      const existingEmail = existingContact.email?.toLowerCase().trim();
+      
+      if (!existingEmail) {
+        // No existing email - add as primary
+        mergedData.email = newContactData.email;
+      } else if (newEmail !== existingEmail && !existingContact.email_secondary) {
+        // Different email and no secondary - add as secondary
+        mergedData.email_secondary = newContactData.email;
+        console.log(`Adding secondary email: ${newContactData.email}`);
+      }
+    }
+
+    // ============= ADDRESS HANDLING =============
+    // If new address is different and address_secondary is empty, add as secondary
+    if (newContactData.address) {
+      const newAddress = newContactData.address.trim();
+      const existingAddress = existingContact.address?.trim();
+      
+      if (!existingAddress) {
+        // No existing address - add as primary
+        mergedData.address = newContactData.address;
+      } else if (newAddress !== existingAddress && !existingContact.address_secondary) {
+        // Different address and no secondary - add as secondary
+        mergedData.address_secondary = newContactData.address;
+        console.log(`Adding secondary address: ${newContactData.address}`);
+      }
     }
 
     // ============= COMPANY HANDLING =============

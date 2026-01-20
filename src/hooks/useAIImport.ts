@@ -15,6 +15,7 @@ export interface ParsedContact {
   company: string | null;
   position: string | null;
   city: string | null;
+  address: string | null; // Address from business card
   tags: string[];
   notes: string | null;
   linkedin_url: string | null;
@@ -222,10 +223,11 @@ export function useAIImport(): UseAIImportReturn {
     last_name: contact.last_name || null,
     email: contact.email || null,
     phone: contact.phone || null,
-    phone_business: contact.phone_business || null,
+    phone_business: contact.phone_business || contact.mobile || null,
     company: contact.company || null,
     position: contact.position || null,
     city: contact.city || null,
+    address: contact.address || null, // Address from business card
     tags: contact.tags || [],
     notes: contact.notes || null,
     linkedin_url: contact.linkedin_url || null,
