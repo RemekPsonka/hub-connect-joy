@@ -36,6 +36,7 @@ export const safeString = (value: unknown): string => {
 
 /**
  * Safely converts value to array of strings
+ * Handles strings, arrays of strings, and arrays of objects
  */
 export const safeArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -43,6 +44,46 @@ export const safeArray = (value: unknown): string[] => {
   }
   if (typeof value === 'string' && value) {
     return [value];
+  }
+  return [];
+};
+
+/**
+ * Safely converts value to a number
+ * Handles numbers, strings, and objects with amount/value keys
+ */
+export const safeNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number') return isNaN(value) ? undefined : value;
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^\d.,-]/g, '').replace(',', '.');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? undefined : parsed;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    if ('amount' in obj) return safeNumber(obj.amount);
+    if ('value' in obj) return safeNumber(obj.value);
+    if ('wartość' in obj) return safeNumber(obj.wartość);
+  }
+  return undefined;
+};
+
+/**
+ * Safely parses awards/certifications that may be objects or strings
+ */
+export const safeAwardArray = (value: unknown): string[] => {
+  if (!value) return [];
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (typeof item === 'string') return item;
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        return obj.award_name || obj.name || obj.title || obj.nazwa || safeString(item);
+      }
+      return String(item);
+    }).filter(Boolean) as string[];
   }
   return [];
 };

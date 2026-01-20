@@ -2,15 +2,13 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Gift, Award, CheckCircle } from 'lucide-react';
 import type { SectionProps } from '../types';
+import { safeArray, safeAwardArray } from '../utils';
 
 export function OfferSection({ data }: SectionProps) {
-  const uniqueSellingPoints = typeof data.unique_selling_points === 'string'
-    ? [data.unique_selling_points]
-    : data.unique_selling_points || [];
-  const certifications = typeof data.certifications === 'string'
-    ? [data.certifications]
-    : data.certifications || [];
-  const awards = data.awards || [];
+  // Use safe parsers for arrays that may be strings or objects
+  const uniqueSellingPoints = safeArray(data.unique_selling_points);
+  const certifications = safeArray(data.certifications);
+  const awards = safeAwardArray(data.awards);
 
   const hasData = data.offer_summary || uniqueSellingPoints.length > 0 || 
     certifications.length > 0 || awards.length > 0 || data.what_company_offers;
