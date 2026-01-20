@@ -470,6 +470,12 @@ export function useRegenerateCompanyAI() {
         nip: enriched.nip || null,
         regon: enriched.regon || null,
         krs: enriched.krs || null,
+        // Ensure legal_form is always a string, never [object Object]
+        legal_form: typeof enriched.legal_form === 'string' 
+          ? enriched.legal_form 
+          : (enriched.legal_form && typeof enriched.legal_form === 'object' 
+              ? ((enriched.legal_form as any).nazwa || (enriched.legal_form as any).wartość || null)
+              : null),
         updated_at: new Date().toISOString()
       };
       
