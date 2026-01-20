@@ -219,25 +219,49 @@ function extractRegistryIds(content: string): { nip: string | null; regon: strin
 
 // Extract KRS number from text (for Perplexity search results)
 function extractKRSFromText(text: string): string | null {
-  // Patterns to find KRS in various formats
+  // First, clean the text from citations like [1][2][3] that Perplexity adds
+  const cleanedText = text
+    .replace(/\[\d+\]/g, ' ') // Remove [1], [2], etc.
+    .replace(/\s+/g, ' ')     // Normalize whitespace
+    .trim();
+  
+  console.log('[KRS Extract] Cleaned text sample:', cleanedText.substring(0, 200));
+  
+  // Patterns to find KRS in various formats (more flexible)
   const patterns = [
-    /KRS[:\s]*0*(\d{10})/gi,
-    /KRS[:\s]*(\d{10})/gi,
+    /KRS[:\s]*[#№]?\s*0*(\d{10})/gi,
+    /KRS[:\s]*[#№]?\s*(\d{10})/gi,
     /numer\s+KRS[:\s]*0*(\d{10})/gi,
-    /rejestr[:\s]*0*(\d{10})/gi,
-    /(?:^|\s)0*(\d{10})(?:\s|$)/g, // bare 10-digit number
+    /rejestr\s+przedsiębiorców[:\s]*0*(\d{10})/gi,
+    /pod\s+numerem\s+0*(\d{10})/gi,
+    // Bare 10-digit number with flexible boundaries
+    /(?:^|[:\s,;.(])0*(\d{10})(?:[\s,;.)[\]]|$)/g,
   ];
   
   for (const pattern of patterns) {
-    const matches = text.matchAll(pattern);
+    const matches = cleanedText.matchAll(pattern);
     for (const match of matches) {
       const cleaned = match[1].replace(/[-\s]/g, '').padStart(10, '0');
       if (isValidKRS(cleaned)) {
+        console.log('[KRS Extract] Found valid KRS:', cleaned);
         return cleaned;
       }
     }
   }
   
+  // Last resort: find any 10-digit sequence that looks like KRS
+  const anyNumberMatch = cleanedText.match(/\b0*(\d{10})\b/g);
+  if (anyNumberMatch) {
+    for (const numStr of anyNumberMatch) {
+      const cleaned = numStr.replace(/^0+/, '').padStart(10, '0');
+      if (isValidKRS(cleaned)) {
+        console.log('[KRS Extract] Found KRS via fallback:', cleaned);
+        return cleaned;
+      }
+    }
+  }
+  
+  console.log('[KRS Extract] No valid KRS found in text');
   return null;
 }
 
@@ -1126,7 +1150,7 @@ serve(async (req) => {
           body: JSON.stringify({
             model: 'sonar',
             messages: [
-              { role: 'system', content: 'Znajdź numer KRS dla podanej firmy. Odpowiedz TYLKO numerem KRS (10 cyfr) lub napisz "BRAK" jeśli nie znaleziono.' },
+              { role: 'system', content: 'Znajdź numer KRS dla podanej polskiej firmy. Odpowiedz WYŁĄCZNIE 10-cyfrowym numerem KRS (przykład: 0000147870). NIE dodawaj żadnych opisów, przypisów [1], linków ani innych znaków. Jeśli nie znaleziono, napisz tylko słowo: BRAK' },
               { role: 'user', content: krsSearchQuery }
             ],
           }),

@@ -17,7 +17,8 @@ import {
   useAssignContactsByDomain,
   useUpdateCompanyRevenue,
   useRemoveGroupCompany,
-  useFetchKRS
+  useFetchKRS,
+  useCreateCompanyFromDomain
 } from '@/hooks/useCompanies';
 import { CompanyModal } from './CompanyModal';
 import { CompanyAnalysisViewer } from '@/components/company';
@@ -65,6 +66,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
   const updateRevenue = useUpdateCompanyRevenue();
   const removeGroupCompany = useRemoveGroupCompany();
   const fetchKRS = useFetchKRS();
+  const createCompanyFromDomain = useCreateCompanyFromDomain();
   
   // Count unassigned contacts (those with matching domain but no company_id)
   const unassignedContacts = useMemo(() => {
@@ -112,6 +114,40 @@ export function CompanyView({ contact }: CompanyViewProps) {
   }
 
   if (!company) {
+    // Check if contact has a business email domain
+    if (emailDomain) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <Building className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Wykryto domenę firmową: {emailDomain}</h3>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                  Możesz utworzyć firmę na podstawie domeny email i uruchomić analizę AI.
+                </p>
+                <Button 
+                  onClick={() => createCompanyFromDomain.mutate({ 
+                    domain: emailDomain, 
+                    contactId: contact.id,
+                    contactEmail: contact.email || undefined
+                  })}
+                  disabled={createCompanyFromDomain.isPending}
+                >
+                  {createCompanyFromDomain.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Utwórz firmę i analizuj AI
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+    
     return (
       <div className="space-y-6">
         <Card>

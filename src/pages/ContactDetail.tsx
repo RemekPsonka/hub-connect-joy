@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, User, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,20 @@ import { BIDataViewer } from '@/components/agents/BIDataViewer';
 import { CompanyView } from '@/components/contacts/CompanyView';
 import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
 import { useAuth } from '@/contexts/AuthContext';
+
+// List of public email domains that should not enable company view
+const PUBLIC_EMAIL_DOMAINS = [
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.pl', 'outlook.com', 
+  'hotmail.com', 'live.com', 'wp.pl', 'onet.pl', 'o2.pl', 'interia.pl',
+  'op.pl', 'tlen.pl', 'gazeta.pl', 'poczta.fm', 'icloud.com', 'protonmail.com'
+];
+
+function hasBusinessEmailDomain(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return false;
+  return !PUBLIC_EMAIL_DOMAINS.includes(domain);
+}
 
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +84,7 @@ export default function ContactDetail() {
           variant={viewMode === 'company' ? 'default' : 'outline'}
           onClick={() => setViewMode('company')}
           className="gap-2"
-          disabled={!contact.companies && !contact.company}
+          disabled={!contact.companies && !contact.company && !hasBusinessEmailDomain(contact.email)}
         >
           <Building className="h-4 w-4" />
           FIRMA
