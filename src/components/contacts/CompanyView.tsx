@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Building, Globe, MapPin, Users, Sparkles, Pencil, 
-  Mail, Phone, Loader2, Link2, Calendar, DollarSign
+  Mail, Phone, Loader2, Link2, Calendar, DollarSign, Download
 } from 'lucide-react';
 import { 
   useCompanyContacts, 
@@ -16,7 +16,8 @@ import {
   extractWebsiteDomain,
   useAssignContactsByDomain,
   useUpdateCompanyRevenue,
-  useRemoveGroupCompany
+  useRemoveGroupCompany,
+  useFetchKRS
 } from '@/hooks/useCompanies';
 import { CompanyModal } from './CompanyModal';
 import { CompanyAnalysisViewer } from '@/components/company';
@@ -63,6 +64,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
   const assignContactsByDomain = useAssignContactsByDomain();
   const updateRevenue = useUpdateCompanyRevenue();
   const removeGroupCompany = useRemoveGroupCompany();
+  const fetchKRS = useFetchKRS();
   
   // Count unassigned contacts (those with matching domain but no company_id)
   const unassignedContacts = useMemo(() => {
@@ -86,6 +88,15 @@ export function CompanyView({ contact }: CompanyViewProps) {
       companyName: company.name,
       website: company.website,
       industryHint: company.industry,
+    });
+  };
+
+  const handleFetchKRS = () => {
+    if (!company?.krs) return;
+    fetchKRS.mutate({
+      companyId: company.id,
+      krs: company.krs,
+      ownerContactId: contact.id,
     });
   };
 
@@ -213,6 +224,20 @@ export function CompanyView({ contact }: CompanyViewProps) {
                 >
                   <Pencil className="h-4 w-4 mr-1" />
                   Edytuj
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchKRS}
+                  disabled={!company.krs || fetchKRS.isPending}
+                  title={company.krs ? "Pobierz dane z KRS" : "Brak numeru KRS - dodaj w edycji firmy"}
+                >
+                  {fetchKRS.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-1" />
+                  )}
+                  KRS
                 </Button>
                 <Button 
                   size="sm"
