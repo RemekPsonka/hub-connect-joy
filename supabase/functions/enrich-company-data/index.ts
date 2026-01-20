@@ -272,6 +272,25 @@ interface KRSPerson {
   funkcja?: string;
 }
 
+// Financial statement from KRS/RDF
+interface KRSFinancialStatement {
+  fiscal_year: number;
+  document_date?: string;
+  document_type?: string;
+  revenue?: number;
+  net_profit?: number;
+  gross_profit?: number;
+  total_assets?: number;
+  fixed_assets?: number;
+  current_assets?: number;
+  equity?: number;
+  total_liabilities?: number;
+  long_term_liabilities?: number;
+  short_term_liabilities?: number;
+  employee_count?: number;
+  source?: 'krs_statement' | 'krs_rdf';
+}
+
 interface KRSApiData {
   name: string | null;
   legal_form: string | null;
@@ -287,6 +306,7 @@ interface KRSApiData {
   registration_date: string | null;
   pkd_main: string | null;
   pkd_codes: string[];
+  financial_statements?: KRSFinancialStatement[];
 }
 
 // ============= CEIDG API DATA INTERFACE =============
@@ -561,6 +581,126 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
     pkd_main: pkdMain,
     pkd_codes: pkdCodes,
   };
+}
+
+// ============= FETCH KRS FINANCIAL STATEMENTS FROM SPRAWOZDANIA API =============
+async function fetchKRSFinancialStatements(krs: string): Promise<KRSFinancialStatement[]> {
+  const krsNormalized = krs.padStart(10, '0');
+  console.log(`[KRS Financials] Fetching financial statements for KRS: ${krsNormalized}`);
+  
+  const statements: KRSFinancialStatement[] = [];
+  
+  try {
+    // Fetch list of financial statements (metadata)
+    const metaUrl = `https://api-krs.ms.gov.pl/api/krs/SprawozdaniaFinansowe/${krsNormalized}?format=json`;
+    console.log('[KRS Financials] Fetching from:', metaUrl);
+    
+    const metaResp = await fetch(metaUrl, { 
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000) // 10s timeout
+    });
+    
+    if (!metaResp.ok) {
+      console.warn(`[KRS Financials] No statements found (${metaResp.status})`);
+      return [];
+    }
+    
+    const metaData = await metaResp.json();
+    console.log('[KRS Financials] Metadata received:', JSON.stringify(metaData).substring(0, 500));
+    
+    // Try multiple paths where documents can be located
+    const documents = metaData.sprawozdania || 
+                      metaData.dokumenty || 
+                      metaData.listaSprawozdanFinansowych ||
+                      metaData.odpis?.sprawozdania ||
+                      [];
+    
+    if (!Array.isArray(documents) || documents.length === 0) {
+      console.log('[KRS Financials] No documents array found in response');
+      return [];
+    }
+    
+    console.log(`[KRS Financials] Found ${documents.length} documents`);
+    
+    // Process each document (max 5 most recent years)
+    for (const doc of documents.slice(0, 5)) {
+      // Extract year from various possible fields
+      const year = parseInt(doc.rokObrotowy || doc.rok || doc.okresOd?.split('-')[0] || '');
+      if (isNaN(year)) {
+        console.log('[KRS Financials] Skipping doc without valid year:', JSON.stringify(doc).substring(0, 200));
+        continue;
+      }
+      
+      console.log(`[KRS Financials] Processing year ${year}`);
+      
+      // Try to extract financial data from document metadata
+      // Some responses include basic financial data directly
+      const statement: KRSFinancialStatement = {
+        fiscal_year: year,
+        document_date: doc.dataSp || doc.dataSporzadzenia || doc.dataZlozenia || undefined,
+        document_type: doc.rodzaj || doc.typDokumentu || 'Sprawozdanie roczne',
+        source: 'krs_statement'
+      };
+      
+      // Try to extract financial values from nested structures
+      const bilans = doc.bilans || doc.dane?.bilans || {};
+      const rzis = doc.rachunekZyskow || doc.rzis || doc.dane?.rachunekZyskow || {};
+      const finansowe = doc.daneFinansowe || doc.dane || {};
+      
+      // Revenue - try multiple paths
+      const revenue = finansowe.przychodyNettoZeSprzedazy || 
+                      rzis.przychodyNettoZeSprzedazyIZrownaneZNimi ||
+                      rzis.przychodyZeSprzedazy ||
+                      doc.przychody;
+      if (revenue) statement.revenue = parseFloat(String(revenue).replace(/\s/g, '').replace(',', '.'));
+      
+      // Net profit
+      const netProfit = finansowe.zyskNettoRokuObrotowego ||
+                        finansowe.zyskNetto ||
+                        rzis.zyskNetto ||
+                        rzis.zyskStrataNetto ||
+                        doc.zyskNetto;
+      if (netProfit !== undefined) statement.net_profit = parseFloat(String(netProfit).replace(/\s/g, '').replace(',', '.'));
+      
+      // Gross profit
+      const grossProfit = finansowe.zyskBrutto ||
+                          rzis.zyskBruttoZDzialalnosci ||
+                          doc.zyskBrutto;
+      if (grossProfit !== undefined) statement.gross_profit = parseFloat(String(grossProfit).replace(/\s/g, '').replace(',', '.'));
+      
+      // Assets
+      const totalAssets = bilans.aktywaRazem ||
+                          bilans.aktywaTrazem ||
+                          finansowe.aktywaRazem ||
+                          doc.aktywa;
+      if (totalAssets) statement.total_assets = parseFloat(String(totalAssets).replace(/\s/g, '').replace(',', '.'));
+      
+      // Equity
+      const equity = bilans.kapitalWlasny ||
+                     bilans.kapitalyWlasne ||
+                     finansowe.kapitalWlasny ||
+                     doc.kapitalWlasny;
+      if (equity) statement.equity = parseFloat(String(equity).replace(/\s/g, '').replace(',', '.'));
+      
+      // Liabilities
+      const liabilities = bilans.zobowiazaniaRazem ||
+                          bilans.zobowiazaniaIPasywa ||
+                          finansowe.zobowiazania;
+      if (liabilities) statement.total_liabilities = parseFloat(String(liabilities).replace(/\s/g, '').replace(',', '.'));
+      
+      // Employee count (sometimes in docs)
+      const employees = finansowe.zatrudnienie || doc.zatrudnienie;
+      if (employees) statement.employee_count = parseInt(String(employees));
+      
+      statements.push(statement);
+      console.log(`[KRS Financials] Year ${year}: revenue=${statement.revenue}, profit=${statement.net_profit}, assets=${statement.total_assets}`);
+    }
+    
+  } catch (e) {
+    console.warn('[KRS Financials] Error fetching statements:', e);
+  }
+  
+  return statements.sort((a, b) => b.fiscal_year - a.fiscal_year);
 }
 
 // ============= FETCH CEIDG DATA (JDG) =============
@@ -1304,6 +1444,14 @@ serve(async (req) => {
         extractedRegistryIds.krs = krsToFetch;
         if (krsData.nip) extractedRegistryIds.nip = krsData.nip;
         if (krsData.regon) extractedRegistryIds.regon = krsData.regon;
+        
+        // PHASE 2B: Fetch financial statements from KRS SprawozdaniaFinansowe API
+        console.log('=== PHASE 2B: KRS FINANCIAL STATEMENTS ===');
+        const financialStatements = await fetchKRSFinancialStatements(krsToFetch);
+        if (financialStatements.length > 0) {
+          krsData.financial_statements = financialStatements;
+          console.log(`Retrieved ${financialStatements.length} financial statements from KRS`);
+        }
       }
     } else {
       console.log('No KRS found (database, website, or search), skipping KRS API');
@@ -1363,14 +1511,16 @@ serve(async (req) => {
 - model biznesowy - B2B/B2C, główne źródła przychodów
 - co wyróżnia firmę od konkurencji`;
 
-      // Query 2: Financial data
-      const financialQuery = `"${company_name}" Polska przychody obroty zysk ranking zatrudnienie:
-- przychody roczne w PLN (ostatnie 3 lata)
-- dynamika wzrostu % rok do roku
-- zysk netto (jeśli publiczny)
-- liczba pracowników
-- pozycja w rankingach branżowych
-- udział w rynku %`;
+      // Query 2: Market position and rankings (NOT hard financials - those come from KRS)
+      const financialQuery = `"${company_name}" Polska rynek pozycja ranking zatrudnienie:
+- pozycja w rankingach: Lista 500 Rzeczpospolitej, Diamenty Forbesa, Gazele Biznesu (rok i pozycja)
+- udział w rynku % (szacunkowy)
+- dynamika wzrostu vs branża
+- dla TRANSPORTU: liczba pojazdów w flocie, typy pojazdów, licencje
+- dla LOGISTYKI: powierzchnia magazynowa m², lokalizacje magazynów
+- główni klienci (jeśli publicznie znani)
+- inwestycje i plany rozwoju
+- zatrudnienie (obecne i historyczne)`;
 
       // Query 3: Locations
       const locationQuery = `"${company_name}" Polska siedziba oddziały fabryki salony lokalizacje:
@@ -1394,6 +1544,14 @@ serve(async (req) => {
 - zmiany w zarządzie
 - nagrody, certyfikaty
 - działania CSR/ESG`;
+
+      // Query 6: Group structure (NEW)
+      const groupQuery = `"${company_name}" Polska grupa kapitałowa właściciel powiązania:
+- spółka matka / główny udziałowiec (nazwa, KRS jeśli znany, % udziałów)
+- spółki zależne (nazwy, udziały %)
+- spółki siostrzane w grupie
+- powiązania osobowe (członkowie zarządu w innych spółkach)
+- historia fuzji i przejęć z datami`;
 
       const [profileResp, financialResp, locationResp, projectsResp, newsResp] = await Promise.all([
         fetch('https://api.perplexity.ai/chat/completions', {
