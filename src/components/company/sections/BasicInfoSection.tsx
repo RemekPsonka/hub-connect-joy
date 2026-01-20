@@ -3,6 +3,15 @@ import { Badge } from '@/components/ui/badge';
 import { Building, Calendar, Tag } from 'lucide-react';
 import type { SectionProps } from '../types';
 
+// Helper to safely render values that might be objects from KRS API
+const safeString = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value[0]?.nazwa) return value[0].nazwa;
+  if (value && typeof value === 'object' && 'nazwa' in value) return (value as any).nazwa;
+  if (value === null || value === undefined) return '';
+  return String(value);
+};
+
 export function BasicInfoSection({ data }: SectionProps) {
   const subIndustries = typeof data.sub_industries === 'string' 
     ? [data.sub_industries] 
@@ -21,7 +30,7 @@ export function BasicInfoSection({ data }: SectionProps) {
           {data.name && (
             <div>
               <p className="text-xs font-medium text-muted-foreground">Pełna nazwa</p>
-              <p className="text-sm font-medium">{data.name}</p>
+              <p className="text-sm font-medium">{safeString(data.name)}</p>
             </div>
           )}
           {data.legal_form && (

@@ -345,7 +345,17 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   const dzial3 = krsData.odpis?.dane?.dzial3;
   const napiData = krsData.odpis?.dane?.napiData;
   
-  const companyName = dzial1?.danePodmiotu?.nazwa || null;
+  // KRS API returns name as array of objects [{nazwa: "...", nrWpisuWprow: "1"}]
+  const rawNazwa = dzial1?.danePodmiotu?.nazwa;
+  let companyName: string | null = null;
+  if (Array.isArray(rawNazwa) && rawNazwa.length > 0) {
+    companyName = rawNazwa[0]?.nazwa || null;
+  } else if (typeof rawNazwa === 'string') {
+    companyName = rawNazwa;
+  } else if (rawNazwa && typeof rawNazwa === 'object') {
+    companyName = (rawNazwa as any).nazwa || String(rawNazwa);
+  }
+  console.log('[KRS API] Parsed company name:', companyName);
   const formaPrawna = dzial1?.danePodmiotu?.formaPrawna || null;
   const siedzibaAdres = dzial1?.siedzibaIAdres?.adres;
   const siedziba = dzial1?.siedzibaIAdres?.siedziba;
