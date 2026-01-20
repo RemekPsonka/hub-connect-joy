@@ -2729,7 +2729,7 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       try {
         enrichedData = JSON.parse(cleanedContent);
         console.log('[AI Response] Parsed successfully, keys:', Object.keys(enrichedData).slice(0, 10));
-        console.log('[AI Response] name field:', enrichedData?.name);
+        console.log('[AI Response] name field before flatten:', enrichedData?.name);
       } catch (firstParseError) {
         console.error('[AI Parse Error] First parse failed:', firstParseError);
         console.log('[AI Parse Error] Raw content sample:', cleanedContent.substring(0, 500));
@@ -2754,9 +2754,49 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       }
       
       // ==========================================
-      // FALLBACK: If AI returned empty/invalid data, build from registry
+      // FLATTEN NUMBERED SECTIONS FROM AI RESPONSE
+      // AI sometimes returns { "1_podstawowe": {...}, "2_historia": {...} }
+      // We need flat structure { "name": "...", "industry": "..." }
       // ==========================================
-      if (!enrichedData || !enrichedData.name || enrichedData.name === 'undefined') {
+      const sectionKeys = Object.keys(enrichedData).filter(k => /^\d+_/.test(k) || k === 'metadata');
+      if (sectionKeys.length > 0) {
+        console.log('[AI Response] Detected numbered sections:', sectionKeys.slice(0, 5), '- flattening...');
+        const flatData: Record<string, unknown> = {};
+        
+        for (const [sectionKey, sectionData] of Object.entries(enrichedData)) {
+          if (typeof sectionData !== 'object' || sectionData === null) continue;
+          const sectionObj = sectionData as Record<string, unknown>;
+          
+          // Copy all fields from section to flat structure
+          for (const [fieldKey, fieldValue] of Object.entries(sectionObj)) {
+            if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+              flatData[fieldKey] = fieldValue;
+            }
+          }
+        }
+        
+        console.log('[AI Response] Flattened keys:', Object.keys(flatData).slice(0, 15));
+        enrichedData = flatData;
+      }
+      
+      console.log('[AI Response] name field after flatten:', enrichedData?.name);
+      console.log('[AI Response] industry field:', enrichedData?.industry);
+      console.log('[AI Response] products count:', Array.isArray(enrichedData?.products) ? enrichedData.products.length : 0);
+      
+      // ==========================================
+      // FALLBACK: If AI returned empty/invalid data, build from registry
+      // Check for ANY valid structured data, not just name
+      // ==========================================
+      const hasValidStructuredData = enrichedData && (
+        enrichedData.name || 
+        enrichedData.industry || 
+        (enrichedData.description && String(enrichedData.description).length > 50) ||
+        (Array.isArray(enrichedData.products) && enrichedData.products.length > 0) ||
+        (Array.isArray(enrichedData.services) && enrichedData.services.length > 0) ||
+        enrichedData.revenue
+      );
+      
+      if (!hasValidStructuredData) {
         console.warn('AI returned invalid data (name missing or undefined), building fallback from registry data');
         console.log('[Fallback] Available Perplexity insights:', {
           profile: !!perplexityProfileInsights,
