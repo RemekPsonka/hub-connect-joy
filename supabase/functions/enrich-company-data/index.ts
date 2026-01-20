@@ -376,10 +376,24 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   const regon = napiData?.regon || krsData.odpis?.napiData?.regon || dzial1?.identyfikatory?.regon || null;
   console.log('[KRS API] NIP:', nip, 'REGON:', regon, 'napiData:', JSON.stringify(napiData)?.substring(0, 200));
   
-  // Map legal form - handle object or string
-  const formaPrawnaStr = typeof formaPrawna === 'string' 
-    ? formaPrawna 
-    : (formaPrawna?.nazwa || formaPrawna?.wartość || String(formaPrawna || ''));
+  // Map legal form - handle object or string with deep inspection
+  let formaPrawnaStr = '';
+  if (typeof formaPrawna === 'string') {
+    formaPrawnaStr = formaPrawna;
+  } else if (formaPrawna && typeof formaPrawna === 'object') {
+    // Try known fields first
+    formaPrawnaStr = formaPrawna.nazwa || formaPrawna.wartość || formaPrawna.value || '';
+    // If still empty but object has values, get first string value
+    if (!formaPrawnaStr && Object.keys(formaPrawna).length > 0) {
+      for (const val of Object.values(formaPrawna)) {
+        if (typeof val === 'string' && val.length > 3) {
+          formaPrawnaStr = val;
+          break;
+        }
+      }
+    }
+  }
+  console.log('[KRS API] Raw formaPrawna:', JSON.stringify(formaPrawna), '-> parsed:', formaPrawnaStr);
   
   const legalFormMap: Record<string, string> = {
     'SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ': 'sp_z_oo',
@@ -1473,6 +1487,31 @@ serve(async (req) => {
       
       perplexityCitations = [...new Set(perplexityCitations)];
       console.log('Perplexity queries completed. Citations:', perplexityCitations.length);
+      
+      // Extract NIP/REGON from Perplexity insights if not found elsewhere
+      if (!extractedRegistryIds.nip || !extractedRegistryIds.regon) {
+        const allPerplexityText = [
+          perplexityProfileInsights,
+          perplexityFinancialInsights, 
+          perplexityLocationInsights,
+          perplexityProjectsInsights,
+          perplexityNewsInsights
+        ].filter(Boolean).join(' ');
+        
+        const extractedFromPerplexity = extractRegistryIds(allPerplexityText);
+        if (!extractedRegistryIds.nip && extractedFromPerplexity.nip) {
+          console.log('[Perplexity] Found NIP in insights:', extractedFromPerplexity.nip);
+          extractedRegistryIds.nip = extractedFromPerplexity.nip;
+        }
+        if (!extractedRegistryIds.regon && extractedFromPerplexity.regon) {
+          console.log('[Perplexity] Found REGON in insights:', extractedFromPerplexity.regon);
+          extractedRegistryIds.regon = extractedFromPerplexity.regon;
+        }
+        if (!extractedRegistryIds.krs && extractedFromPerplexity.krs) {
+          console.log('[Perplexity] Found KRS in insights:', extractedFromPerplexity.krs);
+          extractedRegistryIds.krs = extractedFromPerplexity.krs;
+        }
+      }
     }
 
     // ==========================================
@@ -2023,9 +2062,18 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         if (krsData.regon) enrichedData.regon = krsData.regon;
         enrichedData.krs = krsData.krs;
         if (krsData.legal_form) {
-          enrichedData.legal_form = typeof krsData.legal_form === 'string' 
-            ? krsData.legal_form 
-            : String(krsData.legal_form);
+          // Ensure legal_form is always a clean string, never [object Object]
+          let cleanLegalForm = '';
+          if (typeof krsData.legal_form === 'string') {
+            cleanLegalForm = krsData.legal_form;
+          } else if (krsData.legal_form && typeof krsData.legal_form === 'object') {
+            cleanLegalForm = (krsData.legal_form as any).nazwa || 
+                            (krsData.legal_form as any).wartość || 
+                            JSON.stringify(krsData.legal_form).replace(/[{}"]/g, '').trim();
+          }
+          if (cleanLegalForm && cleanLegalForm !== '[object Object]') {
+            enrichedData.legal_form = cleanLegalForm;
+          }
         }
         
         const existingHq = enrichedData.headquarters as Record<string, unknown> | undefined;
