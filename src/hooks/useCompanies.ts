@@ -389,13 +389,14 @@ export function useRegenerateCompanyAI() {
   const { director } = useAuth();
   
   return useMutation({
-    mutationFn: async ({ id, companyName, website, industryHint, contactEmail, existingKrs }: { 
+    mutationFn: async ({ id, companyName, website, industryHint, contactEmail, existingKrs, existingNip }: { 
       id: string; 
       companyName: string; 
       website?: string | null;
       industryHint?: string | null;
       contactEmail?: string | null;
       existingKrs?: string | null;
+      existingNip?: string | null;
     }) => {
       const { data: result, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
         body: { 
@@ -403,7 +404,8 @@ export function useRegenerateCompanyAI() {
           website: website,
           industry_hint: industryHint,
           contact_email: contactEmail,
-          existing_krs: existingKrs
+          existing_krs: existingKrs,
+          existing_nip: existingNip
         }
       });
       

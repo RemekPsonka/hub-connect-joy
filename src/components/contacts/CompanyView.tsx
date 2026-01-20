@@ -90,6 +90,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
       industryHint: company.industry,
       contactEmail: contact.email,
       existingKrs: company.krs,
+      existingNip: company.nip,
     });
   };
 
