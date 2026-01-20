@@ -180,6 +180,27 @@ interface KRSApiData {
   pkd_codes: string[];
 }
 
+// ============= CEIDG API DATA INTERFACE =============
+interface CEIDGApiData {
+  id: string;
+  name: string;
+  owner_first_name: string;
+  owner_last_name: string;
+  nip: string;
+  regon: string;
+  address: string;
+  city: string;
+  postal_code: string;
+  voivodeship: string;
+  status: 'AKTYWNY' | 'WYKRESLONY' | 'ZAWIESZONY' | string;
+  start_date: string;
+  pkd_main: string | null;
+  pkd_codes: string[];
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+}
+
 // Fetch data from KRS API
 async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   const krsNormalized = krs.padStart(10, '0');
@@ -319,6 +340,86 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
     pkd_main: pkdMain,
     pkd_codes: pkdCodes,
   };
+}
+
+// ============= FETCH CEIDG DATA (JDG) =============
+async function fetchCEIDGData(nip: string, token: string): Promise<CEIDGApiData | null> {
+  const cleanedNip = nip.replace(/[^0-9]/g, '');
+  console.log(`[CEIDG API] Fetching data for NIP: ${cleanedNip}`);
+  
+  try {
+    const response = await fetch(
+      `https://dane.biznes.gov.pl/api/ceidg/v3/firma?nip=${cleanedNip}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      }
+    );
+    
+    if (response.status === 204) {
+      console.log('[CEIDG] No data found for NIP');
+      return null;
+    }
+    
+    if (response.status === 429) {
+      console.warn('[CEIDG] Rate limit exceeded (50/3min or 1000/60min)');
+      return null;
+    }
+    
+    if (response.status === 401 || response.status === 403) {
+      console.warn('[CEIDG] Authentication error - token may be expired');
+      return null;
+    }
+    
+    if (!response.ok) {
+      console.warn(`[CEIDG] Error: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const firma = data.firma?.[0];
+    
+    if (!firma) {
+      console.log('[CEIDG] No firma data in response');
+      return null;
+    }
+    
+    // Extract address from adresDzialalnosci
+    const addr = firma.adresDzialalnosci || {};
+    const addressParts = [addr.ulica, addr.budynek, addr.lokal].filter(Boolean);
+    const address = addressParts.join(' ').trim();
+    
+    // Extract PKD codes
+    const pkdCodes: string[] = (firma.pkd || []).map((p: { kod: string }) => p.kod);
+    const pkdMain = firma.pkdGlowny?.kod || pkdCodes[0] || null;
+    
+    console.log('[CEIDG] Data retrieved for:', firma.nazwa);
+    
+    return {
+      id: firma.id || '',
+      name: firma.nazwa || '',
+      owner_first_name: firma.wlasciciel?.imie || '',
+      owner_last_name: firma.wlasciciel?.nazwisko || '',
+      nip: firma.wlasciciel?.nip || cleanedNip,
+      regon: firma.wlasciciel?.regon || '',
+      address,
+      city: addr.miasto || '',
+      postal_code: addr.kod || '',
+      voivodeship: addr.wojewodztwo || '',
+      status: firma.status || 'NIEZNANY',
+      start_date: firma.dataRozpoczecia || '',
+      pkd_main: pkdMain,
+      pkd_codes: pkdCodes,
+      email: firma.email || null,
+      phone: firma.telefon || null,
+      website: firma.www || null
+    };
+  } catch (error) {
+    console.error('[CEIDG] Fetch error:', error);
+    return null;
+  }
 }
 
 // ============= CONFIDENCE SCORE CALCULATOR =============
@@ -630,7 +731,7 @@ serve(async (req) => {
 
     console.log(`[enrich-company-data] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    const { company_name, website, industry_hint, contact_email, existing_krs } = await req.json();
+    const { company_name, website, industry_hint, contact_email, existing_krs, existing_nip } = await req.json();
     
     if (!company_name) {
       return new Response(
@@ -640,10 +741,12 @@ serve(async (req) => {
     }
     
     console.log('Existing KRS from database:', existing_krs);
+    console.log('Existing NIP from database:', existing_nip);
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const CEIDG_JWT_TOKEN = Deno.env.get('CEIDG_JWT_TOKEN');
     
     if (!LOVABLE_API_KEY) {
       console.error('LOVABLE_API_KEY is not configured');
@@ -653,12 +756,17 @@ serve(async (req) => {
       );
     }
 
+    // Track execution time for timeout guard
+    const startTime = Date.now();
+    const MAX_EXECUTION_TIME = 55000; // 55s safety margin before 60s timeout
+
     console.log('=== ENRICHING COMPANY DATA (NEW FLOW) ===');
     console.log('Company:', company_name);
     console.log('Website:', website);
     console.log('Contact Email:', contact_email);
     console.log('Perplexity available:', !!PERPLEXITY_API_KEY);
     console.log('Firecrawl available:', !!FIRECRAWL_API_KEY);
+    console.log('CEIDG available:', !!CEIDG_JWT_TOKEN);
 
     // ==========================================
     // PHASE 0: EXTRACT DOMAIN FROM EMAIL OR WEBSITE
@@ -719,8 +827,16 @@ serve(async (req) => {
     
     let extractedRegistryIds = { nip: null as string | null, regon: null as string | null, krs: null as string | null };
     
+    // OPTIMIZATION: Early exit if we already have registry identifiers
+    const skipRegistryScan = !!(existing_krs || existing_nip);
+    if (skipRegistryScan) {
+      console.log('EARLY EXIT: Skipping registry scan - using existing identifiers from database');
+      if (existing_krs) extractedRegistryIds.krs = existing_krs;
+      if (existing_nip) extractedRegistryIds.nip = existing_nip;
+    }
+    
     try {
-      if (FIRECRAWL_API_KEY && targetWebsite) {
+      if (FIRECRAWL_API_KEY && targetWebsite && !skipRegistryScan) {
         const baseUrl = targetWebsite.startsWith('http') ? targetWebsite : `https://${targetWebsite}`;
         
         // First, scrape homepage and contact page to find registry IDs
@@ -733,6 +849,12 @@ serve(async (req) => {
         ];
         
         for (const { url, category, priority } of priorityUrls) {
+          // Timeout guard check
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            console.warn('Approaching timeout during critical scan - stopping');
+            break;
+          }
+          
           const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
           if (page.content) {
             scrapedPages.push(page);
@@ -749,7 +871,7 @@ serve(async (req) => {
               break;
             }
           }
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 300ms
         }
         
         console.log('Registry IDs from website:', extractedRegistryIds);
@@ -817,11 +939,22 @@ serve(async (req) => {
         const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
         prioritizedUrls2.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
         
-        const urlsToScrape = prioritizedUrls2.slice(0, 15); // Reduced to 15 for faster processing
+        // OPTIMIZATION: Reduced from 15 to 5 pages for faster processing
+        const urlsToScrape = prioritizedUrls2.slice(0, 5);
         
         let blockedCount = 0;
         for (let i = 0; i < urlsToScrape.length; i++) {
-          if (blockedCount >= 3) break;
+          // Early exit conditions
+          if (blockedCount >= 3) {
+            console.log('Early exit: 3 pages blocked');
+            break;
+          }
+          
+          // Timeout guard
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            console.warn('Approaching timeout during extra pages scrape - stopping');
+            break;
+          }
           
           const { url, category, priority } = urlsToScrape[i];
           const page = await scrapeWithFirecrawl(url, FIRECRAWL_API_KEY, category, priority);
@@ -841,7 +974,7 @@ serve(async (req) => {
           }
           
           if (i < urlsToScrape.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 400));
+            await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 400ms
           }
         }
         
@@ -875,14 +1008,16 @@ serve(async (req) => {
     }
 
     // ==========================================
-    // PHASE 2: KRS API (if KRS found)
+    // PHASE 2: REGISTRY APIs (KRS or CEIDG)
     // ==========================================
-    console.log('=== PHASE 2: KRS API ===');
+    console.log('=== PHASE 2: REGISTRY APIs (KRS + CEIDG) ===');
     
     let krsData: KRSApiData | null = null;
+    let ceidgData: CEIDGApiData | null = null;
     let hasVerifiedRegistryData = false;
+    let registrySource: 'krs_api' | 'ceidg_api' | null = null;
     
-    // Priority: existing_krs from database > extracted from website
+    // Priority 1: Try KRS API first (for companies/spółki)
     const krsToFetch = existing_krs || extractedRegistryIds.krs;
     
     if (krsToFetch) {
@@ -891,6 +1026,7 @@ serve(async (req) => {
       
       if (krsData) {
         hasVerifiedRegistryData = true;
+        registrySource = 'krs_api';
         console.log('KRS data retrieved successfully');
         console.log('Company from KRS:', krsData.name);
         console.log('Management:', krsData.management.length, 'persons');
@@ -901,7 +1037,30 @@ serve(async (req) => {
         if (krsData.regon) extractedRegistryIds.regon = krsData.regon;
       }
     } else {
-      console.log('No KRS found (neither in database nor extracted), skipping KRS API');
+      console.log('No KRS found, skipping KRS API');
+    }
+    
+    // Priority 2: If no KRS data, try CEIDG API (for JDG - sole proprietors)
+    if (!hasVerifiedRegistryData && CEIDG_JWT_TOKEN) {
+      const nipToFetch = existing_nip || extractedRegistryIds.nip;
+      
+      if (nipToFetch) {
+        console.log(`Trying CEIDG API for NIP: ${nipToFetch}`);
+        ceidgData = await fetchCEIDGData(nipToFetch, CEIDG_JWT_TOKEN);
+        
+        if (ceidgData) {
+          hasVerifiedRegistryData = true;
+          registrySource = 'ceidg_api';
+          extractedRegistryIds.nip = ceidgData.nip;
+          if (ceidgData.regon) extractedRegistryIds.regon = ceidgData.regon;
+          console.log('CEIDG data retrieved:', ceidgData.name);
+          console.log('Owner:', ceidgData.owner_first_name, ceidgData.owner_last_name);
+        }
+      } else {
+        console.log('No NIP found for CEIDG lookup');
+      }
+    } else if (!CEIDG_JWT_TOKEN && !hasVerifiedRegistryData) {
+      console.log('CEIDG_JWT_TOKEN not configured, skipping CEIDG API');
     }
 
     // ==========================================
@@ -1100,17 +1259,41 @@ ${krsData.partners.map(p => `- ${p.name}: ${p.position}`).join('\n') || 'brak da
 ⚠️ UWAGA: Powyższe dane są ZWERYFIKOWANE i muszą być użyte DOKŁADNIE w odpowiedzi.
 `;
     }
+    
+    // Build CEIDG data section for AI context
+    let ceidgDataSection = '';
+    if (ceidgData) {
+      ceidgDataSection = `
+═══════════════════════════════════════════════════════════════════
+🔐 DANE ZWERYFIKOWANE Z CEIDG API (100% PEWNOŚĆ - JDG):
+═══════════════════════════════════════════════════════════════════
+Nazwa firmy: ${ceidgData.name}
+Właściciel: ${ceidgData.owner_first_name} ${ceidgData.owner_last_name}
+NIP: ${ceidgData.nip}
+REGON: ${ceidgData.regon}
+Adres: ${ceidgData.address}
+Miasto: ${ceidgData.city} ${ceidgData.postal_code}
+Województwo: ${ceidgData.voivodeship}
+Status: ${ceidgData.status}
+Data rozpoczęcia: ${ceidgData.start_date}
+${ceidgData.pkd_main ? `PKD główne: ${ceidgData.pkd_main}` : ''}
+${ceidgData.email ? `Email: ${ceidgData.email}` : ''}
+${ceidgData.website ? `WWW: ${ceidgData.website}` : ''}
+
+⚠️ UWAGA: Dane są ZWERYFIKOWANE z oficjalnego rejestru CEIDG.
+`;
+    }
 
     const systemPrompt = hasAnyData
       ? `Jesteś analitykiem biznesowym. Stwórz szczegółowy profil firmy w JSON.
 
 📊 ŹRÓDŁA DANYCH (PRIORYTET):
-1. KRS API: ${hasVerifiedRegistryData ? 'TAK (100% pewność - użyj dokładnie!)' : 'NIE'}
+1. KRS/CEIDG API: ${hasVerifiedRegistryData ? `TAK (${registrySource === 'ceidg_api' ? 'CEIDG - JDG' : 'KRS - spółka'}, 100% pewność - użyj dokładnie!)` : 'NIE'}
 2. Strona firmowa (Firecrawl): ${scrapingStats.successful_scrapes} stron, ${scrapingStats.total_words} słów (90% pewność)
 3. Perplexity: ${[hasProfileInsights, hasFinancialInsights, hasLocationInsights, hasProjectsInsights, hasNewsInsights].filter(Boolean).length}/5 zapytań (70% pewność)
 
 🎯 ZASADY PRIORYTETÓW:
-- Dane z KRS API → nadpisują WSZYSTKO (NIP, REGON, KRS, adres, zarząd, wspólnicy)
+- Dane z KRS/CEIDG API → nadpisują WSZYSTKO (NIP, REGON, KRS, adres, zarząd/właściciel)
 - Dane ze strony firmowej → wysokie zaufanie
 - Dane z Perplexity → średnie zaufanie
 - NIE wymyślaj danych jeśli ich nie masz → użyj null
@@ -1149,6 +1332,11 @@ ${industry_hint ? `Wskazówka branżowa: ${industry_hint}` : ''}
     // Add KRS data first (highest priority)
     if (krsDataSection) {
       userContent += krsDataSection;
+    }
+    
+    // Add CEIDG data (for JDG companies)
+    if (ceidgDataSection) {
+      userContent += ceidgDataSection;
     }
 
     // Add Perplexity insights
@@ -1417,8 +1605,54 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
           enrichedData.pkd_main = krsData.pkd_main;
           enrichedData.pkd_codes = krsData.pkd_codes;
         }
+      } 
+      // ==========================================
+      // OVERRIDE WITH CEIDG DATA (100% priority for JDG)
+      // ==========================================
+      else if (ceidgData) {
+        console.log('Overriding AI data with verified CEIDG data');
+        
+        enrichedData.nip = ceidgData.nip;
+        enrichedData.regon = ceidgData.regon;
+        enrichedData.legal_form = 'jdg'; // Jednoosobowa Działalność Gospodarcza
+        
+        enrichedData.headquarters = {
+          address: ceidgData.address || enrichedData.headquarters?.address,
+          city: ceidgData.city || enrichedData.headquarters?.city,
+          postal_code: ceidgData.postal_code || enrichedData.headquarters?.postal_code,
+          country: 'Polska',
+          voivodeship: ceidgData.voivodeship
+        };
+        
+        // Owner as management
+        enrichedData.management = [{
+          name: `${ceidgData.owner_first_name} ${ceidgData.owner_last_name}`,
+          position: 'Właściciel',
+          source: 'ceidg_api',
+          verified: true
+        }];
+        
+        if (ceidgData.pkd_main) {
+          enrichedData.pkd_main = ceidgData.pkd_main;
+          enrichedData.pkd_codes = ceidgData.pkd_codes;
+        }
+        
+        if (ceidgData.website && !targetWebsite) {
+          enrichedData.suggested_website = ceidgData.website;
+        }
+        
+        if (ceidgData.email) {
+          enrichedData.contact_email = ceidgData.email;
+        }
+        
+        if (ceidgData.phone) {
+          enrichedData.contact_phone = ceidgData.phone;
+        }
+        
+        enrichedData.business_start_date = ceidgData.start_date;
+        enrichedData.business_status = ceidgData.status;
       } else {
-        // Use extracted IDs from website if no KRS API data
+        // Use extracted IDs from website if no API data
         if (extractedRegistryIds.nip && isValidNIP(extractedRegistryIds.nip)) {
           enrichedData.nip = extractedRegistryIds.nip;
         }
@@ -1466,7 +1700,9 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
           news: hasNewsInsights,
         },
         firecrawl_stats: scrapingStats,
-        krs_api_used: hasVerifiedRegistryData,
+        krs_api_used: registrySource === 'krs_api',
+        ceidg_api_used: registrySource === 'ceidg_api',
+        registry_source: registrySource,
         confidence_score: confidenceScore,
         overall_confidence: overallConfidence,
         data_freshness: new Date().getFullYear().toString(),
@@ -1476,12 +1712,18 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         sources_count: perplexityCitations.length,
         data_sources_confidence: {
           registry: hasVerifiedRegistryData 
-            ? { source: 'krs_api', confidence: 100, nip_verified: !!krsData?.nip, krs_verified: true }
+            ? { 
+                source: registrySource, 
+                confidence: 100, 
+                nip_verified: registrySource === 'krs_api' ? !!krsData?.nip : !!ceidgData?.nip, 
+                krs_verified: registrySource === 'krs_api',
+                ceidg_verified: registrySource === 'ceidg_api'
+              }
             : extractedRegistryIds.nip || extractedRegistryIds.krs
               ? { source: 'website', confidence: 90, nip_verified: !!extractedRegistryIds.nip, krs_verified: !!extractedRegistryIds.krs }
               : null,
           financial: hasFinancialInsights ? { source: 'perplexity', confidence: 70 } : null,
-          management: hasVerifiedRegistryData ? { source: 'krs_api', confidence: 100 } : null,
+          management: hasVerifiedRegistryData ? { source: registrySource, confidence: 100 } : null,
           locations: hasLocationInsights || hasScrapedContent ? { source: hasScrapedContent ? 'firecrawl' : 'perplexity', confidence: hasScrapedContent ? 90 : 70 } : null,
         }
       };
@@ -1512,7 +1754,8 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
 
     console.log('=== ENRICHMENT COMPLETE ===');
     console.log('Company:', enrichedData.name);
-    console.log('KRS Verified:', hasVerifiedRegistryData);
+    console.log('Registry source:', registrySource);
+    console.log('Verified:', hasVerifiedRegistryData);
     console.log('Confidence:', enrichedData.confidence_score);
 
     return new Response(

@@ -193,7 +193,11 @@ export interface DataSources {
     verified?: boolean;
     source?: string;
   };
-  registry_source?: 'krs_api' | 'firecrawl' | 'perplexity' | 'manual';
+  ceidg_api?: {
+    verified?: boolean;
+    source?: string;
+  };
+  registry_source?: 'krs_api' | 'ceidg_api' | 'firecrawl' | 'perplexity' | 'manual';
 }
 
 // Group Company structure (for group analysis)
