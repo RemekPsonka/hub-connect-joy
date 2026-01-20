@@ -2,6 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Users, Building, Heart, ExternalLink } from 'lucide-react';
 import type { SectionProps, ManagementPerson } from '../types';
+import { safeString } from '../utils';
 
 export function ManagementSection({ data }: SectionProps) {
   const management = data.management || [];
@@ -69,7 +70,7 @@ export function ManagementSection({ data }: SectionProps) {
                 <Building className="h-3 w-3" />
                 Wielkość
               </p>
-              <p className="text-sm font-medium capitalize mt-0.5">{data.company_size}</p>
+              <p className="text-sm font-medium capitalize mt-0.5">{safeString(data.company_size)}</p>
             </div>
           )}
           {data.employee_count && (

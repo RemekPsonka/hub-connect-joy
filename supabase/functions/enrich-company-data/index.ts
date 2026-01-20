@@ -389,23 +389,40 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   };
   const legalForm = formaPrawnaStr ? (legalFormMap[formaPrawnaStr.toUpperCase()] || formaPrawnaStr) : null;
   
-  // Extract management persons
+  // Extract management persons - handle multiple KRS API response structures
   const management: Array<{ name: string; position: string }> = [];
-  const reprezentacja = dzial2?.reprezentacja?.sklad;
-  if (Array.isArray(reprezentacja)) {
-    for (const group of reprezentacja) {
-      if (Array.isArray(group.sklad)) {
-        for (const person of group.sklad as KRSPerson[]) {
-          if (person.imiona && person.nazwisko) {
-            management.push({
-              name: `${person.imiona} ${person.nazwisko}`,
-              position: person.funkcja || 'Członek Zarządu',
-            });
+  console.log('[KRS API] dzial2.reprezentacja structure:', JSON.stringify(dzial2?.reprezentacja, null, 2)?.substring(0, 500));
+  
+  // Try multiple paths where management data can be located
+  const reprezentacja = dzial2?.reprezentacja;
+  const skladSources = [
+    reprezentacja?.sklad,
+    reprezentacja?.skladOrganu,
+    reprezentacja?.organReprezentacji?.sklad,
+  ].filter(Boolean);
+  
+  for (const sklad of skladSources) {
+    if (Array.isArray(sklad)) {
+      for (const group of sklad) {
+        // Try multiple paths for persons within a group
+        const persons = group.sklad || group.osoby || group.czlonkowie || (Array.isArray(group) ? group : [group]);
+        
+        if (Array.isArray(persons)) {
+          for (const personEntry of persons) {
+            // Person can be nested under 'osoba' or directly available
+            const person = personEntry.osoba || personEntry;
+            if (person?.imiona && person?.nazwisko) {
+              management.push({
+                name: `${person.imiona} ${person.nazwisko}`,
+                position: personEntry.funkcja || person.funkcja || 'Członek Zarządu',
+              });
+            }
           }
         }
       }
     }
   }
+  console.log(`[KRS API] Extracted ${management.length} management persons`);
   
   // Extract partners
   const partners: Array<{ name: string; position: string }> = [];

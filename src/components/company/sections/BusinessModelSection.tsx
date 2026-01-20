@@ -2,6 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, Target, Lightbulb, Zap } from 'lucide-react';
 import type { SectionProps } from '../types';
+import { safeString, safeArray } from '../utils';
 
 export function BusinessModelSection({ data }: SectionProps) {
   const competitiveAdvantages = Array.isArray(data.competitive_advantages) 
@@ -27,7 +28,7 @@ export function BusinessModelSection({ data }: SectionProps) {
         {data.business_model && (
           <SectionBox title="Model działania">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {data.business_model}
+              {safeString(data.business_model)}
             </p>
           </SectionBox>
         )}
@@ -36,7 +37,7 @@ export function BusinessModelSection({ data }: SectionProps) {
         {data.value_proposition && (
           <SectionBox title="Propozycja wartości (USP)" icon={<Lightbulb className="h-3 w-3" />}>
             <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
-              <p className="text-sm">{data.value_proposition}</p>
+              <p className="text-sm">{safeString(data.value_proposition)}</p>
             </div>
           </SectionBox>
         )}
@@ -44,7 +45,7 @@ export function BusinessModelSection({ data }: SectionProps) {
         {/* Competitive position */}
         {data.competitive_position && (
           <SectionBox title="Pozycja konkurencyjna" icon={<Target className="h-3 w-3" />}>
-            <p className="text-sm text-muted-foreground">{data.competitive_position}</p>
+            <p className="text-sm text-muted-foreground">{safeString(data.competitive_position)}</p>
           </SectionBox>
         )}
 
