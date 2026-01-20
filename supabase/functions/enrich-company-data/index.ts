@@ -110,6 +110,67 @@ function isValidKRS(krs: string | null): boolean {
   return cleaned.length === 10;
 }
 
+// ============= LEGAL FORM DETECTION =============
+// Detect if company name suggests it's a spółka (requires KRS) vs JDG (CEIDG)
+type LegalFormType = 'spolka' | 'jdg' | 'unknown';
+
+function detectLegalFormFromName(companyName: string): LegalFormType {
+  const upperName = companyName.toUpperCase();
+  
+  // Spółka keywords - these MUST be in KRS, not CEIDG
+  const spolkaKeywords = [
+    'SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ',
+    'SPÓŁKA Z O.O.',
+    'SP. Z O.O.',
+    'SP.Z O.O.',
+    'SP Z O.O',
+    'SPÓŁKA JAWNA',
+    'SP. J.',
+    'SP.J.',
+    'SPÓŁKA AKCYJNA',
+    'S.A.',
+    ' SA ',
+    ' SA$',
+    'SPÓŁKA KOMANDYTOWA',
+    'SP. K.',
+    'SP.K.',
+    'SPÓŁKA KOMANDYTOWO-AKCYJNA',
+    'S.K.A.',
+    'SPÓŁKA PARTNERSKA',
+    'SP. P.',
+    'PROSTA SPÓŁKA AKCYJNA',
+    'P.S.A.',
+    ' PSA ',
+    'SPÓŁDZIELNIA',
+    'FUNDACJA',
+    'STOWARZYSZENIE',
+  ];
+  
+  for (const keyword of spolkaKeywords) {
+    if (upperName.includes(keyword.trim())) {
+      console.log(`[Legal Form Detection] Found spółka keyword "${keyword}" in "${companyName}"`);
+      return 'spolka';
+    }
+  }
+  
+  // Check for ending patterns (e.g., "Firma XYZ S.A.")
+  const endingPatterns = [
+    /\sS\.?A\.?$/i,
+    /\sSP\.?\s*Z\.?\s*O\.?\s*O\.?$/i,
+    /\sSP\.?\s*J\.?$/i,
+    /\sSP\.?\s*K\.?$/i,
+  ];
+  
+  for (const pattern of endingPatterns) {
+    if (pattern.test(companyName)) {
+      console.log(`[Legal Form Detection] Found spółka ending pattern in "${companyName}"`);
+      return 'spolka';
+    }
+  }
+  
+  return 'unknown';
+}
+
 // Extract registry IDs from text content
 function extractRegistryIds(content: string): { nip: string | null; regon: string | null; krs: string | null } {
   const result = { nip: null as string | null, regon: null as string | null, krs: null as string | null };
@@ -154,6 +215,30 @@ function extractRegistryIds(content: string): { nip: string | null; regon: strin
   }
   
   return result;
+}
+
+// Extract KRS number from text (for Perplexity search results)
+function extractKRSFromText(text: string): string | null {
+  // Patterns to find KRS in various formats
+  const patterns = [
+    /KRS[:\s]*0*(\d{10})/gi,
+    /KRS[:\s]*(\d{10})/gi,
+    /numer\s+KRS[:\s]*0*(\d{10})/gi,
+    /rejestr[:\s]*0*(\d{10})/gi,
+    /(?:^|\s)0*(\d{10})(?:\s|$)/g, // bare 10-digit number
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      const cleaned = match[1].replace(/[-\s]/g, '').padStart(10, '0');
+      if (isValidKRS(cleaned)) {
+        return cleaned;
+      }
+    }
+  }
+  
+  return null;
 }
 
 // ============= KRS API DATA INTERFACES =============
@@ -760,8 +845,13 @@ serve(async (req) => {
     const startTime = Date.now();
     const MAX_EXECUTION_TIME = 55000; // 55s safety margin before 60s timeout
 
+    // Detect legal form from company name
+    const detectedLegalForm = detectLegalFormFromName(company_name);
+    const isLikelySpólka = detectedLegalForm === 'spolka';
+
     console.log('=== ENRICHING COMPANY DATA (NEW FLOW) ===');
     console.log('Company:', company_name);
+    console.log('Detected legal form:', detectedLegalForm, isLikelySpólka ? '(will prioritize KRS)' : '');
     console.log('Website:', website);
     console.log('Contact Email:', contact_email);
     console.log('Perplexity available:', !!PERPLEXITY_API_KEY);
@@ -1018,10 +1108,50 @@ serve(async (req) => {
     let registrySource: 'krs_api' | 'ceidg_api' | null = null;
     
     // Priority 1: Try KRS API first (for companies/spółki)
-    const krsToFetch = existing_krs || extractedRegistryIds.krs;
+    let krsToFetch = existing_krs || extractedRegistryIds.krs;
+    
+    // FALLBACK: If company looks like a spółka but we don't have KRS, search via Perplexity
+    if (!krsToFetch && isLikelySpólka && PERPLEXITY_API_KEY) {
+      console.log('Company appears to be a spółka but no KRS found - searching via Perplexity...');
+      
+      try {
+        const krsSearchQuery = `"${company_name}" numer KRS rejestr przedsiębiorców`;
+        
+        const krsSearchResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'sonar',
+            messages: [
+              { role: 'system', content: 'Znajdź numer KRS dla podanej firmy. Odpowiedz TYLKO numerem KRS (10 cyfr) lub napisz "BRAK" jeśli nie znaleziono.' },
+              { role: 'user', content: krsSearchQuery }
+            ],
+          }),
+        });
+        
+        if (krsSearchResponse.ok) {
+          const krsSearchData = await krsSearchResponse.json();
+          const krsSearchContent = krsSearchData.choices?.[0]?.message?.content || '';
+          console.log('Perplexity KRS search result:', krsSearchContent);
+          
+          // Extract KRS from response
+          const foundKrs = extractKRSFromText(krsSearchContent);
+          if (foundKrs) {
+            console.log('Found KRS via Perplexity search:', foundKrs);
+            krsToFetch = foundKrs;
+            extractedRegistryIds.krs = foundKrs;
+          }
+        }
+      } catch (krsSearchError) {
+        console.warn('Perplexity KRS search failed:', krsSearchError);
+      }
+    }
     
     if (krsToFetch) {
-      console.log(`Fetching KRS data for: ${krsToFetch} (source: ${existing_krs ? 'database' : 'extracted'})`);
+      console.log(`Fetching KRS data for: ${krsToFetch} (source: ${existing_krs ? 'database' : 'extracted/searched'})`);
       krsData = await fetchKRSData(krsToFetch);
       
       if (krsData) {
@@ -1037,15 +1167,16 @@ serve(async (req) => {
         if (krsData.regon) extractedRegistryIds.regon = krsData.regon;
       }
     } else {
-      console.log('No KRS found, skipping KRS API');
+      console.log('No KRS found (database, website, or search), skipping KRS API');
     }
     
-    // Priority 2: If no KRS data, try CEIDG API (for JDG - sole proprietors)
-    if (!hasVerifiedRegistryData && CEIDG_JWT_TOKEN) {
+    // Priority 2: If no KRS data, try CEIDG API ONLY for non-spółka companies (JDG)
+    // IMPORTANT: Spółki are NOT in CEIDG - only JDG (sole proprietors)
+    if (!hasVerifiedRegistryData && CEIDG_JWT_TOKEN && !isLikelySpólka) {
       const nipToFetch = existing_nip || extractedRegistryIds.nip;
       
       if (nipToFetch) {
-        console.log(`Trying CEIDG API for NIP: ${nipToFetch}`);
+        console.log(`Trying CEIDG API for NIP: ${nipToFetch} (company is not a spółka)`);
         ceidgData = await fetchCEIDGData(nipToFetch, CEIDG_JWT_TOKEN);
         
         if (ceidgData) {
@@ -1059,6 +1190,8 @@ serve(async (req) => {
       } else {
         console.log('No NIP found for CEIDG lookup');
       }
+    } else if (isLikelySpólka && !hasVerifiedRegistryData) {
+      console.log('Skipping CEIDG: Company appears to be a spółka (should be in KRS, not CEIDG)');
     } else if (!CEIDG_JWT_TOKEN && !hasVerifiedRegistryData) {
       console.log('CEIDG_JWT_TOKEN not configured, skipping CEIDG API');
     }
@@ -1541,7 +1674,7 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
     }
 
     // Parse JSON response
-    let enrichedData;
+    let enrichedData: Record<string, unknown>;
     try {
       let cleanedContent = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
       const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
@@ -1571,6 +1704,50 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       }
       
       // ==========================================
+      // FALLBACK: If AI returned empty/invalid data, build from registry
+      // ==========================================
+      if (!enrichedData || !enrichedData.name || enrichedData.name === 'undefined') {
+        console.warn('AI returned invalid data (name missing or undefined), building fallback from registry data');
+        
+        enrichedData = {
+          name: krsData?.name || ceidgData?.name || company_name,
+          nip: extractedRegistryIds.nip || krsData?.nip || ceidgData?.nip || null,
+          regon: extractedRegistryIds.regon || krsData?.regon || ceidgData?.regon || null,
+          krs: extractedRegistryIds.krs || krsData?.krs || null,
+          legal_form: krsData?.legal_form || (ceidgData ? 'jdg' : null),
+          industry: industry_hint || null,
+          description: null,
+          headquarters: krsData ? {
+            address: krsData.address,
+            city: krsData.city,
+            postal_code: krsData.postal_code,
+            country: 'Polska'
+          } : ceidgData ? {
+            address: ceidgData.address,
+            city: ceidgData.city,
+            postal_code: ceidgData.postal_code,
+            country: 'Polska'
+          } : null,
+          management: krsData?.management?.map(m => ({
+            name: m.name,
+            position: m.position,
+            source: 'krs_api',
+            verified: true
+          })) || (ceidgData ? [{
+            name: `${ceidgData.owner_first_name} ${ceidgData.owner_last_name}`,
+            position: 'Właściciel',
+            source: 'ceidg_api',
+            verified: true
+          }] : []),
+          confidence: hasVerifiedRegistryData ? 'medium' : 'low',
+          analysis_confidence_score: hasVerifiedRegistryData ? 0.4 : 0.1,
+          fallback_used: true,
+        };
+        
+        console.log('Fallback data built with name:', enrichedData.name);
+      }
+      
+      // ==========================================
       // OVERRIDE WITH KRS DATA (100% priority)
       // ==========================================
       if (krsData) {
@@ -1581,10 +1758,11 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         enrichedData.krs = krsData.krs;
         if (krsData.legal_form) enrichedData.legal_form = krsData.legal_form;
         
+        const existingHq = enrichedData.headquarters as Record<string, unknown> | undefined;
         enrichedData.headquarters = {
-          address: krsData.address || enrichedData.headquarters?.address,
-          city: krsData.city || enrichedData.headquarters?.city,
-          postal_code: krsData.postal_code || enrichedData.headquarters?.postal_code,
+          address: krsData.address || existingHq?.address,
+          city: krsData.city || existingHq?.city,
+          postal_code: krsData.postal_code || existingHq?.postal_code,
           country: 'Polska'
         };
         
@@ -1616,10 +1794,11 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
         enrichedData.regon = ceidgData.regon;
         enrichedData.legal_form = 'jdg'; // Jednoosobowa Działalność Gospodarcza
         
+        const existingHq = enrichedData.headquarters as Record<string, unknown> | undefined;
         enrichedData.headquarters = {
-          address: ceidgData.address || enrichedData.headquarters?.address,
-          city: ceidgData.city || enrichedData.headquarters?.city,
-          postal_code: ceidgData.postal_code || enrichedData.headquarters?.postal_code,
+          address: ceidgData.address || existingHq?.address,
+          city: ceidgData.city || existingHq?.city,
+          postal_code: ceidgData.postal_code || existingHq?.postal_code,
           country: 'Polska',
           voivodeship: ceidgData.voivodeship
         };
@@ -1665,15 +1844,15 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
       }
       
       // Validate remaining NIP/REGON/KRS
-      if (enrichedData.nip) {
+      if (enrichedData.nip && typeof enrichedData.nip === 'string') {
         const cleanedNip = enrichedData.nip.replace(/[^0-9]/g, '');
         enrichedData.nip = isValidNIP(cleanedNip) ? cleanedNip : null;
       }
-      if (enrichedData.regon) {
+      if (enrichedData.regon && typeof enrichedData.regon === 'string') {
         const cleanedRegon = enrichedData.regon.replace(/[^0-9]/g, '');
         enrichedData.regon = isValidREGON(cleanedRegon) ? cleanedRegon : null;
       }
-      if (enrichedData.krs) {
+      if (enrichedData.krs && typeof enrichedData.krs === 'string') {
         const cleanedKrs = enrichedData.krs.replace(/[^0-9]/g, '').padStart(10, '0');
         enrichedData.krs = isValidKRS(cleanedKrs) ? cleanedKrs : null;
       }
@@ -1738,8 +1917,8 @@ WAŻNE: Zwróć TYLKO poprawny JSON bez markdown. Użyj danych z KRS jako PRIORY
 
     // Add logo
     if (!logo_url) {
-      const suggestedWebsite = enrichedData.suggested_website || targetWebsite;
-      if (suggestedWebsite) {
+      const suggestedWebsite = (enrichedData.suggested_website as string) || targetWebsite;
+      if (suggestedWebsite && typeof suggestedWebsite === 'string') {
         const suggestedDomain = extractDomain(suggestedWebsite);
         if (suggestedDomain) {
           const clearbitUrl = getClearbitLogoUrl(suggestedDomain);
