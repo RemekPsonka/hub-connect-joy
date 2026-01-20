@@ -874,3 +874,74 @@ export function useRemoveGroupCompany() {
     },
   });
 }
+
+// ============= FETCH KRS DATA =============
+export interface KRSFetchResult {
+  success: boolean;
+  company: {
+    name: string | null;
+    nip: string | null;
+    regon: string | null;
+    address: string | null;
+    city: string | null;
+    postal_code: string | null;
+    legal_form: string | null;
+    krs: string;
+  };
+  management: Array<{ name: string; position: string }>;
+  partners: Array<{ name: string; position: string }>;
+  created_contacts: Array<{
+    id: string;
+    full_name: string;
+    position: string;
+    is_new: boolean;
+  }>;
+  contacts_count: number;
+}
+
+export function useFetchKRS() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      companyId, 
+      krs, 
+      ownerContactId 
+    }: { 
+      companyId?: string; 
+      krs: string;
+      ownerContactId?: string;
+    }): Promise<KRSFetchResult> => {
+      const { data, error } = await supabase.functions.invoke('fetch-krs-data', {
+        body: { companyId, krs, ownerContactId }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Błąd pobierania danych z KRS');
+
+      return data as KRSFetchResult;
+    },
+    onSuccess: (data, { companyId }) => {
+      if (companyId) {
+        queryClient.invalidateQueries({ queryKey: ['company', companyId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      
+      const newContacts = data.created_contacts.filter(c => c.is_new).length;
+      const linkedContacts = data.created_contacts.filter(c => !c.is_new).length;
+      
+      let message = 'Pobrano dane z KRS.';
+      if (newContacts > 0 || linkedContacts > 0) {
+        message += ` Dodano ${newContacts} nowych kontaktów, powiązano ${linkedContacts} istniejących.`;
+      }
+      
+      toast.success(message);
+    },
+    onError: (error) => {
+      console.error('Error fetching KRS data:', error);
+      toast.error(error instanceof Error ? error.message : 'Błąd podczas pobierania danych z KRS');
+    },
+  });
+}

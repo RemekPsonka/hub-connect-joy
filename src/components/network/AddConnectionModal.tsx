@@ -21,6 +21,7 @@ const CONNECTION_TYPES = [
   { value: 'met_at_event', label: 'Poznali się na evencie' },
   { value: 'project', label: 'Wspólny projekt' },
   { value: 'family', label: 'Rodzina' },
+  { value: 'krs_associate', label: 'KRS - Współpracownik' },
   { value: 'other', label: 'Inny' },
 ];
 
