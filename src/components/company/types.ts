@@ -40,6 +40,41 @@ export interface RankingPosition {
   category?: string;
 }
 
+// Extended Financial Statements (new)
+export interface FinancialStatement {
+  year: number;
+  revenue?: number;
+  net_profit?: number;
+  gross_profit?: number;
+  ebitda?: number;
+  ebit?: number;
+  total_assets?: number;
+  total_liabilities?: number;
+  equity?: number;
+  employee_count?: number;
+  vehicle_count?: number;
+  warehouse_area_sqm?: number;
+  source?: 'krs_statement' | 'perplexity' | 'manual' | 'firecrawl';
+}
+
+export interface FinancialRatio {
+  name: string;
+  value: number;
+  unit: '%' | 'x' | 'PLN' | 'days';
+  year: number;
+}
+
+// Shareholders / Partners (from KRS)
+export interface Shareholder {
+  name: string;
+  type: 'individual' | 'company';
+  shares_count?: number;
+  shares_value?: number;
+  ownership_percent?: number;
+  role?: string;
+  krs_verified?: boolean;
+}
+
 // Products & Services
 export interface Product {
   name: string;
@@ -238,15 +273,19 @@ export interface CompanyAnalysis {
   expansion_history?: string;
   founding_story?: string;
   
-  // SEKCJA 3: Dane finansowe
+  // SEKCJA 3: Dane finansowe (rozszerzone)
   revenue?: Revenue;
   revenue_history?: RevenueHistory[];
+  financial_statements?: FinancialStatement[];
+  current_financials?: FinancialStatement;
   employee_count?: string | number;
   employee_growth?: string;
   market_position?: string;
   market_share_info?: string;
   growth_rate?: number;
   ranking_positions?: RankingPosition[];
+  fleet_size?: number;
+  warehouse_area_sqm?: number;
   
   // SEKCJA 4: Model biznesowy
   business_model?: string;
@@ -309,6 +348,7 @@ export interface CompanyAnalysis {
   
   // SEKCJA 13: Zarząd i organizacja
   management?: ManagementPerson[] | string;
+  shareholders?: Shareholder[];
   company_size?: string;
   company_culture?: string;
   organizational_structure?: string;
