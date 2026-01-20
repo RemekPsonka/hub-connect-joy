@@ -370,8 +370,11 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   
   const city = siedzibaAdres?.miejscowosc || siedziba?.miejscowosc || null;
   const postalCode = siedzibaAdres?.kodPocztowy || null;
-  const nip = napiData?.nip || null;
-  const regon = napiData?.regon || null;
+  
+  // NIP/REGON can be in different places in OdpisPelny response
+  const nip = napiData?.nip || krsData.odpis?.napiData?.nip || dzial1?.identyfikatory?.nip || null;
+  const regon = napiData?.regon || krsData.odpis?.napiData?.regon || dzial1?.identyfikatory?.regon || null;
+  console.log('[KRS API] NIP:', nip, 'REGON:', regon, 'napiData:', JSON.stringify(napiData)?.substring(0, 200));
   
   // Map legal form - handle object or string
   const formaPrawnaStr = typeof formaPrawna === 'string' 
@@ -389,40 +392,108 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   };
   const legalForm = formaPrawnaStr ? (legalFormMap[formaPrawnaStr.toUpperCase()] || formaPrawnaStr) : null;
   
-  // Extract management persons - handle multiple KRS API response structures
+  // Extract management persons - handle multiple KRS API response structures (OdpisPelny format)
   const management: Array<{ name: string; position: string }> = [];
-  console.log('[KRS API] dzial2.reprezentacja structure:', JSON.stringify(dzial2?.reprezentacja, null, 2)?.substring(0, 500));
+  console.log('[KRS API] dzial2.reprezentacja structure:', JSON.stringify(dzial2?.reprezentacja, null, 2)?.substring(0, 1000));
+  
+  // Helper function to extract name from nested KRS structure
+  const extractName = (imionaField: any, nazwiskoField: any): string | null => {
+    let firstName = '';
+    let lastName = '';
+    
+    // imiona can be: string, array [{imiona: {imie: "X", imieDrugie: "Y"}}], or {imie: "X"}
+    if (typeof imionaField === 'string') {
+      firstName = imionaField;
+    } else if (Array.isArray(imionaField) && imionaField.length > 0) {
+      const first = imionaField[0];
+      if (first?.imiona?.imie) {
+        firstName = first.imiona.imie;
+        if (first.imiona.imieDrugie) firstName += ' ' + first.imiona.imieDrugie;
+      } else if (first?.imiona && typeof first.imiona === 'string') {
+        firstName = first.imiona;
+      } else if (typeof first === 'string') {
+        firstName = first;
+      }
+    } else if (imionaField?.imie) {
+      firstName = imionaField.imie;
+    }
+    
+    // nazwisko can be: string, array [{nazwisko: {nazwiskoICzlon: "X"}}], or {nazwiskoICzlon: "X"}
+    if (typeof nazwiskoField === 'string') {
+      lastName = nazwiskoField;
+    } else if (Array.isArray(nazwiskoField) && nazwiskoField.length > 0) {
+      const first = nazwiskoField[0];
+      if (first?.nazwisko?.nazwiskoICzlon) {
+        lastName = first.nazwisko.nazwiskoICzlon;
+      } else if (first?.nazwisko && typeof first.nazwisko === 'string') {
+        lastName = first.nazwisko;
+      } else if (typeof first === 'string') {
+        lastName = first;
+      }
+    } else if (nazwiskoField?.nazwiskoICzlon) {
+      lastName = nazwiskoField.nazwiskoICzlon;
+    }
+    
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+    return null;
+  };
+  
+  // Helper to extract position/function
+  const extractPosition = (funkcjaField: any): string => {
+    if (typeof funkcjaField === 'string') return funkcjaField;
+    if (Array.isArray(funkcjaField) && funkcjaField.length > 0) {
+      const first = funkcjaField[0];
+      return first?.funkcjaWOrganie || first?.funkcja || 'Członek Zarządu';
+    }
+    if (funkcjaField?.funkcjaWOrganie) return funkcjaField.funkcjaWOrganie;
+    return 'Członek Zarządu';
+  };
   
   // Try multiple paths where management data can be located
   const reprezentacja = dzial2?.reprezentacja;
-  const skladSources = [
-    reprezentacja?.sklad,
-    reprezentacja?.skladOrganu,
-    reprezentacja?.organReprezentacji?.sklad,
-  ].filter(Boolean);
+  const skladSources: any[] = [];
+  
+  if (reprezentacja?.sklad) skladSources.push(reprezentacja.sklad);
+  if (reprezentacja?.skladOrganu) skladSources.push(reprezentacja.skladOrganu);
+  if (reprezentacja?.organReprezentacji?.sklad) skladSources.push(reprezentacja.organReprezentacji.sklad);
+  
+  // If reprezentacja is an array (OdpisPelny format)
+  if (Array.isArray(reprezentacja)) {
+    for (const rep of reprezentacja) {
+      if (rep.sklad) skladSources.push(rep.sklad);
+      if (rep.skladOrganu) skladSources.push(rep.skladOrganu);
+    }
+  }
+  
+  console.log(`[KRS API] Found ${skladSources.length} potential management sources`);
   
   for (const sklad of skladSources) {
     if (Array.isArray(sklad)) {
-      for (const group of sklad) {
-        // Try multiple paths for persons within a group
-        const persons = group.sklad || group.osoby || group.czlonkowie || (Array.isArray(group) ? group : [group]);
+      for (const personEntry of sklad) {
+        // Each personEntry may have imiona, nazwisko, funkcjaWOrganie directly
+        const fullName = extractName(personEntry.imiona, personEntry.nazwisko);
+        if (fullName) {
+          const position = extractPosition(personEntry.funkcjaWOrganie || personEntry.funkcja);
+          management.push({ name: fullName, position });
+        }
         
-        if (Array.isArray(persons)) {
-          for (const personEntry of persons) {
-            // Person can be nested under 'osoba' or directly available
-            const person = personEntry.osoba || personEntry;
-            if (person?.imiona && person?.nazwisko) {
-              management.push({
-                name: `${person.imiona} ${person.nazwisko}`,
-                position: personEntry.funkcja || person.funkcja || 'Członek Zarządu',
-              });
+        // Or it may have nested sklad/osoby
+        const nestedPersons = personEntry.sklad || personEntry.osoby || [];
+        if (Array.isArray(nestedPersons)) {
+          for (const nested of nestedPersons) {
+            const nestedName = extractName(nested.imiona, nested.nazwisko);
+            if (nestedName) {
+              const nestedPosition = extractPosition(nested.funkcjaWOrganie || nested.funkcja);
+              management.push({ name: nestedName, position: nestedPosition });
             }
           }
         }
       }
     }
   }
-  console.log(`[KRS API] Extracted ${management.length} management persons`);
+  console.log(`[KRS API] Extracted ${management.length} management persons:`, JSON.stringify(management));
   
   // Extract partners
   const partners: Array<{ name: string; position: string }> = [];
