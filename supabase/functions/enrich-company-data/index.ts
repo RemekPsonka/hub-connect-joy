@@ -233,7 +233,11 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
   const nip = napiData?.nip || null;
   const regon = napiData?.regon || null;
   
-  // Map legal form
+  // Map legal form - handle object or string
+  const formaPrawnaStr = typeof formaPrawna === 'string' 
+    ? formaPrawna 
+    : (formaPrawna?.nazwa || formaPrawna?.wartość || String(formaPrawna || ''));
+  
   const legalFormMap: Record<string, string> = {
     'SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ': 'sp_z_oo',
     'SPÓŁKA AKCYJNA': 'sa',
@@ -243,7 +247,7 @@ async function fetchKRSData(krs: string): Promise<KRSApiData | null> {
     'SPÓŁKA KOMANDYTOWO-AKCYJNA': 'spolka_komandytowa',
     'PROSTA SPÓŁKA AKCYJNA': 'psa',
   };
-  const legalForm = formaPrawna ? (legalFormMap[formaPrawna.toUpperCase()] || formaPrawna) : null;
+  const legalForm = formaPrawnaStr ? (legalFormMap[formaPrawnaStr.toUpperCase()] || formaPrawnaStr) : null;
   
   // Extract management persons
   const management: Array<{ name: string; position: string }> = [];
