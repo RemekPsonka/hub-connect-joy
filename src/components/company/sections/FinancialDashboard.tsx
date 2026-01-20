@@ -32,6 +32,7 @@ import {
   ComposedChart
 } from 'recharts';
 import type { CompanyAnalysis, FinancialStatement, RevenueHistory } from '../types';
+import { safeNumber } from '../utils';
 
 interface FinancialDashboardProps {
   data: CompanyAnalysis;
@@ -39,26 +40,28 @@ interface FinancialDashboardProps {
   isUpdatingRevenue?: boolean;
 }
 
-// Format currency values
-function formatCurrency(amount: number | undefined, short = false): string {
-  if (!amount) return '-';
-  if (amount >= 1_000_000_000) {
-    return `${(amount / 1_000_000_000).toFixed(short ? 1 : 2)} mld PLN`;
+// Format currency values - safely handles number, string, or object
+function formatCurrency(amount: number | string | object | undefined, short = false): string {
+  const numAmount = safeNumber(amount);
+  if (!numAmount) return '-';
+  if (numAmount >= 1_000_000_000) {
+    return `${(numAmount / 1_000_000_000).toFixed(short ? 1 : 2)} mld PLN`;
   }
-  if (amount >= 1_000_000) {
-    return `${(amount / 1_000_000).toFixed(short ? 0 : 1)} mln PLN`;
+  if (numAmount >= 1_000_000) {
+    return `${(numAmount / 1_000_000).toFixed(short ? 0 : 1)} mln PLN`;
   }
-  if (amount >= 1_000) {
-    return `${(amount / 1_000).toFixed(0)} tys. PLN`;
+  if (numAmount >= 1_000) {
+    return `${(numAmount / 1_000).toFixed(0)} tys. PLN`;
   }
-  return `${amount} PLN`;
+  return `${numAmount} PLN`;
 }
 
-// Format percentage with sign
-function formatPercent(value: number | undefined): string {
-  if (value === undefined || value === null) return '-';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(1)}%`;
+// Format percentage with sign - safely handles number, string, or object
+function formatPercent(value: number | string | object | undefined): string {
+  const numValue = safeNumber(value);
+  if (numValue === undefined) return '-';
+  const sign = numValue > 0 ? '+' : '';
+  return `${sign}${numValue.toFixed(1)}%`;
 }
 
 // KPI Card Component
@@ -116,14 +119,14 @@ export function FinancialDashboard({
   const financialStatements: FinancialStatement[] = data.financial_statements || [];
   const rankingPositions = data.ranking_positions || [];
   
-  // Get latest financial data
-  const latestRevenue = data.revenue?.amount;
+  // Get latest financial data - safely handle object or number
+  const latestRevenue = safeNumber(data.revenue?.amount);
   const latestYear = data.revenue?.year;
   
-  // Calculate YoY growth
+  // Calculate YoY growth - safely parse growth_rate which can be number, string, or object
   const currentYearData = revenueHistory.find(r => r.year === latestYear);
-  const prevYearData = revenueHistory.find(r => r.year === (latestYear || 0) - 1);
-  const yoyGrowth = currentYearData?.growth_pct || data.growth_rate;
+  const rawGrowth = currentYearData?.growth_pct ?? data.growth_rate;
+  const yoyGrowth = safeNumber(rawGrowth);
   
   // Prepare chart data - combine revenue history with financial statements
   const chartData = revenueHistory.length > 0 

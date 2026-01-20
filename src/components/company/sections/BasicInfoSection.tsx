@@ -2,12 +2,11 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Building, Calendar, Tag } from 'lucide-react';
 import type { SectionProps } from '../types';
-import { safeString } from '../utils';
+import { safeString, safeArray } from '../utils';
 
 export function BasicInfoSection({ data }: SectionProps) {
-  const subIndustries = typeof data.sub_industries === 'string' 
-    ? [data.sub_industries] 
-    : data.sub_industries || [];
+  // Use safeArray to handle string, array of strings, or array of objects
+  const subIndustries = safeArray(data.sub_industries);
 
   const yearFounded = data.year_founded || data.founding_year;
 
