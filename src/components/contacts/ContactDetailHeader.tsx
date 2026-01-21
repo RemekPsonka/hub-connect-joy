@@ -67,7 +67,7 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
         Powrót do kontaktów
       </Button>
 
-      {/* SEKCJA 1: Osoba + Akcje */}
+      {/* SEKCJA 1: Osoba + Akcje + Firma */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         {/* Left side - Avatar and person info */}
         <div className="flex items-start gap-4">
@@ -128,97 +128,79 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
               )}
             </div>
             
-            {/* Group badge */}
+            {/* Group badge - small */}
             <div className="pt-1">
-              <GroupBadge group={contact.contact_groups} />
+              <GroupBadge group={contact.contact_groups} className="text-xs py-0 px-1.5" />
             </div>
           </div>
         </div>
 
-        {/* Right side - Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
-            <CalendarPlus className="h-4 w-4 mr-1.5" />
-            Konsultacja
-          </Button>
-          <Button 
-            variant={isOwner ? "secondary" : "outline"} 
-            size="sm" 
-            onClick={() => toggleOwnerStatus.mutate({ contactId: contact.id, isOwner: !isOwner })}
-            disabled={toggleOwnerStatus.isPending}
-            className={isOwner ? "bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300" : ""}
-          >
-            <Crown className="h-4 w-4 mr-1.5" />
-            {isOwner ? "Właściciel" : "Ustaw właściciela"}
-          </Button>
-          {viewMode === 'company' && company ? (
-            <Button variant="outline" size="sm" onClick={() => setIsCompanyModalOpen(true)}>
-              <Edit className="h-4 w-4 mr-1.5" />
-              Edytuj firmę
+        {/* Right side - Actions + Company data */}
+        <div className="flex flex-col items-end gap-3">
+          {/* Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
+              <CalendarPlus className="h-4 w-4 mr-1.5" />
+              Konsultacja
             </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Edit className="h-4 w-4 mr-1.5" />
-              Edytuj
+            <Button 
+              variant={isOwner ? "secondary" : "outline"} 
+              size="sm" 
+              onClick={() => toggleOwnerStatus.mutate({ contactId: contact.id, isOwner: !isOwner })}
+              disabled={toggleOwnerStatus.isPending}
+              className={isOwner ? "bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300" : ""}
+            >
+              <Crown className="h-4 w-4 mr-1.5" />
+              {isOwner ? "Właściciel" : "Ustaw właściciela"}
             </Button>
-          )}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                <Trash2 className="h-4 w-4" />
+            {viewMode === 'company' && company ? (
+              <Button variant="outline" size="sm" onClick={() => setIsCompanyModalOpen(true)}>
+                <Edit className="h-4 w-4 mr-1.5" />
+                Edytuj firmę
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Usunąć kontakt?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Czy na pewno chcesz usunąć kontakt {contact.full_name}? Ta operacja jest nieodwracalna.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Anuluj</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Usuń</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onEdit}>
+                <Edit className="h-4 w-4 mr-1.5" />
+                Edytuj
+              </Button>
+            )}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Usunąć kontakt?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Czy na pewno chcesz usunąć kontakt {contact.full_name}? Ta operacja jest nieodwracalna.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Usuń</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
 
-      {/* SEKCJA 2: Wskaźniki relacji */}
-      <div className="flex flex-wrap items-center gap-6 text-sm border-t border-b border-border/50 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Siła relacji:</span>
-          <RelationshipStrengthBar 
-            value={contact.relationship_strength || 5} 
-            className="w-20" 
-            showLabel 
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Ostatni kontakt:</span>
-          <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>
-        </div>
-      </div>
-
-      {/* SEKCJA 3: Dane firmy - osobny blok */}
-      {(contact.companies || contact.company) && (
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+          {/* Company data - compact block under actions */}
           {contact.companies ? (
-            <div className="space-y-2">
-              {/* Company name + legal form */}
-              <div className="flex items-center gap-2">
-                <Building className="h-4 w-4 text-muted-foreground" />
+            <div className="text-right text-sm space-y-0.5 max-w-xs">
+              <div className="flex items-center justify-end gap-1.5">
+                <Building className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-medium">{contact.companies.name}</span>
                 {(contact.companies as any).legal_form && (
-                  <Badge variant="outline" className="text-xs font-normal">
+                  <Badge variant="outline" className="text-xs font-normal py-0 px-1">
                     {(contact.companies as any).legal_form}
                   </Badge>
                 )}
               </div>
               
-              {/* Registry IDs - single line with dots */}
+              {/* Registry IDs - single line */}
               {((contact.companies as any).nip || (contact.companies as any).krs || (contact.companies as any).regon) && (
-                <p className="text-xs text-muted-foreground font-mono pl-6">
+                <p className="text-xs text-muted-foreground font-mono">
                   {[
                     (contact.companies as any).nip && `NIP: ${(contact.companies as any).nip}`,
                     (contact.companies as any).krs && `KRS: ${(contact.companies as any).krs}`,
@@ -229,7 +211,7 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
               
               {/* Address */}
               {(contact.companies.address || contact.companies.city) && (
-                <p className="text-sm text-muted-foreground pl-6">
+                <p className="text-xs text-muted-foreground">
                   {[contact.companies.address, (contact.companies as any).postal_code, contact.companies.city].filter(Boolean).join(', ')}
                 </p>
               )}
@@ -240,19 +222,37 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
                   href={(contact.companies as any).website.startsWith('http') ? (contact.companies as any).website : `https://${(contact.companies as any).website}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1.5 pl-6"
+                  className="text-xs text-primary hover:underline inline-flex items-center justify-end gap-1"
                 >
-                  <Globe className="h-3.5 w-3.5" />
+                  <Globe className="h-3 w-3" />
                   {(contact.companies as any).website.replace(/^https?:\/\//, '')}
                 </a>
               )}
             </div>
           ) : contact.company ? (
-            <div className="flex items-center gap-2">
-              <Building className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{contact.company}</span>
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Building className="h-3.5 w-3.5" />
+              <span>{contact.company}</span>
             </div>
           ) : null}
+        </div>
+      </div>
+
+      {/* SEKCJA 2: Wskaźniki relacji - tylko dla widoku OSOBA */}
+      {viewMode === 'person' && (
+        <div className="flex flex-wrap items-center gap-6 text-sm border-t border-b border-border/50 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Siła relacji:</span>
+            <RelationshipStrengthBar 
+              value={contact.relationship_strength || 5} 
+              className="w-20" 
+              showLabel 
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Ostatni kontakt:</span>
+            <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>
+          </div>
         </div>
       )}
 
