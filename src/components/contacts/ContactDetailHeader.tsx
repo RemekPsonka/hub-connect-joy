@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown, Building } from 'lucide-react';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown, Building, Globe } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,21 +90,59 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
                 <p className="text-muted-foreground">{contact.position}</p>
               )}
               {contact.companies ? (
-                <>
-                  <p className="text-muted-foreground font-medium">
-                    {contact.companies.name}
-                  </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <p className="text-muted-foreground font-medium">
+                      {contact.companies.name}
+                    </p>
+                    {(contact.companies as any).legal_form && (
+                      <Badge variant="outline" className="text-xs">
+                        {(contact.companies as any).legal_form}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* Registry IDs */}
+                  {((contact.companies as any).nip || (contact.companies as any).krs || (contact.companies as any).regon) && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(contact.companies as any).nip && (
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          NIP: {(contact.companies as any).nip}
+                        </Badge>
+                      )}
+                      {(contact.companies as any).krs && (
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          KRS: {(contact.companies as any).krs}
+                        </Badge>
+                      )}
+                      {(contact.companies as any).regon && (
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          REGON: {(contact.companies as any).regon}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Address */}
                   {(contact.companies.address || contact.companies.city) && (
                     <p className="text-sm text-muted-foreground">
-                      {[
-                        contact.companies.address,
-                        contact.companies.postal_code,
-                        contact.companies.city,
-                        contact.companies.country
-                      ].filter(Boolean).join(', ')}
+                      {[contact.companies.address, (contact.companies as any).postal_code, contact.companies.city].filter(Boolean).join(', ')}
                     </p>
                   )}
-                </>
+                  
+                  {/* Website */}
+                  {(contact.companies as any).website && (
+                    <a 
+                      href={(contact.companies as any).website.startsWith('http') ? (contact.companies as any).website : `https://${(contact.companies as any).website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Globe className="h-3 w-3" />
+                      {(contact.companies as any).website.replace(/^https?:\/\//, '')}
+                    </a>
+                  )}
+                </div>
               ) : contact.company ? (
                 <p className="text-muted-foreground">{contact.company}</p>
               ) : null}
