@@ -1,10 +1,9 @@
-import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   CheckCircle2,
-  Circle,
   Loader2,
   RefreshCw,
   AlertCircle,
@@ -13,14 +12,13 @@ import {
   Search,
   DollarSign,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SourceDataViewer } from './SourceDataViewer';
 import { WebsiteDataViewer } from './WebsiteDataViewer';
 import { ExternalDataViewer } from './ExternalDataViewer';
 import { FinancialDataViewer } from './FinancialDataViewer';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import type { Company } from './CompanyPipelineController';
 
 interface SourcesTabContentProps {
@@ -55,6 +53,7 @@ type StageStatus = 'pending' | 'processing' | 'completed' | 'failed';
 interface StageConfig {
   id: string;
   title: string;
+  shortTitle: string;
   description: string;
   icon: React.ElementType;
   status: StageStatus;
@@ -64,6 +63,7 @@ interface StageConfig {
   onRun: () => void;
   data: any;
   DataViewer?: React.ComponentType<any>;
+  fetchedAt?: string | null;
 }
 
 function getStatusFromDb(status: string | null): StageStatus {
@@ -74,49 +74,81 @@ function getStatusFromDb(status: string | null): StageStatus {
   return 'pending';
 }
 
-function StatusIcon({ status, isLoading }: { status: StageStatus; isLoading: boolean }) {
-  if (isLoading) {
-    return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
-  }
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    case 'failed':
-      return <AlertCircle className="h-5 w-5 text-destructive" />;
-    case 'processing':
-      return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
+function getToolLabel(stageId: string, data: any): string {
+  switch (stageId) {
+    case 'source':
+      if (data?.source === 'krs_api') return 'API KRS';
+      if (data?.source === 'ceidg_api') return 'API CEIDG';
+      if (data?.source === 'perplexity') return 'Perplexity AI';
+      return 'API';
+    case 'www':
+      return 'Firecrawl';
+    case 'external':
+      return 'Perplexity AI';
+    case 'financials':
+      if (data?.source === 'rdf') return 'RDF API';
+      if (data?.source === 'perplexity') return 'Perplexity AI';
+      return 'API';
     default:
-      return <Circle className="h-5 w-5 text-muted-foreground" />;
+      return 'AI';
   }
 }
 
-function StageCard({ stage }: { stage: StageConfig }) {
-  const [isOpen, setIsOpen] = useState(stage.status === 'completed');
+function formatFetchDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  try {
+    return format(new Date(dateStr), 'd MMM yyyy, HH:mm', { locale: pl });
+  } catch {
+    return '';
+  }
+}
+
+function StageTabContent({ stage, company }: { stage: StageConfig; company: Company }) {
   const Icon = stage.icon;
+  const toolLabel = getToolLabel(stage.id, stage.data);
+  const fetchDate = formatFetchDate(stage.fetchedAt);
 
   return (
-    <Card className={stage.status === 'completed' ? 'border-green-200 dark:border-green-900' : ''}>
+    <Card>
       <CardContent className="pt-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5">
-              <StatusIcon status={stage.status} isLoading={stage.isLoading} />
+        {/* Status bar */}
+        <div className="flex items-center justify-between mb-4 pb-3 border-b">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{stage.title}</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-muted-foreground" />
-                <h4 className="font-medium">{stage.title}</h4>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">{stage.description}</p>
-              {stage.reason && !stage.canRun && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">{stage.reason}</p>
-              )}
-            </div>
+            
+            {stage.status === 'completed' ? (
+              <>
+                <Badge className="bg-green-500 hover:bg-green-600">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Dane pobrane
+                </Badge>
+                <Badge variant="outline">{toolLabel}</Badge>
+                {fetchDate && (
+                  <span className="text-xs text-muted-foreground">{fetchDate}</span>
+                )}
+              </>
+            ) : stage.status === 'processing' || stage.isLoading ? (
+              <Badge className="bg-primary">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Pobieranie...
+              </Badge>
+            ) : stage.status === 'failed' ? (
+              <Badge variant="destructive">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Błąd
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Brak danych</Badge>
+            )}
           </div>
-          <Button
-            size="sm"
+          
+          <Button 
+            size="sm" 
             variant={stage.status === 'completed' ? 'outline' : 'default'}
-            onClick={stage.onRun}
+            onClick={stage.onRun} 
             disabled={!stage.canRun || stage.isLoading}
           >
             {stage.isLoading ? (
@@ -131,47 +163,63 @@ function StageCard({ stage }: { stage: StageConfig }) {
             )}
           </Button>
         </div>
-
-        {/* Data preview */}
-        {stage.data && stage.DataViewer && (
-          <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="mt-3 w-full justify-between">
-                <span className="text-xs">
-                  {isOpen ? 'Zwiń podgląd' : 'Pokaż dane'}
-                </span>
-                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-3 pt-3 border-t">
-              <stage.DataViewer data={stage.data} company={stage.id === 'source' ? stage.data._company : undefined} />
-            </CollapsibleContent>
-          </Collapsible>
+        
+        {/* Reason why can't run */}
+        {stage.reason && !stage.canRun && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">{stage.reason}</p>
+        )}
+        
+        {/* Data viewer */}
+        {stage.data && stage.DataViewer ? (
+          <stage.DataViewer 
+            data={stage.id === 'source' ? { ...stage.data, _company: company } : stage.data} 
+            company={stage.id === 'source' ? company : undefined} 
+          />
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <Icon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">{stage.description}</p>
+            <p className="text-xs mt-1">Kliknij "Uruchom" aby pobrać dane</p>
+          </div>
         )}
       </CardContent>
     </Card>
   );
 }
 
+function StatusDot({ status, isLoading }: { status: StageStatus; isLoading: boolean }) {
+  if (isLoading) {
+    return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
+  }
+  if (status === 'completed') {
+    return <span className="h-2 w-2 rounded-full bg-green-500" />;
+  }
+  if (status === 'failed') {
+    return <span className="h-2 w-2 rounded-full bg-destructive" />;
+  }
+  if (status === 'processing') {
+    return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
+  }
+  return <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />;
+}
+
 export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTabContentProps) {
-  // Extract email domain for pipeline
   const emailDomain = contactEmail?.split('@')[1];
 
-  // Determine stage statuses
   const sourceStatus = getStatusFromDb(company.source_data_status);
   const wwwStatus = getStatusFromDb(company.www_data_status);
   const externalStatus = getStatusFromDb(company.external_data_status);
   const financialStatus = getStatusFromDb(company.financial_data_status);
   const profileStatus = getStatusFromDb(company.company_analysis_status);
 
-  // Check if synthesis can run
   const canSynthesize = sourceStatus === 'completed' && 
     (wwwStatus === 'completed' || externalStatus === 'completed');
 
   const stages: StageConfig[] = [
     {
       id: 'source',
-      title: 'Etap 1: Dane rejestrowe',
+      title: 'Dane rejestrowe',
+      shortTitle: 'Rejestr',
       description: 'Weryfikacja w KRS/CEIDG lub przez AI',
       icon: Database,
       status: sourceStatus,
@@ -183,17 +231,16 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
         existingKrs: company.krs || undefined,
         existingNip: company.nip || undefined,
       }),
-      data: company.source_data_api ? { 
-        ...company.source_data_api as object,
-        _company: company 
-      } : null,
+      data: company.source_data_api as object | null,
       DataViewer: ({ data, company: comp }: any) => (
         <SourceDataViewer data={data} company={comp || company} />
       ),
+      fetchedAt: company.source_data_date,
     },
     {
       id: 'www',
-      title: 'Etap 2: Analiza strony WWW',
+      title: 'Analiza strony WWW',
+      shortTitle: 'WWW',
       description: 'Skanowanie strony firmowej (Firecrawl)',
       icon: Globe,
       status: wwwStatus,
@@ -203,10 +250,12 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
       onRun: () => company.website && pipeline.scanWebsite.mutate({ website: company.website }),
       data: company.www_data as object | null,
       DataViewer: WebsiteDataViewer,
+      fetchedAt: (company.www_data as any)?.scanned_at || (company.www_data as any)?.scan_date || company.www_data_date,
     },
     {
       id: 'external',
-      title: 'Etap 3: Analiza zewnętrzna',
+      title: 'Analiza zewnętrzna',
+      shortTitle: 'External',
       description: 'Wyszukiwanie informacji (Perplexity AI)',
       icon: Search,
       status: externalStatus,
@@ -215,10 +264,12 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
       onRun: () => pipeline.analyzeExternal.mutate({ companyName: company.name }),
       data: company.external_data as object | null,
       DataViewer: ExternalDataViewer,
+      fetchedAt: (company.external_data as any)?.analyzed_at || company.external_data_date,
     },
     {
       id: 'financials',
-      title: 'Etap 4: Dane finansowe 3Y',
+      title: 'Dane finansowe 3Y',
+      shortTitle: 'Finanse',
       description: 'Pobieranie danych finansowych za 3 lata',
       icon: DollarSign,
       status: financialStatus,
@@ -230,17 +281,37 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
       }),
       data: company.financial_data_3y as object | null,
       DataViewer: FinancialDataViewer,
+      fetchedAt: (company.financial_data_3y as any)?.fetched_at || company.financial_data_date,
     },
   ];
 
+  // Find first tab with data, or default to 'source'
+  const defaultTab = stages.find(s => s.status === 'completed')?.id || 'source';
+
   return (
     <div className="space-y-4">
-      {/* Pipeline stages */}
-      <div className="grid gap-4">
+      {/* Pipeline stages as tabs */}
+      <Tabs defaultValue={defaultTab} className="w-full">
+        <TabsList className="grid grid-cols-4 w-full">
+          {stages.map((stage) => (
+            <TabsTrigger 
+              key={stage.id} 
+              value={stage.id}
+              className="flex items-center gap-2"
+            >
+              <StatusDot status={stage.status} isLoading={stage.isLoading} />
+              <span className="hidden sm:inline">{stage.shortTitle}</span>
+              <stage.icon className="h-4 w-4 sm:hidden" />
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        
         {stages.map((stage) => (
-          <StageCard key={stage.id} stage={stage} />
+          <TabsContent key={stage.id} value={stage.id} className="mt-4">
+            <StageTabContent stage={stage} company={company} />
+          </TabsContent>
         ))}
-      </div>
+      </Tabs>
 
       {/* Synthesis button - prominent */}
       <Card className={profileStatus === 'completed' 
@@ -253,19 +324,25 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="mt-0.5">
-                <StatusIcon status={profileStatus} isLoading={pipeline.synthesizeProfile.isPending} />
+                {pipeline.synthesizeProfile.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                ) : profileStatus === 'completed' ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : (
+                  <Sparkles className="h-5 w-5 text-muted-foreground" />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  <h4 className="font-medium">Etap 5: Synteza Profilu AI</h4>
+                  <h4 className="font-medium">Synteza Profilu AI</h4>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Połączenie wszystkich źródeł w kompleksowy profil firmy
                 </p>
                 {!canSynthesize && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    Wymaga: Etap 1 (dane rejestrowe) + Etap 2 lub 3 (WWW lub Perplexity)
+                    Wymaga: Dane rejestrowe + (WWW lub External)
                   </p>
                 )}
               </div>
@@ -290,13 +367,13 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
           <div className="mt-4 flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Postęp:</span>
             <div className="flex gap-1">
-              {stages.map((s) => (
+              {stages.map((s, i) => (
                 <Badge 
                   key={s.id}
                   variant={s.status === 'completed' ? 'default' : 'outline'}
                   className={`text-xs ${s.status === 'completed' ? 'bg-green-500' : ''}`}
                 >
-                  {s.id === 'source' ? '1' : s.id === 'www' ? '2' : s.id === 'external' ? '3' : '4'}
+                  {i + 1}
                 </Badge>
               ))}
               <Badge 
