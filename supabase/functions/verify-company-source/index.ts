@@ -297,6 +297,269 @@ Odpowiedz krótko, tylko fakty.`
   }
 }
 
+// Helper: Extract shareholders from dzial2
+function extractShareholders(dzial2: any): Array<{
+  name: string;
+  type: 'person' | 'company';
+  shares_count?: number;
+  shares_value?: number;
+  krs?: string;
+  nip?: string;
+  verified: boolean;
+}> {
+  const shareholders: Array<{
+    name: string;
+    type: 'person' | 'company';
+    shares_count?: number;
+    shares_value?: number;
+    krs?: string;
+    nip?: string;
+    verified: boolean;
+  }> = [];
+  
+  try {
+    const wspolnicy = dzial2?.wspolnicy || {};
+    
+    // Wspólnicy sp. z o.o. - osoby fizyczne
+    const wspolnikSpZoo = wspolnicy?.wspolnikSpZoo || wspolnicy?.wspolnik || [];
+    const wspolnikArray = Array.isArray(wspolnikSpZoo) ? wspolnikSpZoo : [wspolnikSpZoo];
+    
+    for (const w of wspolnikArray) {
+      if (!w) continue;
+      const osoba = w?.wspólnik?.osoba || w?.osoba || w;
+      const udzialy = w?.posiadaneUdzialy || w?.udzialy || {};
+      
+      const imiona = osoba?.imiona || osoba?.imie;
+      const nazwisko = osoba?.nazwisko;
+      const name = extractName(imiona, nazwisko);
+      
+      if (name) {
+        shareholders.push({
+          name,
+          type: 'person',
+          shares_count: parseFloat(udzialy?.liczbaUdzialow || udzialy?.iloscUdzialow || udzialy?.liczba || '0') || undefined,
+          shares_value: parseFloat(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || udzialy?.wartoscNominalna || '0') || undefined,
+          verified: true
+        });
+      }
+    }
+    
+    // Wspólnicy - osoby prawne
+    const wspolnikPrawny = wspolnicy?.wspolnikPrawny || [];
+    const prawnyArray = Array.isArray(wspolnikPrawny) ? wspolnikPrawny : [wspolnikPrawny];
+    
+    for (const w of prawnyArray) {
+      if (!w) continue;
+      const udzialy = w?.posiadaneUdzialy || {};
+      
+      shareholders.push({
+        name: w?.nazwa || w?.firma || w?.firmaLubNazwa || 'Osoba prawna',
+        type: 'company',
+        krs: w?.krs || undefined,
+        nip: w?.nip || undefined,
+        shares_count: parseFloat(udzialy?.liczbaUdzialow || '0') || undefined,
+        shares_value: parseFloat(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || '0') || undefined,
+        verified: true
+      });
+    }
+  } catch (e) {
+    console.error('[KRS] Error extracting shareholders:', e);
+  }
+  
+  return shareholders;
+}
+
+// Helper: Extract procurators from dzial2
+function extractProcurators(dzial2: any): Array<{ name: string; type: string; verified: boolean }> {
+  const procurators: Array<{ name: string; type: string; verified: boolean }> = [];
+  
+  try {
+    const prokura = dzial2?.prokura || dzial2?.prokurent || [];
+    const prokuraArray = Array.isArray(prokura) ? prokura : [prokura];
+    
+    for (const p of prokuraArray) {
+      if (!p) continue;
+      
+      // Get prokura type
+      const rodzaj = p?.rodzajProkury || p?.rodzaj || 'Prokura';
+      
+      // Extract persons from sklad
+      const sklad = p?.sklad || p?.prokurenci || [];
+      const skladArray = Array.isArray(sklad) ? sklad : [sklad];
+      
+      for (const person of skladArray) {
+        if (!person) continue;
+        const name = extractName(person.imiona || person.imie, person.nazwisko);
+        if (name) {
+          procurators.push({
+            name,
+            type: rodzaj,
+            verified: true
+          });
+        }
+      }
+      
+      // If prokura entry has direct name (single prokurent)
+      if (!sklad.length && (p?.imiona || p?.imie)) {
+        const name = extractName(p.imiona || p.imie, p.nazwisko);
+        if (name) {
+          procurators.push({
+            name,
+            type: rodzaj,
+            verified: true
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[KRS] Error extracting procurators:', e);
+  }
+  
+  return procurators;
+}
+
+// Helper: Extract supervisory board from dzial2
+function extractSupervisoryBoard(dzial2: any): Array<{ name: string; position: string; verified: boolean }> {
+  const board: Array<{ name: string; position: string; verified: boolean }> = [];
+  
+  try {
+    const organNadzoru = dzial2?.organNadzoru || dzial2?.radaNadzorcza || [];
+    const organArray = Array.isArray(organNadzoru) ? organNadzoru : [organNadzoru];
+    
+    for (const organ of organArray) {
+      if (!organ) continue;
+      
+      const sklad = organ?.sklad || organ?.skladOrganu || [];
+      const skladArray = Array.isArray(sklad) ? sklad : [sklad];
+      
+      for (const person of skladArray) {
+        if (!person) continue;
+        const name = extractName(person.imiona || person.imie, person.nazwisko);
+        if (name) {
+          board.push({
+            name,
+            position: person?.funkcjaWOrganie || person?.funkcja || 'Członek Rady Nadzorczej',
+            verified: true
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[KRS] Error extracting supervisory board:', e);
+  }
+  
+  return board;
+}
+
+// Helper: Extract share capital from dzial1
+function extractShareCapital(dzial1: any): {
+  amount: number | null;
+  currency: string;
+  shares_total: number | null;
+  share_unit_value: number | null;
+  paid_up: number | null;
+} {
+  try {
+    const kapital = dzial1?.kapitalSpolki || dzial1?.kapital || {};
+    
+    // wysokoscKapitaluZakladowego can be object or string
+    let amount: number | null = null;
+    const wysokosc = kapital?.wysokoscKapitaluZakladowego;
+    if (typeof wysokosc === 'object' && wysokosc?.wartosc) {
+      amount = parseFloat(wysokosc.wartosc);
+    } else if (typeof wysokosc === 'string' || typeof wysokosc === 'number') {
+      amount = parseFloat(String(wysokosc).replace(/[^\d.,]/g, '').replace(',', '.'));
+    }
+    
+    const currency = kapital?.waluta || kapital?.wysokoscKapitaluZakladowego?.waluta || 'PLN';
+    const sharesTotalRaw = kapital?.iloscWszystkichUdzialow || kapital?.liczbaUdzialow;
+    const sharesTotal = sharesTotalRaw ? parseFloat(sharesTotalRaw) : null;
+    
+    const shareUnitRaw = kapital?.wartoscJednegoUdzialu || kapital?.wartoscNominalnaUdzialu;
+    let shareUnitValue: number | null = null;
+    if (typeof shareUnitRaw === 'object' && shareUnitRaw?.wartosc) {
+      shareUnitValue = parseFloat(shareUnitRaw.wartosc);
+    } else if (shareUnitRaw) {
+      shareUnitValue = parseFloat(String(shareUnitRaw).replace(/[^\d.,]/g, '').replace(',', '.'));
+    }
+    
+    const paidUpRaw = kapital?.oplaconaWartosc || kapital?.kapitaOplacony;
+    let paidUp: number | null = null;
+    if (typeof paidUpRaw === 'object' && paidUpRaw?.wartosc) {
+      paidUp = parseFloat(paidUpRaw.wartosc);
+    } else if (paidUpRaw) {
+      paidUp = parseFloat(String(paidUpRaw).replace(/[^\d.,]/g, '').replace(',', '.'));
+    }
+    
+    return { amount, currency, shares_total: sharesTotal, share_unit_value: shareUnitValue, paid_up: paidUp };
+  } catch (e) {
+    console.error('[KRS] Error extracting share capital:', e);
+    return { amount: null, currency: 'PLN', shares_total: null, share_unit_value: null, paid_up: null };
+  }
+}
+
+// Helper: Extract branches from dzial1
+function extractBranches(dzial1: any): Array<{ name: string; address: string; city: string; postal_code?: string }> {
+  const branches: Array<{ name: string; address: string; city: string; postal_code?: string }> = [];
+  
+  try {
+    const oddzialy = dzial1?.oddzialy || [];
+    const oddzialyArray = Array.isArray(oddzialy) ? oddzialy : [oddzialy];
+    
+    for (const o of oddzialyArray) {
+      if (!o) continue;
+      const adres = o?.adres || o?.adresSiedziby || {};
+      
+      branches.push({
+        name: o?.nazwaOddzialu || o?.nazwa || 'Oddział',
+        address: adres?.ulica ? `${adres.ulica} ${adres.nrDomu || ''}${adres.nrLokalu ? '/' + adres.nrLokalu : ''}`.trim() : '',
+        city: adres?.miejscowosc || '',
+        postal_code: adres?.kodPocztowy
+      });
+    }
+  } catch (e) {
+    console.error('[KRS] Error extracting branches:', e);
+  }
+  
+  return branches;
+}
+
+// Helper: Extract registry court info from odpis
+function extractRegistryCourt(krsData: any): { name: string | null; department: string | null; entry_number: string | null } {
+  try {
+    const naglowek = krsData?.odpis?.naglowek || krsData?.odpis?.sad || {};
+    return {
+      name: naglowek?.sad || naglowek?.nazwaSadu || null,
+      department: naglowek?.wydzial || naglowek?.nazwaWydzialu || null,
+      entry_number: naglowek?.numerWpisu || null
+    };
+  } catch (e) {
+    return { name: null, department: null, entry_number: null };
+  }
+}
+
+// Helper: Extract all important dates
+function extractDates(dzial1: any, dzial6: any): {
+  registration: string | null;
+  first_entry: string | null;
+  deletion: string | null;
+  suspension_start: string | null;
+  suspension_end: string | null;
+} {
+  try {
+    const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || dzial6 || {};
+    return {
+      registration: dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || null,
+      first_entry: statusInfo?.dataWpisuDoRejestru || statusInfo?.dataPierwszegoWpisu || null,
+      deletion: statusInfo?.dataWykreslenia || null,
+      suspension_start: statusInfo?.dataZawieszenia || null,
+      suspension_end: statusInfo?.dataWznowienia || null
+    };
+  } catch (e) {
+    return { registration: null, first_entry: null, deletion: null, suspension_start: null, suspension_end: null };
+  }
+}
+
 // Parse KRS response - using OdpisPelny structure (same as fetch-krs-data)
 function parseKRSResponse(krsData: any): any {
   try {
@@ -341,6 +604,11 @@ function parseKRSResponse(krsData: any): any {
     const postalCode = siedzibaAdres?.kodPocztowy || null;
     
     const addressFull = [addressParts, postalCode, city].filter(Boolean).join(', ');
+    
+    // Contact info from KRS (if available)
+    const email = siedzibaAdres?.email || siedzibaAdres?.adresEmail || null;
+    const phone = siedzibaAdres?.telefon || siedzibaAdres?.numerTelefonu || null;
+    const websiteKrs = siedzibaAdres?.www || siedzibaAdres?.stronaWWW || null;
     
     // Legal form
     const rawFormaPrawna = dzial1?.danePodmiotu?.formaPrawna;
@@ -423,9 +691,19 @@ function parseKRSResponse(krsData: any): any {
       ...pkdPozostalaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean)
     ];
     
-    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length} persons`);
+    // Extract additional data using helper functions
+    const shareholders = extractShareholders(dzial2);
+    const procurators = extractProcurators(dzial2);
+    const supervisoryBoard = extractSupervisoryBoard(dzial2);
+    const shareCapital = extractShareCapital(dzial1);
+    const branches = extractBranches(dzial1);
+    const registryCourt = extractRegistryCourt(krsData);
+    const dates = extractDates(dzial1, dzial6);
+    
+    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length}, shareholders=${shareholders.length}, procurators=${procurators.length}, supervisoryBoard=${supervisoryBoard.length}`);
     
     return {
+      // Basic data
       name_official: companyName,
       nip: nip,
       regon: regon,
@@ -433,13 +711,43 @@ function parseKRSResponse(krsData: any): any {
       address: addressParts || null,
       city: city,
       postal_code: postalCode,
-      registration_date: dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || null,
+      registration_date: dates.registration,
       legal_form: legalForm,
+      legal_form_name: formaPrawna,
       pkd_codes: pkdCodes,
       pkd_main: pkdCodes[0] || null,
-      management,
-      shareholders: [],
       status,
+      
+      // People
+      management,
+      shareholders,
+      procurators,
+      supervisory_board: supervisoryBoard,
+      
+      // Capital
+      share_capital: shareCapital.amount,
+      share_capital_currency: shareCapital.currency,
+      shares_total: shareCapital.shares_total,
+      share_unit_value: shareCapital.share_unit_value,
+      capital_paid_up: shareCapital.paid_up,
+      
+      // Registry court
+      registry_court: registryCourt.name,
+      registry_department: registryCourt.department,
+      entry_number: registryCourt.entry_number,
+      
+      // Branches
+      branches,
+      
+      // Dates
+      dates,
+      
+      // Contact from KRS
+      email_krs: email,
+      phone_krs: phone,
+      website_krs: websiteKrs,
+      
+      // Meta
       source: 'krs_api',
       confidence: 'verified',
       verified_at: new Date().toISOString()
