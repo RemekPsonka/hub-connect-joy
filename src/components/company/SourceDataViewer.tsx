@@ -57,8 +57,18 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const branches = data?.branches || [];
   const dates = data?.dates || {};
   
-  // NEW: Additional KRS OdpisPełny data
-  const representationRules = data?.representation_rules;
+  // Helper to safely extract string from potentially nested KRS objects
+  const safeString = (value: any): string | null => {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null) {
+      // KRS API sometimes returns objects with history keys
+      return value?.sposobReprezentacji || value?.opis || value?.nazwa || null;
+    }
+    return null;
+  };
+  
+  // NEW: Additional KRS OdpisPełny data (with safe extraction)
+  const representationRules = safeString(data?.representation_rules);
   const correspondenceAddress = data?.correspondence_address;
   const correspondenceCity = data?.correspondence_city;
   const correspondencePostalCode = data?.correspondence_postal_code;
