@@ -1,4 +1,7 @@
 export { CompanyAnalysisViewer } from './CompanyAnalysisViewer';
+export { CompanyKPIHeader } from './CompanyKPIHeader';
+export { CompanyFlatTabs } from './CompanyFlatTabs';
+export { SourcesTabContent } from './SourcesTabContent';
 export { AnalysisHeader } from './AnalysisHeader';
 export { AnalysisDashboardHeader } from './AnalysisDashboardHeader';
 export { ConfidenceIndicator, ConfidenceDot } from './ConfidenceIndicator';

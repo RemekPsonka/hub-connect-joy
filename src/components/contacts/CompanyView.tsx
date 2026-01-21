@@ -17,7 +17,8 @@ import {
   useRemoveGroupCompany,
   useCreateCompanyFromDomain
 } from '@/hooks/useCompanies';
-import { CompanyPipelineController, CompanyHeaderCard } from '@/components/company';
+import { CompanyKPIHeader } from '@/components/company/CompanyKPIHeader';
+import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
 import type { ContactWithDetails } from '@/hooks/useContacts';
 
 interface CompanyViewProps {
@@ -130,11 +131,11 @@ export function CompanyView({ contact }: CompanyViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Company Header Card */}
-      <CompanyHeaderCard company={company} ownerContactId={contact.id} />
+      {/* Company Header with KPI Badges */}
+      <CompanyKPIHeader company={company} ownerContactId={contact.id} />
 
-      {/* Company Pipeline Controller - handles all 5 buttons and data tabs */}
-      <CompanyPipelineController
+      {/* Flat Tabs - Single layer structure */}
+      <CompanyFlatTabs
         company={company}
         contactEmail={contact.email}
         onUpdateRevenue={() => updateRevenue.mutate({ 
@@ -151,7 +152,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
         })}
       />
 
-      {/* People from this company */}
+      {/* People from this company - always visible below tabs */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">

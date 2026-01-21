@@ -23,6 +23,11 @@ import { CompanyAnalysisViewer } from './CompanyAnalysisViewer';
 export interface Company {
   id: string;
   name: string;
+  short_name?: string | null;
+  tagline?: string | null;
+  industry?: string | null;
+  company_size?: string | null;
+  logo_url?: string | null;
   website?: string | null;
   krs?: string | null;
   nip?: string | null;
