@@ -17,7 +17,7 @@ import {
   useRemoveGroupCompany,
   useCreateCompanyFromDomain
 } from '@/hooks/useCompanies';
-import { CompanyKPIHeader } from '@/components/company/CompanyKPIHeader';
+
 import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
 import type { ContactWithDetails } from '@/hooks/useContacts';
 
@@ -131,9 +131,6 @@ export function CompanyView({ contact }: CompanyViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Company Header with KPI Badges */}
-      <CompanyKPIHeader company={company} ownerContactId={contact.id} />
-
       {/* Flat Tabs - Single layer structure */}
       <CompanyFlatTabs
         company={company}
