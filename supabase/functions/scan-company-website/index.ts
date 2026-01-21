@@ -10,7 +10,8 @@ const PAGE_PRIORITIES: Record<string, number> = {
   'o-nas': 10, 'about': 10, 'o-firmie': 10, 'kim-jestesmy': 10, 'about-us': 10,
   'oferta': 9, 'uslugi': 9, 'services': 9, 'offer': 9, 'produkty': 9, 'products': 9,
   'realizacje': 8, 'portfolio': 8, 'projekty': 8, 'projects': 8, 'case-studies': 8,
-  'referencje': 7, 'klienci': 7, 'clients': 7, 'references': 7,
+  'referencje': 7, 'klienci': 7, 'clients': 7, 'references': 7, 'opinie': 7, 'testimonials': 7, 'reviews': 7,
+  'marki': 7, 'brands': 7, 'producenci': 7, 'dealers': 7, 'partnerzy': 7, 'partners': 7,
   'zespol': 6, 'team': 6, 'zarzad': 6, 'management': 6, 'nasz-zespol': 6,
   'historia': 5, 'history': 5, 'o-nas/historia': 5,
   'aktualnosci': 4, 'news': 4, 'blog': 4, 'nowosci': 4,
@@ -156,13 +157,15 @@ function extractSocialMedia(content: string): Record<string, string | null> {
 
 // Parse scraped content into structured data
 function parseScrapedContent(pages: Array<{ url: string; content: string; title?: string }>): any {
-  let aboutUs = '';
+  let description = '';
   let services: string[] = [];
   let products: string[] = [];
-  let team: string[] = [];
-  let history = '';
-  let projects: string[] = [];
-  let news: Array<{ title: string; date?: string }> = [];
+  let brands: string[] = [];
+  let realizations: string[] = [];
+  let references: string[] = [];
+  let management_web: Array<{ name: string; position?: string }> = [];
+  let company_history = '';
+  let latest_news: Array<{ title: string; date?: string }> = [];
   let allContent = '';
 
   for (const page of pages) {
@@ -170,14 +173,13 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
     const content = page.content;
     allContent += content + '\n';
 
-    // About us
+    // Description (about us)
     if (/o-nas|about|o-firmie|kim-jestesmy/.test(lowerUrl) && content.length > 100) {
-      aboutUs = content.slice(0, 2000);
+      description = content.slice(0, 2000);
     }
 
     // Services/Products
     if (/oferta|uslugi|services|produkty|products/.test(lowerUrl)) {
-      // Extract bullet points or headings
       const lines = content.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* ') || l.trim().startsWith('## '));
       const items = lines.map(l => l.replace(/^[-*#\s]+/, '').trim()).filter(l => l.length > 3 && l.length < 100);
       if (lowerUrl.includes('produkt')) {
@@ -187,54 +189,97 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
       }
     }
 
-    // Team
-    if (/zespol|team|zarzad|management/.test(lowerUrl)) {
-      // Look for names (simple heuristic)
-      const namePattern = /(?:^|\n)(?:#+\s*)?([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/g;
+    // Brands/Partners
+    if (/marki|brands|producenci|dealers|partnerzy|partners/.test(lowerUrl)) {
+      const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
+      brands.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(b => b.length > 2 && b.length < 50));
+      
+      const bullets = content.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
+      brands.push(...bullets.map(l => l.replace(/^[-*\s]+/, '').trim()).filter(b => b.length > 2 && b.length < 50));
+    }
+
+    // References/Testimonials
+    if (/referencje|opinie|testimonials|reviews|klienci|clients/.test(lowerUrl)) {
+      // Look for quotes
+      const quotes = content.match(/"([^"]{20,200})"/g) || [];
+      references.push(...quotes.slice(0, 10).map(q => q.replace(/"/g, '').trim()));
+      
+      // Look for company names in references
+      const companyPattern = /(?:dla|for)\s+(?:firmy\s+)?([A-ZŻŹĆĄŚĘŁÓŃ][A-Za-zżźćąśęłóń\s&]+(?:Sp\.\s*z\s*o\.o\.|S\.A\.|Ltd|GmbH)?)/gi;
       let match;
-      while ((match = namePattern.exec(content)) !== null) {
-        if (!team.includes(match[1])) {
-          team.push(match[1]);
+      while ((match = companyPattern.exec(content)) !== null) {
+        references.push(match[1].trim());
+      }
+    }
+
+    // Management/Team (with positions)
+    if (/zespol|team|zarzad|management/.test(lowerUrl)) {
+      // Pattern: Name - Position or Name\nPosition
+      const personPattern = /(?:^|\n)(?:#+\s*)?([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)(?:\s*[-–—]\s*|\n\s*)([A-ZŻŹĆĄŚĘŁÓŃa-zżźćąśęłóń\s]+)?/g;
+      let match;
+      const seenNames = new Set<string>();
+      while ((match = personPattern.exec(content)) !== null) {
+        const name = match[1].trim();
+        if (!seenNames.has(name)) {
+          seenNames.add(name);
+          const position = match[2]?.trim();
+          management_web.push({
+            name,
+            position: position && position.length > 2 && position.length < 60 ? position : undefined
+          });
         }
       }
     }
 
-    // History
+    // Company history
     if (/historia|history/.test(lowerUrl) && content.length > 100) {
-      history = content.slice(0, 1500);
+      company_history = content.slice(0, 1500);
     }
 
-    // Projects/Portfolio
+    // Realizations/Portfolio
     if (/realizacje|portfolio|projekty|projects|case/.test(lowerUrl)) {
       const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
-      projects.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(p => p.length > 3 && p.length < 100));
+      realizations.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(p => p.length > 3 && p.length < 100));
     }
 
-    // News
+    // Latest news (2023-2025)
     if (/aktualnosci|news|blog/.test(lowerUrl)) {
       const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
-      news.push(...headings.slice(0, 5).map(h => ({ title: h.replace(/^[\n#\s]+/, '').trim() })));
+      // Try to extract dates
+      headings.slice(0, 10).forEach(h => {
+        const title = h.replace(/^[\n#\s]+/, '').trim();
+        const dateMatch = title.match(/(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|\d{4}[.\/-]\d{1,2}[.\/-]\d{1,2})/);
+        latest_news.push({
+          title: title.replace(/\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}/, '').trim(),
+          date: dateMatch ? dateMatch[1] : undefined
+        });
+      });
     }
   }
 
   // Deduplicate
   services = [...new Set(services)].slice(0, 15);
   products = [...new Set(products)].slice(0, 15);
-  team = [...new Set(team)].slice(0, 10);
-  projects = [...new Set(projects)].slice(0, 10);
+  brands = [...new Set(brands)].slice(0, 15);
+  realizations = [...new Set(realizations)].slice(0, 15);
+  references = [...new Set(references)].slice(0, 15);
+  management_web = management_web.slice(0, 10);
+  latest_news = latest_news.slice(0, 10);
 
   // Extract social media from all content
-  const socialMedia = extractSocialMedia(allContent);
+  const social_media_links = extractSocialMedia(allContent);
 
   return {
-    about_us: aboutUs || null,
+    description: description || null,
     services: services.length > 0 ? services : null,
     products: products.length > 0 ? products : null,
-    team: team.length > 0 ? team : null,
-    history: history || null,
-    projects: projects.length > 0 ? projects : null,
-    news: news.length > 0 ? news : null,
-    social_media: socialMedia,
+    brands: brands.length > 0 ? brands : null,
+    realizations: realizations.length > 0 ? realizations : null,
+    references: references.length > 0 ? references : null,
+    management_web: management_web.length > 0 ? management_web : null,
+    company_history: company_history || null,
+    latest_news: latest_news.length > 0 ? latest_news : null,
+    social_media_links,
   };
 }
 
@@ -297,10 +342,11 @@ Deno.serve(async (req) => {
       if (homepage) {
         const wwwData = {
           pages_scanned: 1,
-          scan_date: new Date().toISOString(),
-          about_us: homepage.content.slice(0, 2000),
-          social_media: extractSocialMedia(homepage.content),
+          crawled_at: new Date().toISOString(),
+          description: homepage.content.slice(0, 2000),
+          social_media_links: extractSocialMedia(homepage.content),
           urls_found: 0,
+          crawled_urls: [normalizedUrl],
         };
 
         await supabase
@@ -354,8 +400,8 @@ Deno.serve(async (req) => {
       ...parsedData,
       pages_scanned: scrapedPages.length,
       urls_found: allUrls.length,
-      scan_date: new Date().toISOString(),
-      scanned_urls: scrapedPages.map(p => p.url),
+      crawled_at: new Date().toISOString(),
+      crawled_urls: scrapedPages.map(p => p.url),
     };
 
     // Save to database
