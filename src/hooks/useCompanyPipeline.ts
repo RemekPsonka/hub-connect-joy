@@ -24,6 +24,8 @@ export function useCompanyPipeline(companyId: string | undefined) {
   const invalidateCompany = () => {
     queryClient.invalidateQueries({ queryKey: ['company', companyId] });
     queryClient.invalidateQueries({ queryKey: ['companies'] });
+    queryClient.invalidateQueries({ queryKey: ['contact'] }); // Refresh contact views with company data
+    queryClient.invalidateQueries({ queryKey: ['contacts'] });
   };
 
   // Stage 1: Verify source data (KRS/CEIDG/Perplexity)
