@@ -162,17 +162,49 @@ Odpowiedz krótko, tylko fakty.`
     const data = await response.json();
     const rawContent = data?.choices?.[0]?.message?.content || '';
     
-    // Clean Perplexity citation markers [1][2] etc. before parsing
-    const content = rawContent.replace(/\[\d+\]/g, '');
+    // Clean Perplexity markdown formatting AND citation markers before parsing
+    const content = rawContent
+      .replace(/\[\d+\]/g, '')     // Remove [1][2][3] citations
+      .replace(/\*\*/g, '')        // Remove **bold** markdown
+      .replace(/\*/g, '')          // Remove *italic* markdown
+      .replace(/`/g, '');          // Remove `code` markdown
     
-    // Extract registry IDs with improved patterns
-    const nipMatch = content.match(/NIP[:\s]*(\d{10}|\d{3}[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})(?:[,.\s]|$)/i);
-    const krsMatch = content.match(/KRS[:\s]*(\d{10})(?:[,.\s]|$)/i);
-    const regonMatch = content.match(/REGON[:\s]*(\d{9}|\d{14})(?:[,.\s]|$)/i);
+    console.log(`[Perplexity] Cleaned content preview: ${content.substring(0, 300)}`);
     
-    const extractedKrs = krsMatch ? krsMatch[1] : undefined;
-    const extractedNip = nipMatch ? nipMatch[1].replace(/[-\s]/g, '') : undefined;
-    const extractedRegon = regonMatch ? regonMatch[1] : undefined;
+    // Extract registry IDs with flexible patterns (handle various separators)
+    let extractedNip: string | undefined;
+    let extractedKrs: string | undefined;
+    let extractedRegon: string | undefined;
+    
+    // NIP patterns - handle "NIP: 1234567890", "NIP 123-456-78-90", etc.
+    const nipMatch = content.match(/NIP\s*[:\-]?\s*(\d{10}|\d{3}[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})/i);
+    if (nipMatch) {
+      extractedNip = nipMatch[1].replace(/[-\s]/g, '');
+    } else {
+      // Fallback: find 10-digit number near "NIP" keyword
+      const nipFallback = content.match(/NIP.{0,15}?(\d{10})/i);
+      if (nipFallback) extractedNip = nipFallback[1];
+    }
+    
+    // KRS patterns - handle "KRS: 0000123456", "KRS 123456" (auto-pad), etc.
+    const krsMatch = content.match(/KRS\s*[:\-]?\s*(\d{10}|\d{6,9})/i);
+    if (krsMatch) {
+      extractedKrs = krsMatch[1].padStart(10, '0'); // Always 10 digits
+    } else {
+      // Fallback: find 10-digit number near "KRS" keyword
+      const krsFallback = content.match(/KRS.{0,15}?(\d{10})/i);
+      if (krsFallback) extractedKrs = krsFallback[1];
+    }
+    
+    // REGON patterns - handle 9 or 14 digit REGON
+    const regonMatch = content.match(/REGON\s*[:\-]?\s*(\d{14}|\d{9})/i);
+    if (regonMatch) {
+      extractedRegon = regonMatch[1];
+    } else {
+      // Fallback: find 9 or 14 digit number near "REGON" keyword
+      const regonFallback = content.match(/REGON.{0,15}?(\d{14}|\d{9})/i);
+      if (regonFallback) extractedRegon = regonFallback[1];
+    }
     
     console.log(`[Perplexity] Extracted: KRS=${extractedKrs}, NIP=${extractedNip}, REGON=${extractedRegon}`);
     
