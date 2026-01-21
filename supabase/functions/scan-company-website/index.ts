@@ -1,0 +1,395 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Priority pages to scan
+const PAGE_PRIORITIES: Record<string, number> = {
+  'o-nas': 10, 'about': 10, 'o-firmie': 10, 'kim-jestesmy': 10, 'about-us': 10,
+  'oferta': 9, 'uslugi': 9, 'services': 9, 'offer': 9, 'produkty': 9, 'products': 9,
+  'realizacje': 8, 'portfolio': 8, 'projekty': 8, 'projects': 8, 'case-studies': 8,
+  'referencje': 7, 'klienci': 7, 'clients': 7, 'references': 7,
+  'zespol': 6, 'team': 6, 'zarzad': 6, 'management': 6, 'nasz-zespol': 6,
+  'historia': 5, 'history': 5, 'o-nas/historia': 5,
+  'aktualnosci': 4, 'news': 4, 'blog': 4, 'nowosci': 4,
+  'kontakt': 3, 'contact': 3,
+  'kariera': 2, 'careers': 2, 'praca': 2,
+};
+
+// Social media patterns
+const SOCIAL_PATTERNS = {
+  linkedin: /linkedin\.com\/company\/[^\/\s"']+/gi,
+  facebook: /facebook\.com\/[^\/\s"']+/gi,
+  instagram: /instagram\.com\/[^\/\s"']+/gi,
+  twitter: /(?:twitter|x)\.com\/[^\/\s"']+/gi,
+  youtube: /youtube\.com\/(?:channel|c|user)\/[^\/\s"']+/gi,
+};
+
+// Map URL to get Firecrawl
+async function mapWebsite(url: string, apiKey: string): Promise<string[]> {
+  try {
+    console.log(`[Firecrawl] Mapping ${url}`);
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/map', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        limit: 100,
+        includeSubdomains: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[Firecrawl] Map failed:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return data?.links || [];
+  } catch (error) {
+    console.error('[Firecrawl] Map error:', error);
+    return [];
+  }
+}
+
+// Prioritize URLs
+function prioritizeUrls(urls: string[], baseUrl: string): string[] {
+  const scored = urls.map(url => {
+    const path = url.replace(baseUrl, '').toLowerCase();
+    let score = 0;
+    
+    for (const [pattern, priority] of Object.entries(PAGE_PRIORITIES)) {
+      if (path.includes(pattern)) {
+        score = Math.max(score, priority);
+      }
+    }
+    
+    // Penalize deep paths
+    const depth = (path.match(/\//g) || []).length;
+    score -= depth * 0.5;
+    
+    // Penalize pages with query params or anchors
+    if (url.includes('?') || url.includes('#')) score -= 3;
+    
+    // Penalize specific file types
+    if (/\.(pdf|jpg|png|gif|zip|doc)$/i.test(url)) score -= 10;
+    
+    return { url, score };
+  });
+  
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+  
+  // Return top 20 unique URLs
+  const seen = new Set<string>();
+  const result: string[] = [];
+  
+  for (const { url } of scored) {
+    const normalized = url.replace(/\/$/, '');
+    if (!seen.has(normalized) && result.length < 20) {
+      seen.add(normalized);
+      result.push(url);
+    }
+  }
+  
+  return result;
+}
+
+// Scrape a single page
+async function scrapePage(url: string, apiKey: string): Promise<{ url: string; content: string; title?: string } | null> {
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown', 'links'],
+        onlyMainContent: true,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Firecrawl] Scrape failed for ${url}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      url,
+      content: data?.data?.markdown || '',
+      title: data?.data?.metadata?.title || '',
+    };
+  } catch (error) {
+    console.error(`[Firecrawl] Scrape error for ${url}:`, error);
+    return null;
+  }
+}
+
+// Extract social media links from content
+function extractSocialMedia(content: string): Record<string, string | null> {
+  const result: Record<string, string | null> = {
+    linkedin: null,
+    facebook: null,
+    instagram: null,
+    twitter: null,
+    youtube: null,
+  };
+
+  for (const [platform, pattern] of Object.entries(SOCIAL_PATTERNS)) {
+    const matches = content.match(pattern);
+    if (matches && matches[0]) {
+      result[platform] = 'https://' + matches[0].replace(/^https?:\/\//, '');
+    }
+  }
+
+  return result;
+}
+
+// Parse scraped content into structured data
+function parseScrapedContent(pages: Array<{ url: string; content: string; title?: string }>): any {
+  let aboutUs = '';
+  let services: string[] = [];
+  let products: string[] = [];
+  let team: string[] = [];
+  let history = '';
+  let projects: string[] = [];
+  let news: Array<{ title: string; date?: string }> = [];
+  let allContent = '';
+
+  for (const page of pages) {
+    const lowerUrl = page.url.toLowerCase();
+    const content = page.content;
+    allContent += content + '\n';
+
+    // About us
+    if (/o-nas|about|o-firmie|kim-jestesmy/.test(lowerUrl) && content.length > 100) {
+      aboutUs = content.slice(0, 2000);
+    }
+
+    // Services/Products
+    if (/oferta|uslugi|services|produkty|products/.test(lowerUrl)) {
+      // Extract bullet points or headings
+      const lines = content.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* ') || l.trim().startsWith('## '));
+      const items = lines.map(l => l.replace(/^[-*#\s]+/, '').trim()).filter(l => l.length > 3 && l.length < 100);
+      if (lowerUrl.includes('produkt')) {
+        products.push(...items);
+      } else {
+        services.push(...items);
+      }
+    }
+
+    // Team
+    if (/zespol|team|zarzad|management/.test(lowerUrl)) {
+      // Look for names (simple heuristic)
+      const namePattern = /(?:^|\n)(?:#+\s*)?([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/g;
+      let match;
+      while ((match = namePattern.exec(content)) !== null) {
+        if (!team.includes(match[1])) {
+          team.push(match[1]);
+        }
+      }
+    }
+
+    // History
+    if (/historia|history/.test(lowerUrl) && content.length > 100) {
+      history = content.slice(0, 1500);
+    }
+
+    // Projects/Portfolio
+    if (/realizacje|portfolio|projekty|projects|case/.test(lowerUrl)) {
+      const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
+      projects.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(p => p.length > 3 && p.length < 100));
+    }
+
+    // News
+    if (/aktualnosci|news|blog/.test(lowerUrl)) {
+      const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
+      news.push(...headings.slice(0, 5).map(h => ({ title: h.replace(/^[\n#\s]+/, '').trim() })));
+    }
+  }
+
+  // Deduplicate
+  services = [...new Set(services)].slice(0, 15);
+  products = [...new Set(products)].slice(0, 15);
+  team = [...new Set(team)].slice(0, 10);
+  projects = [...new Set(projects)].slice(0, 10);
+
+  // Extract social media from all content
+  const socialMedia = extractSocialMedia(allContent);
+
+  return {
+    about_us: aboutUs || null,
+    services: services.length > 0 ? services : null,
+    products: products.length > 0 ? products : null,
+    team: team.length > 0 ? team : null,
+    history: history || null,
+    projects: projects.length > 0 ? projects : null,
+    news: news.length > 0 ? news : null,
+    social_media: socialMedia,
+  };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { company_id, website } = await req.json();
+
+    if (!company_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'company_id is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!website) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'website is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    if (!firecrawlKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Firecrawl not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Normalize URL
+    let normalizedUrl = website.trim();
+    if (!normalizedUrl.startsWith('http')) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    normalizedUrl = normalizedUrl.replace(/\/$/, '');
+
+    console.log(`[Stage 2] Starting website scan for: ${normalizedUrl}`);
+
+    // Update status to processing
+    await supabase
+      .from('companies')
+      .update({ www_data_status: 'processing' })
+      .eq('id', company_id);
+
+    // Step 1: Map the website
+    const allUrls = await mapWebsite(normalizedUrl, firecrawlKey);
+    console.log(`[Stage 2] Found ${allUrls.length} URLs`);
+
+    if (allUrls.length === 0) {
+      // Try to at least scrape the homepage
+      const homepage = await scrapePage(normalizedUrl, firecrawlKey);
+      if (homepage) {
+        const wwwData = {
+          pages_scanned: 1,
+          scan_date: new Date().toISOString(),
+          about_us: homepage.content.slice(0, 2000),
+          social_media: extractSocialMedia(homepage.content),
+          urls_found: 0,
+        };
+
+        await supabase
+          .from('companies')
+          .update({
+            www_data: wwwData,
+            www_data_status: 'completed',
+            www_data_date: new Date().toISOString(),
+          })
+          .eq('id', company_id);
+
+        return new Response(
+          JSON.stringify({ success: true, data: wwwData, pages_scanned: 1 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      await supabase
+        .from('companies')
+        .update({ www_data_status: 'failed' })
+        .eq('id', company_id);
+
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not access website' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Step 2: Prioritize URLs
+    const prioritizedUrls = prioritizeUrls(allUrls, normalizedUrl);
+    console.log(`[Stage 2] Prioritized ${prioritizedUrls.length} URLs for scraping`);
+
+    // Step 3: Scrape prioritized pages (limit to 15 to avoid timeout)
+    const scrapedPages: Array<{ url: string; content: string; title?: string }> = [];
+    
+    for (const url of prioritizedUrls.slice(0, 15)) {
+      const page = await scrapePage(url, firecrawlKey);
+      if (page && page.content.length > 50) {
+        scrapedPages.push(page);
+      }
+      // Small delay to avoid rate limits
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    console.log(`[Stage 2] Successfully scraped ${scrapedPages.length} pages`);
+
+    // Step 4: Parse content into structured data
+    const parsedData = parseScrapedContent(scrapedPages);
+
+    const wwwData = {
+      ...parsedData,
+      pages_scanned: scrapedPages.length,
+      urls_found: allUrls.length,
+      scan_date: new Date().toISOString(),
+      scanned_urls: scrapedPages.map(p => p.url),
+    };
+
+    // Save to database
+    const { error: updateError } = await supabase
+      .from('companies')
+      .update({
+        www_data: wwwData,
+        www_data_status: 'completed',
+        www_data_date: new Date().toISOString(),
+      })
+      .eq('id', company_id);
+
+    if (updateError) {
+      console.error('[Stage 2] Database update error:', updateError);
+      throw updateError;
+    }
+
+    console.log(`[Stage 2] Completed successfully`);
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        data: wwwData,
+        pages_scanned: scrapedPages.length,
+        urls_found: allUrls.length
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    console.error('[Stage 2] Error:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: error?.message || 'Unknown error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

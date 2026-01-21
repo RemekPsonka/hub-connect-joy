@@ -263,6 +263,12 @@ export type Database = {
           created_by: string | null
           description: string | null
           employee_count: string | null
+          external_data: Json | null
+          external_data_date: string | null
+          external_data_status: string | null
+          financial_data_3y: Json | null
+          financial_data_date: string | null
+          financial_data_status: string | null
           group_companies: Json | null
           growth_rate: number | null
           id: string
@@ -281,10 +287,16 @@ export type Database = {
           revenue_currency: string | null
           revenue_year: number | null
           short_name: string | null
+          source_data_api: Json | null
+          source_data_date: string | null
+          source_data_status: string | null
           tagline: string | null
           tenant_id: string
           updated_at: string
           website: string | null
+          www_data: Json | null
+          www_data_date: string | null
+          www_data_status: string | null
         }
         Insert: {
           address?: string | null
@@ -301,6 +313,12 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          external_data?: Json | null
+          external_data_date?: string | null
+          external_data_status?: string | null
+          financial_data_3y?: Json | null
+          financial_data_date?: string | null
+          financial_data_status?: string | null
           group_companies?: Json | null
           growth_rate?: number | null
           id?: string
@@ -319,10 +337,16 @@ export type Database = {
           revenue_currency?: string | null
           revenue_year?: number | null
           short_name?: string | null
+          source_data_api?: Json | null
+          source_data_date?: string | null
+          source_data_status?: string | null
           tagline?: string | null
           tenant_id: string
           updated_at?: string
           website?: string | null
+          www_data?: Json | null
+          www_data_date?: string | null
+          www_data_status?: string | null
         }
         Update: {
           address?: string | null
@@ -339,6 +363,12 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           employee_count?: string | null
+          external_data?: Json | null
+          external_data_date?: string | null
+          external_data_status?: string | null
+          financial_data_3y?: Json | null
+          financial_data_date?: string | null
+          financial_data_status?: string | null
           group_companies?: Json | null
           growth_rate?: number | null
           id?: string
@@ -357,10 +387,16 @@ export type Database = {
           revenue_currency?: string | null
           revenue_year?: number | null
           short_name?: string | null
+          source_data_api?: Json | null
+          source_data_date?: string | null
+          source_data_status?: string | null
           tagline?: string | null
           tenant_id?: string
           updated_at?: string
           website?: string | null
+          www_data?: Json | null
+          www_data_date?: string | null
+          www_data_status?: string | null
         }
         Relationships: [
           {

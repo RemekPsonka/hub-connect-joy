@@ -96,5 +96,17 @@ verify_jwt = false
 [functions.sync-contact-agents]
 verify_jwt = false
 
-[functions.learn-contact-agent]
+[functions.verify-company-source]
+verify_jwt = false
+
+[functions.scan-company-website]
+verify_jwt = false
+
+[functions.analyze-company-external]
+verify_jwt = false
+
+[functions.fetch-company-financials]
+verify_jwt = false
+
+[functions.synthesize-company-profile]
 verify_jwt = false
