@@ -98,18 +98,30 @@ Odpowiedz krótko, tylko fakty.`
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content || '';
+    const rawContent = data?.choices?.[0]?.message?.content || '';
     
-    // Extract registry IDs
-    const nipMatch = content.match(/NIP[:\s]*(\d{10}|\d{3}[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})/i);
-    const krsMatch = content.match(/KRS[:\s]*(\d{10})/i);
-    const regonMatch = content.match(/REGON[:\s]*(\d{9,14})/i);
+    // Clean Perplexity citation markers [1][2] etc. before parsing
+    const content = rawContent.replace(/\[\d+\]/g, '');
+    
+    // Extract registry IDs with improved patterns that handle various formats
+    // NIP: 10 digits, possibly with dashes/spaces
+    const nipMatch = content.match(/NIP[:\s]*(\d{10}|\d{3}[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})(?:[,.\s]|$)/i);
+    // KRS: exactly 10 digits
+    const krsMatch = content.match(/KRS[:\s]*(\d{10})(?:[,.\s]|$)/i);
+    // REGON: 9 or 14 digits
+    const regonMatch = content.match(/REGON[:\s]*(\d{9}|\d{14})(?:[,.\s]|$)/i);
+    
+    const extractedKrs = krsMatch ? krsMatch[1] : undefined;
+    const extractedNip = nipMatch ? nipMatch[1].replace(/[-\s]/g, '') : undefined;
+    const extractedRegon = regonMatch ? regonMatch[1] : undefined;
+    
+    console.log(`[Perplexity] Extracted: KRS=${extractedKrs}, NIP=${extractedNip}, REGON=${extractedRegon}`);
     
     return {
-      nip: nipMatch ? nipMatch[1].replace(/[-\s]/g, '') : undefined,
-      krs: krsMatch ? krsMatch[1] : undefined,
-      regon: regonMatch ? regonMatch[1] : undefined,
-      info: content
+      nip: extractedNip,
+      krs: extractedKrs,
+      regon: extractedRegon,
+      info: rawContent // Keep original with citations for reference
     };
   } catch (error) {
     console.error('[Perplexity] Error:', error);
