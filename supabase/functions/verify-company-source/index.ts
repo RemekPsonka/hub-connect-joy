@@ -126,73 +126,106 @@ function parseKRSResponse(krsData: any): any {
     const dane = odpis?.dane || {};
     const dzial1 = dane?.dzial1 || {};
     const dzial2 = dane?.dzial2 || {};
+    const dzial6 = dane?.dzial6 || {};
     
     // Get name
     const danePodmiotu = dzial1?.danePodmiotu || {};
     const nazwa = danePodmiotu?.nazwa || '';
     
-    // Get address
+    // Get address - full registered address
     const siedziba = dzial1?.siedzibaIAdres?.adres || {};
-    const address = [
+    const addressParts = [
       siedziba?.ulica ? `ul. ${siedziba.ulica}` : null,
       siedziba?.nrDomu,
-      siedziba?.nrLokalu ? `/${siedziba.nrLokalu}` : null
+      siedziba?.nrLokalu ? `/${siedziba.nrLokalu}` : null,
     ].filter(Boolean).join(' ');
+    
+    const addressFull = [
+      addressParts,
+      siedziba?.kodPocztowy,
+      siedziba?.miejscowosc
+    ].filter(Boolean).join(', ');
     
     // Get NIP/REGON
     const identyfikatory = dzial1?.danePodmiotu?.identyfikatory || {};
     
-    // Get management
+    // Get company status from dzial6
+    const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || {};
+    const czyWykreslony = statusInfo?.czyWykreslony === true || statusInfo?.dataWykreslenia;
+    const czyZawieszona = statusInfo?.czyZawieszona === true;
+    const status = czyWykreslony ? 'WYKREŚLONA' : 
+                   czyZawieszona ? 'ZAWIESZONA' : 'AKTYWNA';
+    
+    // Get management (Zarząd)
     const management: Array<{name: string; position: string; verified: boolean}> = [];
     
-    // Parse Zarząd
-    const zarzad = dzial2?.organReprezentacji?.sklad || [];
-    if (Array.isArray(zarzad)) {
-      zarzad.forEach((osoba: any) => {
-        if (osoba?.imiona && osoba?.nazwisko) {
-          management.push({
-            name: `${osoba.imiona} ${osoba.nazwisko}`,
-            position: osoba.funkcja || 'Członek Zarządu',
-            verified: true
-          });
-        }
-      });
-    }
+    // Parse Zarząd from organReprezentacji
+    const organRep = dzial2?.organReprezentacji || {};
+    const skladOrganu = organRep?.skladOrganu || organRep?.sklad || [];
+    const zarzadArray = Array.isArray(skladOrganu) ? skladOrganu : [skladOrganu];
     
-    // Parse Wspólnicy/Udziałowcy
+    zarzadArray.forEach((osoba: any) => {
+      if (osoba?.imiona && osoba?.nazwisko) {
+        management.push({
+          name: `${osoba.imiona} ${osoba.nazwisko}`,
+          position: osoba.funkcja || 'Członek Zarządu',
+          verified: true
+        });
+      }
+    });
+    
+    // Parse Wspólnicy/Udziałowcy (shareholders)
     const wspolnicy = dzial1?.wspolnicyLubAkcjonariusze || [];
-    const shareholders: Array<{name: string; shares?: number; verified: boolean}> = [];
-    if (Array.isArray(wspolnicy)) {
-      wspolnicy.forEach((wspolnik: any) => {
-        if (wspolnik?.nazwisko) {
-          shareholders.push({
-            name: wspolnik.imiona ? `${wspolnik.imiona} ${wspolnik.nazwisko}` : wspolnik.nazwisko,
-            shares: wspolnik.posiadaneUdzialy?.iloscUdzialow,
-            verified: true
-          });
-        }
-      });
-    }
+    const shareholders: Array<{name: string; shares?: number; ownership_percent?: number; verified: boolean}> = [];
+    const wspolnicyArray = Array.isArray(wspolnicy) ? wspolnicy : [wspolnicy];
+    
+    wspolnicyArray.forEach((wspolnik: any) => {
+      if (wspolnik?.nazwisko || wspolnik?.nazwa) {
+        const name = wspolnik?.imiona 
+          ? `${wspolnik.imiona} ${wspolnik.nazwisko}` 
+          : (wspolnik?.nazwisko || wspolnik?.nazwa);
+        shareholders.push({
+          name,
+          shares: wspolnik?.posiadaneUdzialy?.iloscUdzialow || wspolnik?.liczbaUdzialow,
+          ownership_percent: wspolnik?.procentUdzialow,
+          verified: true
+        });
+      }
+    });
 
     // Get PKD codes
     const dzial3 = dane?.dzial3 || {};
-    const pkd = dzial3?.przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || [];
-    const pkdCodes = Array.isArray(pkd) ? pkd.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean) : [];
+    const przedmiotDzialalnosci = dzial3?.przedmiotDzialalnosci || {};
+    const pkdPrzewazajaca = przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || [];
+    const pkdPozostala = przedmiotDzialalnosci?.przedmiotPozostalejDzialalnosci || [];
+    
+    const pkdPrzewazajacaArray = Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca : [pkdPrzewazajaca];
+    const pkdPozostalaArray = Array.isArray(pkdPozostala) ? pkdPozostala : [pkdPozostala];
+    
+    const pkdCodes = [
+      ...pkdPrzewazajacaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean),
+      ...pkdPozostalaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean)
+    ];
+    const pkdMain = pkdCodes[0] || null;
 
     return {
       name_official: nazwa,
       nip: identyfikatory?.nip || null,
       regon: identyfikatory?.regon || null,
-      address: address || null,
+      address_registered: addressFull || null,
+      address: addressParts || null,
       city: siedziba?.miejscowosc || null,
       postal_code: siedziba?.kodPocztowy || null,
-      registration_date: danePodmiotu?.dataRozpoczeciaDzialalnosci || null,
+      registration_date: danePodmiotu?.dataRozpoczeciaDzialalnosci || danePodmiotu?.dataWpisuDoRejestruPrzedsieb || null,
       legal_form: danePodmiotu?.formaLubRodzajRejestru || 'spółka',
       pkd_codes: pkdCodes,
+      pkd_main: pkdMain,
       management,
       shareholders,
+      status,
       source: 'krs_api',
-      confidence: 'verified'
+      confidence: 'verified',
+      verified_at: new Date().toISOString()
     };
   } catch (error) {
     console.error('[KRS] Parse error:', error);
@@ -203,24 +236,50 @@ function parseKRSResponse(krsData: any): any {
 // Parse CEIDG response
 function parseCEIDGResponse(ceidgData: any): any {
   try {
+    const adres = ceidgData?.adresDzialalnosci || {};
+    const addressParts = [
+      adres?.ulica ? `ul. ${adres.ulica}` : null,
+      adres?.budynek,
+      adres?.lokal ? `/${adres.lokal}` : null,
+    ].filter(Boolean).join(' ');
+    
+    const addressFull = [
+      addressParts,
+      adres?.kodPocztowy,
+      adres?.miasto
+    ].filter(Boolean).join(', ');
+
+    // CEIDG status mapping
+    const ceidgStatus = ceidgData?.status;
+    const status = ceidgStatus === 'WYKRESLONY' ? 'WYKREŚLONA' :
+                   ceidgStatus === 'ZAWIESZONY' ? 'ZAWIESZONA' : 'AKTYWNA';
+
+    const pkdList = ceidgData?.pkd || [];
+    const pkdCodes = Array.isArray(pkdList) ? pkdList : [pkdList];
+    const pkdMain = ceidgData?.pkdGlowny || pkdCodes[0] || null;
+
     return {
       name_official: ceidgData?.nazwa || null,
-      nip: ceidgData?.wlasciciel?.nip || null,
-      regon: ceidgData?.wlasciciel?.regon || null,
-      address: ceidgData?.adresDzialalnosci?.ulica || null,
-      city: ceidgData?.adresDzialalnosci?.miasto || null,
-      postal_code: ceidgData?.adresDzialalnosci?.kodPocztowy || null,
+      nip: ceidgData?.wlasciciel?.nip || ceidgData?.nip || null,
+      regon: ceidgData?.wlasciciel?.regon || ceidgData?.regon || null,
+      address_registered: addressFull || null,
+      address: addressParts || null,
+      city: adres?.miasto || null,
+      postal_code: adres?.kodPocztowy || null,
       registration_date: ceidgData?.dataRozpoczeciaDzialalnosci || null,
       legal_form: 'jednoosobowa_dzialalnosc',
-      pkd_codes: ceidgData?.pkd ? [ceidgData.pkd] : [],
+      pkd_codes: pkdCodes.filter(Boolean),
+      pkd_main: pkdMain,
       management: [{
         name: `${ceidgData?.wlasciciel?.imie || ''} ${ceidgData?.wlasciciel?.nazwisko || ''}`.trim(),
         position: 'Właściciel',
         verified: true
       }],
       shareholders: [],
+      status,
       source: 'ceidg_api',
-      confidence: 'verified'
+      confidence: 'verified',
+      verified_at: new Date().toISOString()
     };
   } catch (error) {
     console.error('[CEIDG] Parse error:', error);
@@ -338,7 +397,7 @@ Deno.serve(async (req) => {
         source_data_api: sourceData,
         source_data_status: 'completed',
         source_data_date: new Date().toISOString(),
-        // Also update main fields if verified
+        // Update main fields if verified
         ...(sourceData.nip && !existing_nip ? { nip: sourceData.nip } : {}),
         ...(sourceData.krs && !existing_krs ? { krs: sourceData.krs } : {}),
         ...(sourceData.regon ? { regon: sourceData.regon } : {}),
@@ -346,6 +405,10 @@ Deno.serve(async (req) => {
         ...(sourceData.city ? { city: sourceData.city } : {}),
         ...(sourceData.postal_code ? { postal_code: sourceData.postal_code } : {}),
         ...(sourceData.legal_form ? { legal_form: sourceData.legal_form } : {}),
+        // New fields from Stage 1
+        ...(sourceData.registration_date ? { registration_date: sourceData.registration_date } : {}),
+        ...(sourceData.pkd_codes?.length ? { pkd_codes: sourceData.pkd_codes } : {}),
+        ...(sourceData.status ? { company_status: sourceData.status } : {}),
       })
       .eq('id', company_id);
 

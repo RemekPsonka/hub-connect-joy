@@ -258,6 +258,7 @@ export type Database = {
           company_analysis_date: string | null
           company_analysis_status: string | null
           company_size: string | null
+          company_status: string | null
           country: string | null
           created_at: string
           created_by: string | null
@@ -281,7 +282,9 @@ export type Database = {
           nip: string | null
           parent_company_id: string | null
           phone: string | null
+          pkd_codes: string[] | null
           postal_code: string | null
+          registration_date: string | null
           regon: string | null
           revenue_amount: number | null
           revenue_currency: string | null
@@ -308,6 +311,7 @@ export type Database = {
           company_analysis_date?: string | null
           company_analysis_status?: string | null
           company_size?: string | null
+          company_status?: string | null
           country?: string | null
           created_at?: string
           created_by?: string | null
@@ -331,7 +335,9 @@ export type Database = {
           nip?: string | null
           parent_company_id?: string | null
           phone?: string | null
+          pkd_codes?: string[] | null
           postal_code?: string | null
+          registration_date?: string | null
           regon?: string | null
           revenue_amount?: number | null
           revenue_currency?: string | null
@@ -358,6 +364,7 @@ export type Database = {
           company_analysis_date?: string | null
           company_analysis_status?: string | null
           company_size?: string | null
+          company_status?: string | null
           country?: string | null
           created_at?: string
           created_by?: string | null
@@ -381,7 +388,9 @@ export type Database = {
           nip?: string | null
           parent_company_id?: string | null
           phone?: string | null
+          pkd_codes?: string[] | null
           postal_code?: string | null
+          registration_date?: string | null
           regon?: string | null
           revenue_amount?: number | null
           revenue_currency?: string | null
