@@ -29,7 +29,7 @@ const SOCIAL_PATTERNS = {
 };
 
 // Map URL to get Firecrawl
-async function mapWebsite(url: string, apiKey: string): Promise<string[]> {
+async function mapWebsite(url: string, apiKey: string): Promise<{ links: string[]; error?: string }> {
   try {
     console.log(`[Firecrawl] Mapping ${url}`);
     
@@ -48,14 +48,17 @@ async function mapWebsite(url: string, apiKey: string): Promise<string[]> {
 
     if (!response.ok) {
       console.error('[Firecrawl] Map failed:', response.status);
-      return [];
+      if (response.status === 402) {
+        return { links: [], error: 'firecrawl_quota_exceeded' };
+      }
+      return { links: [] };
     }
 
     const data = await response.json();
-    return data?.links || [];
+    return { links: data?.links || [] };
   } catch (error) {
     console.error('[Firecrawl] Map error:', error);
-    return [];
+    return { links: [] };
   }
 }
 
@@ -103,7 +106,7 @@ function prioritizeUrls(urls: string[], baseUrl: string): string[] {
 }
 
 // Scrape a single page
-async function scrapePage(url: string, apiKey: string): Promise<{ url: string; content: string; title?: string } | null> {
+async function scrapePage(url: string, apiKey: string): Promise<{ url: string; content: string; title?: string; error?: string } | null> {
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -120,6 +123,9 @@ async function scrapePage(url: string, apiKey: string): Promise<{ url: string; c
 
     if (!response.ok) {
       console.error(`[Firecrawl] Scrape failed for ${url}:`, response.status);
+      if (response.status === 402) {
+        return { url, content: '', error: 'firecrawl_quota_exceeded' };
+      }
       return null;
     }
 
@@ -333,13 +339,40 @@ Deno.serve(async (req) => {
       .eq('id', company_id);
 
     // Step 1: Map the website
-    const allUrls = await mapWebsite(normalizedUrl, firecrawlKey);
-    console.log(`[Stage 2] Found ${allUrls.length} URLs`);
+    const mapResult = await mapWebsite(normalizedUrl, firecrawlKey);
+    console.log(`[Stage 2] Found ${mapResult.links.length} URLs`);
 
-    if (allUrls.length === 0) {
+    // Check for quota exceeded
+    if (mapResult.error === 'firecrawl_quota_exceeded') {
+      await supabase
+        .from('companies')
+        .update({ www_data_status: 'failed' })
+        .eq('id', company_id);
+
+      return new Response(
+        JSON.stringify({ success: false, error: 'Limit kredytów Firecrawl wyczerpany. Sprawdź subskrypcję.' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (mapResult.links.length === 0) {
       // Try to at least scrape the homepage
       const homepage = await scrapePage(normalizedUrl, firecrawlKey);
-      if (homepage) {
+      
+      // Check for quota exceeded on homepage scrape
+      if (homepage?.error === 'firecrawl_quota_exceeded') {
+        await supabase
+          .from('companies')
+          .update({ www_data_status: 'failed' })
+          .eq('id', company_id);
+
+        return new Response(
+          JSON.stringify({ success: false, error: 'Limit kredytów Firecrawl wyczerpany. Sprawdź subskrypcję.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (homepage && homepage.content) {
         const wwwData = {
           pages_scanned: 1,
           crawled_at: new Date().toISOString(),
@@ -370,10 +403,12 @@ Deno.serve(async (req) => {
         .eq('id', company_id);
 
       return new Response(
-        JSON.stringify({ success: false, error: 'Could not access website' }),
+        JSON.stringify({ success: false, error: 'Nie udało się uzyskać dostępu do strony WWW' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    const allUrls = mapResult.links;
 
     // Step 2: Prioritize URLs
     const prioritizedUrls = prioritizeUrls(allUrls, normalizedUrl);
