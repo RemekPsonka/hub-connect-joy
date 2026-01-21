@@ -94,6 +94,24 @@ async function fetchKRSData(krs: string): Promise<any | null> {
   return null;
 }
 
+/**
+ * KRS OdpisPełny returns arrays with history entries (nrWpisuWprow/nrWpisuWykr).
+ * This function returns the latest active (not deleted) entry from the array.
+ */
+function getLatestEntry<T>(entries: T[] | T | undefined): T | null {
+  if (!entries) return null;
+  if (!Array.isArray(entries)) return entries as T;
+  if (entries.length === 0) return null;
+  
+  // Filter out deleted entries (those with nrWpisuWykr set)
+  const activeEntries = (entries as any[]).filter(e => !e?.nrWpisuWykr);
+  
+  // Return last active entry, or last entry if all were deleted
+  return activeEntries.length > 0 
+    ? activeEntries[activeEntries.length - 1] 
+    : entries[entries.length - 1];
+}
+
 // CEIDG API - Polish Sole Proprietorship Register
 async function fetchCEIDGData(nip: string, token: string): Promise<any | null> {
   try {
@@ -502,36 +520,47 @@ function extractShareCapital(dzial1: any): {
   paid_up: number | null;
 } {
   try {
-    const kapital = dzial1?.kapitalSpolki || dzial1?.kapital || {};
+    const kapitalSpolki = dzial1?.kapitalSpolki || dzial1?.kapital || {};
     
-    // wysokoscKapitaluZakladowego can be object or string
+    // wysokoscKapitaluZakladowego is an ARRAY with history
+    const wysokoscArray = kapitalSpolki?.wysokoscKapitaluZakladowego || [];
+    const wysokosc = getLatestEntry(wysokoscArray);
+    
     let amount: number | null = null;
-    const wysokosc = kapital?.wysokoscKapitaluZakladowego;
     if (typeof wysokosc === 'object' && wysokosc?.wartosc) {
-      amount = parseFloat(wysokosc.wartosc);
-    } else if (typeof wysokosc === 'string' || typeof wysokosc === 'number') {
+      amount = parseFloat(String(wysokosc.wartosc).replace(/[^\d.,]/g, '').replace(',', '.'));
+    } else if (wysokosc && (typeof wysokosc === 'string' || typeof wysokosc === 'number')) {
       amount = parseFloat(String(wysokosc).replace(/[^\d.,]/g, '').replace(',', '.'));
     }
     
-    const currency = kapital?.waluta || kapital?.wysokoscKapitaluZakladowego?.waluta || 'PLN';
-    const sharesTotalRaw = kapital?.iloscWszystkichUdzialow || kapital?.liczbaUdzialow;
-    const sharesTotal = sharesTotalRaw ? parseFloat(sharesTotalRaw) : null;
+    const currency = wysokosc?.waluta || kapitalSpolki?.waluta || 'PLN';
     
-    const shareUnitRaw = kapital?.wartoscJednegoUdzialu || kapital?.wartoscNominalnaUdzialu;
+    // iloscWszystkichUdzialow is an ARRAY
+    const iloscArray = kapitalSpolki?.iloscWszystkichUdzialow || [];
+    const iloscEntry = getLatestEntry(iloscArray);
+    const sharesTotal = iloscEntry?.iloscWszystkichUdzialow 
+      ? parseFloat(String(iloscEntry.iloscWszystkichUdzialow)) 
+      : (typeof iloscEntry === 'number' || typeof iloscEntry === 'string' ? parseFloat(String(iloscEntry)) : null);
+    
+    // wartoscJednegoUdzialu is an ARRAY
+    const wartoscArray = kapitalSpolki?.wartoscJednegoUdzialu || [];
+    const wartoscEntry = getLatestEntry(wartoscArray);
     let shareUnitValue: number | null = null;
-    if (typeof shareUnitRaw === 'object' && shareUnitRaw?.wartosc) {
-      shareUnitValue = parseFloat(shareUnitRaw.wartosc);
-    } else if (shareUnitRaw) {
-      shareUnitValue = parseFloat(String(shareUnitRaw).replace(/[^\d.,]/g, '').replace(',', '.'));
+    if (typeof wartoscEntry === 'object' && wartoscEntry?.wartosc) {
+      shareUnitValue = parseFloat(String(wartoscEntry.wartosc).replace(',', '.'));
+    } else if (wartoscEntry) {
+      shareUnitValue = parseFloat(String(wartoscEntry).replace(/[^\d.,]/g, '').replace(',', '.'));
     }
     
-    const paidUpRaw = kapital?.oplaconaWartosc || kapital?.kapitaOplacony;
+    // czyKapitalZostaWplacony or similar
+    const paidUpArray = kapitalSpolki?.czyKapitalZostalWplacony || kapitalSpolki?.oplaconaWartosc || [];
+    const paidUpEntry = getLatestEntry(paidUpArray);
     let paidUp: number | null = null;
-    if (typeof paidUpRaw === 'object' && paidUpRaw?.wartosc) {
-      paidUp = parseFloat(paidUpRaw.wartosc);
-    } else if (paidUpRaw) {
-      paidUp = parseFloat(String(paidUpRaw).replace(/[^\d.,]/g, '').replace(',', '.'));
+    if (typeof paidUpEntry === 'object' && paidUpEntry?.wartosc) {
+      paidUp = parseFloat(String(paidUpEntry.wartosc).replace(',', '.'));
     }
+    
+    console.log(`[KRS] Share capital extracted: ${amount} ${currency}, shares: ${sharesTotal}, unit: ${shareUnitValue}`);
     
     return { amount, currency, shares_total: sharesTotal, share_unit_value: shareUnitValue, paid_up: paidUp };
   } catch (e) {
@@ -628,57 +657,58 @@ function parseKRSResponse(krsData: any): any {
       return null;
     }
     
-    // Handle company name - can be string, array of objects, or nested object
-    const rawNazwa = dzial1?.danePodmiotu?.nazwa;
+    // Handle company name - nazwa is an ARRAY with history in OdpisPelny
+    const nazwaArray = dzial1?.danePodmiotu?.nazwa;
+    const latestNazwa = getLatestEntry(nazwaArray);
     let companyName: string | null = null;
-    if (Array.isArray(rawNazwa) && rawNazwa.length > 0) {
-      companyName = rawNazwa[0]?.nazwa || String(rawNazwa[0]) || null;
-    } else if (typeof rawNazwa === 'string') {
-      companyName = rawNazwa;
-    } else if (rawNazwa && typeof rawNazwa === 'object') {
-      companyName = (rawNazwa as any).nazwa || String(rawNazwa);
+    if (typeof latestNazwa === 'string') {
+      companyName = latestNazwa;
+    } else if (latestNazwa?.nazwa) {
+      companyName = latestNazwa.nazwa;
+    } else if (latestNazwa && typeof latestNazwa === 'object') {
+      // Try to get any string value from the object
+      const values = Object.values(latestNazwa).filter(v => typeof v === 'string' && v.length > 3);
+      companyName = values[0] as string || null;
     }
     
-    // NIP and REGON - check multiple possible paths in KRS API
-    const identyfikatory = dzial1?.danePodmiotu?.identyfikatory || {};
-    const danePodmiotu = dzial1?.danePodmiotu || {};
+    // NIP and REGON - identyfikatory is an ARRAY with history entries
+    const identyfikatoryArray = dzial1?.danePodmiotu?.identyfikatory || [];
+    const latestIdent = getLatestEntry(identyfikatoryArray);
+    // The actual NIP/REGON are nested inside "identyfikatory" key
+    const identyfikatory = latestIdent?.identyfikatory || latestIdent || {};
     
-    // Try multiple paths for NIP
     const nip = identyfikatory?.nip || 
-                danePodmiotu?.nip || 
                 naglowek?.nip ||
-                krsData?.odpis?.nip ||
                 null;
     
-    // Try multiple paths for REGON
     const regon = identyfikatory?.regon || 
-                  danePodmiotu?.regon || 
                   naglowek?.regon ||
-                  krsData?.odpis?.regon ||
                   null;
     
-    console.log(`[KRS] Identyfikatory extracted: NIP=${nip}, REGON=${regon}`);
+    console.log(`[KRS] Identyfikatory: ${Array.isArray(identyfikatoryArray) ? identyfikatoryArray.length : 0} entries, NIP=${nip}, REGON=${regon}`);
     
-    // Address - check multiple paths
+    // Address - adres is an ARRAY with history entries
     const siedzibaIAdres = dzial1?.siedzibaIAdres || {};
-    const siedzibaAdres = siedzibaIAdres?.adres || siedzibaIAdres?.adresSiedziby || {};
-    const siedziba = siedzibaIAdres?.siedziba || {};
+    const adresArray = siedzibaIAdres?.adres || [];
+    const siedzibaAdres = getLatestEntry(adresArray) || {};
     
-    console.log('[KRS] DEBUG - Address structure:', JSON.stringify({
-      siedzibaIAdres_keys: Object.keys(siedzibaIAdres),
+    const siedzibaArray = siedzibaIAdres?.siedziba || [];
+    const siedziba = getLatestEntry(siedzibaArray) || {};
+    
+    console.log('[KRS] DEBUG - Address data:', JSON.stringify({
+      adres_count: Array.isArray(adresArray) ? adresArray.length : 0,
+      siedziba_count: Array.isArray(siedzibaArray) ? siedzibaArray.length : 0,
       siedzibaAdres,
       siedziba
-    }, null, 2).substring(0, 1000));
+    }, null, 2).substring(0, 1500));
     
+    // Build address from the latest entry
     let addressParts = '';
-    if (siedzibaAdres?.ulica) {
-      addressParts = siedzibaAdres.ulica;
-      if (siedzibaAdres?.nrDomu) addressParts += ` ${siedzibaAdres.nrDomu}`;
-      if (siedzibaAdres?.nrLokalu) addressParts += `/${siedzibaAdres.nrLokalu}`;
-    } else if (siedziba?.ulica) {
-      addressParts = siedziba.ulica;
-      if (siedziba?.nrDomu) addressParts += ` ${siedziba.nrDomu}`;
-      if (siedziba?.nrLokalu) addressParts += `/${siedziba.nrLokalu}`;
+    const addrSource = siedzibaAdres?.ulica ? siedzibaAdres : siedziba;
+    if (addrSource?.ulica) {
+      addressParts = addrSource.ulica;
+      if (addrSource?.nrDomu) addressParts += ` ${addrSource.nrDomu}`;
+      if (addrSource?.nrLokalu) addressParts += `/${addrSource.nrLokalu}`;
     }
     
     const city = siedzibaAdres?.miejscowosc || siedziba?.miejscowosc || null;
@@ -686,10 +716,20 @@ function parseKRSResponse(krsData: any): any {
     
     const addressFull = [addressParts, postalCode, city].filter(Boolean).join(', ');
     
-    // Contact info from KRS (if available)
-    const email = siedzibaAdres?.email || siedzibaAdres?.adresEmail || null;
-    const phone = siedzibaAdres?.telefon || siedzibaAdres?.numerTelefonu || null;
-    const websiteKrs = siedzibaAdres?.www || siedzibaAdres?.stronaWWW || null;
+    // Contact info from KRS - these are also ARRAYS
+    const emailArray = siedzibaIAdres?.adresPocztyElektronicznej || [];
+    const emailEntry = getLatestEntry(emailArray);
+    const email = emailEntry?.adresPocztyElektronicznej || emailEntry?.email || emailEntry || null;
+    
+    const phoneArray = siedzibaIAdres?.numerTelefonu || [];
+    const phoneEntry = getLatestEntry(phoneArray);
+    const phone = phoneEntry?.numerTelefonu || phoneEntry?.telefon || phoneEntry || null;
+    
+    const wwwArray = siedzibaIAdres?.adresStronyInternetowej || [];
+    const wwwEntry = getLatestEntry(wwwArray);
+    const websiteKrs = wwwEntry?.adresStronyInternetowej || wwwEntry?.www || wwwEntry || null;
+    
+    console.log(`[KRS] Contact: email=${email}, phone=${phone}, www=${websiteKrs}`);
     
     // Legal form
     const rawFormaPrawna = dzial1?.danePodmiotu?.formaPrawna;
