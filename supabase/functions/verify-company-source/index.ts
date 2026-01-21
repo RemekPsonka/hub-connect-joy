@@ -320,14 +320,30 @@ function extractShareholders(dzial2: any): Array<{
   try {
     const wspolnicy = dzial2?.wspolnicy || {};
     
-    // Wspólnicy sp. z o.o. - osoby fizyczne
-    const wspolnikSpZoo = wspolnicy?.wspolnikSpZoo || wspolnicy?.wspolnik || [];
-    const wspolnikArray = Array.isArray(wspolnikSpZoo) ? wspolnikSpZoo : [wspolnikSpZoo];
+    // DEBUG: Log wspolnicy structure
+    console.log('[KRS] DEBUG - Wspolnicy structure:', JSON.stringify({
+      wspolnicy_keys: Object.keys(wspolnicy),
+      wspolnicy_type: typeof wspolnicy,
+      wspolnicy_isArray: Array.isArray(wspolnicy),
+      wspolnicy_raw: wspolnicy
+    }, null, 2).substring(0, 2000));
+    
+    // Wspólnicy sp. z o.o. - try multiple key patterns
+    const wspolnikSpZoo = wspolnicy?.wspolnikSpZoo || 
+                          wspolnicy?.wspolnik || 
+                          wspolnicy?.wspólnikSpZoo ||
+                          wspolnicy?.wspólnik ||
+                          wspolnicy?.udzialowiec ||
+                          wspolnicy?.udziałowiec ||
+                          [];
+    const wspolnikArray = Array.isArray(wspolnikSpZoo) ? wspolnikSpZoo : (wspolnikSpZoo ? [wspolnikSpZoo] : []);
+    
+    console.log(`[KRS] DEBUG - wspolnikSpZoo entries: ${wspolnikArray.length}`);
     
     for (const w of wspolnikArray) {
       if (!w) continue;
-      const osoba = w?.wspólnik?.osoba || w?.osoba || w;
-      const udzialy = w?.posiadaneUdzialy || w?.udzialy || {};
+      const osoba = w?.wspólnik?.osoba || w?.wspolnik?.osoba || w?.osoba || w?.dane || w;
+      const udzialy = w?.posiadaneUdzialy || w?.udzialy || w?.iloscPosiadanychUdzialow || {};
       
       const imiona = osoba?.imiona || osoba?.imie;
       const nazwisko = osoba?.nazwisko;
@@ -337,35 +353,61 @@ function extractShareholders(dzial2: any): Array<{
         shareholders.push({
           name,
           type: 'person',
-          shares_count: parseFloat(udzialy?.liczbaUdzialow || udzialy?.iloscUdzialow || udzialy?.liczba || '0') || undefined,
-          shares_value: parseFloat(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || udzialy?.wartoscNominalna || '0') || undefined,
+          shares_count: parseFloat(String(udzialy?.liczbaUdzialow || udzialy?.iloscUdzialow || udzialy?.liczba || udzialy?.ilosc || '0').replace(/[^\d]/g, '')) || undefined,
+          shares_value: parseFloat(String(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || udzialy?.wartoscNominalna || udzialy?.wartosc || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || undefined,
           verified: true
         });
       }
     }
     
-    // Wspólnicy - osoby prawne
-    const wspolnikPrawny = wspolnicy?.wspolnikPrawny || [];
-    const prawnyArray = Array.isArray(wspolnikPrawny) ? wspolnikPrawny : [wspolnikPrawny];
+    // Wspólnicy - osoby prawne - try multiple key patterns
+    const wspolnikPrawny = wspolnicy?.wspolnikPrawny || 
+                           wspolnicy?.wspólnikPrawny ||
+                           wspolnicy?.osobaPrawna ||
+                           [];
+    const prawnyArray = Array.isArray(wspolnikPrawny) ? wspolnikPrawny : (wspolnikPrawny ? [wspolnikPrawny] : []);
+    
+    console.log(`[KRS] DEBUG - wspolnikPrawny entries: ${prawnyArray.length}`);
     
     for (const w of prawnyArray) {
       if (!w) continue;
-      const udzialy = w?.posiadaneUdzialy || {};
+      const udzialy = w?.posiadaneUdzialy || w?.udzialy || {};
       
       shareholders.push({
         name: w?.nazwa || w?.firma || w?.firmaLubNazwa || 'Osoba prawna',
         type: 'company',
         krs: w?.krs || undefined,
         nip: w?.nip || undefined,
-        shares_count: parseFloat(udzialy?.liczbaUdzialow || '0') || undefined,
-        shares_value: parseFloat(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || '0') || undefined,
+        shares_count: parseFloat(String(udzialy?.liczbaUdzialow || '0').replace(/[^\d]/g, '')) || undefined,
+        shares_value: parseFloat(String(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || undefined,
         verified: true
       });
+    }
+    
+    // If wspolnicy is an array directly (some formats)
+    if (Array.isArray(dzial2?.wspolnicy)) {
+      console.log('[KRS] DEBUG - wspolnicy is array with', dzial2.wspolnicy.length, 'entries');
+      for (const w of dzial2.wspolnicy) {
+        if (!w) continue;
+        const osoba = w?.osoba || w;
+        const name = extractName(osoba?.imiona || osoba?.imie, osoba?.nazwisko);
+        if (name && !shareholders.find(s => s.name === name)) {
+          const udzialy = w?.posiadaneUdzialy || w?.udzialy || {};
+          shareholders.push({
+            name,
+            type: 'person',
+            shares_count: parseFloat(String(udzialy?.liczbaUdzialow || '0').replace(/[^\d]/g, '')) || undefined,
+            shares_value: parseFloat(String(udzialy?.wartoscUdzialow?.wartosc || udzialy?.wartoscUdzialow || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || undefined,
+            verified: true
+          });
+        }
+      }
     }
   } catch (e) {
     console.error('[KRS] Error extracting shareholders:', e);
   }
   
+  console.log(`[KRS] Total shareholders extracted: ${shareholders.length}`);
   return shareholders;
 }
 
@@ -567,7 +609,19 @@ function parseKRSResponse(krsData: any): any {
     const dzial2 = krsData?.odpis?.dane?.dzial2;
     const dzial3 = krsData?.odpis?.dane?.dzial3;
     const dzial6 = krsData?.odpis?.dane?.dzial6;
-    const napiData = krsData?.odpis?.dane?.napiData;
+    const naglowek = krsData?.odpis?.naglowek || {};
+    
+    // DEBUG: Log raw structure to find correct paths
+    console.log('[KRS] DEBUG - Raw structure sample:', JSON.stringify({
+      naglowek_keys: Object.keys(naglowek),
+      naglowek: naglowek,
+      dzial1_danePodmiotu_keys: Object.keys(dzial1?.danePodmiotu || {}),
+      dzial1_danePodmiotu_identyfikatory: dzial1?.danePodmiotu?.identyfikatory,
+      dzial1_kapitalSpolki: dzial1?.kapitalSpolki,
+      dzial1_siedzibaIAdres: dzial1?.siedzibaIAdres,
+      dzial2_keys: Object.keys(dzial2 || {}),
+      dzial2_wspolnicy: dzial2?.wspolnicy,
+    }, null, 2).substring(0, 3000));
     
     if (!dzial1) {
       console.log(`[KRS] No dzial1 in response`);
@@ -585,23 +639,50 @@ function parseKRSResponse(krsData: any): any {
       companyName = (rawNazwa as any).nazwa || String(rawNazwa);
     }
     
-    // NIP and REGON from napiData (official source - 100% confidence)
-    const nip = napiData?.nip || null;
-    const regon = napiData?.regon || null;
+    // NIP and REGON - check multiple possible paths in KRS API
+    const identyfikatory = dzial1?.danePodmiotu?.identyfikatory || {};
+    const danePodmiotu = dzial1?.danePodmiotu || {};
     
-    // Address
-    const siedzibaAdres = dzial1?.siedzibaIAdres?.adres;
-    const siedziba = dzial1?.siedzibaIAdres?.siedziba;
+    // Try multiple paths for NIP
+    const nip = identyfikatory?.nip || 
+                danePodmiotu?.nip || 
+                naglowek?.nip ||
+                krsData?.odpis?.nip ||
+                null;
+    
+    // Try multiple paths for REGON
+    const regon = identyfikatory?.regon || 
+                  danePodmiotu?.regon || 
+                  naglowek?.regon ||
+                  krsData?.odpis?.regon ||
+                  null;
+    
+    console.log(`[KRS] Identyfikatory extracted: NIP=${nip}, REGON=${regon}`);
+    
+    // Address - check multiple paths
+    const siedzibaIAdres = dzial1?.siedzibaIAdres || {};
+    const siedzibaAdres = siedzibaIAdres?.adres || siedzibaIAdres?.adresSiedziby || {};
+    const siedziba = siedzibaIAdres?.siedziba || {};
+    
+    console.log('[KRS] DEBUG - Address structure:', JSON.stringify({
+      siedzibaIAdres_keys: Object.keys(siedzibaIAdres),
+      siedzibaAdres,
+      siedziba
+    }, null, 2).substring(0, 1000));
     
     let addressParts = '';
     if (siedzibaAdres?.ulica) {
       addressParts = siedzibaAdres.ulica;
-      if (siedzibaAdres.nrDomu) addressParts += ` ${siedzibaAdres.nrDomu}`;
-      if (siedzibaAdres.nrLokalu) addressParts += `/${siedzibaAdres.nrLokalu}`;
+      if (siedzibaAdres?.nrDomu) addressParts += ` ${siedzibaAdres.nrDomu}`;
+      if (siedzibaAdres?.nrLokalu) addressParts += `/${siedzibaAdres.nrLokalu}`;
+    } else if (siedziba?.ulica) {
+      addressParts = siedziba.ulica;
+      if (siedziba?.nrDomu) addressParts += ` ${siedziba.nrDomu}`;
+      if (siedziba?.nrLokalu) addressParts += `/${siedziba.nrLokalu}`;
     }
     
     const city = siedzibaAdres?.miejscowosc || siedziba?.miejscowosc || null;
-    const postalCode = siedzibaAdres?.kodPocztowy || null;
+    const postalCode = siedzibaAdres?.kodPocztowy || siedziba?.kodPocztowy || null;
     
     const addressFull = [addressParts, postalCode, city].filter(Boolean).join(', ');
     
