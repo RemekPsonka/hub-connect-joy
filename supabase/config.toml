@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.synthesize-company-profile]
 verify_jwt = false
+
+[functions.batch-krs-sync]
+verify_jwt = false

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield, Database } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -16,6 +16,7 @@ import { GroupManagementModal } from '@/components/settings/GroupManagementModal
 import { DefaultPositionsManager } from '@/components/settings/DefaultPositionsManager';
 import { TwoFactorSettings } from '@/components/settings/TwoFactorSettings';
 import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
+import { BatchKRSSyncController } from '@/components/company/BatchKRSSyncController';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -290,9 +291,18 @@ export default function Settings() {
             <Shield className="h-4 w-4 mr-1" />
             Bezpieczeństwo
           </TabsTrigger>
+          <TabsTrigger value="krs">
+            <Database className="h-4 w-4 mr-1" />
+            KRS / Rejestry
+          </TabsTrigger>
           <TabsTrigger value="bi">Business Intelligence</TabsTrigger>
           <TabsTrigger value="ai">AI & Embeddingi</TabsTrigger>
         </TabsList>
+
+        {/* KRS Tab */}
+        <TabsContent value="krs" className="space-y-6">
+          <BatchKRSSyncController />
+        </TabsContent>
 
         {/* General Tab */}
         <TabsContent value="general" className="space-y-6">
