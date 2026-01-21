@@ -5,8 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Perplexity search for external data
-async function perplexitySearch(query: string, apiKey: string): Promise<{ content: string; citations: string[] }> {
+// Perplexity search with increased tokens for full analyses
+async function perplexitySearch(query: string, apiKey: string, maxTokens: number = 3000): Promise<{ content: string; citations: string[] }> {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
@@ -20,7 +20,7 @@ async function perplexitySearch(query: string, apiKey: string): Promise<{ conten
           role: 'user',
           content: query
         }],
-        max_tokens: 1500,
+        max_tokens: maxTokens,
         temperature: 0.1
       })
     });
@@ -349,6 +349,114 @@ function detectRedFlags(content: string): string[] {
   return [...new Set(redFlags)];
 }
 
+// Parse key clients and projects
+function parseKeyClients(content: string): Array<{ name: string; industry?: string; project?: string }> {
+  const clients: Array<{ name: string; industry?: string; project?: string }> = [];
+  
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[-•*\d]+\.?\s/.test(trimmed) && trimmed.length > 10) {
+      const text = trimmed.replace(/^[-•*\d]+\.?\s/, '');
+      
+      // Extract client name
+      const clientMatch = text.match(/^([A-ZŻŹĆĄŚĘŁÓŃ][A-Za-zżźćąśęłóń\s&.-]+?)(?:\s*[-–:,]|\s+(?:–|-))/i);
+      if (clientMatch) {
+        const client: any = { name: clientMatch[1].trim().slice(0, 100) };
+        
+        // Detect industry
+        if (/bank|finans|ubezpiecz/i.test(text)) client.industry = 'finanse';
+        else if (/szpital|klinik|medyc|zdrow/i.test(text)) client.industry = 'medycyna';
+        else if (/produkc|fabryk|przem/i.test(text)) client.industry = 'przemysł';
+        else if (/retail|handel|sklep/i.test(text)) client.industry = 'handel';
+        else if (/budow|dewelop|nieruch/i.test(text)) client.industry = 'budownictwo';
+        
+        client.project = text.slice(0, 200);
+        clients.push(client);
+      }
+    }
+  }
+  
+  return clients.slice(0, 15);
+}
+
+// Parse technology and innovation info
+function parseTechnologyInfo(content: string): {
+  technologies?: string[];
+  innovations?: string[];
+  patents?: string[];
+  rnd_focus?: string;
+} | null {
+  const techInfo: any = {};
+  
+  const technologies: string[] = [];
+  const innovations: string[] = [];
+  const patents: string[] = [];
+  
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[-•*\d]+\.?\s/.test(trimmed) && trimmed.length > 10) {
+      const text = trimmed.replace(/^[-•*\d]+\.?\s/, '').slice(0, 150);
+      
+      if (/patent|wynalaz|zgłoszeni/i.test(text)) {
+        patents.push(text);
+      } else if (/innowacj|nowa technologi|przełom|breakthrough/i.test(text)) {
+        innovations.push(text);
+      } else {
+        technologies.push(text);
+      }
+    }
+  }
+  
+  if (technologies.length > 0) techInfo.technologies = technologies.slice(0, 10);
+  if (innovations.length > 0) techInfo.innovations = innovations.slice(0, 5);
+  if (patents.length > 0) techInfo.patents = patents.slice(0, 5);
+  
+  // Extract R&D focus
+  const rndMatch = content.match(/(?:R&D|badania\s+i\s+rozwój|innowacje)[:\s]+([^.!?]{20,200})/i);
+  if (rndMatch) {
+    techInfo.rnd_focus = rndMatch[1].trim();
+  }
+  
+  return Object.keys(techInfo).length > 0 ? techInfo : null;
+}
+
+// Parse company history and milestones
+function parseHistoryMilestones(content: string): Array<{ year?: number; event: string; significance?: string }> {
+  const milestones: Array<{ year?: number; event: string; significance?: string }> = [];
+  
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[-•*\d]+\.?\s/.test(trimmed) && trimmed.length > 15) {
+      const text = trimmed.replace(/^[-•*\d]+\.?\s/, '');
+      
+      const milestone: any = { event: text.slice(0, 300) };
+      
+      // Extract year
+      const yearMatch = text.match(/\b(19\d{2}|20[0-2]\d)\b/);
+      if (yearMatch) {
+        milestone.year = parseInt(yearMatch[1]);
+      }
+      
+      // Detect significance
+      if (/założen|powstanie|start|początek/i.test(text)) milestone.significance = 'founding';
+      else if (/przejęci|akwizycj|fuzj|merger/i.test(text)) milestone.significance = 'merger';
+      else if (/ekspansj|nowy\s+rynek|zagraniczn/i.test(text)) milestone.significance = 'expansion';
+      else if (/nagrad|wyróżnien|sukces/i.test(text)) milestone.significance = 'achievement';
+      else if (/produkt|usług|wdrożeni/i.test(text)) milestone.significance = 'product_launch';
+      
+      milestones.push(milestone);
+    }
+  }
+  
+  // Sort by year if available
+  return milestones
+    .sort((a, b) => (a.year || 0) - (b.year || 0))
+    .slice(0, 15);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -376,7 +484,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[Stage 3] Starting external analysis for: ${company_name}`);
+    console.log(`[Stage 3] Starting comprehensive external analysis for: ${company_name}`);
 
     // Update status to processing
     await supabase
@@ -385,54 +493,202 @@ Deno.serve(async (req) => {
       .eq('id', company_id);
 
     const allCitations: string[] = [];
+    const rawAnalyses: Record<string, string> = {};
 
-    // Query 1: Press mentions and news
-    const newsQuery = `"${company_name}" Polska - najnowsze wiadomości, artykuły prasowe, informacje medialne z lat 2023-2025. Podaj konkretne tytuły artykułów, źródła, daty. Skup się na faktach.`;
-    const newsResult = await perplexitySearch(newsQuery, perplexityKey);
+    // Query 1: Press mentions and news (expanded prompt)
+    const newsQuery = `Przeanalizuj dokładnie firmę "${company_name}" w kontekście obecności medialnej i prasowej w Polsce.
+
+Poszukaj i opisz szczegółowo:
+1. Najnowsze artykuły prasowe o firmie (2023-2025)
+2. Wywiady z przedstawicielami firmy
+3. Informacje prasowe i komunikaty
+4. Wzmianki w mediach branżowych
+5. Obecność w social media (LinkedIn, Facebook, Twitter)
+6. Rankingi i zestawienia, w których firma się pojawiła
+
+Dla każdej wzmianki podaj: tytuł, źródło, datę (jeśli dostępna), krótkie podsumowanie treści.
+Napisz szczegółową analizę obecności medialnej tej firmy.`;
+    const newsResult = await perplexitySearch(newsQuery, perplexityKey, 3000);
+    rawAnalyses.news_analysis = newsResult.content;
     const pressMentions = parsePressMentions(newsResult.content);
     allCitations.push(...newsResult.citations);
 
-    // Query 2: Public contracts and tenders
-    const contractsQuery = `"${company_name}" - zamówienia publiczne, przetargi, kontrakty rządowe, umowy z sektorem publicznym. Podaj wartości, daty, zamawiających z lat 2020-2025.`;
-    const contractsResult = await perplexitySearch(contractsQuery, perplexityKey);
+    // Query 2: Public contracts and tenders (expanded)
+    const contractsQuery = `Przeanalizuj dokładnie udział firmy "${company_name}" w zamówieniach publicznych i przetargach w Polsce.
+
+Poszukaj i opisz szczegółowo:
+1. Wygrane przetargi i zamówienia publiczne (2020-2025)
+2. Wartości kontraktów (w PLN)
+3. Nazwy zamawiających (urzędy, instytucje, szpitale, gminy)
+4. Rodzaje dostarczanych produktów/usług
+5. Umowy ramowe z sektorem publicznym
+6. Realizowane projekty dla administracji publicznej
+
+Podaj konkretne przykłady z wartościami i datami. Napisz pełną analizę aktywności firmy w sektorze publicznym.`;
+    const contractsResult = await perplexitySearch(contractsQuery, perplexityKey, 3000);
+    rawAnalyses.contracts_analysis = contractsResult.content;
     const publicContracts = parseContracts(contractsResult.content);
     allCitations.push(...contractsResult.citations);
 
-    // Query 3: Partnerships and alliances
-    const partnershipsQuery = `"${company_name}" - partnerzy biznesowi, partnerstwa strategiczne, dystrybutorzy, dealerzy, alianse, współprace. Jakie firmy są partnerami tej firmy?`;
-    const partnershipsResult = await perplexitySearch(partnershipsQuery, perplexityKey);
+    // Query 3: Partnerships and alliances (expanded)
+    const partnershipsQuery = `Przeanalizuj dokładnie partnerstwa biznesowe i alianse strategiczne firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Oficjalnych partnerów biznesowych
+2. Dystrybutorów i dealerów (kogo reprezentują, czyje marki sprzedają)
+3. Partnerstwa technologiczne (z jakimi producentami współpracują)
+4. Alianse strategiczne i joint ventures
+5. Członkostwo w organizacjach branżowych
+6. Certyfikowane partnerstwa (Gold Partner, Authorized Dealer itp.)
+7. Współprace z uczelniami i instytutami
+
+Dla każdego partnerstwa opisz: nazwa partnera, rodzaj współpracy, od kiedy trwa, co obejmuje. Napisz pełną analizę ekosystemu partnerskiego firmy.`;
+    const partnershipsResult = await perplexitySearch(partnershipsQuery, perplexityKey, 3000);
+    rawAnalyses.partnerships_analysis = partnershipsResult.content;
     const partnerships = parsePartnerships(partnershipsResult.content);
     allCitations.push(...partnershipsResult.citations);
 
-    // Query 4: Awards and certifications
-    const awardsQuery = `"${company_name}" - nagrody, wyróżnienia, certyfikaty ISO, akredytacje, rankingi branżowe, osiągnięcia. Podaj konkretne nazwy nagród i daty.`;
-    const awardsResult = await perplexitySearch(awardsQuery, perplexityKey);
+    // Query 4: Awards and certifications (expanded)
+    const awardsQuery = `Przeanalizuj dokładnie nagrody, wyróżnienia i certyfikaty firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Nagrody branżowe i wyróżnienia
+2. Certyfikaty jakości (ISO 9001, ISO 14001, ISO 27001, itp.)
+3. Akredytacje i atesty
+4. Wyróżnienia "Gazele Biznesu", "Diamenty Forbesa", itp.
+5. Nagrody dla produktów/usług
+6. Certyfikaty partnerskie od producentów
+7. Nagrody dla pracodawcy (Great Place to Work, itp.)
+
+Dla każdej nagrody/certyfikatu podaj: nazwę, rok otrzymania, kategorię, znaczenie. Napisz pełną analizę osiągnięć i certyfikacji firmy.`;
+    const awardsResult = await perplexitySearch(awardsQuery, perplexityKey, 3000);
+    rawAnalyses.awards_analysis = awardsResult.content;
     const awardsCertificates = parseAwardsCertificates(awardsResult.content);
     allCitations.push(...awardsResult.citations);
 
-    // Query 5: Customer reviews and opinions
-    const reviewsQuery = `"${company_name}" - opinie klientów, recenzje, referencje, oceny, reputacja firmy. Co mówią klienci o tej firmie? Cytaty opinii.`;
-    const reviewsResult = await perplexitySearch(reviewsQuery, perplexityKey);
+    // Query 5: Customer reviews and reputation (expanded)
+    const reviewsQuery = `Przeanalizuj dokładnie opinie klientów i reputację firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Opinie na Google Maps i Google Business
+2. Recenzje na portalach branżowych
+3. Opinie na Clutch, Trustpilot, Facebook
+4. Referencje klientów dostępne publicznie
+5. Case studies i success stories
+6. Komentarze i opinie w social media
+7. Wszelkie kontrowersje lub skargi klientów
+
+Cytuj konkretne opinie (jeśli dostępne). Opisz ogólną reputację firmy na rynku. Napisz pełną analizę wizerunku i opinii o firmie.`;
+    const reviewsResult = await perplexitySearch(reviewsQuery, perplexityKey, 3000);
+    rawAnalyses.reviews_analysis = reviewsResult.content;
     const customerReviews = parseCustomerReviews(reviewsResult.content);
     const redFlags = detectRedFlags(reviewsResult.content + newsResult.content);
     allCitations.push(...reviewsResult.citations);
 
-    // Query 6: LinkedIn insights
-    const linkedinQuery = `"${company_name}" LinkedIn - profil firmowy, liczba pracowników, wzrost zatrudnienia, aktywność, posty, kultura organizacyjna. Dane z LinkedIn.`;
-    const linkedinResult = await perplexitySearch(linkedinQuery, perplexityKey);
+    // Query 6: LinkedIn insights (expanded)
+    const linkedinQuery = `Przeanalizuj dokładnie profil LinkedIn firmy "${company_name}" oraz jej pracowników.
+
+Poszukaj i opisz szczegółowo:
+1. Liczba pracowników według LinkedIn
+2. Dynamika zatrudnienia (wzrost/spadek)
+3. Kluczowi menedżerowie i ich profile
+4. Aktywność firmy na LinkedIn (częstotliwość postów)
+5. Najpopularniejsze posty i tematy
+6. Kultura organizacyjna prezentowana na LinkedIn
+7. Oferty pracy i rekrutacje
+8. Życie firmowe (eventy, szkolenia, integracje)
+
+Napisz pełną analizę obecności firmy na LinkedIn i co mówi ona o kulturze i rozwoju organizacji.`;
+    const linkedinResult = await perplexitySearch(linkedinQuery, perplexityKey, 3000);
+    rawAnalyses.linkedin_analysis = linkedinResult.content;
     const linkedinInsights = parseLinkedInInsights(linkedinResult.content);
     allCitations.push(...linkedinResult.citations);
 
-    // Query 7: Market position
-    const marketQuery = `"${company_name}" - pozycja rynkowa, udział w rynku, ranking branżowy, konkurenci, lider czy challenger. Jaka jest pozycja tej firmy na rynku polskim?`;
-    const marketResult = await perplexitySearch(marketQuery, perplexityKey);
+    // Query 7: Market position (expanded)
+    const marketQuery = `Przeanalizuj dokładnie pozycję rynkową firmy "${company_name}" na polskim rynku.
+
+Poszukaj i opisz szczegółowo:
+1. Pozycja firmy w branży (lider, challenger, niszowy gracz)
+2. Szacowany udział w rynku
+3. Pozycje w rankingach branżowych
+4. Główni konkurenci i porównanie z nimi
+5. Przewagi konkurencyjne firmy
+6. Segmenty rynku, w których firma dominuje
+7. Trendy rynkowe wpływające na firmę
+8. Perspektywy rozwoju i zagrożenia
+
+Napisz pełną analizę konkurencyjną i pozycji rynkowej firmy.`;
+    const marketResult = await perplexitySearch(marketQuery, perplexityKey, 3000);
+    rawAnalyses.market_analysis = marketResult.content;
     const marketPosition = parseMarketPosition(marketResult.content);
     allCitations.push(...marketResult.citations);
 
+    // Query 8: Company history and milestones (NEW)
+    const historyQuery = `Przeanalizuj dokładnie historię i rozwój firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Rok założenia i okoliczności powstania
+2. Założyciele i ich wizja
+3. Kluczowe kamienie milowe w historii firmy
+4. Przejęcia, fuzje, spin-offy
+5. Ekspansja geograficzna (nowe rynki, oddziały)
+6. Transformacje biznesowe i zmiany modelu
+7. Ważne inwestycje i projekty rozwojowe
+8. Ewolucja oferty produktowej/usługowej
+
+Przedstaw chronologiczną historię rozwoju firmy od powstania do dziś. Napisz pełną analizę historii i ewolucji organizacji.`;
+    const historyResult = await perplexitySearch(historyQuery, perplexityKey, 3000);
+    rawAnalyses.history_analysis = historyResult.content;
+    const historyMilestones = parseHistoryMilestones(historyResult.content);
+    allCitations.push(...historyResult.citations);
+
+    // Query 9: Key clients and projects (NEW)
+    const clientsQuery = `Przeanalizuj dokładnie klientów i realizacje firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Największych/najważniejszych klientów firmy
+2. Kluczowe projekty referencyjne
+3. Case studies dostępne publicznie
+4. Branże, w których firma ma klientów
+5. Długoterminowe relacje z klientami
+6. Międzynarodowi klienci (jeśli są)
+7. Projekty flagowe i prestiżowe realizacje
+8. Sukcesy i wyniki osiągnięte dla klientów
+
+Podaj konkretne nazwy firm-klientów i opisy projektów. Napisz pełną analizę portfolio klientów i realizacji firmy.`;
+    const clientsResult = await perplexitySearch(clientsQuery, perplexityKey, 3000);
+    rawAnalyses.clients_analysis = clientsResult.content;
+    const keyClients = parseKeyClients(clientsResult.content);
+    allCitations.push(...clientsResult.citations);
+
+    // Query 10: Technology and innovation (NEW)
+    const techQuery = `Przeanalizuj dokładnie technologie i innowacje firmy "${company_name}".
+
+Poszukaj i opisz szczegółowo:
+1. Stosowane technologie i rozwiązania
+2. Własne produkty i innowacje
+3. Patenty i zgłoszenia patentowe
+4. Działalność R&D (badania i rozwój)
+5. Transformacja cyfrowa i digitalizacja
+6. Inwestycje w nowe technologie
+7. Współpraca z startupami i innowatorami
+8. Automatyzacja i robotyzacja procesów
+9. Rozwiązania IT i systemy informatyczne
+
+Napisz pełną analizę poziomu technologicznego i innowacyjności firmy.`;
+    const techResult = await perplexitySearch(techQuery, perplexityKey, 3000);
+    rawAnalyses.technology_analysis = techResult.content;
+    const technologyInfo = parseTechnologyInfo(techResult.content);
+    allCitations.push(...techResult.citations);
+
     // Deduplicate citations
-    const uniqueSources = [...new Set(allCitations)].filter(c => c && c.length > 0).slice(0, 25);
+    const uniqueSources = [...new Set(allCitations)].filter(c => c && c.length > 0).slice(0, 50);
 
     const externalData = {
+      // Raw analyses - full AI responses for display
+      raw_analyses: rawAnalyses,
+      
+      // Parsed structured data
       press_mentions: pressMentions.length > 0 ? pressMentions : null,
       public_contracts: publicContracts.length > 0 ? publicContracts : null,
       partnerships: partnerships.length > 0 ? partnerships : null,
@@ -441,9 +697,16 @@ Deno.serve(async (req) => {
       red_flags: redFlags.length > 0 ? redFlags : null,
       linkedin_insights: linkedinInsights,
       market_position: marketPosition,
+      
+      // New parsed data
+      history_milestones: historyMilestones.length > 0 ? historyMilestones : null,
+      key_clients: keyClients.length > 0 ? keyClients : null,
+      technology_info: technologyInfo,
+      
+      // Metadata
       sources: uniqueSources.length > 0 ? uniqueSources : null,
       analyzed_at: new Date().toISOString(),
-      queries_executed: 7,
+      queries_executed: 10,
     };
 
     // Save to database
@@ -461,7 +724,7 @@ Deno.serve(async (req) => {
       throw updateError;
     }
 
-    console.log(`[Stage 3] Completed successfully with ${uniqueSources.length} sources`);
+    console.log(`[Stage 3] Completed successfully with ${uniqueSources.length} sources and ${Object.keys(rawAnalyses).length} full analyses`);
 
     return new Response(
       JSON.stringify({ 
@@ -470,7 +733,10 @@ Deno.serve(async (req) => {
         press_mentions_count: pressMentions.length,
         contracts_count: publicContracts.length,
         partnerships_count: partnerships.length,
-        sources_count: uniqueSources.length
+        history_milestones_count: historyMilestones.length,
+        key_clients_count: keyClients.length,
+        sources_count: uniqueSources.length,
+        raw_analyses_count: Object.keys(rawAnalyses).length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
