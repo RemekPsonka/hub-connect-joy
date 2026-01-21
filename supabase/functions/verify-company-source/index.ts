@@ -643,14 +643,29 @@ function extractRepresentationRules(dzial2: any): string | null {
     const reprezentacja = dzial2?.reprezentacja;
     if (!reprezentacja) return null;
     
-    // Handle array format (OdpisPelny)
-    if (Array.isArray(reprezentacja)) {
-      const latest = getLatestEntry(reprezentacja);
-      return latest?.sposobReprezentacji || latest?.opis || null;
+    // Handle array format (OdpisPelny) - get latest entry
+    const repr = Array.isArray(reprezentacja) 
+      ? getLatestEntry(reprezentacja) 
+      : reprezentacja;
+    
+    if (!repr) return null;
+    
+    // sposobReprezentacji might itself be an object or array with history
+    let sposobRepr = repr?.sposobReprezentacji || repr?.opis;
+    
+    // If sposobReprezentacji is also an array, get latest
+    if (Array.isArray(sposobRepr)) {
+      const latestSposob = getLatestEntry(sposobRepr);
+      sposobRepr = latestSposob?.sposobReprezentacji || latestSposob?.opis || latestSposob;
     }
     
-    // Handle object format
-    return reprezentacja?.sposobReprezentacji || reprezentacja?.opis || null;
+    // If it's an object with sposobReprezentacji key, extract it recursively
+    if (typeof sposobRepr === 'object' && sposobRepr !== null) {
+      sposobRepr = sposobRepr?.sposobReprezentacji || sposobRepr?.opis || null;
+    }
+    
+    // Final check: must be string
+    return typeof sposobRepr === 'string' ? sposobRepr : null;
   } catch (e) {
     console.error('[KRS] Error extracting representation rules:', e);
     return null;
