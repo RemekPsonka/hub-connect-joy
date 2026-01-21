@@ -161,6 +161,44 @@ function extractSocialMedia(content: string): Record<string, string | null> {
   return result;
 }
 
+// Extract address from content
+function extractAddressFromContent(content: string): { 
+  address?: string; 
+  city?: string; 
+  postal_code?: string 
+} {
+  const result: { address?: string; city?: string; postal_code?: string } = {};
+  
+  // Pattern 1: "ul./al. Nazwa 123" or "ulica Nazwa 123/4"
+  const streetPattern = /(?:ul\.|ulica|al\.|aleja|os\.|osiedle|pl\.|plac)\s+([A-ZŻŹĆĄŚĘŁÓŃa-zżźćąśęłóń\s\-\.]+\s+\d+[a-zA-Z]?(?:\/\d+)?)/gi;
+  const streetMatch = content.match(streetPattern);
+  if (streetMatch && streetMatch[0]) {
+    result.address = streetMatch[0].trim();
+  }
+  
+  // Pattern 2: Postal code + city "00-000 Miasto" or "00-000, Miasto"
+  const postalCityPattern = /(\d{2}[-\s]?\d{3})\s*[,\s]\s*([A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+(?:[\s\-][A-ZŁÓŚŻŹĆĄ]?[a-złóśżźćąę]+)*)/g;
+  const postalMatch = postalCityPattern.exec(content);
+  if (postalMatch) {
+    result.postal_code = postalMatch[1].replace(/\s/g, '-');
+    result.city = postalMatch[2].trim();
+  }
+  
+  // Pattern 3: Address in Contact section
+  if (!result.address) {
+    const contactSection = content.match(/(?:kontakt|adres|siedziba)[:\s]*([^\n]{10,150})/i);
+    if (contactSection) {
+      const sectionText = contactSection[1];
+      const streetInSection = sectionText.match(/(?:ul\.|ulica|al\.)\s+[A-ZŻŹĆĄŚĘŁÓŃa-zżźćąśęłóń\s\-\.]+\d+/i);
+      if (streetInSection) {
+        result.address = streetInSection[0].trim();
+      }
+    }
+  }
+  
+  return result;
+}
+
 // Parse scraped content into structured data
 function parseScrapedContent(pages: Array<{ url: string; content: string; title?: string }>): any {
   let description = '';
@@ -172,6 +210,7 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
   let management_web: Array<{ name: string; position?: string }> = [];
   let company_history = '';
   let latest_news: Array<{ title: string; date?: string }> = [];
+  let extracted_address: { address?: string; city?: string; postal_code?: string } = {};
   let allContent = '';
 
   for (const page of pages) {
@@ -261,6 +300,14 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
         });
       });
     }
+    
+    // Extract address from contact/location pages
+    if (/kontakt|contact|lokalizacja|location|o-nas|about/.test(lowerUrl)) {
+      const addr = extractAddressFromContent(content);
+      if (addr.address || addr.city || addr.postal_code) {
+        extracted_address = { ...extracted_address, ...addr };
+      }
+    }
   }
 
   // Deduplicate
@@ -286,6 +333,9 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
     company_history: company_history || null,
     latest_news: latest_news.length > 0 ? latest_news : null,
     social_media_links,
+    extracted_address: (extracted_address.address || extracted_address.city || extracted_address.postal_code) 
+      ? extracted_address 
+      : null,
   };
 }
 
@@ -439,14 +489,44 @@ Deno.serve(async (req) => {
       crawled_urls: scrapedPages.map(p => p.url),
     };
 
+    // Get current company data to avoid overwriting existing values
+    const { data: currentCompany } = await supabase
+      .from('companies')
+      .select('address, city, postal_code, website')
+      .eq('id', company_id)
+      .single();
+
+    // Prepare update data
+    const updateData: Record<string, any> = {
+      www_data: wwwData,
+      www_data_status: 'completed',
+      www_data_date: new Date().toISOString(),
+    };
+
+    // Auto-fill address fields only if currently empty
+    if (!currentCompany?.address && parsedData.extracted_address?.address) {
+      updateData.address = parsedData.extracted_address.address;
+      console.log('[Stage 2] Auto-filling address:', parsedData.extracted_address.address);
+    }
+    if (!currentCompany?.city && parsedData.extracted_address?.city) {
+      updateData.city = parsedData.extracted_address.city;
+      console.log('[Stage 2] Auto-filling city:', parsedData.extracted_address.city);
+    }
+    if (!currentCompany?.postal_code && parsedData.extracted_address?.postal_code) {
+      updateData.postal_code = parsedData.extracted_address.postal_code;
+      console.log('[Stage 2] Auto-filling postal_code:', parsedData.extracted_address.postal_code);
+    }
+
+    // Save website URL to company if it was missing
+    if (!currentCompany?.website) {
+      updateData.website = normalizedUrl;
+      console.log('[Stage 2] Auto-filling website:', normalizedUrl);
+    }
+
     // Save to database
     const { error: updateError } = await supabase
       .from('companies')
-      .update({
-        www_data: wwwData,
-        www_data_status: 'completed',
-        www_data_date: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', company_id);
 
     if (updateError) {

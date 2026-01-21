@@ -103,7 +103,13 @@ function formatFetchDate(dateStr: string | null | undefined): string {
   }
 }
 
-function StageTabContent({ stage, company }: { stage: StageConfig; company: Company }) {
+interface StageTabContentProps {
+  stage: StageConfig;
+  company: Company;
+  inferredWebsite?: string | null;
+}
+
+function StageTabContent({ stage, company, inferredWebsite }: StageTabContentProps) {
   const Icon = stage.icon;
   const toolLabel = getToolLabel(stage.id, stage.data);
   const fetchDate = formatFetchDate(stage.fetchedAt);
@@ -164,6 +170,14 @@ function StageTabContent({ stage, company }: { stage: StageConfig; company: Comp
           </Button>
         </div>
         
+        {/* Info about inferred website URL */}
+        {stage.id === 'www' && !company.website && inferredWebsite && (
+          <p className="text-xs text-blue-600 dark:text-blue-400 mb-3 flex items-center gap-1">
+            <Globe className="h-3 w-3" />
+            URL wywnioskowany z domeny email: {inferredWebsite}
+          </p>
+        )}
+        
         {/* Reason why can't run */}
         {stage.reason && !stage.canRun && (
           <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">{stage.reason}</p>
@@ -205,6 +219,9 @@ function StatusDot({ status, isLoading }: { status: StageStatus; isLoading: bool
 
 export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTabContentProps) {
   const emailDomain = contactEmail?.split('@')[1];
+  
+  // Infer website from email domain if company.website is missing
+  const inferredWebsite = company.website || (emailDomain ? `https://${emailDomain}` : null);
 
   const sourceStatus = getStatusFromDb(company.source_data_status);
   const wwwStatus = getStatusFromDb(company.www_data_status);
@@ -245,9 +262,9 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
       icon: Globe,
       status: wwwStatus,
       isLoading: pipeline.scanWebsite.isPending,
-      canRun: !!company.website,
-      reason: !company.website ? 'Brak strony WWW w danych' : undefined,
-      onRun: () => company.website && pipeline.scanWebsite.mutate({ website: company.website }),
+      canRun: !!inferredWebsite,
+      reason: !inferredWebsite ? 'Brak strony WWW i domeny email' : undefined,
+      onRun: () => inferredWebsite && pipeline.scanWebsite.mutate({ website: inferredWebsite }),
       data: company.www_data as object | null,
       DataViewer: WebsiteDataViewer,
       fetchedAt: (company.www_data as any)?.scanned_at || (company.www_data as any)?.scan_date || company.www_data_date,
@@ -308,7 +325,7 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
         
         {stages.map((stage) => (
           <TabsContent key={stage.id} value={stage.id} className="mt-4">
-            <StageTabContent stage={stage} company={company} />
+            <StageTabContent stage={stage} company={company} inferredWebsite={inferredWebsite} />
           </TabsContent>
         ))}
       </Tabs>
