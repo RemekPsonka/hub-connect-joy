@@ -5,31 +5,93 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// KRS API - Polish National Court Register
-async function fetchKRSData(krs: string): Promise<any | null> {
-  try {
-    // Try P (commercial companies) first, then S (associations)
-    for (const register of ['P', 'S']) {
-      const url = `https://api-krs.ms.gov.pl/api/krs/OdsijApi/${register}/${krs}`;
-      console.log(`[KRS] Trying ${register} register for KRS ${krs}`);
-      
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.odppierwsza || data?.odpis) {
-          console.log(`[KRS] Found in ${register} register`);
-          return data;
-        }
-      }
+// Helper function to extract name from nested KRS structure (same as fetch-krs-data)
+function extractName(imionaField: any, nazwiskoField: any): string | null {
+  let firstName = '';
+  let lastName = '';
+  
+  if (typeof imionaField === 'string') {
+    firstName = imionaField;
+  } else if (Array.isArray(imionaField) && imionaField.length > 0) {
+    const first = imionaField[0];
+    if (first?.imiona?.imie) {
+      firstName = first.imiona.imie;
+      if (first.imiona.imieDrugie) firstName += ' ' + first.imiona.imieDrugie;
+    } else if (first?.imiona && typeof first.imiona === 'string') {
+      firstName = first.imiona;
+    } else if (typeof first === 'string') {
+      firstName = first;
     }
-    return null;
-  } catch (error) {
-    console.error('[KRS] Error fetching:', error);
-    return null;
+  } else if (imionaField?.imie) {
+    firstName = imionaField.imie;
   }
+  
+  if (typeof nazwiskoField === 'string') {
+    lastName = nazwiskoField;
+  } else if (Array.isArray(nazwiskoField) && nazwiskoField.length > 0) {
+    const first = nazwiskoField[0];
+    if (first?.nazwisko?.nazwiskoICzlon) {
+      lastName = first.nazwisko.nazwiskoICzlon;
+    } else if (first?.nazwisko && typeof first.nazwisko === 'string') {
+      lastName = first.nazwisko;
+    } else if (typeof first === 'string') {
+      lastName = first;
+    }
+  } else if (nazwiskoField?.nazwiskoICzlon) {
+    lastName = nazwiskoField.nazwiskoICzlon;
+  }
+  
+  if (firstName && lastName) {
+    return `${firstName} ${lastName}`;
+  }
+  return null;
+}
+
+// Helper to extract position/function
+function extractPosition(funkcjaField: any): string {
+  if (typeof funkcjaField === 'string') return funkcjaField;
+  if (Array.isArray(funkcjaField) && funkcjaField.length > 0) {
+    const first = funkcjaField[0];
+    return first?.funkcjaWOrganie || first?.funkcja || 'Członek Zarządu';
+  }
+  if (funkcjaField?.funkcjaWOrganie) return funkcjaField.funkcjaWOrganie;
+  return 'Członek Zarządu';
+}
+
+// KRS API - using OdpisPelny endpoint (same as fetch-krs-data)
+async function fetchKRSData(krs: string): Promise<any | null> {
+  const krsNormalized = krs.padStart(10, '0');
+  
+  // Try P register first (businesses)
+  console.log(`[KRS] Trying P register for KRS ${krsNormalized}`);
+  const urlP = `https://api-krs.ms.gov.pl/api/krs/OdpisPelny/${krsNormalized}?rejestr=P&format=json`;
+  
+  try {
+    const responseP = await fetch(urlP);
+    if (responseP.ok) {
+      console.log(`[KRS] Found in P register`);
+      return await responseP.json();
+    }
+  } catch (e) {
+    console.log(`[KRS] P register fetch failed:`, e);
+  }
+  
+  // Try S register (associations/foundations)
+  console.log(`[KRS] Trying S register for KRS ${krsNormalized}`);
+  const urlS = `https://api-krs.ms.gov.pl/api/krs/OdpisPelny/${krsNormalized}?rejestr=S&format=json`;
+  
+  try {
+    const responseS = await fetch(urlS);
+    if (responseS.ok) {
+      console.log(`[KRS] Found in S register`);
+      return await responseS.json();
+    }
+  } catch (e) {
+    console.log(`[KRS] S register fetch failed:`, e);
+  }
+  
+  console.log(`[KRS] Not found in any register`);
+  return null;
 }
 
 // CEIDG API - Polish Sole Proprietorship Register
@@ -103,12 +165,9 @@ Odpowiedz krótko, tylko fakty.`
     // Clean Perplexity citation markers [1][2] etc. before parsing
     const content = rawContent.replace(/\[\d+\]/g, '');
     
-    // Extract registry IDs with improved patterns that handle various formats
-    // NIP: 10 digits, possibly with dashes/spaces
+    // Extract registry IDs with improved patterns
     const nipMatch = content.match(/NIP[:\s]*(\d{10}|\d{3}[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})(?:[,.\s]|$)/i);
-    // KRS: exactly 10 digits
     const krsMatch = content.match(/KRS[:\s]*(\d{10})(?:[,.\s]|$)/i);
-    // REGON: 9 or 14 digits
     const regonMatch = content.match(/REGON[:\s]*(\d{9}|\d{14})(?:[,.\s]|$)/i);
     
     const extractedKrs = krsMatch ? krsMatch[1] : undefined;
@@ -121,7 +180,7 @@ Odpowiedz krótko, tylko fakty.`
       nip: extractedNip,
       krs: extractedKrs,
       regon: extractedRegon,
-      info: rawContent // Keep original with citations for reference
+      info: rawContent
     };
   } catch (error) {
     console.error('[Perplexity] Error:', error);
@@ -129,84 +188,120 @@ Odpowiedz krótko, tylko fakty.`
   }
 }
 
-// Parse KRS response to extract useful data
+// Parse KRS response - using OdpisPelny structure (same as fetch-krs-data)
 function parseKRSResponse(krsData: any): any {
   try {
-    const odpis = krsData?.odppierwsza || krsData?.odpis;
-    if (!odpis) return null;
-
-    const dane = odpis?.dane || {};
-    const dzial1 = dane?.dzial1 || {};
-    const dzial2 = dane?.dzial2 || {};
-    const dzial6 = dane?.dzial6 || {};
+    const dzial1 = krsData?.odpis?.dane?.dzial1;
+    const dzial2 = krsData?.odpis?.dane?.dzial2;
+    const dzial3 = krsData?.odpis?.dane?.dzial3;
+    const dzial6 = krsData?.odpis?.dane?.dzial6;
+    const napiData = krsData?.odpis?.dane?.napiData;
     
-    // Get name
-    const danePodmiotu = dzial1?.danePodmiotu || {};
-    const nazwa = danePodmiotu?.nazwa || '';
+    if (!dzial1) {
+      console.log(`[KRS] No dzial1 in response`);
+      return null;
+    }
     
-    // Get address - full registered address
-    const siedziba = dzial1?.siedzibaIAdres?.adres || {};
-    const addressParts = [
-      siedziba?.ulica ? `ul. ${siedziba.ulica}` : null,
-      siedziba?.nrDomu,
-      siedziba?.nrLokalu ? `/${siedziba.nrLokalu}` : null,
-    ].filter(Boolean).join(' ');
+    // Handle company name - can be string, array of objects, or nested object
+    const rawNazwa = dzial1?.danePodmiotu?.nazwa;
+    let companyName: string | null = null;
+    if (Array.isArray(rawNazwa) && rawNazwa.length > 0) {
+      companyName = rawNazwa[0]?.nazwa || String(rawNazwa[0]) || null;
+    } else if (typeof rawNazwa === 'string') {
+      companyName = rawNazwa;
+    } else if (rawNazwa && typeof rawNazwa === 'object') {
+      companyName = (rawNazwa as any).nazwa || String(rawNazwa);
+    }
     
-    const addressFull = [
-      addressParts,
-      siedziba?.kodPocztowy,
-      siedziba?.miejscowosc
-    ].filter(Boolean).join(', ');
+    // NIP and REGON from napiData (official source - 100% confidence)
+    const nip = napiData?.nip || null;
+    const regon = napiData?.regon || null;
     
-    // Get NIP/REGON
-    const identyfikatory = dzial1?.danePodmiotu?.identyfikatory || {};
+    // Address
+    const siedzibaAdres = dzial1?.siedzibaIAdres?.adres;
+    const siedziba = dzial1?.siedzibaIAdres?.siedziba;
     
-    // Get company status from dzial6
+    let addressParts = '';
+    if (siedzibaAdres?.ulica) {
+      addressParts = siedzibaAdres.ulica;
+      if (siedzibaAdres.nrDomu) addressParts += ` ${siedzibaAdres.nrDomu}`;
+      if (siedzibaAdres.nrLokalu) addressParts += `/${siedzibaAdres.nrLokalu}`;
+    }
+    
+    const city = siedzibaAdres?.miejscowosc || siedziba?.miejscowosc || null;
+    const postalCode = siedzibaAdres?.kodPocztowy || null;
+    
+    const addressFull = [addressParts, postalCode, city].filter(Boolean).join(', ');
+    
+    // Legal form
+    const rawFormaPrawna = dzial1?.danePodmiotu?.formaPrawna;
+    let formaPrawna: string | null = null;
+    if (typeof rawFormaPrawna === 'string') {
+      formaPrawna = rawFormaPrawna;
+    } else if (rawFormaPrawna && typeof rawFormaPrawna === 'object') {
+      formaPrawna = (rawFormaPrawna as any).nazwa || (rawFormaPrawna as any).wartość || null;
+    }
+    
+    // Map legal form to code
+    const legalFormMap: Record<string, string> = {
+      'SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ': 'sp_z_oo',
+      'SPÓŁKA AKCYJNA': 'sa',
+      'SPÓŁKA JAWNA': 'sp_j',
+      'SPÓŁKA PARTNERSKA': 'sp_p',
+      'SPÓŁKA KOMANDYTOWA': 'sp_k',
+      'SPÓŁKA KOMANDYTOWO-AKCYJNA': 'sp_ka',
+    };
+    const legalForm = formaPrawna ? (legalFormMap[formaPrawna.toUpperCase()] || 'spółka') : 'spółka';
+    
+    // Extract management persons
+    const management: Array<{ name: string; position: string; verified: boolean }> = [];
+    const reprezentacja = dzial2?.reprezentacja;
+    
+    // Collect all possible sources of management data
+    const skladSources: any[] = [];
+    if (reprezentacja?.sklad) skladSources.push(reprezentacja.sklad);
+    if (reprezentacja?.skladOrganu) skladSources.push(reprezentacja.skladOrganu);
+    if (reprezentacja?.organReprezentacji?.sklad) skladSources.push(reprezentacja.organReprezentacji.sklad);
+    
+    // If reprezentacja is an array (OdpisPelny format)
+    if (Array.isArray(reprezentacja)) {
+      for (const rep of reprezentacja) {
+        if (rep.sklad) skladSources.push(rep.sklad);
+        if (rep.skladOrganu) skladSources.push(rep.skladOrganu);
+      }
+    }
+    
+    for (const sklad of skladSources) {
+      if (Array.isArray(sklad)) {
+        for (const personEntry of sklad) {
+          const fullName = extractName(personEntry.imiona, personEntry.nazwisko);
+          if (fullName) {
+            const position = extractPosition(personEntry.funkcjaWOrganie || personEntry.funkcja);
+            management.push({ name: fullName, position, verified: true });
+          }
+          
+          // Handle nested sklad/osoby
+          const nestedPersons = personEntry.sklad || personEntry.osoby || [];
+          if (Array.isArray(nestedPersons)) {
+            for (const nested of nestedPersons) {
+              const nestedName = extractName(nested.imiona, nested.nazwisko);
+              if (nestedName) {
+                const nestedPosition = extractPosition(nested.funkcjaWOrganie || nested.funkcja);
+                management.push({ name: nestedName, position: nestedPosition, verified: true });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Company status from dzial6
     const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || {};
     const czyWykreslony = statusInfo?.czyWykreslony === true || statusInfo?.dataWykreslenia;
     const czyZawieszona = statusInfo?.czyZawieszona === true;
-    const status = czyWykreslony ? 'WYKREŚLONA' : 
-                   czyZawieszona ? 'ZAWIESZONA' : 'AKTYWNA';
+    const status = czyWykreslony ? 'WYKREŚLONA' : czyZawieszona ? 'ZAWIESZONA' : 'AKTYWNA';
     
-    // Get management (Zarząd)
-    const management: Array<{name: string; position: string; verified: boolean}> = [];
-    
-    // Parse Zarząd from organReprezentacji
-    const organRep = dzial2?.organReprezentacji || {};
-    const skladOrganu = organRep?.skladOrganu || organRep?.sklad || [];
-    const zarzadArray = Array.isArray(skladOrganu) ? skladOrganu : [skladOrganu];
-    
-    zarzadArray.forEach((osoba: any) => {
-      if (osoba?.imiona && osoba?.nazwisko) {
-        management.push({
-          name: `${osoba.imiona} ${osoba.nazwisko}`,
-          position: osoba.funkcja || 'Członek Zarządu',
-          verified: true
-        });
-      }
-    });
-    
-    // Parse Wspólnicy/Udziałowcy (shareholders)
-    const wspolnicy = dzial1?.wspolnicyLubAkcjonariusze || [];
-    const shareholders: Array<{name: string; shares?: number; ownership_percent?: number; verified: boolean}> = [];
-    const wspolnicyArray = Array.isArray(wspolnicy) ? wspolnicy : [wspolnicy];
-    
-    wspolnicyArray.forEach((wspolnik: any) => {
-      if (wspolnik?.nazwisko || wspolnik?.nazwa) {
-        const name = wspolnik?.imiona 
-          ? `${wspolnik.imiona} ${wspolnik.nazwisko}` 
-          : (wspolnik?.nazwisko || wspolnik?.nazwa);
-        shareholders.push({
-          name,
-          shares: wspolnik?.posiadaneUdzialy?.iloscUdzialow || wspolnik?.liczbaUdzialow,
-          ownership_percent: wspolnik?.procentUdzialow,
-          verified: true
-        });
-      }
-    });
-
-    // Get PKD codes
-    const dzial3 = dane?.dzial3 || {};
+    // PKD codes from dzial3
     const przedmiotDzialalnosci = dzial3?.przedmiotDzialalnosci || {};
     const pkdPrzewazajaca = przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || [];
     const pkdPozostala = przedmiotDzialalnosci?.przedmiotPozostalejDzialalnosci || [];
@@ -218,22 +313,23 @@ function parseKRSResponse(krsData: any): any {
       ...pkdPrzewazajacaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean),
       ...pkdPozostalaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean)
     ];
-    const pkdMain = pkdCodes[0] || null;
-
+    
+    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length} persons`);
+    
     return {
-      name_official: nazwa,
-      nip: identyfikatory?.nip || null,
-      regon: identyfikatory?.regon || null,
+      name_official: companyName,
+      nip: nip,
+      regon: regon,
       address_registered: addressFull || null,
       address: addressParts || null,
-      city: siedziba?.miejscowosc || null,
-      postal_code: siedziba?.kodPocztowy || null,
-      registration_date: danePodmiotu?.dataRozpoczeciaDzialalnosci || danePodmiotu?.dataWpisuDoRejestruPrzedsieb || null,
-      legal_form: danePodmiotu?.formaLubRodzajRejestru || 'spółka',
+      city: city,
+      postal_code: postalCode,
+      registration_date: dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || null,
+      legal_form: legalForm,
       pkd_codes: pkdCodes,
-      pkd_main: pkdMain,
+      pkd_main: pkdCodes[0] || null,
       management,
-      shareholders,
+      shareholders: [],
       status,
       source: 'krs_api',
       confidence: 'verified',
