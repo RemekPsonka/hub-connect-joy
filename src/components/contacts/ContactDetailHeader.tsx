@@ -60,94 +60,76 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Back button */}
-      <Button variant="ghost" size="sm" onClick={() => navigate('/contacts')} className="gap-2">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/contacts')} className="gap-2 -ml-2">
         <ArrowLeft className="h-4 w-4" />
         Powrót do kontaktów
       </Button>
 
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-        {/* Left side - Avatar and info */}
+      {/* SEKCJA 1: Osoba + Akcje */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        {/* Left side - Avatar and person info */}
         <div className="flex items-start gap-4">
-          <Avatar className="h-16 w-16">
-            <AvatarFallback className="text-xl bg-primary text-primary-foreground">
+          <Avatar className="h-14 w-14">
+            <AvatarFallback className="text-lg bg-primary text-primary-foreground">
               {getInitials(contact.full_name)}
             </AvatarFallback>
           </Avatar>
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              {contact.full_name}
+            {/* Name + Owner badge */}
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground">
+                {contact.full_name}
+              </h1>
               {isOwner && (
-                <Badge variant="default" className="gap-1 bg-amber-500 hover:bg-amber-600">
+                <Badge variant="default" className="gap-1 bg-amber-500 hover:bg-amber-600 text-xs">
                   <Crown className="h-3 w-3" />
                   Właściciel
                 </Badge>
               )}
-            </h1>
-            <div className="space-y-0.5">
-              {contact.position && (
-                <p className="text-muted-foreground">{contact.position}</p>
-              )}
-              {contact.companies ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <p className="text-muted-foreground font-medium">
-                      {contact.companies.name}
-                    </p>
-                    {(contact.companies as any).legal_form && (
-                      <Badge variant="outline" className="text-xs">
-                        {(contact.companies as any).legal_form}
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {/* Registry IDs */}
-                  {((contact.companies as any).nip || (contact.companies as any).krs || (contact.companies as any).regon) && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {(contact.companies as any).nip && (
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          NIP: {(contact.companies as any).nip}
-                        </Badge>
-                      )}
-                      {(contact.companies as any).krs && (
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          KRS: {(contact.companies as any).krs}
-                        </Badge>
-                      )}
-                      {(contact.companies as any).regon && (
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          REGON: {(contact.companies as any).regon}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Address */}
-                  {(contact.companies.address || contact.companies.city) && (
-                    <p className="text-sm text-muted-foreground">
-                      {[contact.companies.address, (contact.companies as any).postal_code, contact.companies.city].filter(Boolean).join(', ')}
-                    </p>
-                  )}
-                  
-                  {/* Website */}
-                  {(contact.companies as any).website && (
-                    <a 
-                      href={(contact.companies as any).website.startsWith('http') ? (contact.companies as any).website : `https://${(contact.companies as any).website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
-                    >
-                      <Globe className="h-3 w-3" />
-                      {(contact.companies as any).website.replace(/^https?:\/\//, '')}
-                    </a>
-                  )}
-                </div>
-              ) : contact.company ? (
-                <p className="text-muted-foreground">{contact.company}</p>
-              ) : null}
             </div>
-            <div className="flex items-center gap-2 pt-1">
+            
+            {/* Position */}
+            {contact.position && (
+              <p className="text-muted-foreground text-sm">{contact.position}</p>
+            )}
+            
+            {/* Contact links - inline text style */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-sm">
+              {contact.email && (
+                <a 
+                  href={`mailto:${contact.email}`}
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>{contact.email}</span>
+                </a>
+              )}
+              {contact.phone && (
+                <a 
+                  href={`tel:${contact.phone}`}
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  <span>{contact.phone}</span>
+                </a>
+              )}
+              {contact.linkedin_url && (
+                <a 
+                  href={contact.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Linkedin className="h-3.5 w-3.5" />
+                  <span>LinkedIn</span>
+                </a>
+              )}
+            </div>
+            
+            {/* Group badge */}
+            <div className="pt-1">
               <GroupBadge group={contact.contact_groups} />
             </div>
           </div>
@@ -155,60 +137,35 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
 
         {/* Right side - Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {contact.email && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={`mailto:${contact.email}`}>
-                <Mail className="h-4 w-4 mr-2" />
-                Email
-              </a>
-            </Button>
-          )}
-          {contact.phone && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={`tel:${contact.phone}`}>
-                <Phone className="h-4 w-4 mr-2" />
-                Telefon
-              </a>
-            </Button>
-          )}
-          {contact.linkedin_url && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
-                <Linkedin className="h-4 w-4 mr-2" />
-                LinkedIn
-              </a>
-            </Button>
-          )}
           <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
-            <CalendarPlus className="h-4 w-4 mr-2" />
+            <CalendarPlus className="h-4 w-4 mr-1.5" />
             Konsultacja
           </Button>
           <Button 
-            variant={isOwner ? "default" : "outline"} 
+            variant={isOwner ? "secondary" : "outline"} 
             size="sm" 
             onClick={() => toggleOwnerStatus.mutate({ contactId: contact.id, isOwner: !isOwner })}
             disabled={toggleOwnerStatus.isPending}
-            className={isOwner ? "bg-amber-500 hover:bg-amber-600" : ""}
+            className={isOwner ? "bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300" : ""}
           >
-            <Crown className="h-4 w-4 mr-2" />
-            {isOwner ? "Właściciel" : "Oznacz właściciela"}
+            <Crown className="h-4 w-4 mr-1.5" />
+            {isOwner ? "Właściciel" : "Ustaw właściciela"}
           </Button>
           {viewMode === 'company' && company ? (
             <Button variant="outline" size="sm" onClick={() => setIsCompanyModalOpen(true)}>
-              <Building className="h-4 w-4 mr-2" />
+              <Edit className="h-4 w-4 mr-1.5" />
               Edytuj firmę
             </Button>
           ) : (
             <Button variant="outline" size="sm" onClick={onEdit}>
-              <Edit className="h-4 w-4 mr-2" />
+              <Edit className="h-4 w-4 mr-1.5" />
               Edytuj
             </Button>
           )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Usuń
+              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                <Trash2 className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -227,13 +184,13 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="flex flex-wrap items-center gap-6 text-sm">
+      {/* SEKCJA 2: Wskaźniki relacji */}
+      <div className="flex flex-wrap items-center gap-6 text-sm border-t border-b border-border/50 py-3">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Siła relacji:</span>
           <RelationshipStrengthBar 
             value={contact.relationship_strength || 5} 
-            className="w-24" 
+            className="w-20" 
             showLabel 
           />
         </div>
@@ -242,6 +199,62 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
           <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>
         </div>
       </div>
+
+      {/* SEKCJA 3: Dane firmy - osobny blok */}
+      {(contact.companies || contact.company) && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+          {contact.companies ? (
+            <div className="space-y-2">
+              {/* Company name + legal form */}
+              <div className="flex items-center gap-2">
+                <Building className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{contact.companies.name}</span>
+                {(contact.companies as any).legal_form && (
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {(contact.companies as any).legal_form}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* Registry IDs - single line with dots */}
+              {((contact.companies as any).nip || (contact.companies as any).krs || (contact.companies as any).regon) && (
+                <p className="text-xs text-muted-foreground font-mono pl-6">
+                  {[
+                    (contact.companies as any).nip && `NIP: ${(contact.companies as any).nip}`,
+                    (contact.companies as any).krs && `KRS: ${(contact.companies as any).krs}`,
+                    (contact.companies as any).regon && `REGON: ${(contact.companies as any).regon}`
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              
+              {/* Address */}
+              {(contact.companies.address || contact.companies.city) && (
+                <p className="text-sm text-muted-foreground pl-6">
+                  {[contact.companies.address, (contact.companies as any).postal_code, contact.companies.city].filter(Boolean).join(', ')}
+                </p>
+              )}
+              
+              {/* Website */}
+              {(contact.companies as any).website && (
+                <a 
+                  href={(contact.companies as any).website.startsWith('http') ? (contact.companies as any).website : `https://${(contact.companies as any).website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline flex items-center gap-1.5 pl-6"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  {(contact.companies as any).website.replace(/^https?:\/\//, '')}
+                </a>
+              )}
+            </div>
+          ) : contact.company ? (
+            <div className="flex items-center gap-2">
+              <Building className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{contact.company}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <ConsultationModal
         isOpen={isConsultationModalOpen}
