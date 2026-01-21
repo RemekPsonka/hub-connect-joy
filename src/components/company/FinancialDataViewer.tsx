@@ -53,28 +53,69 @@ function getTrendIcon(current: number | undefined, previous: number | undefined)
 }
 
 export function FinancialDataViewer({ data, onRefresh, isRefreshing }: FinancialDataViewerProps) {
-  if (!data) {
+  // Extract years data (different possible structures)
+  const yearsData = data?.years || data?.financial_years || [];
+  const year2024 = yearsData.find((y: any) => y.year === 2024) || data?.year_2024;
+  const year2023 = yearsData.find((y: any) => y.year === 2023) || data?.year_2023;
+  const year2022 = yearsData.find((y: any) => y.year === 2022) || data?.year_2022;
+  
+  const latestYear = year2024 || year2023 || yearsData[0];
+  const hasAnyData = latestYear || yearsData.length > 0;
+
+  // Show empty state if no data at all OR if data exists but has no actual values
+  if (!data || !hasAnyData) {
+    const dataSources = data?.data_sources || data?.sources || [];
+    
     return (
       <div className="text-center py-8 text-muted-foreground">
         <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Brak danych finansowych</p>
+        <p className="font-medium mb-2">Brak szczegółowych danych finansowych</p>
+        
+        {/* Show searched sources if available */}
+        {dataSources.length > 0 && (
+          <div className="mt-4 text-xs">
+            <p className="mb-2">Przeszukane źródła:</p>
+            <div className="flex flex-wrap gap-1 justify-center">
+              {dataSources.slice(0, 5).map((url: string, idx: number) => {
+                try {
+                  return (
+                    <Badge key={idx} variant="outline" className="text-xs">
+                      {new URL(url).hostname}
+                    </Badge>
+                  );
+                } catch {
+                  return (
+                    <Badge key={idx} variant="outline" className="text-xs">
+                      {url.substring(0, 30)}
+                    </Badge>
+                  );
+                }
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Timestamp */}
+        {data?.fetched_at && (
+          <p className="text-xs mt-4">
+            Sprawdzono: {format(new Date(data.fetched_at), 'd MMM yyyy, HH:mm', { locale: pl })}
+          </p>
+        )}
+        
         {onRefresh && (
-          <Button className="mt-4" onClick={onRefresh} disabled={isRefreshing}>
-            {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
-            Pobierz dane
+          <Button className="mt-4" variant="outline" onClick={onRefresh} disabled={isRefreshing}>
+            {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Spróbuj ponownie
           </Button>
         )}
+        
+        <p className="text-xs text-muted-foreground/70 mt-3 max-w-md mx-auto">
+          Firma może nie publikować sprawozdań finansowych lub dane nie są dostępne w publicznych źródłach.
+        </p>
       </div>
     );
   }
 
-  // Extract years data (different possible structures)
-  const yearsData = data.years || data.financial_years || [];
-  const year2024 = yearsData.find((y: any) => y.year === 2024) || data.year_2024;
-  const year2023 = yearsData.find((y: any) => y.year === 2023) || data.year_2023;
-  const year2022 = yearsData.find((y: any) => y.year === 2022) || data.year_2022;
-  
-  const latestYear = year2024 || year2023 || yearsData[0];
   const cagr = data.revenue_cagr || data.cagr;
   const healthIndicator = data.financial_health || data.health;
 
