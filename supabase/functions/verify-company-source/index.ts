@@ -121,11 +121,47 @@ async function fetchCEIDGData(nip: string, token: string): Promise<any | null> {
   }
 }
 
+// Extract address from Perplexity text response
+function parseAddressFromPerplexity(text: string): { address?: string; city?: string; postal_code?: string } {
+  const result: { address?: string; city?: string; postal_code?: string } = {};
+  
+  // Clean text
+  const cleanText = text
+    .replace(/\[\d+\]/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '');
+  
+  // Pattern: "ul. Nazwa 123, 00-000 Miasto" or "Adres: ul. Nazwa 123"
+  const addressMatch = cleanText.match(/(?:Adres(?:\s+siedziby)?|Siedziba)\s*[:\-]?\s*([^,\n]+(?:,\s*)?(?:\d{2}[-\s]?\d{3})?\s*[A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+)/i);
+  if (addressMatch) {
+    const fullAddress = addressMatch[1].trim();
+    
+    // Extract postal code and city
+    const postalCityMatch = fullAddress.match(/(\d{2}[-\s]?\d{3})\s*([A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+(?:\s+[A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+)?)/);
+    if (postalCityMatch) {
+      result.postal_code = postalCityMatch[1].replace(/\s/g, '-');
+      result.city = postalCityMatch[2];
+      // Street is everything before postal code
+      const streetPart = fullAddress.substring(0, fullAddress.indexOf(postalCityMatch[1])).replace(/,\s*$/, '').trim();
+      if (streetPart) result.address = streetPart;
+    } else {
+      // Just try to extract city from end of address
+      const cityOnlyMatch = fullAddress.match(/,?\s*([A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+(?:\s+[A-ZŁÓŚŻŹĆĄ][a-złóśżźćąę]+)?)$/);
+      if (cityOnlyMatch) {
+        result.city = cityOnlyMatch[1];
+        result.address = fullAddress.substring(0, fullAddress.lastIndexOf(cityOnlyMatch[1])).replace(/,\s*$/, '').trim();
+      }
+    }
+  }
+  
+  return result;
+}
+
 // Perplexity basic search - find KRS/NIP if unknown
 async function searchBasicInfo(
   companyName: string, 
   apiKey: string
-): Promise<{ krs?: string; nip?: string; regon?: string; info?: string }> {
+): Promise<{ krs?: string; nip?: string; regon?: string; info?: string; address?: string; city?: string; postal_code?: string }> {
   try {
     console.log(`[Perplexity] Basic search for ${companyName}`);
     
@@ -206,13 +242,17 @@ Odpowiedz krótko, tylko fakty.`
       if (regonFallback) extractedRegon = regonFallback[1];
     }
     
-    console.log(`[Perplexity] Extracted: KRS=${extractedKrs}, NIP=${extractedNip}, REGON=${extractedRegon}`);
+    // Extract address from Perplexity response
+    const addressData = parseAddressFromPerplexity(rawContent);
+    
+    console.log(`[Perplexity] Extracted: KRS=${extractedKrs}, NIP=${extractedNip}, REGON=${extractedRegon}, city=${addressData.city}`);
     
     return {
       nip: extractedNip,
       krs: extractedKrs,
       regon: extractedRegon,
-      info: rawContent
+      info: rawContent,
+      ...addressData
     };
   } catch (error) {
     console.error('[Perplexity] Error:', error);
@@ -490,7 +530,11 @@ Deno.serve(async (req) => {
       if (searchResult.nip) nip = searchResult.nip;
       if (searchResult.regon) sourceData.regon = searchResult.regon;
       if (searchResult.info) sourceData.perplexity_info = searchResult.info;
-      console.log(`[Stage 1] Perplexity found: KRS=${krs}, NIP=${nip}`);
+      // Extract address from Perplexity as fallback
+      if (searchResult.address) sourceData.address_perplexity = searchResult.address;
+      if (searchResult.city) sourceData.city_perplexity = searchResult.city;
+      if (searchResult.postal_code) sourceData.postal_code_perplexity = searchResult.postal_code;
+      console.log(`[Stage 1] Perplexity found: KRS=${krs}, NIP=${nip}, city=${searchResult.city}`);
     }
 
     // Step 2: KRS API if we have KRS or detected spółka form
@@ -520,10 +564,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If no API data, at least record what we searched for
+    // If no API data, at least record what we searched for and use Perplexity fallbacks
     if (!sourceData.source) {
       sourceData.source = 'perplexity_only';
       sourceData.confidence = 'low';
+      // Use Perplexity address data as fallback when no KRS/CEIDG data
+      if (sourceData.address_perplexity && !sourceData.address) {
+        sourceData.address = sourceData.address_perplexity;
+      }
+      if (sourceData.city_perplexity && !sourceData.city) {
+        sourceData.city = sourceData.city_perplexity;
+      }
+      if (sourceData.postal_code_perplexity && !sourceData.postal_code) {
+        sourceData.postal_code = sourceData.postal_code_perplexity;
+      }
     }
 
     // Add the found IDs

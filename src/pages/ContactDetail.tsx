@@ -68,6 +68,7 @@ export default function ContactDetail() {
       <ContactDetailHeader
         contact={contact}
         onEdit={() => setIsEditModalOpen(true)}
+        viewMode={viewMode}
       />
 
       {/* Main View Toggle: OSOBA / FIRMA */}

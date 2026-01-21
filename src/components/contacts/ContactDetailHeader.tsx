@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown } from 'lucide-react';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown, Building } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,19 +22,23 @@ import { useToggleOwnerStatus } from '@/hooks/useOwnership';
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
+import { CompanyModal } from '@/components/contacts/CompanyModal';
 
 interface ContactDetailHeaderProps {
   contact: ContactWithDetails;
   onEdit: () => void;
+  viewMode?: 'person' | 'company';
 }
 
-export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProps) {
+export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: ContactDetailHeaderProps) {
   const navigate = useNavigate();
   const deleteContact = useDeleteContact();
   const toggleOwnerStatus = useToggleOwnerStatus();
   const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
 
   const isOwner = (contact as any).is_owner || false;
+  const company = contact.companies;
 
   const getInitials = (name: string) => {
     return name
@@ -151,10 +155,17 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
             <Crown className="h-4 w-4 mr-2" />
             {isOwner ? "Właściciel" : "Oznacz właściciela"}
           </Button>
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edytuj
-          </Button>
+          {viewMode === 'company' && company ? (
+            <Button variant="outline" size="sm" onClick={() => setIsCompanyModalOpen(true)}>
+              <Building className="h-4 w-4 mr-2" />
+              Edytuj firmę
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edytuj
+            </Button>
+          )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm">
@@ -199,6 +210,15 @@ export function ContactDetailHeader({ contact, onEdit }: ContactDetailHeaderProp
         onClose={() => setIsConsultationModalOpen(false)}
         prefilledContactId={contact.id}
       />
+
+      {company && (
+        <CompanyModal
+          open={isCompanyModalOpen}
+          onOpenChange={setIsCompanyModalOpen}
+          company={company as any}
+          ownerContactId={contact.id}
+        />
+      )}
     </div>
   );
 }
