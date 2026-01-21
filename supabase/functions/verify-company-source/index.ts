@@ -619,8 +619,14 @@ function extractDates(dzial1: any, dzial6: any): {
 } {
   try {
     const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || dzial6 || {};
+    
+    // dataRozpoczeciaDzialalnosci is an ARRAY with history
+    const dataRozpArray = dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || [];
+    const dataRozp = getLatestEntry(dataRozpArray);
+    const registration = typeof dataRozp === 'string' ? dataRozp : (dataRozp?.dataRozpoczeciaDzialalnosci || null);
+    
     return {
-      registration: dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || null,
+      registration,
       first_entry: statusInfo?.dataWpisuDoRejestru || statusInfo?.dataPierwszegoWpisu || null,
       deletion: statusInfo?.dataWykreslenia || null,
       suspension_start: statusInfo?.dataZawieszenia || null,
@@ -629,6 +635,234 @@ function extractDates(dzial1: any, dzial6: any): {
   } catch (e) {
     return { registration: null, first_entry: null, deletion: null, suspension_start: null, suspension_end: null };
   }
+}
+
+// Helper: Extract representation rules (sposób reprezentacji)
+function extractRepresentationRules(dzial2: any): string | null {
+  try {
+    const reprezentacja = dzial2?.reprezentacja;
+    if (!reprezentacja) return null;
+    
+    // Handle array format (OdpisPelny)
+    if (Array.isArray(reprezentacja)) {
+      const latest = getLatestEntry(reprezentacja);
+      return latest?.sposobReprezentacji || latest?.opis || null;
+    }
+    
+    // Handle object format
+    return reprezentacja?.sposobReprezentacji || reprezentacja?.opis || null;
+  } catch (e) {
+    console.error('[KRS] Error extracting representation rules:', e);
+    return null;
+  }
+}
+
+// Helper: Extract correspondence address
+function extractCorrespondenceAddress(dzial1: any): {
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+} {
+  try {
+    const siedzibaIAdres = dzial1?.siedzibaIAdres || {};
+    const adresKoresp = siedzibaIAdres?.adresDoKorespondencji || siedzibaIAdres?.adresKorespondencyjny || [];
+    const latest = getLatestEntry(adresKoresp);
+    
+    if (!latest) return { address: null, city: null, postal_code: null };
+    
+    let addressParts = '';
+    if (latest?.ulica) {
+      addressParts = latest.ulica;
+      if (latest?.nrDomu) addressParts += ` ${latest.nrDomu}`;
+      if (latest?.nrLokalu) addressParts += `/${latest.nrLokalu}`;
+    }
+    
+    return {
+      address: addressParts || null,
+      city: latest?.miejscowosc || null,
+      postal_code: latest?.kodPocztowy || null
+    };
+  } catch (e) {
+    return { address: null, city: null, postal_code: null };
+  }
+}
+
+// Helper: Extract related entities (podmioty powiązane) from dzial4
+function extractRelatedEntities(dzial4: any): Array<{
+  name: string;
+  krs?: string;
+  nip?: string;
+  type: 'parent' | 'subsidiary' | 'affiliated';
+}> {
+  const entities: Array<{ name: string; krs?: string; nip?: string; type: 'parent' | 'subsidiary' | 'affiliated' }> = [];
+  
+  try {
+    // Podmioty dominujące (parent companies)
+    const dominujace = dzial4?.informacjaOPodmiotachDominujacych || dzial4?.podmiotyDominujace || [];
+    const dominujaceArray = Array.isArray(dominujace) ? dominujace : (dominujace ? [dominujace] : []);
+    
+    for (const d of dominujaceArray) {
+      if (!d) continue;
+      const latest = getLatestEntry(Array.isArray(d) ? d : [d]);
+      const nazwa = latest?.firma || latest?.nazwa || latest?.nazwaPodmiotu;
+      if (nazwa) {
+        entities.push({
+          name: nazwa,
+          krs: latest?.krs || latest?.numerKRS,
+          nip: latest?.nip,
+          type: 'parent'
+        });
+      }
+    }
+    
+    // Podmioty zależne (subsidiary companies)
+    const zalezne = dzial4?.informacjaOPodmiotachZaleznych || dzial4?.podmiotyZalezne || [];
+    const zalezneArray = Array.isArray(zalezne) ? zalezne : (zalezne ? [zalezne] : []);
+    
+    for (const z of zalezneArray) {
+      if (!z) continue;
+      const latest = getLatestEntry(Array.isArray(z) ? z : [z]);
+      const nazwa = latest?.firma || latest?.nazwa || latest?.nazwaPodmiotu;
+      if (nazwa) {
+        entities.push({
+          name: nazwa,
+          krs: latest?.krs || latest?.numerKRS,
+          nip: latest?.nip,
+          type: 'subsidiary'
+        });
+      }
+    }
+    
+    console.log(`[KRS] Related entities: ${entities.length} found`);
+  } catch (e) {
+    console.error('[KRS] Error extracting related entities:', e);
+  }
+  
+  return entities;
+}
+
+// Helper: Extract court mentions and proceedings from dzial6
+function extractCourtMentions(dzial6: any): Array<{
+  type: 'bankruptcy' | 'restructuring' | 'transformation' | 'liquidation' | 'other';
+  date?: string;
+  description: string;
+  warning_level: 'critical' | 'warning' | 'info';
+}> {
+  const mentions: Array<{
+    type: 'bankruptcy' | 'restructuring' | 'transformation' | 'liquidation' | 'other';
+    date?: string;
+    description: string;
+    warning_level: 'critical' | 'warning' | 'info';
+  }> = [];
+  
+  try {
+    // Postępowania upadłościowe
+    const upadlosciowe = dzial6?.postepowaniaUpadlosciowe || dzial6?.informacjeOUpadlosci || [];
+    const upadArray = Array.isArray(upadlosciowe) ? upadlosciowe : (upadlosciowe ? [upadlosciowe] : []);
+    
+    for (const u of upadArray) {
+      if (!u) continue;
+      const latest = getLatestEntry(Array.isArray(u) ? u : [u]);
+      mentions.push({
+        type: 'bankruptcy',
+        date: latest?.dataOrzeczenia || latest?.data,
+        description: latest?.opis || latest?.informacja || 'Postępowanie upadłościowe',
+        warning_level: 'critical'
+      });
+    }
+    
+    // Postępowania restrukturyzacyjne
+    const restrukturyzacyjne = dzial6?.postepowaniaRestrukturyzacyjne || dzial6?.informacjeORestrukturyzacji || [];
+    const restrArray = Array.isArray(restrukturyzacyjne) ? restrukturyzacyjne : (restrukturyzacyjne ? [restrukturyzacyjne] : []);
+    
+    for (const r of restrArray) {
+      if (!r) continue;
+      const latest = getLatestEntry(Array.isArray(r) ? r : [r]);
+      mentions.push({
+        type: 'restructuring',
+        date: latest?.dataOrzeczenia || latest?.data,
+        description: latest?.opis || latest?.informacja || 'Postępowanie restrukturyzacyjne',
+        warning_level: 'critical'
+      });
+    }
+    
+    // Przekształcenia
+    const przeksztalcenia = dzial6?.informacjeOPrzeksztalceniu || dzial6?.przeksztalcenia || [];
+    const przekArray = Array.isArray(przeksztalcenia) ? przeksztalcenia : (przeksztalcenia ? [przeksztalcenia] : []);
+    
+    for (const p of przekArray) {
+      if (!p) continue;
+      const latest = getLatestEntry(Array.isArray(p) ? p : [p]);
+      mentions.push({
+        type: 'transformation',
+        date: latest?.data || latest?.dataWpisu,
+        description: latest?.opis || latest?.informacja || 'Przekształcenie spółki',
+        warning_level: 'info'
+      });
+    }
+    
+    // Likwidacja
+    const likwidacja = dzial6?.informacjaOOtwarciuLikwidacji || dzial6?.likwidacja || [];
+    const likwArray = Array.isArray(likwidacja) ? likwidacja : (likwidacja ? [likwidacja] : []);
+    
+    for (const l of likwArray) {
+      if (!l) continue;
+      const latest = getLatestEntry(Array.isArray(l) ? l : [l]);
+      mentions.push({
+        type: 'liquidation',
+        date: latest?.dataOtwarcia || latest?.data,
+        description: latest?.opis || 'Otwarcie likwidacji',
+        warning_level: 'warning'
+      });
+    }
+    
+    // Inne wzmianki
+    const wzmianki = dzial6?.wzmianki || [];
+    const wzmankiArray = Array.isArray(wzmianki) ? wzmianki : (wzmianki ? [wzmianki] : []);
+    
+    for (const w of wzmankiArray) {
+      if (!w) continue;
+      const latest = getLatestEntry(Array.isArray(w) ? w : [w]);
+      if (latest?.opis || latest?.tresc) {
+        mentions.push({
+          type: 'other',
+          date: latest?.data,
+          description: latest?.opis || latest?.tresc,
+          warning_level: 'info'
+        });
+      }
+    }
+    
+    console.log(`[KRS] Court mentions: ${mentions.length} found`);
+  } catch (e) {
+    console.error('[KRS] Error extracting court mentions:', e);
+  }
+  
+  return mentions;
+}
+
+// Helper: Extract case signatures (sygnatury spraw)
+function extractCaseSignatures(dzial6: any, naglowek: any): string[] {
+  const signatures: string[] = [];
+  
+  try {
+    // From naglowek
+    if (naglowek?.sygnatura) signatures.push(naglowek.sygnatura);
+    if (naglowek?.sygnaturaAkt) signatures.push(naglowek.sygnaturaAkt);
+    
+    // From dzial6 sygnatury
+    const sygnatury = dzial6?.sygnatury || dzial6?.sygnaturySpraw || [];
+    const sygArray = Array.isArray(sygnatury) ? sygnatury : (sygnatury ? [sygnatury] : []);
+    
+    for (const s of sygArray) {
+      if (typeof s === 'string' && s) signatures.push(s);
+      else if (s?.sygnatura) signatures.push(s.sygnatura);
+    }
+  } catch (e) {
+    console.error('[KRS] Error extracting case signatures:', e);
+  }
+  
+  return [...new Set(signatures)]; // Remove duplicates
 }
 
 // Parse KRS response - using OdpisPelny structure (same as fetch-krs-data)
@@ -821,7 +1055,15 @@ function parseKRSResponse(krsData: any): any {
     const registryCourt = extractRegistryCourt(krsData);
     const dates = extractDates(dzial1, dzial6);
     
-    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length}, shareholders=${shareholders.length}, procurators=${procurators.length}, supervisoryBoard=${supervisoryBoard.length}`);
+    // NEW: Extract additional KRS OdpisPełny data
+    const representationRules = extractRepresentationRules(dzial2);
+    const correspondenceAddress = extractCorrespondenceAddress(dzial1);
+    const dzial4 = krsData?.odpis?.dane?.dzial4;
+    const relatedEntities = extractRelatedEntities(dzial4);
+    const courtMentions = extractCourtMentions(dzial6);
+    const caseSignatures = extractCaseSignatures(dzial6, naglowek);
+    
+    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length}, shareholders=${shareholders.length}, procurators=${procurators.length}, supervisoryBoard=${supervisoryBoard.length}, relatedEntities=${relatedEntities.length}, courtMentions=${courtMentions.length}`);
     
     return {
       // Basic data
@@ -845,6 +1087,9 @@ function parseKRSResponse(krsData: any): any {
       procurators,
       supervisory_board: supervisoryBoard,
       
+      // NEW: Representation rules
+      representation_rules: representationRules,
+      
       // Capital
       share_capital: shareCapital.amount,
       share_capital_currency: shareCapital.currency,
@@ -862,6 +1107,20 @@ function parseKRSResponse(krsData: any): any {
       
       // Dates
       dates,
+      
+      // NEW: Correspondence address
+      correspondence_address: correspondenceAddress.address,
+      correspondence_city: correspondenceAddress.city,
+      correspondence_postal_code: correspondenceAddress.postal_code,
+      
+      // NEW: Related entities (podmioty powiązane)
+      related_entities: relatedEntities,
+      
+      // NEW: Court mentions and proceedings
+      court_mentions: courtMentions,
+      
+      // NEW: Case signatures
+      case_signatures: caseSignatures,
       
       // Contact from KRS
       email_krs: email,

@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   CheckCircle2, RefreshCw, Loader2, Building, Users, 
   MapPin, FileText, Calendar, Landmark, Briefcase, UserCheck,
-  DollarSign, GitBranch, Phone, Mail, Globe, AlertTriangle, Scale
+  DollarSign, GitBranch, Phone, Mail, Globe, AlertTriangle, Scale,
+  Link2, Gavel, FileWarning, Shield
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -55,6 +56,15 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const pkdCodes = data?.pkd_codes || data?.pkd || [];
   const branches = data?.branches || [];
   const dates = data?.dates || {};
+  
+  // NEW: Additional KRS OdpisPełny data
+  const representationRules = data?.representation_rules;
+  const correspondenceAddress = data?.correspondence_address;
+  const correspondenceCity = data?.correspondence_city;
+  const correspondencePostalCode = data?.correspondence_postal_code;
+  const relatedEntities = data?.related_entities || [];
+  const courtMentions = data?.court_mentions || [];
+  const caseSignatures = data?.case_signatures || [];
 
   // Format currency
   const formatCurrency = (amount: number | null | undefined, currency = 'PLN') => {
@@ -433,6 +443,145 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
               {pkdCodes.length > 15 && (
                 <Badge variant="secondary">+{pkdCodes.length - 15} więcej</Badge>
               )}
+            </div>
+      </CardContent>
+        </Card>
+      )}
+
+      {/* Representation Rules */}
+      {representationRules && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              Sposób reprezentacji
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">{representationRules}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Correspondence Address */}
+      {correspondenceAddress && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              Adres do korespondencji
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p>{correspondenceAddress}</p>
+                <p>{[correspondencePostalCode, correspondenceCity].filter(Boolean).join(' ')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Related Entities */}
+      {relatedEntities.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-muted-foreground" />
+              Podmioty powiązane
+              <Badge variant="outline">{relatedEntities.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {relatedEntities.map((entity: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/30">
+                  <div>
+                    <p className="font-medium">{entity.name}</p>
+                    {entity.krs && <p className="text-xs text-muted-foreground">KRS: {entity.krs}</p>}
+                  </div>
+                  <Badge variant={entity.type === 'parent' ? 'default' : 'secondary'}>
+                    {entity.type === 'parent' ? 'Dominujący' : entity.type === 'subsidiary' ? 'Zależny' : 'Powiązany'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Court Mentions and Proceedings - with warnings */}
+      {courtMentions.length > 0 && (
+        <Card className="border-yellow-200 dark:border-yellow-800">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Gavel className="h-4 w-4 text-yellow-600" />
+              Wzmianki i postępowania sądowe
+              <Badge variant="destructive">{courtMentions.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {courtMentions.map((mention: any, idx: number) => {
+                const warningColors = {
+                  critical: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800',
+                  warning: 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800',
+                  info: 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800'
+                };
+                const iconColors = {
+                  critical: 'text-red-600',
+                  warning: 'text-yellow-600',
+                  info: 'text-blue-600'
+                };
+                const typeLabels: Record<string, string> = {
+                  bankruptcy: 'Upadłość',
+                  restructuring: 'Restrukturyzacja',
+                  transformation: 'Przekształcenie',
+                  liquidation: 'Likwidacja',
+                  other: 'Wzmianka'
+                };
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className={`flex items-start gap-2 py-2 px-3 rounded-md border ${warningColors[mention.warning_level as keyof typeof warningColors] || warningColors.info}`}
+                  >
+                    <FileWarning className={`h-4 w-4 mt-0.5 ${iconColors[mention.warning_level as keyof typeof iconColors] || iconColors.info}`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={mention.warning_level === 'critical' ? 'destructive' : 'secondary'}>
+                          {typeLabels[mention.type] || mention.type}
+                        </Badge>
+                        {mention.date && <span className="text-xs text-muted-foreground">{mention.date}</span>}
+                      </div>
+                      <p className="text-sm mt-1">{mention.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Case Signatures */}
+      {caseSignatures.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Sygnatury spraw
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {caseSignatures.map((sig: string, idx: number) => (
+                <Badge key={idx} variant="outline" className="font-mono">
+                  {sig}
+                </Badge>
+              ))}
             </div>
           </CardContent>
         </Card>
