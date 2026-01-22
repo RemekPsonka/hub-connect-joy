@@ -147,8 +147,21 @@ ${JSON.stringify(financialData).substring(0, 400)}`;
       }
     }
 
-    // Build prompt for AI - now includes memory_summary, topics generation, AND company data
-    const prompt = `Wygeneruj profil agenta AI dla kontaktu biznesowego.
+    // Build data strings for prompt
+    const needsStr = (needs.data || []).map((n: any) => `${n.title} (${n.description?.substring(0, 100) || ''})`).join('; ') || 'Brak';
+    const offersStr = (offers.data || []).map((o: any) => `${o.title} (${o.description?.substring(0, 100) || ''})`).join('; ') || 'Brak';
+    const consultationsStr = consultations.data?.slice(0, 5).map((c: any) => `- ${c.notes?.substring(0, 200) || c.ai_summary?.substring(0, 200) || 'brak notatek'}`).join('\n') || 'brak';
+    const biDataStr = biData.data ? JSON.stringify(biData.data).substring(0, 500) : 'brak danych BI';
+
+    // Build prompt for AI - ROZBUDOWANY prompt generujący szczegółowe dane z uzasadnieniami
+    const prompt = `Jesteś ekspertem od analizy biznesowej i relacji B2B. Przygotuj SZCZEGÓŁOWY, POGŁĘBIONY profil osoby i GOTOWY BRIEF pod spotkanie biznesowe.
+
+## ZASADY KRYTYCZNE:
+1. NIGDY nie pisz hasłowo - każdy punkt musi być UZASADNIONY i ROZWINIĘTY (minimum 2-3 zdania)
+2. Każde wyzwanie/cel MUSI zawierać KONTEKST i DLACZEGO jest ważne dla TEJ osoby
+3. Uwzględnij perspektywę OSOBY (rola, decyzyjność, styl) I jej FIRMY (sytuacja, produkty, finanse)
+4. Przygotuj KONKRETNY brief pod spotkanie z DO/DON'T
+5. Wszystkie odpowiedzi po polsku
 
 ## DANE KONTAKTU
 - Imię i nazwisko: ${contact.full_name}
@@ -161,33 +174,110 @@ ${JSON.stringify(financialData).substring(0, 400)}`;
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
 ${companyContext}
 
-## POTRZEBY KONTAKTU: ${(needs.data || []).map((n: any) => `${n.title} (${n.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
-## OFERTY KONTAKTU: ${(offers.data || []).map((o: any) => `${o.title} (${o.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
-## KONSULTACJI: ${consultations.data?.length || 0}
-${consultations.data?.slice(0, 3).map((c: any) => `- ${c.notes?.substring(0, 100) || c.ai_summary?.substring(0, 100) || 'brak notatek'}`).join('\n') || ''}
+## POTRZEBY KONTAKTU: ${needsStr}
+## OFERTY KONTAKTU: ${offersStr}
+## KONSULTACJE (${consultations.data?.length || 0}):
+${consultationsStr}
 
-WAŻNE: Uwzględnij zarówno dane osoby JAK I jej firmy w analizie. Agent musi rozumieć kontekst biznesowy.
+## BI DATA (jeśli dostępne):
+${biDataStr}
 
-Zwróć JSON:
-\`\`\`json
+Zwróć JSON z ROZBUDOWANYMI sekcjami:
+
 {
-  "agent_persona": "Opis jak AI powinno myśleć o tej osobie w kontekście jej firmy (2-3 zdania)",
-  "agent_profile": {
-    "pain_points": ["wyzwania osoby I jej firmy"],
-    "interests": ["zainteresowania biznesowe"],
-    "goals": ["cele osoby i firmy"],
-    "communication_style": "styl komunikacji",
-    "key_topics": ["tematy do poruszenia - w tym produkty/usługi firmy"],
-    "business_value": "wartość biznesowa relacji",
-    "company_context": "kluczowe informacje o firmie wpływające na relację"
+  "agent_persona": "Kim jest ta osoba w kontekście jej firmy i jak budować z nią relację. 3-4 zdania opisujące człowieka, jego pozycję, styl myślenia i podejście do biznesu.",
+  
+  "person_profile": {
+    "summary": "Szczegółowy opis osoby: kim jest, jaką ma historię, czym się wyróżnia, jakie ma podejście do pracy (4-5 zdań)",
+    "role_in_company": "Dokładny opis roli w firmie: zakres odpowiedzialności, wpływ na decyzje, kluczowe obszary działania",
+    "decision_making_style": "Jak podejmuje decyzje: szybko/wolno, analitycznie/intuicyjnie, samodzielnie/zespołowo",
+    "communication_preferences": "Preferowany styl komunikacji: formalny/nieformalny, szczegółowy/skrótowy, co cenią w rozmówcach"
   },
-  "memory_summary": "Zwięzłe podsumowanie (max 600 znaków): kim jest osoba, jaka jest jej rola w firmie, czym firma się zajmuje, czego szuka, co oferuje",
-  "topics": ["słowa kluczowe osoby", "branża firmy", "produkty firmy", "usługi firmy", "specjalizacja", "zainteresowania biznesowe"],
-  "insights": [{"text": "insight o osobie lub firmie", "source": "źródło", "importance": "high/medium/low"}],
-  "next_steps": ["następne kroki w relacji"],
-  "warnings": ["ostrzeżenia dotyczące osoby lub firmy"]
-}
-\`\`\``;
+  
+  "challenges_detailed": [
+    {
+      "challenge": "Nazwa wyzwania",
+      "context": "Dlaczego to wyzwanie istnieje - kontekst sytuacji firmy i osoby (2-3 zdania)",
+      "why_it_matters": "Dlaczego to jest ważne dla TEJ konkretnej osoby, jakie ma konsekwencje",
+      "potential_approach": "Jak możemy pomóc w tym wyzwaniu - konkretne propozycje"
+    }
+  ],
+  
+  "goals_detailed": [
+    {
+      "goal": "Cel osoby/firmy",
+      "timeline": "short/medium/long",
+      "priority": "high/medium/low",
+      "context": "Dlaczego ten cel jest istotny, z czego wynika",
+      "how_we_can_help": "Konkretna propozycja jak możemy wesprzeć osiągnięcie tego celu"
+    }
+  ],
+  
+  "topics_to_discuss": [
+    {
+      "topic": "Temat do rozmowy",
+      "why_relevant": "Dlaczego warto poruszyć ten temat - co łączy z naszą ofertą/wspólnymi interesami",
+      "suggested_angle": "Z jakiej perspektywy podejść, jakie pytania zadać"
+    }
+  ],
+  
+  "business_value_detailed": {
+    "summary": "Rozwinięta ocena wartości biznesowej tej relacji (3-4 zdania)",
+    "strategic_importance": "Dlaczego ta relacja jest strategicznie ważna",
+    "potential_deal_size": "Szacunkowa skala potencjalnej współpracy",
+    "risks": "Potencjalne ryzyka i jak je mitygować"
+  },
+  
+  "company_context": {
+    "key_facts": "Najważniejsze fakty o firmie wpływające na relację",
+    "current_situation": "Aktualna sytuacja firmy (finansowa, rynkowa, strategiczna)",
+    "products_services_relevant": "Produkty/usługi firmy istotne dla naszej współpracy",
+    "opportunities": "Konkretne możliwości współpracy wynikające z analizy firmy"
+  },
+  
+  "meeting_brief": {
+    "one_liner": "Najważniejsza rzecz do zapamiętania przed spotkaniem (1 zdanie)",
+    "what_to_know": [
+      "Kluczowa informacja #1 o osobie/firmie (pełne zdanie z kontekstem)",
+      "Kluczowa informacja #2",
+      "Kluczowa informacja #3",
+      "Kluczowa informacja #4"
+    ],
+    "do": [
+      "Konkretna rzecz którą POWINIENEŚ robić w rozmowie (z uzasadnieniem)",
+      "Kolejna rekomendacja DO",
+      "Kolejna rekomendacja DO"
+    ],
+    "dont": [
+      "Konkretna rzecz której UNIKAJ w rozmowie (z uzasadnieniem)",
+      "Kolejna rekomendacja DON'T",
+      "Kolejna rekomendacja DON'T"
+    ],
+    "opening_topics": [
+      "Temat na otwarcie rozmowy #1",
+      "Temat na otwarcie rozmowy #2",
+      "Temat na otwarcie rozmowy #3"
+    ]
+  },
+  
+  "memory_summary": "Zwięzłe, ale treściwe podsumowanie (max 800 znaków): kim jest osoba, jaka jest jej rola, czym firma się zajmuje, jaka jest sytuacja, czego szuka, co oferuje, co jest najważniejsze w relacji",
+  
+  "topics": ["słowa kluczowe opisujące osobę", "branża", "produkty firmy", "usługi", "specjalizacja", "zainteresowania biznesowe"],
+  
+  "insights": [
+    {
+      "text": "Rozwinięty insight o osobie lub firmie z uzasadnieniem dlaczego jest ważny (2-3 zdania)",
+      "source": "Źródło tego wniosku (np. dane finansowe, historia, konsultacje)",
+      "importance": "high/medium/low"
+    }
+  ],
+  
+  "next_steps": [
+    "Konkretny, szczegółowy następny krok z uzasadnieniem dlaczego teraz i jak to zrobić"
+  ],
+  
+  "warnings": ["Ostrzeżenie z wyjaśnieniem dlaczego jest istotne"]
+}`;
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -235,14 +325,30 @@ Zwróć JSON:
       { type: 'bi_data', count: biData.data ? 1 : 0, updated: new Date().toISOString() }
     ];
 
-    // Upsert agent memory with memory_summary and topics
+    // Upsert agent memory with ALL new detailed fields in agent_profile
     const { data: savedAgent, error: saveError } = await supabase
       .from('contact_agent_memory')
       .upsert({
         tenant_id: tenantId,
         contact_id: contact_id,
         agent_persona: agentData.agent_persona,
-        agent_profile: { ...agentData.agent_profile, next_steps: agentData.next_steps, warnings: agentData.warnings },
+        agent_profile: { 
+          // Nowe rozbudowane sekcje
+          person_profile: agentData.person_profile || null,
+          challenges_detailed: agentData.challenges_detailed || [],
+          goals_detailed: agentData.goals_detailed || [],
+          topics_to_discuss: agentData.topics_to_discuss || [],
+          business_value_detailed: agentData.business_value_detailed || null,
+          company_context: agentData.company_context || null,
+          meeting_brief: agentData.meeting_brief || null,
+          // Legacy fields for backward compatibility
+          pain_points: agentData.challenges_detailed?.map((c: any) => c.challenge) || [],
+          goals: agentData.goals_detailed?.map((g: any) => g.goal) || [],
+          key_topics: agentData.topics_to_discuss?.map((t: any) => t.topic) || [],
+          business_value: agentData.business_value_detailed?.summary || '',
+          next_steps: agentData.next_steps || [], 
+          warnings: agentData.warnings || []
+        },
         memory_summary: agentData.memory_summary?.substring(0, 1000) || null,
         topics: agentData.topics || [],
         insights: agentData.insights || [],
