@@ -58,10 +58,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch fresh contact data
+    // Fetch fresh contact data with full company analysis
     const { data: contact } = await supabase
       .from('contacts')
-      .select(`*, company:companies(*), primary_group:contact_groups(*)`)
+      .select(`*, 
+        company:companies(
+          id, name, industry, website, description, 
+          revenue, employees_count, growth_rate,
+          ai_analysis, company_analysis_confidence
+        ), 
+        primary_group:contact_groups(*)`)
       .eq('id', contact_id)
       .single();
 
@@ -99,20 +105,58 @@ serve(async (req) => {
 
     const profile = agentMemory.agent_profile || {};
 
+    // Extract company data for query context
+    const company = contact?.company as any;
+    const aiAnalysis = company?.ai_analysis as any;
+    
+    // Build company context for query
+    let companyContext = '';
+    if (company) {
+      companyContext = `
+## DANE FIRMY: ${company.name || 'nieznana'}
+- Branża: ${company.industry || 'nieznana'}
+- Strona WWW: ${company.website || 'brak'}
+- Opis: ${company.description?.substring(0, 200) || 'brak'}
+- Przychody: ${company.revenue ? `${company.revenue} PLN` : 'nieznane'}
+- Zatrudnienie: ${company.employees_count || 'nieznane'}`;
+
+      if (aiAnalysis) {
+        const products = aiAnalysis.products_and_services?.products || [];
+        const services = aiAnalysis.products_and_services?.services || [];
+        
+        companyContext += `
+
+## OFERTA FIRMY
+### Produkty (${products.length}):
+${products.slice(0, 5).map((p: any) => `- ${p.name || p}`).join('\n') || 'brak'}
+
+### Usługi (${services.length}):
+${services.slice(0, 5).map((s: any) => `- ${s.name || s}`).join('\n') || 'brak'}
+
+### Model biznesowy: ${aiAnalysis.business_model?.type || 'nieznany'}
+### Klienci: ${(aiAnalysis.clients_projects?.client_types || []).join(', ') || 'nieznani'}
+### Konkurenci: ${(aiAnalysis.competition?.competitors || []).slice(0, 3).map((c: any) => c.name || c).join(', ') || 'nieznani'}
+### Czego szuka firma: ${aiAnalysis.seeking?.clients?.substring(0, 100) || 'brak danych'}
+### Możliwości współpracy: ${(aiAnalysis.collaboration?.opportunities || []).slice(0, 2).map((o: any) => o.area || o).join(', ') || 'brak'}`;
+      }
+    }
+
     const prompt = `Jesteś Contact Agent dla kontaktu: ${contact?.full_name}.
 
 ## DANE KONTAKTU
-- Firma: ${contact?.company?.name || contact?.company || 'nieznana'}
+- Firma: ${company?.name || contact?.company || 'nieznana'}
 - Stanowisko: ${contact?.position || 'nieznane'}
 - Siła relacji: ${contact?.relationship_strength}/10
 - Notatki: ${contact?.notes || 'Brak'}
 - Pain points: ${(profile.pain_points || []).join(', ') || 'nieznane'}
 - Cele: ${(profile.goals || []).join(', ') || 'nieznane'}
+- Kontekst firmy: ${(profile as any).company_context || 'nieznany'}
+${companyContext}
 
-## POTRZEBY (${needs?.length || 0})
+## POTRZEBY KONTAKTU (${needs?.length || 0})
 ${(needs || []).map(n => `- [${n.status}] ${n.title}`).join('\n') || 'Brak'}
 
-## OFERTY (${offers?.length || 0})
+## OFERTY KONTAKTU (${offers?.length || 0})
 ${(offers || []).map(o => `- [${o.status}] ${o.title}`).join('\n') || 'Brak'}
 
 ## KONTEKST ROZMOWY
@@ -120,12 +164,13 @@ ${conversationContext}
 
 ## PYTANIE: "${question}"
 
-Odpowiedz konkretnie i praktycznie. Możesz zaproponować akcje (CREATE_TASK, ADD_NOTE, UPDATE_PROFILE, CREATE_NEED, CREATE_OFFER).
+Odpowiedz konkretnie i praktycznie. Uwzględnij kontekst OSOBY i jej FIRMY. 
+Możesz zaproponować akcje (CREATE_TASK, ADD_NOTE, UPDATE_PROFILE, CREATE_NEED, CREATE_OFFER).
 
 Zwróć JSON:
 \`\`\`json
 {
-  "answer": "odpowiedź",
+  "answer": "odpowiedź uwzględniająca kontekst osoby i firmy",
   "proposed_actions": [{"type": "TYP", "data": {...}, "reason": "..."}],
   "memory_update": {"new_insights": []}
 }

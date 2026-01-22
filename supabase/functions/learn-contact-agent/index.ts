@@ -60,7 +60,7 @@ serve(async (req) => {
       );
     }
 
-    // Fetch ALL data about the contact
+    // Fetch ALL data about the contact including full company analysis
     const [
       contactResult,
       consultationsResult,
@@ -72,7 +72,15 @@ serve(async (req) => {
     ] = await Promise.all([
       supabase
         .from('contacts')
-        .select(`*, company:companies(*), primary_group:contact_groups(*)`)
+        .select(`*, 
+          company:companies(
+            id, name, industry, website, description, 
+            revenue, employees_count, growth_rate,
+            ai_analysis, company_analysis_confidence,
+            company_www_data, company_external_data, 
+            company_source_data, company_financial_data
+          ), 
+          primary_group:contact_groups(*)`)
         .eq('id', contact_id)
         .single(),
       supabase
@@ -125,15 +133,91 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Extract company data for learning
+    const company = contact.company as any;
+    const aiAnalysis = company?.ai_analysis as any;
+    
+    // Build company context section
+    let companyContext = '';
+    if (company) {
+      companyContext = `
+## DANE FIRMY: ${company.name || 'nieznana'}
+- Branża: ${company.industry || 'nieznana'}
+- Strona WWW: ${company.website || 'brak'}
+- Opis: ${company.description?.substring(0, 300) || 'brak'}
+- Przychody: ${company.revenue ? `${company.revenue} PLN` : 'nieznane'}
+- Zatrudnienie: ${company.employees_count || 'nieznane'}
+- Wzrost: ${company.growth_rate ? `${company.growth_rate}%` : 'nieznany'}`;
+
+      if (aiAnalysis) {
+        const products = aiAnalysis.products_and_services?.products || [];
+        const services = aiAnalysis.products_and_services?.services || [];
+        
+        companyContext += `
+
+## ANALIZA AI FIRMY (pełny profil 16-sekcyjny)
+### Produkty firmy (${products.length}):
+${products.slice(0, 8).map((p: any) => `- ${p.name || p}: ${p.description?.substring(0, 100) || ''}`).join('\n') || 'brak danych'}
+
+### Usługi firmy (${services.length}):
+${services.slice(0, 8).map((s: any) => `- ${s.name || s}: ${s.description?.substring(0, 100) || ''}`).join('\n') || 'brak danych'}
+
+### Model biznesowy firmy:
+- Typ: ${aiAnalysis.business_model?.type || 'nieznany'}
+- Główne źródła przychodu: ${(aiAnalysis.business_model?.revenue_sources || []).join(', ') || 'nieznane'}
+- Opis: ${aiAnalysis.business_model?.description?.substring(0, 150) || 'brak'}
+
+### Klienci firmy:
+- Typy klientów: ${(aiAnalysis.clients_projects?.client_types || []).join(', ') || 'nieznane'}
+- Sektory: ${(aiAnalysis.clients_projects?.sectors || []).join(', ') || 'nieznane'}
+- Przykładowi klienci: ${(aiAnalysis.clients_projects?.notable_clients || []).slice(0, 5).join(', ') || 'brak'}
+
+### Konkurencja:
+${(aiAnalysis.competition?.competitors || []).slice(0, 5).map((c: any) => `- ${c.name || c}: ${c.description?.substring(0, 60) || ''}`).join('\n') || 'brak danych'}
+- Pozycja rynkowa: ${aiAnalysis.competition?.market_position || 'nieznana'}
+
+### Czego firma szuka:
+- Szukani klienci: ${aiAnalysis.seeking?.clients?.substring(0, 150) || 'brak danych'}
+- Szukani partnerzy: ${aiAnalysis.seeking?.partners?.substring(0, 150) || 'brak danych'}
+- Szukani pracownicy: ${aiAnalysis.seeking?.employees?.substring(0, 150) || 'brak danych'}
+
+### Możliwości współpracy:
+${(aiAnalysis.collaboration?.opportunities || []).slice(0, 5).map((o: any) => `- ${o.area || o}: ${o.description?.substring(0, 100) || ''}`).join('\n') || 'brak danych'}
+
+### Zarząd firmy:
+${(aiAnalysis.management?.people || []).slice(0, 5).map((p: any) => `- ${p.name}: ${p.position || 'brak'} - ${p.background?.substring(0, 60) || ''}`).join('\n') || 'brak danych'}
+
+### Lokalizacje i zasięg:
+- Siedziba: ${aiAnalysis.locations_coverage?.headquarters || 'nieznana'}
+- Zasięg: ${aiAnalysis.locations_coverage?.coverage_area || 'nieznany'}
+- Oddziały: ${(aiAnalysis.locations_coverage?.locations || []).slice(0, 3).map((l: any) => l.city || l).join(', ') || 'brak'}
+
+### Najnowsze wiadomości:
+${(aiAnalysis.news_signals?.items || []).slice(0, 3).map((n: any) => `- ${n.title?.substring(0, 100) || n}`).join('\n') || 'brak'}
+
+### CSR / Działalność społeczna:
+${aiAnalysis.csr?.activities?.slice(0, 2).map((a: any) => `- ${a.name || a}: ${a.description?.substring(0, 80) || ''}`).join('\n') || 'brak danych'}`;
+      }
+      
+      // Add financial data if available
+      const financialData = company.company_financial_data as any;
+      if (financialData) {
+        companyContext += `
+
+### Szczegółowe dane finansowe:
+${JSON.stringify(financialData).substring(0, 500)}`;
+      }
+    }
+
     // Build comprehensive learning prompt
     const learningPrompt = `Jesteś Contact Agent dla ${contact.full_name}. 
-Przeanalizuj WSZYSTKIE dostępne dane i stwórz skondensowaną wiedzę o tej osobie.
+Przeanalizuj WSZYSTKIE dostępne dane o OSOBIE oraz jej FIRMIE i stwórz skondensowaną wiedzę.
 
-## DANE PODSTAWOWE
+## DANE PODSTAWOWE OSOBY
 - Imię i nazwisko: ${contact.full_name}
 - Stanowisko: ${contact.position || 'nieznane'}
-- Firma: ${contact.company?.name || contact.company || 'nieznana'}
-- Branża firmy: ${contact.company?.industry || 'nieznana'}
+- Firma: ${company?.name || contact.company || 'nieznana'}
+- Branża firmy: ${company?.industry || 'nieznana'}
 - Email: ${contact.email || 'brak'}
 - Miasto: ${contact.city || 'nieznane'}
 - Notatki: ${contact.notes || 'Brak'}
@@ -141,16 +225,17 @@ Przeanalizuj WSZYSTKIE dostępne dane i stwórz skondensowaną wiedzę o tej oso
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
 - Siła relacji: ${contact.relationship_strength || 'nieznana'}/10
 - Grupa: ${contact.primary_group?.name || 'brak'}
+${companyContext}
 
-## KONSULTACJE (${consultations.length})
+## KONSULTACJE Z TĄ OSOBĄ (${consultations.length})
 ${consultations.slice(0, 10).map((c: any) => 
   `- ${c.scheduled_at?.split('T')[0] || '?'}: ${c.notes?.substring(0, 200) || 'brak notatek'} | AI Summary: ${c.ai_summary?.substring(0, 150) || 'brak'}`
 ).join('\n') || 'Brak konsultacji'}
 
-## POTRZEBY (${needs.length})
+## POTRZEBY KONTAKTU (${needs.length})
 ${needs.map((n: any) => `- [${n.status}] ${n.title}: ${n.description?.substring(0, 100) || ''}`).join('\n') || 'Brak potrzeb'}
 
-## OFERTY (${offers.length})
+## OFERTY KONTAKTU (${offers.length})
 ${offers.map((o: any) => `- [${o.status}] ${o.title}: ${o.description?.substring(0, 100) || ''}`).join('\n') || 'Brak ofert'}
 
 ## ZADANIA (${tasks.length})
@@ -163,29 +248,35 @@ ${biData ? `## DANE BI
 ${JSON.stringify(biData.bi_profile || {}, null, 2).substring(0, 500)}` : ''}
 
 ## TWOJE ZADANIE
-Przeanalizuj powyższe dane i stwórz:
+Przeanalizuj powyższe dane O OSOBIE I JEJ FIRMIE i stwórz:
 
-1. **memory_summary** - Zwięzłe podsumowanie (max 600 znaków) opisujące:
-   - Kim jest ta osoba?
-   - Czym się zajmuje?
-   - Jakie ma potrzeby/szuka czego?
+1. **memory_summary** - Zwięzłe podsumowanie (max 700 znaków) opisujące:
+   - Kim jest ta osoba i jaka jest jej rola?
+   - Czym zajmuje się jej firma (produkty, usługi)?
+   - Jakie ma potrzeby / czego szuka?
    - Co oferuje?
-   - Co jest najważniejsze do zapamiętania?
+   - Jaki jest kontekst biznesowy?
 
-2. **topics** - Lista 5-15 słów kluczowych/tematów kojarzonych z tą osobą (np. branża, specjalizacja, produkty, usługi, zainteresowania biznesowe)
+2. **topics** - Lista 10-20 słów kluczowych/tematów:
+   - Imię i nazwisko, stanowisko
+   - Nazwa firmy, branża
+   - Produkty i usługi firmy
+   - Specjalizacje, kompetencje
+   - Zainteresowania biznesowe
+   - Kluczowe tematy z konsultacji
 
-3. **can_answer** - Lista pytań na które możesz odpowiedzieć o tej osobie
+3. **can_answer** - Lista pytań na które możesz odpowiedzieć o tej osobie I jej firmie
 
-4. **key_insights** - 3-5 najważniejszych spostrzeżeń
+4. **key_insights** - 3-7 najważniejszych spostrzeżeń o osobie i firmie
 
 Zwróć JSON:
 \`\`\`json
 {
-  "memory_summary": "Kim jest, czym się zajmuje, czego szuka, co oferuje...",
-  "topics": ["temat1", "temat2", "branża", "specjalizacja", ...],
-  "can_answer": ["Na jakie pytania mogę odpowiedzieć?", ...],
+  "memory_summary": "Kim jest osoba, jaka firma, czym się zajmują, czego szukają, co oferują...",
+  "topics": ["imię", "stanowisko", "firma", "branża", "produkty", "usługi", "specjalizacja", ...],
+  "can_answer": ["Pytania o osobę", "Pytania o firmę", "Pytania o produkty/usługi", ...],
   "key_insights": [
-    {"text": "insight", "importance": "high/medium/low"}
+    {"text": "insight o osobie lub firmie", "importance": "high/medium/low"}
   ]
 }
 \`\`\``;
