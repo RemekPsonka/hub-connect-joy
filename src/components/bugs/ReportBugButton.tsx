@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { Bug } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { ReportBugModal } from './ReportBugModal';
 import { useBugReportsCount } from '@/hooks/useBugReports';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 export function ReportBugButton() {
@@ -76,26 +74,28 @@ export function ReportBugButton() {
 
   return (
     <>
-      <Button
+      <button
         id="report-bug-button"
         className={cn(
           "fixed bottom-6 right-6 z-50 rounded-full p-4 shadow-lg",
           "bg-destructive hover:bg-destructive/90 text-destructive-foreground",
-          "transition-all duration-200",
+          "transition-all duration-200 cursor-pointer",
+          "flex items-center justify-center",
           isCapturing && "animate-pulse"
         )}
         onClick={captureScreenshot}
         disabled={isCapturing}
+        type="button"
       >
         <Bug className="h-6 w-6" />
         {openCount > 0 && (
-          <Badge 
-            className="absolute -top-2 -right-2 h-5 min-w-5 px-1 bg-primary text-primary-foreground text-xs"
+          <span 
+            className="absolute -top-2 -right-2 h-5 min-w-5 px-1 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-medium"
           >
             {openCount}
-          </Badge>
+          </span>
         )}
-      </Button>
+      </button>
 
       <ReportBugModal
         open={isModalOpen}
