@@ -1152,27 +1152,78 @@ function parseKRSResponse(krsData: any): any {
     const czyZawieszona = statusInfo?.czyZawieszona === true;
     const status = czyWykreslony ? 'WYKREŚLONA' : czyZawieszona ? 'ZAWIESZONA' : 'AKTYWNA';
     
-    // PKD codes from dzial3 - with descriptions
-    const przedmiotDzialalnosci = dzial3?.przedmiotDzialalnosci || {};
-    const pkdPrzewazajaca = przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || [];
-    const pkdPozostala = przedmiotDzialalnosci?.przedmiotPozostalejDzialalnosci || [];
+    // PKD codes from dzial3 - with descriptions (extended paths for various KRS API formats)
+    // DEBUG: Log dzial3 structure
+    console.log('[KRS] DEBUG - dzial3 structure:', JSON.stringify({
+      dzial3_exists: !!dzial3,
+      dzial3_keys: Object.keys(dzial3 || {}),
+      dzial3_type: typeof dzial3,
+      przedmiotDzialalnosci_exists: !!dzial3?.przedmiotDzialalnosci,
+      przedmiotDzialalnosci_keys: Object.keys(dzial3?.przedmiotDzialalnosci || {}),
+      przedmiotDzialalnosciGospodarczej_exists: !!dzial3?.przedmiotDzialalnosciGospodarczej,
+      raw_dzial3: dzial3
+    }, null, 2).substring(0, 3000));
     
-    const pkdPrzewazajacaArray = Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca : [pkdPrzewazajaca];
-    const pkdPozostalaArray = Array.isArray(pkdPozostala) ? pkdPozostala : [pkdPozostala];
+    // Try multiple paths for przedmiotDzialalnosci (different KRS API versions)
+    const przedmiotDzialalnosci = dzial3?.przedmiotDzialalnosci || 
+                                   dzial3?.przedmiotDzialalnosciGospodarczej ||
+                                   dzial3?.pkd ||
+                                   dzial3 || {};
+    
+    // Try multiple paths for PKD przeważająca (main activity)
+    const pkdPrzewazajaca = przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || 
+                             przedmiotDzialalnosci?.pkdPrzewazajaca ||
+                             przedmiotDzialalnosci?.dzialalnosPrzewazajaca ||
+                             przedmiotDzialalnosci?.glowna ||
+                             przedmiotDzialalnosci?.przewazajaca ||
+                             [];
+    
+    // Try multiple paths for PKD pozostała (secondary activities)
+    const pkdPozostala = przedmiotDzialalnosci?.przedmiotPozostalejDzialalnosci || 
+                          przedmiotDzialalnosci?.pkdPozostala ||
+                          przedmiotDzialalnosci?.pozostala ||
+                          przedmiotDzialalnosci?.dzialalnosci ||
+                          [];
+    
+    console.log('[KRS] DEBUG - PKD extraction:', JSON.stringify({
+      pkdPrzewazajaca_type: typeof pkdPrzewazajaca,
+      pkdPrzewazajaca_isArray: Array.isArray(pkdPrzewazajaca),
+      pkdPrzewazajaca_length: Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca.length : 'not array',
+      pkdPrzewazajaca_sample: Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca[0] : pkdPrzewazajaca,
+      pkdPozostala_length: Array.isArray(pkdPozostala) ? pkdPozostala.length : 'not array',
+    }, null, 2));
+    
+    const pkdPrzewazajacaArray = Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca : (pkdPrzewazajaca ? [pkdPrzewazajaca] : []);
+    const pkdPozostalaArray = Array.isArray(pkdPozostala) ? pkdPozostala : (pkdPozostala ? [pkdPozostala] : []);
+    
+    // Helper to extract PKD code and description from various formats
+    const extractPkdEntry = (p: any, isMain: boolean) => {
+      if (!p) return null;
+      
+      // Get latest entry if it's history array
+      const entry = getLatestEntry(Array.isArray(p) ? p : [p]);
+      if (!entry) return null;
+      
+      // Extract code from various key names
+      const code = entry?.kodDzial || entry?.kod || entry?.pkd || entry?.kodPKD ||
+                   (typeof entry === 'string' ? entry : null);
+      
+      if (!code) return null;
+      
+      return {
+        code: code,
+        description: entry?.opis || entry?.nazwa || entry?.opisDzialalnosci || null,
+        is_main: isMain
+      };
+    };
     
     // Extract PKD with descriptions
     const pkdWithDescriptions = [
-      ...pkdPrzewazajacaArray.map((p: any) => ({
-        code: p?.kodDzial || p?.kod || (typeof p === 'string' ? p : null),
-        description: p?.opis || null,
-        is_main: true
-      })).filter((p: any) => p.code),
-      ...pkdPozostalaArray.map((p: any) => ({
-        code: p?.kodDzial || p?.kod || (typeof p === 'string' ? p : null),
-        description: p?.opis || null,
-        is_main: false
-      })).filter((p: any) => p.code)
-    ];
+      ...pkdPrzewazajacaArray.map((p: any) => extractPkdEntry(p, true)).filter(Boolean),
+      ...pkdPozostalaArray.map((p: any) => extractPkdEntry(p, false)).filter(Boolean)
+    ] as Array<{ code: string; description: string | null; is_main: boolean }>;
+    
+    console.log(`[KRS] PKD extracted: ${pkdWithDescriptions.length} codes, main=${pkdWithDescriptions.find(p => p.is_main)?.code}`);
     
     // Backward compatible flat list
     const pkdCodes = pkdWithDescriptions.map(p => p.code);
