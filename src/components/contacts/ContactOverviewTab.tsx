@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, Phone, MapPin, Linkedin, Tag, 
-  Briefcase, User, Loader2, Search
+  Sparkles, Briefcase, User, Loader2, Search
 } from 'lucide-react';
-import { useContactStats, type ContactWithDetails } from '@/hooks/useContacts';
+import { useContactStats, useGenerateContactProfile, type ContactWithDetails } from '@/hooks/useContacts';
 import { ContactConnectionsSection } from './ContactConnectionsSection';
+import { AIProfileRenderer } from './AIProfileRenderer';
 import { useLinkedInAnalysis } from '@/hooks/useLinkedInAnalysis';
 import { LinkedInNetworkSection } from './LinkedInNetworkSection';
 
@@ -25,7 +26,12 @@ const sourceLabels: Record<string, string> = {
 
 export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
   const { data: stats } = useContactStats(contact.id);
+  const generateContactProfile = useGenerateContactProfile();
   const linkedInAnalysis = useLinkedInAnalysis();
+
+  const handleGenerateContactProfile = () => {
+    generateContactProfile.mutate(contact.id);
+  };
 
   return (
     <div className="space-y-6">
@@ -183,6 +189,62 @@ export function ContactOverviewTab({ contact }: ContactOverviewTabProps) {
           </CardContent>
         </Card>
 
+        {/* AI Profile Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Profil AI osoby
+              </CardTitle>
+              {contact.profile_summary && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerateContactProfile}
+                  disabled={generateContactProfile.isPending}
+                >
+                  {generateContactProfile.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Wygeneruj rozbudowany profil AI
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {contact.profile_summary ? (
+              <AIProfileRenderer markdown={contact.profile_summary} />
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-3">
+                  Brak profilu AI dla tej osoby
+                </p>
+                <Button
+                  onClick={handleGenerateContactProfile}
+                  disabled={generateContactProfile.isPending}
+                  size="sm"
+                >
+                  {generateContactProfile.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generowanie...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Wygeneruj profil AI
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ===== LINKEDIN NETWORK SECTION ===== */}
