@@ -45,6 +45,21 @@ const safeString = (value: any): string | null => {
   return null;
 };
 
+// Helper to extract procurator type from potentially nested KRS structure
+const getProcuratorType = (type: any): string => {
+  if (typeof type === 'string') return type;
+  if (Array.isArray(type)) {
+    // Get latest active entry (without nrWpisuWykr = deleted)
+    const activeEntries = type.filter((t: any) => !t.nrWpisuWykr);
+    const latest = activeEntries[activeEntries.length - 1] || type[type.length - 1];
+    return latest?.rodzajProkury || 'Prokurent';
+  }
+  if (typeof type === 'object' && type !== null) {
+    return type?.rodzajProkury || type?.opis || 'Prokurent';
+  }
+  return 'Prokurent';
+};
+
 // Format currency
 const formatCurrency = (amount: number | null | undefined, currency = 'PLN') => {
   if (!amount) return null;
@@ -379,7 +394,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                 <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/30">
                   <span className="font-medium">{person.name}</span>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">{person.type}</Badge>
+                    <Badge variant="secondary" className="text-xs">{getProcuratorType(person.type)}</Badge>
                     {person.verified && <CheckCircle2 className="h-3 w-3 text-green-500" />}
                   </div>
                 </div>
