@@ -1,11 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { 
   CheckCircle2, RefreshCw, Loader2, Building, Users, 
   MapPin, FileText, Calendar, Landmark, Briefcase, UserCheck,
   DollarSign, GitBranch, Phone, Mail, Globe, AlertTriangle, Scale,
-  Link2, Gavel, FileWarning, Shield
+  Link2, Gavel, FileWarning, Shield, Hash, Building2, Clock, Factory
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -35,6 +36,51 @@ interface SourceDataViewerProps {
   isRefreshing?: boolean;
 }
 
+// Helper to safely extract string from potentially nested KRS objects
+const safeString = (value: any): string | null => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null) {
+    return value?.sposobReprezentacji || value?.opis || value?.nazwa || null;
+  }
+  return null;
+};
+
+// Format currency
+const formatCurrency = (amount: number | null | undefined, currency = 'PLN') => {
+  if (!amount) return null;
+  return new Intl.NumberFormat('pl-PL', { 
+    style: 'currency', 
+    currency: currency,
+    minimumFractionDigits: 2 
+  }).format(amount);
+};
+
+// Section separator component
+function SectionSeparator({ label, icon: Icon }: { label: string; icon?: React.ComponentType<{ className?: string }> }) {
+  return (
+    <div className="flex items-center gap-3 py-4">
+      {Icon && <Icon className="h-5 w-5 text-primary" />}
+      <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{label}</h3>
+      <Separator className="flex-1" />
+    </div>
+  );
+}
+
+// Empty state for sections without data
+function EmptySection({ title, icon: Icon }: { title: string; icon: React.ComponentType<{ className?: string }> }) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="py-4">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Icon className="h-4 w-4" />
+          <span className="text-sm">{title}</span>
+          <Badge variant="outline" className="ml-auto">Brak danych</Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: SourceDataViewerProps) {
   const sourceType = data?.source || 'unknown';
   const isVerified = sourceType === 'krs_api' || sourceType === 'ceidg_api';
@@ -49,6 +95,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
     }
   };
 
+  // Extract all data fields
   const management = data?.management || [];
   const shareholders = data?.shareholders || [];
   const procurators = data?.procurators || [];
@@ -59,18 +106,6 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const pkdMainDescription = data?.pkd_main_description || null;
   const branches = data?.branches || [];
   const dates = data?.dates || {};
-  
-  // Helper to safely extract string from potentially nested KRS objects
-  const safeString = (value: any): string | null => {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'object' && value !== null) {
-      // KRS API sometimes returns objects with history keys
-      return value?.sposobReprezentacji || value?.opis || value?.nazwa || null;
-    }
-    return null;
-  };
-  
-  // NEW: Additional KRS OdpisPełny data (with safe extraction)
   const representationRules = safeString(data?.representation_rules);
   const correspondenceAddress = data?.correspondence_address;
   const correspondenceCity = data?.correspondence_city;
@@ -78,17 +113,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const relatedEntities = data?.related_entities || [];
   const courtMentions = data?.court_mentions || [];
   const caseSignatures = data?.case_signatures || [];
-
-  // Format currency
-  const formatCurrency = (amount: number | null | undefined, currency = 'PLN') => {
-    if (!amount) return null;
-    return new Intl.NumberFormat('pl-PL', { 
-      style: 'currency', 
-      currency: currency,
-      minimumFractionDigits: 2 
-    }).format(amount);
-  };
-
+  
   // Calculate ownership percentage
   const totalShares = data?.shares_total || shareholders.reduce((sum: number, s: any) => sum + (s.shares_count || 0), 0);
 
@@ -97,7 +122,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
       {/* Header with source info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="font-medium text-lg">Dane rejestrowe</h3>
+          <h2 className="font-semibold text-lg">Dane rejestrowe</h2>
           {isVerified ? (
             <Badge className="bg-green-500 hover:bg-green-600">
               <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -116,107 +141,119 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
           )}
         </div>
         {onRefresh && (
-          <Button size="sm" variant="ghost" onClick={onRefresh} disabled={isRefreshing}>
+          <Button size="sm" variant="outline" onClick={onRefresh} disabled={isRefreshing}>
             {isRefreshing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
+            <span className="ml-2 hidden sm:inline">Odśwież</span>
           </Button>
         )}
       </div>
 
-      {/* Basic registry data + Registry Court */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DZIAŁ 1: DANE PODMIOTU */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Dział 1: Dane podmiotu" icon={Building2} />
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Identyfikacja */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Building className="h-4 w-4 text-muted-foreground" />
-              Dane podstawowe
+              Identyfikacja
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-xs text-muted-foreground">Nazwa</p>
+              <p className="text-xs text-muted-foreground">Nazwa oficjalna</p>
               <p className="font-medium">{data?.name_official || company.name}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {(company.krs || data?.krs) && (
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">KRS</p>
-                    <p className="font-mono">{company.krs || data?.krs}</p>
-                  </div>
-                  {sourceType === 'krs_api' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                </div>
-              )}
-
-              {(company.nip || data?.nip) && (
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">NIP</p>
-                    <p className="font-mono">{company.nip || data?.nip}</p>
-                  </div>
-                  {isVerified && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                </div>
-              )}
-
-              {(company.regon || data?.regon) && (
+              <div className="flex items-center gap-2">
                 <div>
-                  <p className="text-xs text-muted-foreground">REGON</p>
-                  <p className="font-mono">{company.regon || data?.regon}</p>
+                  <p className="text-xs text-muted-foreground">KRS</p>
+                  <p className="font-mono text-sm">{company.krs || data?.krs || <span className="text-muted-foreground">—</span>}</p>
                 </div>
-              )}
-
-              {(data?.legal_form_name || company.legal_form) && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Forma prawna</p>
-                  <p className="text-sm">{data?.legal_form_name || company.legal_form}</p>
-                </div>
-              )}
-            </div>
-
-            {(company.address || company.city || data?.address) && (
-              <div className="flex items-start gap-2 pt-2 border-t">
-                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Adres siedziby</p>
-                  <p>{data?.address || company.address}</p>
-                  <p>{[data?.postal_code || company.postal_code, data?.city || company.city].filter(Boolean).join(' ')}</p>
-                </div>
+                {(company.krs || data?.krs) && sourceType === 'krs_api' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
               </div>
+
+              <div className="flex items-center gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">NIP</p>
+                  <p className="font-mono text-sm">{company.nip || data?.nip || <span className="text-muted-foreground">—</span>}</p>
+                </div>
+                {(company.nip || data?.nip) && isVerified && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">REGON</p>
+                <p className="font-mono text-sm">{company.regon || data?.regon || <span className="text-muted-foreground">—</span>}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">Forma prawna</p>
+                <p className="text-sm">{data?.legal_form_name || company.legal_form || <span className="text-muted-foreground">—</span>}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sąd rejestrowy */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-muted-foreground" />
+              Sąd rejestrowy
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {data?.registry_court ? (
+              <>
+                <p className="text-sm">{data.registry_court}</p>
+                {data?.registry_department && <p className="text-sm text-muted-foreground">{data.registry_department}</p>}
+                {data?.entry_number && <p className="text-xs text-muted-foreground">Numer wpisu: {data.entry_number}</p>}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Brak danych o sądzie rejestrowym</p>
             )}
           </CardContent>
         </Card>
 
-        {/* Registry Court + Capital */}
-        <div className="space-y-4">
-          {(data?.registry_court || data?.registry_department) && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Landmark className="h-4 w-4 text-muted-foreground" />
-                  Sąd rejestrowy
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {data?.registry_court && <p className="text-sm">{data.registry_court}</p>}
-                {data?.registry_department && <p className="text-sm text-muted-foreground">{data.registry_department}</p>}
-                {data?.entry_number && <p className="text-xs text-muted-foreground">Wpis nr: {data.entry_number}</p>}
-              </CardContent>
-            </Card>
-          )}
+        {/* Adres siedziby */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              Adres siedziby
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(company.address || company.city || data?.address) ? (
+              <div>
+                <p>{data?.address || company.address}</p>
+                <p>{[data?.postal_code || company.postal_code, data?.city || company.city].filter(Boolean).join(' ')}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Brak danych adresowych</p>
+            )}
+          </CardContent>
+        </Card>
 
-          {data?.share_capital && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  Kapitał zakładowy
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+        {/* Kapitał zakładowy */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              Kapitał zakładowy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.share_capital ? (
+              <>
                 <p className="text-xl font-bold">
                   {formatCurrency(data.share_capital, data.share_capital_currency)}
                 </p>
@@ -228,45 +265,61 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                     <p>Opłacony: {formatCurrency(data.capital_paid_up, data.share_capital_currency)}</p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Contact from KRS */}
-          {(data?.email_krs || data?.phone_krs || data?.website_krs) && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Dane kontaktowe (KRS)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {data?.email_krs && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{data.email_krs}</span>
-                  </div>
-                )}
-                {data?.phone_krs && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{data.phone_krs}</span>
-                  </div>
-                )}
-                {data?.website_krs && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <a href={data.website_krs} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      {data.website_krs}
-                    </a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Brak danych o kapitale</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Management */}
-      {management.length > 0 && (
+      {/* Daty rejestrowe */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            Daty rejestrowe
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Pierwszy wpis</p>
+              <p className="font-medium">{dates.first_entry || <span className="text-muted-foreground">—</span>}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Rozpoczęcie działalności</p>
+              <p className="font-medium">{dates.registration || <span className="text-muted-foreground">—</span>}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                {dates.suspension_start && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                Data zawieszenia
+              </p>
+              <p className={`font-medium ${dates.suspension_start ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                {dates.suspension_start || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                {dates.deletion && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                Data wykreślenia
+              </p>
+              <p className={`font-medium ${dates.deletion ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {dates.deletion || '—'}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DZIAŁ 2: ORGANY SPÓŁKI */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Dział 2: Organy spółki" icon={Users} />
+
+      {/* Zarząd */}
+      {management.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -289,10 +342,29 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Zarząd" icon={Users} />
       )}
 
-      {/* Procurators */}
-      {procurators.length > 0 && (
+      {/* Sposób reprezentacji */}
+      {representationRules ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              Sposób reprezentacji
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">{representationRules}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <EmptySection title="Sposób reprezentacji" icon={Shield} />
+      )}
+
+      {/* Prokurenci */}
+      {procurators.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -315,10 +387,12 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Prokurenci" icon={UserCheck} />
       )}
 
-      {/* Supervisory Board */}
-      {supervisoryBoard.length > 0 && (
+      {/* Rada Nadzorcza */}
+      {supervisoryBoard.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -341,10 +415,12 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Rada Nadzorcza" icon={Scale} />
       )}
 
-      {/* Shareholders */}
-      {shareholders.length > 0 && (
+      {/* Wspólnicy / Udziałowcy */}
+      {shareholders.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -384,14 +460,14 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {sh.shares_count?.toLocaleString('pl-PL') || '-'}
+                        {sh.shares_count?.toLocaleString('pl-PL') || '—'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {sh.shares_value ? formatCurrency(sh.shares_value, data?.share_capital_currency) : '-'}
+                        {sh.shares_value ? formatCurrency(sh.shares_value, data?.share_capital_currency) : '—'}
                       </TableCell>
                       {totalShares > 0 && (
                         <TableCell className="text-right font-medium">
-                          {percentage ? `${percentage}%` : '-'}
+                          {percentage ? `${percentage}%` : '—'}
                         </TableCell>
                       )}
                     </TableRow>
@@ -401,38 +477,17 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </Table>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Wspólnicy / Udziałowcy" icon={Briefcase} />
       )}
 
-      {/* Branches */}
-      {branches.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              Oddziały
-              <Badge variant="outline">{branches.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {branches.map((branch: any, idx: number) => (
-                <div key={idx} className="flex items-start gap-2 py-2 px-3 rounded-md bg-muted/30">
-                  <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="font-medium">{branch.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {[branch.address, branch.postal_code, branch.city].filter(Boolean).join(', ')}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DZIAŁ 3: PRZEDMIOT DZIAŁALNOŚCI (PKD) */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Dział 3: Przedmiot działalności" icon={Factory} />
 
-      {/* Industry Badge */}
-      {industry && (
+      {/* Branża główna */}
+      {industry ? (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
@@ -441,31 +496,33 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Branża</p>
                 <p className="text-lg font-semibold text-primary">{industry}</p>
               </div>
-              {pkdMainDescription && (
+              {(pkdMainDescription || data?.pkd_main) && (
                 <div className="ml-auto text-right">
                   <p className="text-xs text-muted-foreground">Główne PKD</p>
-                  <p className="text-sm">{data?.pkd_main}: {pkdMainDescription}</p>
+                  <p className="text-sm">{data?.pkd_main}: {pkdMainDescription || ''}</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Branża" icon={Factory} />
       )}
 
-      {/* PKD Codes with Descriptions */}
-      {pkdCodes.length > 0 && (
+      {/* Kody PKD */}
+      {pkdCodes.length > 0 || pkdWithDescriptions.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               Kody PKD
-              <Badge variant="outline">{pkdCodes.length}</Badge>
+              <Badge variant="outline">{pkdWithDescriptions.length || pkdCodes.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {pkdWithDescriptions.length > 0 ? (
               <div className="space-y-2">
-                {pkdWithDescriptions.slice(0, 15).map((pkd: any, idx: number) => (
+                {pkdWithDescriptions.slice(0, 20).map((pkd: any, idx: number) => (
                   <div 
                     key={idx} 
                     className={`flex items-start gap-2 py-1.5 px-2 rounded ${pkd.is_main ? 'bg-primary/10' : ''}`}
@@ -484,14 +541,13 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                     )}
                   </div>
                 ))}
-                {pkdWithDescriptions.length > 15 && (
-                  <p className="text-sm text-muted-foreground mt-2">+{pkdWithDescriptions.length - 15} więcej kodów...</p>
+                {pkdWithDescriptions.length > 20 && (
+                  <p className="text-sm text-muted-foreground mt-2">+{pkdWithDescriptions.length - 20} więcej kodów...</p>
                 )}
               </div>
             ) : (
-              // Fallback to old display if no descriptions
               <div className="flex flex-wrap gap-2">
-                {pkdCodes.slice(0, 15).map((pkd: any, idx: number) => (
+                {pkdCodes.slice(0, 20).map((pkd: any, idx: number) => (
                   <Badge 
                     key={idx} 
                     variant={idx === 0 ? 'default' : 'outline'} 
@@ -501,53 +557,24 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                     {idx === 0 && ' (główny)'}
                   </Badge>
                 ))}
-                {pkdCodes.length > 15 && (
-                  <Badge variant="secondary">+{pkdCodes.length - 15} więcej</Badge>
+                {pkdCodes.length > 20 && (
+                  <Badge variant="secondary">+{pkdCodes.length - 20} więcej</Badge>
                 )}
               </div>
             )}
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Kody PKD" icon={FileText} />
       )}
 
-      {/* Representation Rules */}
-      {representationRules && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Sposób reprezentacji
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm">{representationRules}</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DZIAŁ 4: POWIĄZANIA KAPITAŁOWE */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Dział 4: Powiązania kapitałowe" icon={Link2} />
 
-      {/* Correspondence Address */}
-      {correspondenceAddress && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              Adres do korespondencji
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div>
-                <p>{correspondenceAddress}</p>
-                <p>{[correspondencePostalCode, correspondenceCity].filter(Boolean).join(' ')}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Related Entities */}
-      {relatedEntities.length > 0 && (
+      {/* Podmioty powiązane */}
+      {relatedEntities.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -572,10 +599,47 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Podmioty powiązane" icon={Link2} />
       )}
 
-      {/* Court Mentions and Proceedings - with warnings */}
-      {courtMentions.length > 0 && (
+      {/* Oddziały */}
+      {branches.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              Oddziały
+              <Badge variant="outline">{branches.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {branches.map((branch: any, idx: number) => (
+                <div key={idx} className="flex items-start gap-2 py-2 px-3 rounded-md bg-muted/30">
+                  <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="font-medium">{branch.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {[branch.address, branch.postal_code, branch.city].filter(Boolean).join(', ')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <EmptySection title="Oddziały" icon={GitBranch} />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DZIAŁ 6: INFORMACJE DODATKOWE */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Dział 6: Informacje dodatkowe" icon={FileWarning} />
+
+      {/* Wzmianki i postępowania sądowe */}
+      {courtMentions.length > 0 ? (
         <Card className="border-yellow-200 dark:border-yellow-800">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -626,15 +690,18 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Wzmianki i postępowania sądowe" icon={Gavel} />
       )}
 
-      {/* Case Signatures */}
-      {caseSignatures.length > 0 && (
+      {/* Sygnatury spraw */}
+      {caseSignatures.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               Sygnatury spraw
+              <Badge variant="outline">{caseSignatures.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -647,65 +714,76 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <EmptySection title="Sygnatury spraw" icon={FileText} />
       )}
 
-      {/* Dates */}
-      {(dates.registration || dates.first_entry || dates.deletion || dates.suspension_start) && (
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* KONTAKT I KORESPONDENCJA */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionSeparator label="Kontakt i korespondencja" icon={Mail} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Dane kontaktowe z KRS */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              Daty rejestrowe
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              Dane kontaktowe (KRS)
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {dates.first_entry && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Pierwszy wpis</p>
-                  <p className="font-medium">{dates.first_entry}</p>
-                </div>
-              )}
-              {dates.registration && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Rozpoczęcie działalności</p>
-                  <p className="font-medium">{dates.registration}</p>
-                </div>
-              )}
-              {dates.suspension_start && (
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                    Data zawieszenia
-                  </p>
-                  <p className="font-medium text-yellow-600">{dates.suspension_start}</p>
-                </div>
-              )}
-              {dates.suspension_end && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Wznowienie</p>
-                  <p className="font-medium">{dates.suspension_end}</p>
-                </div>
-              )}
-              {dates.deletion && (
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-destructive" />
-                    Data wykreślenia
-                  </p>
-                  <p className="font-medium text-destructive">{dates.deletion}</p>
-                </div>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span>{data?.email_krs || <span className="text-muted-foreground">Brak danych</span>}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span>{data?.phone_krs || <span className="text-muted-foreground">Brak danych</span>}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              {data?.website_krs ? (
+                <a href={data.website_krs} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  {data.website_krs}
+                </a>
+              ) : (
+                <span className="text-muted-foreground">Brak danych</span>
               )}
             </div>
           </CardContent>
         </Card>
-      )}
+
+        {/* Adres do korespondencji */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              Adres do korespondencji
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {correspondenceAddress ? (
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p>{correspondenceAddress}</p>
+                  <p>{[correspondencePostalCode, correspondenceCity].filter(Boolean).join(' ')}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Taki sam jak siedziba lub brak danych</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Update timestamp */}
       {company.source_data_date && (
-        <p className="text-xs text-muted-foreground text-right">
+        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground pt-4 border-t">
+          <Clock className="h-3 w-3" />
           Ostatnia weryfikacja: {format(new Date(company.source_data_date), 'd MMMM yyyy, HH:mm', { locale: pl })}
-        </p>
+        </div>
       )}
     </div>
   );
