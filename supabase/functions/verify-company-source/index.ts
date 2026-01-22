@@ -1857,6 +1857,72 @@ Deno.serve(async (req) => {
       console.error('[Stage 1] Database update error:', updateError);
       throw updateError;
     }
+    
+    // NEW: Save related entities to capital_group_members table
+    if (sourceData.related_entities?.length > 0) {
+      // Get tenant_id from company
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('tenant_id')
+        .eq('id', company_id)
+        .single();
+      
+      if (companyData?.tenant_id) {
+        console.log(`[Stage 1] Saving ${sourceData.related_entities.length} related entities to capital_group_members`);
+        
+        for (const entity of sourceData.related_entities) {
+          // Map KRS type to our relationship_type
+          const relationshipType = entity.type === 'parent' ? 'parent' 
+            : entity.type === 'subsidiary' ? 'subsidiary' 
+            : 'affiliate';
+          
+          // Check if company with NIP/KRS exists in database
+          let memberCompanyId = null;
+          if (entity.nip || entity.krs) {
+            let query = supabase
+              .from('companies')
+              .select('id')
+              .eq('tenant_id', companyData.tenant_id)
+              .neq('id', company_id); // Don't link to self
+            
+            if (entity.nip) {
+              query = query.eq('nip', entity.nip);
+            } else if (entity.krs) {
+              query = query.eq('krs', entity.krs);
+            }
+            
+            const { data: existingCompany } = await query.maybeSingle();
+            memberCompanyId = existingCompany?.id || null;
+          }
+          
+          // Upsert to capital_group_members
+          const { error: insertError } = await supabase
+            .from('capital_group_members')
+            .upsert({
+              tenant_id: companyData.tenant_id,
+              parent_company_id: company_id,
+              member_company_id: memberCompanyId,
+              external_name: entity.name,
+              external_krs: entity.krs || null,
+              external_nip: entity.nip || null,
+              relationship_type: relationshipType,
+              data_source: 'krs',
+              krs_verified: true
+            }, {
+              onConflict: entity.nip ? 'parent_company_id,external_nip' : 
+                          entity.krs ? 'parent_company_id,external_krs' : 
+                          undefined
+            });
+          
+          if (insertError) {
+            console.error(`[Stage 1] Error saving capital group member ${entity.name}:`, insertError);
+          } else {
+            console.log(`[Stage 1] Saved capital group member: ${entity.name} (${relationshipType})`);
+          }
+        }
+      }
+    }
+    
     console.log(`[Stage 1] Completed successfully for ${company_name || email_domain}`);
 
     return new Response(

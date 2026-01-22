@@ -247,6 +247,78 @@ export type Database = {
           },
         ]
       }
+      capital_group_members: {
+        Row: {
+          created_at: string | null
+          data_source: string | null
+          external_krs: string | null
+          external_name: string
+          external_nip: string | null
+          external_regon: string | null
+          id: string
+          krs_verified: boolean | null
+          member_company_id: string | null
+          ownership_percent: number | null
+          parent_company_id: string
+          relationship_type: string
+          revenue_amount: number | null
+          revenue_year: number | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_source?: string | null
+          external_krs?: string | null
+          external_name: string
+          external_nip?: string | null
+          external_regon?: string | null
+          id?: string
+          krs_verified?: boolean | null
+          member_company_id?: string | null
+          ownership_percent?: number | null
+          parent_company_id: string
+          relationship_type?: string
+          revenue_amount?: number | null
+          revenue_year?: number | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_source?: string | null
+          external_krs?: string | null
+          external_name?: string
+          external_nip?: string | null
+          external_regon?: string | null
+          id?: string
+          krs_verified?: boolean | null
+          member_company_id?: string | null
+          ownership_percent?: number | null
+          parent_company_id?: string
+          relationship_type?: string
+          revenue_amount?: number | null
+          revenue_year?: number | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_group_members_member_company_id_fkey"
+            columns: ["member_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_group_members_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
