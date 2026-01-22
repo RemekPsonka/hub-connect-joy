@@ -49,10 +49,10 @@ serve(async (req) => {
       .select(`*, 
         company:companies(
           id, name, industry, website, description, 
-          revenue, employees_count, growth_rate,
-          ai_analysis, company_analysis_confidence,
-          company_www_data, company_external_data, 
-          company_source_data, company_financial_data
+          revenue_amount, employee_count, growth_rate,
+          ai_analysis, analysis_confidence_score,
+          www_data, external_data, 
+          source_data_api, financial_data_3y
         ), 
         primary_group:contact_groups(*)`)
       .eq('id', contact_id)
@@ -92,10 +92,10 @@ serve(async (req) => {
 - Branża: ${company.industry || 'nieznana'}
 - Strona WWW: ${company.website || 'brak'}
 - Opis: ${company.description?.substring(0, 300) || 'brak'}
-- Przychody: ${company.revenue ? `${company.revenue} PLN` : 'nieznane'}
-- Zatrudnienie: ${company.employees_count || 'nieznane'}
+- Przychody: ${company.revenue_amount ? `${company.revenue_amount} PLN` : 'nieznane'}
+- Zatrudnienie: ${company.employee_count || 'nieznane'}
 - Wzrost: ${company.growth_rate ? `${company.growth_rate}%` : 'nieznany'}
-- Pewność analizy: ${company.company_analysis_confidence || 'brak'}%`;
+- Pewność analizy: ${company.analysis_confidence_score || 'brak'}%`;
 
       if (aiAnalysis) {
         // Products and services
@@ -138,7 +138,7 @@ ${(aiAnalysis.news_signals?.items || []).slice(0, 2).map((n: any) => `- ${n.titl
       }
       
       // Add financial data if available
-      const financialData = company.company_financial_data as any;
+      const financialData = company.financial_data_3y as any;
       if (financialData) {
         companyContext += `
 
