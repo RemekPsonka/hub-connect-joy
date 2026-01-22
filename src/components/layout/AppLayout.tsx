@@ -7,6 +7,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { SemanticSearchModal } from '@/components/search/SemanticSearchModal';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { ReportBugButton } from '@/components/bugs/ReportBugButton';
 
 export function AppLayout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -69,6 +70,8 @@ export function AppLayout() {
         open={isSearchOpen} 
         onOpenChange={setIsSearchOpen} 
       />
+      
+      <ReportBugButton />
     </SidebarProvider>
   );
 }

@@ -13,6 +13,7 @@ import {
   Share2,
   Shield,
   Building2,
+  Bug,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -39,6 +40,7 @@ const navigationItems = [
   { title: 'Dopasowania', url: '/matches', icon: Handshake },
   { title: 'Sieć', url: '/network', icon: Share2 },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
+  { title: 'Zgłoszenia', url: '/bug-reports', icon: Bug },
   { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
   { title: 'Analityka', url: '/analytics', icon: BarChart3 },
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },
