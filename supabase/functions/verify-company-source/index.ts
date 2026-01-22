@@ -872,8 +872,8 @@ function extractCorrespondenceAddress(dzial1: any): {
   }
 }
 
-// Helper: Extract related entities (podmioty powiązane) from dzial4
-function extractRelatedEntities(dzial4: any): Array<{
+// Helper: Extract related entities (podmioty powiązane) from dzial3 AND dzial4
+function extractRelatedEntities(dzial3: any, dzial4: any): Array<{
   name: string;
   krs?: string;
   nip?: string;
@@ -882,7 +882,99 @@ function extractRelatedEntities(dzial4: any): Array<{
   const entities: Array<{ name: string; krs?: string; nip?: string; type: 'parent' | 'subsidiary' | 'affiliated' }> = [];
   
   try {
-    // Podmioty dominujące (parent companies)
+    // DEBUG: Log both dzial3 and dzial4 structures for related entities
+    console.log('[KRS] DEBUG - Related entities sources:', JSON.stringify({
+      dzial3_keys: Object.keys(dzial3 || {}),
+      dzial3_sprawozdaniaGrupyKapitalowej_exists: !!dzial3?.sprawozdaniaGrupyKapitalowej,
+      dzial3_sprawozdaniaGrupyKapitalowej: dzial3?.sprawozdaniaGrupyKapitalowej,
+      dzial4_keys: Object.keys(dzial4 || {}),
+      dzial4_sample: dzial4
+    }, null, 2).substring(0, 3000));
+    
+    // ============================================
+    // SOURCE 1: Dzial3 - Sprawozdania grupy kapitałowej
+    // This is where capital group affiliations are stored in OdpisPelny
+    // ============================================
+    const sprawozdaniaGrupy = dzial3?.sprawozdaniaGrupyKapitalowej || [];
+    const sprawozdaniaArray = Array.isArray(sprawozdaniaGrupy) ? sprawozdaniaGrupy : (sprawozdaniaGrupy ? [sprawozdaniaGrupy] : []);
+    
+    console.log(`[KRS] DEBUG - sprawozdaniaGrupyKapitalowej entries: ${sprawozdaniaArray.length}`);
+    
+    for (const sprawozdanie of sprawozdaniaArray) {
+      if (!sprawozdanie) continue;
+      const latest = getLatestEntry(Array.isArray(sprawozdanie) ? sprawozdanie : [sprawozdanie]);
+      
+      // The structure might have: jednostkaDominujacaLubOrganizujaca, jednostkiZalezne, jednostkiPowiazane
+      
+      // Jednostka dominująca (parent organizing the group)
+      const dominujaca = latest?.jednostkaDominujacaLubOrganizujaca || latest?.jednostkaDominujaca || latest?.organizator || [];
+      const dominujacaArray = Array.isArray(dominujaca) ? dominujaca : (dominujaca ? [dominujaca] : []);
+      
+      for (const d of dominujacaArray) {
+        if (!d) continue;
+        const entry = getLatestEntry(Array.isArray(d) ? d : [d]);
+        const nazwa = entry?.firma || entry?.nazwa || entry?.nazwaPodmiotu || (typeof entry === 'string' ? entry : null);
+        if (nazwa) {
+          entities.push({
+            name: nazwa,
+            krs: entry?.krs || entry?.numerKRS,
+            nip: entry?.nip,
+            type: 'parent'
+          });
+          console.log(`[KRS] Found parent from dzial3.sprawozdaniaGrupyKapitalowej: ${nazwa}`);
+        }
+      }
+      
+      // Jednostki zależne (subsidiaries in the group)
+      const zalezne = latest?.jednostkiZalezne || latest?.podmioty || [];
+      const zalezneArray = Array.isArray(zalezne) ? zalezne : (zalezne ? [zalezne] : []);
+      
+      for (const z of zalezneArray) {
+        if (!z) continue;
+        const entry = getLatestEntry(Array.isArray(z) ? z : [z]);
+        const nazwa = entry?.firma || entry?.nazwa || entry?.nazwaPodmiotu || (typeof entry === 'string' ? entry : null);
+        if (nazwa) {
+          entities.push({
+            name: nazwa,
+            krs: entry?.krs || entry?.numerKRS,
+            nip: entry?.nip,
+            type: 'subsidiary'
+          });
+          console.log(`[KRS] Found subsidiary from dzial3.sprawozdaniaGrupyKapitalowej: ${nazwa}`);
+        }
+      }
+      
+      // Jednostki powiązane (affiliated entities)
+      const powiazane = latest?.jednostkiPowiazane || [];
+      const powiazaneArray = Array.isArray(powiazane) ? powiazane : (powiazane ? [powiazane] : []);
+      
+      for (const p of powiazaneArray) {
+        if (!p) continue;
+        const entry = getLatestEntry(Array.isArray(p) ? p : [p]);
+        const nazwa = entry?.firma || entry?.nazwa || entry?.nazwaPodmiotu || (typeof entry === 'string' ? entry : null);
+        if (nazwa) {
+          entities.push({
+            name: nazwa,
+            krs: entry?.krs || entry?.numerKRS,
+            nip: entry?.nip,
+            type: 'affiliated'
+          });
+          console.log(`[KRS] Found affiliated from dzial3.sprawozdaniaGrupyKapitalowej: ${nazwa}`);
+        }
+      }
+      
+      // Direct opis/informacja might contain company names in some formats
+      if (latest?.opis && typeof latest.opis === 'string' && entities.length === 0) {
+        // Store as an info note - we might parse it later
+        console.log(`[KRS] sprawozdaniaGrupyKapitalowej has opis but no structured data: ${latest.opis.substring(0, 200)}`);
+      }
+    }
+    
+    // ============================================
+    // SOURCE 2: Dzial4 - Additional affiliated entities (fallback/legacy)
+    // ============================================
+    
+    // Podmioty dominujące (parent companies) from dzial4
     const dominujace = dzial4?.informacjaOPodmiotachDominujacych || dzial4?.podmiotyDominujace || [];
     const dominujaceArray = Array.isArray(dominujace) ? dominujace : (dominujace ? [dominujace] : []);
     
@@ -890,17 +982,18 @@ function extractRelatedEntities(dzial4: any): Array<{
       if (!d) continue;
       const latest = getLatestEntry(Array.isArray(d) ? d : [d]);
       const nazwa = latest?.firma || latest?.nazwa || latest?.nazwaPodmiotu;
-      if (nazwa) {
+      if (nazwa && !entities.find(e => e.name === nazwa)) {
         entities.push({
           name: nazwa,
           krs: latest?.krs || latest?.numerKRS,
           nip: latest?.nip,
           type: 'parent'
         });
+        console.log(`[KRS] Found parent from dzial4: ${nazwa}`);
       }
     }
     
-    // Podmioty zależne (subsidiary companies)
+    // Podmioty zależne (subsidiary companies) from dzial4
     const zalezne = dzial4?.informacjaOPodmiotachZaleznych || dzial4?.podmiotyZalezne || [];
     const zalezneArray = Array.isArray(zalezne) ? zalezne : (zalezne ? [zalezne] : []);
     
@@ -908,17 +1001,18 @@ function extractRelatedEntities(dzial4: any): Array<{
       if (!z) continue;
       const latest = getLatestEntry(Array.isArray(z) ? z : [z]);
       const nazwa = latest?.firma || latest?.nazwa || latest?.nazwaPodmiotu;
-      if (nazwa) {
+      if (nazwa && !entities.find(e => e.name === nazwa)) {
         entities.push({
           name: nazwa,
           krs: latest?.krs || latest?.numerKRS,
           nip: latest?.nip,
           type: 'subsidiary'
         });
+        console.log(`[KRS] Found subsidiary from dzial4: ${nazwa}`);
       }
     }
     
-    console.log(`[KRS] Related entities: ${entities.length} found`);
+    console.log(`[KRS] Related entities total: ${entities.length} found`);
   } catch (e) {
     console.error('[KRS] Error extracting related entities:', e);
   }
@@ -1344,7 +1438,7 @@ function parseKRSResponse(krsData: any): any {
     const representationRules = extractRepresentationRules(dzial2);
     const correspondenceAddress = extractCorrespondenceAddress(dzial1);
     const dzial4 = krsData?.odpis?.dane?.dzial4;
-    const relatedEntities = extractRelatedEntities(dzial4);
+    const relatedEntities = extractRelatedEntities(dzial3, dzial4);
     const courtMentions = extractCourtMentions(dzial6);
     const caseSignatures = extractCaseSignatures(dzial6, naglowek);
     
