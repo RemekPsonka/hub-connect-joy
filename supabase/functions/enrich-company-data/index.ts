@@ -1698,7 +1698,7 @@ serve(async (req) => {
     console.log('Existing KRS from database:', existing_krs);
     console.log('Existing NIP from database:', existing_nip);
 
-    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1');
     const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const CEIDG_JWT_TOKEN = Deno.env.get('CEIDG_JWT_TOKEN');

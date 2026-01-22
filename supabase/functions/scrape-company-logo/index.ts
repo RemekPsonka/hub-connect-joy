@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     console.log(`[scrape-company-logo] Starting for website: ${companyWebsite}, companyId: ${companyId}`);
 
-    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1');
     let logoUrl: string | null = null;
     let method = 'unknown';
 
