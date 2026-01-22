@@ -256,8 +256,8 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
         const tableData: string[][] = [];
         for (let i = 0; i < maxRows; i++) {
           tableData.push([
-            doItems[i] ? `✓ ${s(doItems[i])}` : '',
-            dontItems[i] ? `✗ ${s(dontItems[i])}` : ''
+            doItems[i] ? s(doItems[i]) : '',
+            dontItems[i] ? s(dontItems[i]) : ''
           ]);
         }
         
@@ -266,17 +266,36 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
           head: [[s('TAK - Rob to'), s('NIE - Unikaj')]],
           body: tableData,
           theme: 'grid',
+          tableWidth: CONTENT_WIDTH,
           headStyles: { 
             fillColor: [34, 197, 94],
             textColor: [255, 255, 255],
             fontStyle: 'bold',
-            fontSize: 9
+            fontSize: 9,
+            halign: 'left'
           },
           columnStyles: {
-            0: { cellWidth: CONTENT_WIDTH / 2, fillColor: [240, 253, 244] },
-            1: { cellWidth: CONTENT_WIDTH / 2, fillColor: [254, 242, 242], textColor: [127, 29, 29] }
+            0: { 
+              cellWidth: (CONTENT_WIDTH / 2) - 1, 
+              fillColor: [240, 253, 244],
+              textColor: [21, 128, 61],
+              overflow: 'linebreak'
+            },
+            1: { 
+              cellWidth: (CONTENT_WIDTH / 2) - 1, 
+              fillColor: [254, 242, 242], 
+              textColor: [185, 28, 28],
+              overflow: 'linebreak'
+            }
           },
-          styles: { fontSize: 9, cellPadding: 3 },
+          styles: { 
+            fontSize: 9, 
+            cellPadding: 4,
+            overflow: 'linebreak',
+            font: 'helvetica',
+            lineColor: [229, 231, 235],
+            lineWidth: 0.5
+          },
           margin: { left: MARGIN, right: MARGIN },
           didParseCell: (data) => {
             if (data.section === 'head' && data.column.index === 1) {
