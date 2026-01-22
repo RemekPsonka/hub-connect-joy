@@ -132,6 +132,8 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const correspondenceCity = data?.correspondence_city;
   const correspondencePostalCode = data?.correspondence_postal_code;
   const relatedEntities = data?.related_entities || [];
+  const hasCapitalGroup = data?.has_capital_group || false;
+  const capitalGroupReportsCount = data?.capital_group_reports_count || 0;
   const courtMentions = data?.court_mentions || [];
   const caseSignatures = data?.case_signatures || [];
   
@@ -633,7 +635,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <SectionSeparator label="Dział 4: Powiązania kapitałowe" icon={Link2} />
 
-      {/* Podmioty powiązane */}
+      {/* Podmioty powiązane / Capital group info */}
       {relatedEntities.length > 0 ? (
         <Card>
           <CardHeader className="pb-2">
@@ -656,6 +658,28 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
                   </Badge>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : hasCapitalGroup ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              Grupa kapitałowa
+              <Badge variant="secondary">{capitalGroupReportsCount} sprawozdań</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span>Firma składa skonsolidowane sprawozdania finansowe grupy kapitałowej</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Szczegółowa lista podmiotów powiązanych jest dostępna w złożonych do KRS sprawozdaniach finansowych. 
+                API KRS nie udostępnia bezpośrednio listy spółek zależnych/powiązanych.
+              </p>
             </div>
           </CardContent>
         </Card>

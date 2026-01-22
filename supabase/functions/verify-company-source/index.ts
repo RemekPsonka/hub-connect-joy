@@ -683,25 +683,89 @@ function extractShareCapital(dzial1: any): {
   }
 }
 
-// Helper: Extract branches from dzial1
+// Helper: Extract branches from dzial1 - using jednostkiTerenoweOddzialy
 function extractBranches(dzial1: any): Array<{ name: string; address: string; city: string; postal_code?: string }> {
   const branches: Array<{ name: string; address: string; city: string; postal_code?: string }> = [];
   
   try {
-    const oddzialy = dzial1?.oddzialy || [];
-    const oddzialyArray = Array.isArray(oddzialy) ? oddzialy : [oddzialy];
+    // KRS API uses "jednostkiTerenoweOddzialy" not "oddzialy"
+    const jednostki = dzial1?.jednostkiTerenoweOddzialy || dzial1?.oddzialy || {};
     
-    for (const o of oddzialyArray) {
-      if (!o) continue;
-      const adres = o?.adres || o?.adresSiedziby || {};
+    console.log('[KRS] DEBUG - jednostkiTerenoweOddzialy:', JSON.stringify({
+      exists: !!dzial1?.jednostkiTerenoweOddzialy,
+      type: typeof jednostki,
+      isArray: Array.isArray(jednostki),
+      keys: typeof jednostki === 'object' ? Object.keys(jednostki || {}) : [],
+      sample: jednostki
+    }, null, 2).substring(0, 2000));
+    
+    // Helper to extract address
+    const buildAddress = (adres: any) => {
+      if (!adres) return '';
+      const parts = [];
+      if (adres.ulica) {
+        let street = adres.ulica;
+        if (adres.nrDomu) street += ` ${adres.nrDomu}`;
+        if (adres.nrLokalu) street += `/${adres.nrLokalu}`;
+        parts.push(street);
+      }
+      return parts.join(' ').trim();
+    };
+    
+    // Helper to process a branch entry
+    const processBranch = (item: any) => {
+      if (!item) return;
+      const latest = getLatestEntry(Array.isArray(item) ? item : [item]);
+      if (!latest) return;
       
-      branches.push({
-        name: o?.nazwaOddzialu || o?.nazwa || 'Oddział',
-        address: adres?.ulica ? `${adres.ulica} ${adres.nrDomu || ''}${adres.nrLokalu ? '/' + adres.nrLokalu : ''}`.trim() : '',
-        city: adres?.miejscowosc || '',
-        postal_code: adres?.kodPocztowy
-      });
+      // Skip deleted entries
+      if (latest.nrWpisuWykr) return;
+      
+      const adres = latest?.adres || latest?.adresSiedziby || latest?.siedzibaOddzialu || {};
+      const name = latest?.nazwaOddzialu || latest?.nazwa || latest?.oznaczenie || 'Oddział';
+      const address = buildAddress(adres);
+      const city = adres?.miejscowosc || '';
+      
+      if (name || city) {
+        branches.push({
+          name,
+          address,
+          city,
+          postal_code: adres?.kodPocztowy
+        });
+      }
+    };
+    
+    // Check different structures used by KRS API
+    if (Array.isArray(jednostki)) {
+      // Direct array of branches
+      for (const item of jednostki) {
+        processBranch(item);
+      }
+    } else if (typeof jednostki === 'object' && jednostki !== null) {
+      // Object with sub-keys like oddzialySamodzielnieBilansujace, pozostaleJednostki
+      const sources = [
+        jednostki?.oddzialySamodzielnieBilansujace,
+        jednostki?.pozostaleJednostki,
+        jednostki?.oddzialy,
+        jednostki?.jednostki,
+        jednostki?.pozycja
+      ].filter(Boolean);
+      
+      for (const source of sources) {
+        const items = Array.isArray(source) ? source : [source];
+        for (const item of items) {
+          processBranch(item);
+        }
+      }
+      
+      // Also check if jednostki itself has branch data
+      if (Object.keys(jednostki).some(k => ['nazwaOddzialu', 'nazwa', 'adres', 'siedzibaOddzialu'].includes(k))) {
+        processBranch(jednostki);
+      }
     }
+    
+    console.log(`[KRS] Branches extracted: ${branches.length}`);
   } catch (e) {
     console.error('[KRS] Error extracting branches:', e);
   }
@@ -873,13 +937,15 @@ function extractCorrespondenceAddress(dzial1: any): {
 }
 
 // Helper: Extract related entities (podmioty powiązane) from dzial3 AND dzial4
-function extractRelatedEntities(dzial3: any, dzial4: any): Array<{
-  name: string;
-  krs?: string;
-  nip?: string;
-  type: 'parent' | 'subsidiary' | 'affiliated';
-}> {
+// Also returns capital group info from consolidated report filings
+function extractRelatedEntities(dzial3: any, dzial4: any): {
+  entities: Array<{ name: string; krs?: string; nip?: string; type: 'parent' | 'subsidiary' | 'affiliated' }>;
+  has_capital_group: boolean;
+  capital_group_reports_count: number;
+} {
   const entities: Array<{ name: string; krs?: string; nip?: string; type: 'parent' | 'subsidiary' | 'affiliated' }> = [];
+  let hasCapitalGroup = false;
+  let reportsCount = 0;
   
   try {
     // DEBUG: Log both dzial3 and dzial4 structures for related entities
@@ -892,11 +958,24 @@ function extractRelatedEntities(dzial3: any, dzial4: any): Array<{
     }, null, 2).substring(0, 3000));
     
     // ============================================
+    // Check for capital group indicators in dzial3
+    // wzmiankaOZlozeniuSkonsolidowanegoRocznegoSprawozdaniaFinansowego = consolidated financial reports
+    // ============================================
+    const sprawozdaniaGrupy = dzial3?.sprawozdaniaGrupyKapitalowej || {};
+    const wzmiankaSkonsolidowane = sprawozdaniaGrupy?.wzmiankaOZlozeniuSkonsolidowanegoRocznegoSprawozdaniaFinansowego || [];
+    const skonsolidowaneArray = Array.isArray(wzmiankaSkonsolidowane) ? wzmiankaSkonsolidowane : (wzmiankaSkonsolidowane ? [wzmiankaSkonsolidowane] : []);
+    
+    if (skonsolidowaneArray.length > 0) {
+      hasCapitalGroup = true;
+      reportsCount = skonsolidowaneArray.length;
+      console.log(`[KRS] Company has ${reportsCount} consolidated group reports - is part of capital group`);
+    }
+    
+    // ============================================
     // SOURCE 1: Dzial3 - Sprawozdania grupy kapitałowej
     // This is where capital group affiliations are stored in OdpisPelny
     // ============================================
-    const sprawozdaniaGrupy = dzial3?.sprawozdaniaGrupyKapitalowej || [];
-    const sprawozdaniaArray = Array.isArray(sprawozdaniaGrupy) ? sprawozdaniaGrupy : (sprawozdaniaGrupy ? [sprawozdaniaGrupy] : []);
+    const sprawozdaniaArray = Array.isArray(sprawozdaniaGrupy) ? [sprawozdaniaGrupy] : (typeof sprawozdaniaGrupy === 'object' && sprawozdaniaGrupy !== null ? [sprawozdaniaGrupy] : []);
     
     console.log(`[KRS] DEBUG - sprawozdaniaGrupyKapitalowej entries: ${sprawozdaniaArray.length}`);
     
@@ -1012,12 +1091,16 @@ function extractRelatedEntities(dzial3: any, dzial4: any): Array<{
       }
     }
     
-    console.log(`[KRS] Related entities total: ${entities.length} found`);
+    console.log(`[KRS] Related entities total: ${entities.length} found, has_capital_group: ${hasCapitalGroup}, reports: ${reportsCount}`);
   } catch (e) {
     console.error('[KRS] Error extracting related entities:', e);
   }
   
-  return entities;
+  return {
+    entities,
+    has_capital_group: hasCapitalGroup,
+    capital_group_reports_count: reportsCount
+  };
 }
 
 // Helper: Extract court mentions and proceedings from dzial6
@@ -1438,11 +1521,11 @@ function parseKRSResponse(krsData: any): any {
     const representationRules = extractRepresentationRules(dzial2);
     const correspondenceAddress = extractCorrespondenceAddress(dzial1);
     const dzial4 = krsData?.odpis?.dane?.dzial4;
-    const relatedEntities = extractRelatedEntities(dzial3, dzial4);
+    const relatedEntitiesResult = extractRelatedEntities(dzial3, dzial4);
     const courtMentions = extractCourtMentions(dzial6);
     const caseSignatures = extractCaseSignatures(dzial6, naglowek);
     
-    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length}, shareholders=${shareholders.length}, procurators=${procurators.length}, supervisoryBoard=${supervisoryBoard.length}, relatedEntities=${relatedEntities.length}, courtMentions=${courtMentions.length}`);
+    console.log(`[KRS] Parsed: name=${companyName}, nip=${nip}, regon=${regon}, management=${management.length}, shareholders=${shareholders.length}, procurators=${procurators.length}, supervisoryBoard=${supervisoryBoard.length}, relatedEntities=${relatedEntitiesResult.entities.length}, courtMentions=${courtMentions.length}`);
     
     return {
       // Basic data
@@ -1499,7 +1582,9 @@ function parseKRSResponse(krsData: any): any {
       correspondence_postal_code: correspondenceAddress.postal_code,
       
       // NEW: Related entities (podmioty powiązane)
-      related_entities: relatedEntities,
+      related_entities: relatedEntitiesResult.entities,
+      has_capital_group: relatedEntitiesResult.has_capital_group,
+      capital_group_reports_count: relatedEntitiesResult.capital_group_reports_count,
       
       // NEW: Court mentions and proceedings
       court_mentions: courtMentions,
