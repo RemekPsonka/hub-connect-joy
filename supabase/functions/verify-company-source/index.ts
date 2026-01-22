@@ -1709,6 +1709,33 @@ Deno.serve(async (req) => {
     if (krs && !sourceData.krs) sourceData.krs = krs;
     if (nip && !sourceData.nip) sourceData.nip = nip;
 
+    // Check if website would conflict with another company (unique constraint)
+    let websiteToUpdate = sourceData.website;
+    if (websiteToUpdate) {
+      // Get current company's tenant_id
+      const { data: currentCompany } = await supabase
+        .from('companies')
+        .select('tenant_id, website')
+        .eq('id', company_id)
+        .single();
+      
+      if (currentCompany) {
+        // Check if another company already has this website
+        const { data: existingWithWebsite } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', currentCompany.tenant_id)
+          .eq('website', websiteToUpdate)
+          .neq('id', company_id)
+          .maybeSingle();
+        
+        if (existingWithWebsite) {
+          console.log(`[Stage 1] Website ${websiteToUpdate} already used by company ${existingWithWebsite.id}, skipping website update`);
+          websiteToUpdate = null; // Don't update website if it would conflict
+        }
+      }
+    }
+
     // Save to database
     const { error: updateError } = await supabase
       .from('companies')
@@ -1728,7 +1755,7 @@ Deno.serve(async (req) => {
         ...(sourceData.registration_date ? { registration_date: sourceData.registration_date } : {}),
         ...(sourceData.pkd_codes?.length ? { pkd_codes: sourceData.pkd_codes } : {}),
         ...(sourceData.status ? { company_status: sourceData.status } : {}),
-        ...(sourceData.website ? { website: sourceData.website } : {}),
+        ...(websiteToUpdate ? { website: websiteToUpdate } : {}),
         ...(sourceData.industry ? { industry: sourceData.industry } : {}),
       })
       .eq('id', company_id);
@@ -1737,7 +1764,6 @@ Deno.serve(async (req) => {
       console.error('[Stage 1] Database update error:', updateError);
       throw updateError;
     }
-
     console.log(`[Stage 1] Completed successfully for ${company_name || email_domain}`);
 
     return new Response(
