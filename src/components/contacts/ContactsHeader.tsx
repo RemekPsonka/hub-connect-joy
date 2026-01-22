@@ -58,7 +58,8 @@ export function ContactsHeader({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchInput, onSearchChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
 
   return (
     <div className="space-y-4">
