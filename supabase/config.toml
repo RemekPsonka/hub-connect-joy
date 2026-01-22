@@ -113,3 +113,9 @@ verify_jwt = false
 
 [functions.batch-krs-sync]
 verify_jwt = false
+
+[functions.create-companies-from-emails]
+verify_jwt = false
+
+[functions.background-sync-runner]
+verify_jwt = false

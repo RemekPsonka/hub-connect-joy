@@ -1193,6 +1193,7 @@ export type Database = {
           city: string | null
           company: string | null
           company_id: string | null
+          company_verified_at: string | null
           created_at: string | null
           email: string | null
           email_secondary: string | null
@@ -1230,6 +1231,7 @@ export type Database = {
           city?: string | null
           company?: string | null
           company_id?: string | null
+          company_verified_at?: string | null
           created_at?: string | null
           email?: string | null
           email_secondary?: string | null
@@ -1267,6 +1269,7 @@ export type Database = {
           city?: string | null
           company?: string | null
           company_id?: string | null
+          company_verified_at?: string | null
           created_at?: string | null
           email?: string | null
           email_secondary?: string | null
@@ -2381,6 +2384,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      sync_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          job_type: string
+          logs: Json | null
+          progress: Json | null
+          started_at: string | null
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          job_type: string
+          logs?: Json | null
+          progress?: Json | null
+          started_at?: string | null
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          job_type?: string
+          logs?: Json | null
+          progress?: Json | null
+          started_at?: string | null
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_contacts: {
         Row: {
