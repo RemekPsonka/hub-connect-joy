@@ -78,12 +78,13 @@ Deno.serve(async (req) => {
     const progress = job.progress || { processed: 0, total: 0, errors: 0, companies_created: 0, last_id: null };
     const logs: any[] = job.logs || [];
 
-    // Get contacts without company_id that have business emails
+    // Get contacts without company_id that have business emails AND haven't been verified yet
     const { data: contacts, error: contactsError } = await supabase
       .from('contacts')
       .select('id, email, company, first_name, last_name')
       .eq('tenant_id', tenant_id)
       .is('company_id', null)
+      .is('company_verified_at', null)  // Skip already processed contacts (including public emails)
       .eq('is_active', true)
       .not('email', 'is', null)
       .order('created_at', { ascending: true })
@@ -116,13 +117,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If this is first batch, get total count
+    // If this is first batch, get total count of contacts that need processing
     if (progress.total === 0) {
       const { count } = await supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
         .eq('tenant_id', tenant_id)
         .is('company_id', null)
+        .is('company_verified_at', null)  // Only count unverified contacts
         .eq('is_active', true)
         .not('email', 'is', null);
 
@@ -244,12 +246,13 @@ Deno.serve(async (req) => {
       last_id: contacts[contacts.length - 1]?.id
     };
 
-    // Check if more contacts to process
+    // Check if more contacts to process (only unverified ones)
     const { count: remainingCount } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenant_id)
       .is('company_id', null)
+      .is('company_verified_at', null)  // Only count unverified contacts
       .eq('is_active', true)
       .not('email', 'is', null);
 
