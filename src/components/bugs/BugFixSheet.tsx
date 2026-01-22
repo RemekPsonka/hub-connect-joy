@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   ExternalLink,
   Send,
@@ -22,7 +23,12 @@ import {
   Clock,
   MapPin,
   Loader2,
+  Rocket,
+  Copy,
+  Sparkles,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { generateBugFixPrompt } from '@/utils/bugFixPrompt';
 import type { BugReport } from '@/hooks/useBugReports';
 
 interface FixNote {
@@ -56,6 +62,7 @@ export function BugFixSheet({
   isUpdating,
 }: BugFixSheetProps) {
   const [newNote, setNewNote] = useState('');
+  const [isStartingAIFix, setIsStartingAIFix] = useState(false);
 
   const fixNotes: FixNote[] = (report.context_data as Record<string, unknown>)?.fix_notes as FixNote[] || [];
   const contextData = report.context_data as Record<string, unknown> || {};
@@ -70,6 +77,36 @@ export function BugFixSheet({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleAddNote();
+    }
+  };
+
+  const handleStartAIFix = async () => {
+    setIsStartingAIFix(true);
+    try {
+      // Generate the prompt
+      const prompt = generateBugFixPrompt(report);
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(prompt);
+      
+      // Add note about AI fix
+      onAddNote('🤖 Uruchomiono naprawę AI - prompt skopiowany do schowka');
+      
+      // Update status to in_progress if not already
+      if (report.status === 'new') {
+        onUpdateStatus('in_progress');
+      }
+      
+      // Show success toast
+      toast.success('Prompt skopiowany do schowka!', {
+        description: 'Wklej go w oknie czatu Lovable aby rozpocząć naprawę.',
+        duration: 6000,
+      });
+    } catch (error) {
+      console.error('Failed to copy prompt:', error);
+      toast.error('Nie udało się skopiować prompta');
+    } finally {
+      setIsStartingAIFix(false);
     }
   };
 
@@ -141,6 +178,48 @@ export function BugFixSheet({
                   )}
                 </div>
               </div>
+
+              <Separator />
+
+              {/* AI Fix Section */}
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      <div>
+                        <h4 className="font-medium text-sm">Naprawa z pomocą AI</h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Kliknij aby wygenerować prompt dla Lovable AI. Prompt zawiera pełny kontekst błędu wraz ze screenshotem.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleStartAIFix}
+                        disabled={isStartingAIFix || isUpdating}
+                        className="w-full"
+                      >
+                        {isStartingAIFix ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Generowanie...
+                          </>
+                        ) : (
+                          <>
+                            <Rocket className="h-4 w-4 mr-2" />
+                            Uruchom naprawę AI
+                          </>
+                        )}
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        <Copy className="h-3 w-3 inline mr-1" />
+                        Prompt zostanie skopiowany do schowka
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Separator />
 
