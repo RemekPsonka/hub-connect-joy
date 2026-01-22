@@ -1,15 +1,19 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   CheckCircle2, RefreshCw, Loader2, Building, Users, 
   MapPin, FileText, Calendar, Landmark, Briefcase, UserCheck,
   DollarSign, GitBranch, Phone, Mail, Globe, AlertTriangle, Scale,
-  Link2, Gavel, FileWarning, Shield, Hash, Building2, Clock, Factory
+  Link2, Gavel, FileWarning, Shield, Hash, Building2, Clock, Factory,
+  ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -97,6 +101,8 @@ function EmptySection({ title, icon: Icon }: { title: string; icon: React.Compon
 }
 
 export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: SourceDataViewerProps) {
+  const [isPkdExpanded, setIsPkdExpanded] = useState(false);
+  
   const sourceType = data?.source || 'unknown';
   const isVerified = sourceType === 'krs_api' || sourceType === 'ceidg_api';
 
@@ -524,60 +530,99 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
         <EmptySection title="Branża" icon={Factory} />
       )}
 
-      {/* Kody PKD */}
+      {/* Kody PKD - zwijalna sekcja */}
       {pkdCodes.length > 0 || pkdWithDescriptions.length > 0 ? (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Kody PKD
-              <Badge variant="outline">{pkdWithDescriptions.length || pkdCodes.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pkdWithDescriptions.length > 0 ? (
-              <div className="space-y-2">
-                {pkdWithDescriptions.slice(0, 20).map((pkd: any, idx: number) => (
-                  <div 
-                    key={idx} 
-                    className={`flex items-start gap-2 py-1.5 px-2 rounded ${pkd.is_main ? 'bg-primary/10' : ''}`}
-                  >
-                    <Badge 
-                      variant={pkd.is_main ? 'default' : 'outline'} 
-                      className={`shrink-0 ${pkd.is_main ? 'bg-primary' : ''}`}
-                    >
-                      {pkd.code}
-                    </Badge>
-                    {pkd.description && (
-                      <span className="text-sm text-muted-foreground">{pkd.description}</span>
-                    )}
-                    {pkd.is_main && !pkd.description && (
-                      <span className="text-xs text-primary">(przeważająca)</span>
-                    )}
+          <Collapsible open={isPkdExpanded} onOpenChange={setIsPkdExpanded}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                Kody PKD
+                <Badge variant="outline">{pkdWithDescriptions.length || pkdCodes.length}</Badge>
+                {(pkdWithDescriptions.length > 5 || pkdCodes.length > 5) && (
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-auto">
+                      <ChevronDown className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isPkdExpanded && "rotate-180"
+                      )} />
+                    </Button>
+                  </CollapsibleTrigger>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pkdWithDescriptions.length > 0 ? (
+                <div className="space-y-2">
+                  {/* Pierwsze 5 kodów - zawsze widoczne, wyróżnione jako główne do analizy */}
+                  <div className="space-y-1.5">
+                    {pkdWithDescriptions.slice(0, 5).map((pkd: any, idx: number) => (
+                      <div 
+                        key={idx} 
+                        className={cn(
+                          "flex items-start gap-2 py-1.5 px-2 rounded",
+                          pkd.is_main ? "bg-primary/10 border border-primary/20" : "bg-muted/40"
+                        )}
+                      >
+                        <Badge 
+                          variant={pkd.is_main ? 'default' : 'secondary'} 
+                          className="shrink-0"
+                        >
+                          {pkd.code}
+                        </Badge>
+                        <span className="text-sm flex-1">{pkd.description || ''}</span>
+                        {pkd.is_main && (
+                          <Badge variant="outline" className="text-xs shrink-0">przeważająca</Badge>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-                {pkdWithDescriptions.length > 20 && (
-                  <p className="text-sm text-muted-foreground mt-2">+{pkdWithDescriptions.length - 20} więcej kodów...</p>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {pkdCodes.slice(0, 20).map((pkd: any, idx: number) => (
-                  <Badge 
-                    key={idx} 
-                    variant={idx === 0 ? 'default' : 'outline'} 
-                    className={idx === 0 ? 'bg-primary' : ''}
-                  >
-                    {typeof pkd === 'string' ? pkd : `${pkd.code}`}
-                    {idx === 0 && ' (główny)'}
-                  </Badge>
-                ))}
-                {pkdCodes.length > 20 && (
-                  <Badge variant="secondary">+{pkdCodes.length - 20} więcej</Badge>
-                )}
-              </div>
-            )}
-          </CardContent>
+
+                  {/* Pozostałe kody - zwijane */}
+                  {pkdWithDescriptions.length > 5 && (
+                    <CollapsibleContent className="space-y-1 pt-2 border-t border-dashed">
+                      {pkdWithDescriptions.slice(5).map((pkd: any, idx: number) => (
+                        <div 
+                          key={idx + 5} 
+                          className="flex items-start gap-2 py-1 px-2 text-sm text-muted-foreground"
+                        >
+                          <Badge variant="outline" className="shrink-0 text-xs">{pkd.code}</Badge>
+                          <span>{pkd.description || ''}</span>
+                        </div>
+                      ))}
+                    </CollapsibleContent>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Fallback for pkdCodes without descriptions */}
+                  <div className="flex flex-wrap gap-2">
+                    {pkdCodes.slice(0, 5).map((pkd: any, idx: number) => (
+                      <Badge 
+                        key={idx} 
+                        variant={idx === 0 ? 'default' : 'secondary'} 
+                      >
+                        {typeof pkd === 'string' ? pkd : `${pkd.code}`}
+                        {idx === 0 && ' (główny)'}
+                      </Badge>
+                    ))}
+                  </div>
+                  {pkdCodes.length > 5 && (
+                    <CollapsibleContent className="flex flex-wrap gap-2 pt-2 border-t border-dashed">
+                      {pkdCodes.slice(5).map((pkd: any, idx: number) => (
+                        <Badge 
+                          key={idx + 5} 
+                          variant="outline"
+                        >
+                          {typeof pkd === 'string' ? pkd : `${pkd.code}`}
+                        </Badge>
+                      ))}
+                    </CollapsibleContent>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Collapsible>
         </Card>
       ) : (
         <EmptySection title="Kody PKD" icon={FileText} />
