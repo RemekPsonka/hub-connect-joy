@@ -5,8 +5,8 @@ import { useCompany } from '@/hooks/useCompanies';
 import { CompanyProfileHeader } from '@/components/companies/CompanyProfileHeader';
 import { CompanyAnalysisViewer } from '@/components/company';
 import { CompanyContactsList } from '@/components/companies/CompanyContactsList';
+import { CapitalGroupViewer } from '@/components/company/CapitalGroupViewer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -54,6 +54,7 @@ export default function CompanyDetail() {
       <Tabs defaultValue="analysis" className="w-full">
         <TabsList>
           <TabsTrigger value="analysis">Analiza AI</TabsTrigger>
+          <TabsTrigger value="capital-group">Grupa kapitałowa</TabsTrigger>
           <TabsTrigger value="contacts">Kontakty</TabsTrigger>
         </TabsList>
 
@@ -73,6 +74,16 @@ export default function CompanyDetail() {
               </p>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="capital-group" className="mt-6">
+          <CapitalGroupViewer 
+            company={{
+              id: company.id,
+              name: company.name,
+              logo_url: company.logo_url
+            }} 
+          />
         </TabsContent>
 
         <TabsContent value="contacts" className="mt-6">
