@@ -5,6 +5,108 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// =============================================
+// PKD Code to Industry Mapping Dictionary
+// =============================================
+const PKD_INDUSTRY_MAP: Record<string, string> = {
+  '01': 'Rolnictwo',
+  '02': 'Leśnictwo',
+  '03': 'Rybactwo',
+  '05': 'Górnictwo węgla',
+  '06': 'Górnictwo ropy i gazu',
+  '07': 'Górnictwo rud metali',
+  '08': 'Górnictwo pozostałe',
+  '09': 'Usługi górnicze',
+  '10': 'Produkcja żywności',
+  '11': 'Produkcja napojów',
+  '12': 'Produkcja wyrobów tytoniowych',
+  '13': 'Produkcja tekstyliów',
+  '14': 'Produkcja odzieży',
+  '15': 'Produkcja skóry',
+  '16': 'Produkcja drewna',
+  '17': 'Produkcja papieru',
+  '18': 'Poligrafia',
+  '19': 'Produkcja paliw',
+  '20': 'Przemysł chemiczny',
+  '21': 'Przemysł farmaceutyczny',
+  '22': 'Produkcja wyrobów z gumy i tworzyw',
+  '23': 'Produkcja minerałów niemetalicznych',
+  '24': 'Przemysł metalurgiczny',
+  '25': 'Produkcja wyrobów metalowych',
+  '26': 'Elektronika i optyka',
+  '27': 'Urządzenia elektryczne',
+  '28': 'Maszyny i urządzenia',
+  '29': 'Produkcja pojazdów',
+  '30': 'Produkcja środków transportu',
+  '31': 'Produkcja mebli',
+  '32': 'Pozostała produkcja',
+  '33': 'Naprawa maszyn i urządzeń',
+  '35': 'Energia i gaz',
+  '36': 'Pobór i dystrybucja wody',
+  '37': 'Odprowadzanie ścieków',
+  '38': 'Gospodarka odpadami',
+  '39': 'Rekultywacja',
+  '41': 'Budownictwo mieszkaniowe',
+  '42': 'Inżynieria lądowa',
+  '43': 'Roboty budowlane',
+  '45': 'Handel pojazdami',
+  '46': 'Handel hurtowy',
+  '47': 'Handel detaliczny',
+  '49': 'Transport lądowy',
+  '50': 'Transport wodny',
+  '51': 'Transport lotniczy',
+  '52': 'Magazynowanie i logistyka',
+  '53': 'Poczta i kurierzy',
+  '55': 'Zakwaterowanie',
+  '56': 'Gastronomia',
+  '58': 'Wydawnictwa',
+  '59': 'Film i produkcja wideo',
+  '60': 'Nadawanie programów',
+  '61': 'Telekomunikacja',
+  '62': 'IT i oprogramowanie',
+  '63': 'Usługi informacyjne',
+  '64': 'Finanse i bankowość',
+  '65': 'Ubezpieczenia',
+  '66': 'Usługi finansowe',
+  '68': 'Nieruchomości',
+  '69': 'Prawo i księgowość',
+  '70': 'Zarządzanie i doradztwo',
+  '71': 'Architektura i inżynieria',
+  '72': 'Badania i rozwój',
+  '73': 'Reklama i marketing',
+  '74': 'Projektowanie i fotografia',
+  '75': 'Weterynaria',
+  '77': 'Wynajem i dzierżawa',
+  '78': 'HR i rekrutacja',
+  '79': 'Turystyka',
+  '80': 'Ochrona',
+  '81': 'Usługi dla budynków',
+  '82': 'Usługi biurowe',
+  '84': 'Administracja publiczna',
+  '85': 'Edukacja',
+  '86': 'Ochrona zdrowia',
+  '87': 'Pomoc społeczna stacjonarna',
+  '88': 'Opieka społeczna',
+  '90': 'Kultura i rozrywka',
+  '91': 'Biblioteki i muzea',
+  '92': 'Hazard',
+  '93': 'Sport i rekreacja',
+  '94': 'Organizacje członkowskie',
+  '95': 'Naprawa sprzętu',
+  '96': 'Usługi indywidualne',
+  '97': 'Gospodarstwa domowe',
+  '99': 'Organizacje międzynarodowe',
+};
+
+/**
+ * Get industry name from PKD code (first 2 digits)
+ */
+function getIndustryFromPKD(pkdCode: string | null | undefined): string | null {
+  if (!pkdCode) return null;
+  const prefix = pkdCode.substring(0, 2);
+  return PKD_INDUSTRY_MAP[prefix] || null;
+}
+
 // Helper function to extract name from nested KRS structure (same as fetch-krs-data)
 function extractName(imionaField: any, nazwiskoField: any): string | null {
   let firstName = '';
@@ -233,10 +335,12 @@ async function searchBasicInfo(
 - Forma prawna
 - Adres siedziby
 - Data rejestracji
+- Główna branża/sektor działalności
+- Główny kod PKD (jeśli znany)
 
 Odpowiedz krótko, tylko fakty.`
         }],
-        max_tokens: 500,
+        max_tokens: 600,
         temperature: 0.1
       })
     });
@@ -1048,7 +1152,7 @@ function parseKRSResponse(krsData: any): any {
     const czyZawieszona = statusInfo?.czyZawieszona === true;
     const status = czyWykreslony ? 'WYKREŚLONA' : czyZawieszona ? 'ZAWIESZONA' : 'AKTYWNA';
     
-    // PKD codes from dzial3
+    // PKD codes from dzial3 - with descriptions
     const przedmiotDzialalnosci = dzial3?.przedmiotDzialalnosci || {};
     const pkdPrzewazajaca = przedmiotDzialalnosci?.przedmiotPrzewazajacejDzialalnosci || [];
     const pkdPozostala = przedmiotDzialalnosci?.przedmiotPozostalejDzialalnosci || [];
@@ -1056,10 +1160,27 @@ function parseKRSResponse(krsData: any): any {
     const pkdPrzewazajacaArray = Array.isArray(pkdPrzewazajaca) ? pkdPrzewazajaca : [pkdPrzewazajaca];
     const pkdPozostalaArray = Array.isArray(pkdPozostala) ? pkdPozostala : [pkdPozostala];
     
-    const pkdCodes = [
-      ...pkdPrzewazajacaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean),
-      ...pkdPozostalaArray.map((p: any) => p?.kodDzial || p?.kod).filter(Boolean)
+    // Extract PKD with descriptions
+    const pkdWithDescriptions = [
+      ...pkdPrzewazajacaArray.map((p: any) => ({
+        code: p?.kodDzial || p?.kod || (typeof p === 'string' ? p : null),
+        description: p?.opis || null,
+        is_main: true
+      })).filter((p: any) => p.code),
+      ...pkdPozostalaArray.map((p: any) => ({
+        code: p?.kodDzial || p?.kod || (typeof p === 'string' ? p : null),
+        description: p?.opis || null,
+        is_main: false
+      })).filter((p: any) => p.code)
     ];
+    
+    // Backward compatible flat list
+    const pkdCodes = pkdWithDescriptions.map(p => p.code);
+    const pkdMain = pkdWithDescriptions.find(p => p.is_main)?.code || pkdCodes[0] || null;
+    const pkdMainDescription = pkdWithDescriptions.find(p => p.is_main)?.description || null;
+    
+    // Get industry from main PKD
+    const industry = getIndustryFromPKD(pkdMain);
     
     // Extract additional data using helper functions
     const shareholders = extractShareholders(dzial2);
@@ -1093,7 +1214,10 @@ function parseKRSResponse(krsData: any): any {
       legal_form: legalForm,
       legal_form_name: formaPrawna,
       pkd_codes: pkdCodes,
-      pkd_main: pkdCodes[0] || null,
+      pkd_with_descriptions: pkdWithDescriptions,
+      pkd_main: pkdMain,
+      pkd_main_description: pkdMainDescription,
+      industry: industry,
       status,
       
       // People
@@ -1359,6 +1483,7 @@ Deno.serve(async (req) => {
         ...(sourceData.pkd_codes?.length ? { pkd_codes: sourceData.pkd_codes } : {}),
         ...(sourceData.status ? { company_status: sourceData.status } : {}),
         ...(sourceData.website ? { website: sourceData.website } : {}),
+        ...(sourceData.industry ? { industry: sourceData.industry } : {}),
       })
       .eq('id', company_id);
 

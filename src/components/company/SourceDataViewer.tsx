@@ -54,6 +54,9 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const procurators = data?.procurators || [];
   const supervisoryBoard = data?.supervisory_board || [];
   const pkdCodes = data?.pkd_codes || data?.pkd || [];
+  const pkdWithDescriptions = data?.pkd_with_descriptions || [];
+  const industry = data?.industry || null;
+  const pkdMainDescription = data?.pkd_main_description || null;
   const branches = data?.branches || [];
   const dates = data?.dates || {};
   
@@ -428,7 +431,28 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
         </Card>
       )}
 
-      {/* PKD Codes */}
+      {/* Industry Badge */}
+      {industry && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <Briefcase className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Branża</p>
+                <p className="text-lg font-semibold text-primary">{industry}</p>
+              </div>
+              {pkdMainDescription && (
+                <div className="ml-auto text-right">
+                  <p className="text-xs text-muted-foreground">Główne PKD</p>
+                  <p className="text-sm">{data?.pkd_main}: {pkdMainDescription}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PKD Codes with Descriptions */}
       {pkdCodes.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
@@ -439,22 +463,50 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {pkdCodes.slice(0, 15).map((pkd: any, idx: number) => (
-                <Badge 
-                  key={idx} 
-                  variant={idx === 0 ? 'default' : 'outline'} 
-                  className={idx === 0 ? 'bg-primary' : ''}
-                >
-                  {typeof pkd === 'string' ? pkd : `${pkd.code}`}
-                  {idx === 0 && ' (główny)'}
-                </Badge>
-              ))}
-              {pkdCodes.length > 15 && (
-                <Badge variant="secondary">+{pkdCodes.length - 15} więcej</Badge>
-              )}
-            </div>
-      </CardContent>
+            {pkdWithDescriptions.length > 0 ? (
+              <div className="space-y-2">
+                {pkdWithDescriptions.slice(0, 15).map((pkd: any, idx: number) => (
+                  <div 
+                    key={idx} 
+                    className={`flex items-start gap-2 py-1.5 px-2 rounded ${pkd.is_main ? 'bg-primary/10' : ''}`}
+                  >
+                    <Badge 
+                      variant={pkd.is_main ? 'default' : 'outline'} 
+                      className={`shrink-0 ${pkd.is_main ? 'bg-primary' : ''}`}
+                    >
+                      {pkd.code}
+                    </Badge>
+                    {pkd.description && (
+                      <span className="text-sm text-muted-foreground">{pkd.description}</span>
+                    )}
+                    {pkd.is_main && !pkd.description && (
+                      <span className="text-xs text-primary">(przeważająca)</span>
+                    )}
+                  </div>
+                ))}
+                {pkdWithDescriptions.length > 15 && (
+                  <p className="text-sm text-muted-foreground mt-2">+{pkdWithDescriptions.length - 15} więcej kodów...</p>
+                )}
+              </div>
+            ) : (
+              // Fallback to old display if no descriptions
+              <div className="flex flex-wrap gap-2">
+                {pkdCodes.slice(0, 15).map((pkd: any, idx: number) => (
+                  <Badge 
+                    key={idx} 
+                    variant={idx === 0 ? 'default' : 'outline'} 
+                    className={idx === 0 ? 'bg-primary' : ''}
+                  >
+                    {typeof pkd === 'string' ? pkd : `${pkd.code}`}
+                    {idx === 0 && ' (główny)'}
+                  </Badge>
+                ))}
+                {pkdCodes.length > 15 && (
+                  <Badge variant="secondary">+{pkdCodes.length - 15} więcej</Badge>
+                )}
+              </div>
+            )}
+          </CardContent>
         </Card>
       )}
 
