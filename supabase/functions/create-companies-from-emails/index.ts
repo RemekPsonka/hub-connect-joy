@@ -181,38 +181,76 @@ Deno.serve(async (req) => {
           companyId = existingCompany.id;
           companyName = existingCompany.name;
         } else {
-          // Create new company
+          // Create new company using UPSERT to handle race conditions
           const newCompanyName = contact.company || domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ');
+          const websiteUrl = `https://${domain}`;
           
-          const { data: newCompany, error: createError } = await supabase
+          // First try to find if company was created by parallel process
+          const { data: existingByWebsite } = await supabase
             .from('companies')
-            .insert({
-              tenant_id,
-              name: newCompanyName.charAt(0).toUpperCase() + newCompanyName.slice(1),
-              website: `https://${domain}`,
-              source_data_status: 'pending'
-            })
             .select('id, name')
-            .single();
+            .eq('tenant_id', tenant_id)
+            .eq('website', websiteUrl)
+            .maybeSingle();
+          
+          if (existingByWebsite) {
+            // Company was created by parallel process, use it
+            companyId = existingByWebsite.id;
+            companyName = existingByWebsite.name;
+            domainToCompany.set(normalizedDomain, { id: companyId, name: companyName });
+          } else {
+            // Create new company
+            const { data: newCompany, error: createError } = await supabase
+              .from('companies')
+              .insert({
+                tenant_id,
+                name: newCompanyName.charAt(0).toUpperCase() + newCompanyName.slice(1),
+                website: websiteUrl,
+                source_data_status: 'pending'
+              })
+              .select('id, name')
+              .single();
 
-          if (createError) {
-            console.error(`Error creating company for ${domain}:`, createError);
-            errorsCount++;
-            continue;
+            if (createError) {
+              // Check if it's a unique constraint violation (race condition)
+              if (createError.code === '23505') {
+                // Another process created the company, fetch it
+                const { data: raceCompany } = await supabase
+                  .from('companies')
+                  .select('id, name')
+                  .eq('tenant_id', tenant_id)
+                  .eq('website', websiteUrl)
+                  .single();
+                
+                if (raceCompany) {
+                  companyId = raceCompany.id;
+                  companyName = raceCompany.name;
+                  domainToCompany.set(normalizedDomain, { id: companyId, name: companyName });
+                } else {
+                  console.error(`Error finding company after race condition for ${domain}:`, createError);
+                  errorsCount++;
+                  continue;
+                }
+              } else {
+                console.error(`Error creating company for ${domain}:`, createError);
+                errorsCount++;
+                continue;
+              }
+            } else {
+              companyId = newCompany.id;
+              companyName = newCompany.name;
+              companiesCreated++;
+
+              // Add to map for future contacts in this batch
+              domainToCompany.set(normalizedDomain, { id: companyId, name: companyName });
+
+              logs.push({
+                timestamp: new Date().toISOString(),
+                message: `Utworzono firmę: ${companyName} (${domain})`,
+                type: 'success'
+              });
+            }
           }
-
-          companyId = newCompany.id;
-          companyName = newCompany.name;
-          companiesCreated++;
-
-          // Add to map for future contacts in this batch
-          domainToCompany.set(normalizedDomain, { id: companyId, name: companyName });
-
-          logs.push({
-            timestamp: new Date().toISOString(),
-            message: `Utworzono firmę: ${companyName} (${domain})`,
-            type: 'success'
-          });
         }
 
         // Assign contact to company
