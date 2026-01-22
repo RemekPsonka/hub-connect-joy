@@ -43,10 +43,18 @@ serve(async (req) => {
 
     console.log(`Initializing agent for contact ${contact_id} in tenant ${tenantId}`);
 
-    // Fetch contact with all related data
+    // Fetch contact with all related data including full company analysis
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
-      .select(`*, company:companies(*), primary_group:contact_groups(*)`)
+      .select(`*, 
+        company:companies(
+          id, name, industry, website, description, 
+          revenue, employees_count, growth_rate,
+          ai_analysis, company_analysis_confidence,
+          company_www_data, company_external_data, 
+          company_source_data, company_financial_data
+        ), 
+        primary_group:contact_groups(*)`)
       .eq('id', contact_id)
       .single();
 
@@ -72,41 +80,112 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Build prompt for AI - now includes memory_summary and topics generation
+    // Extract company data for prompt
+    const company = contact.company;
+    const aiAnalysis = company?.ai_analysis as any;
+    
+    // Build company context section
+    let companyContext = '';
+    if (company) {
+      companyContext = `
+## DANE FIRMY: ${company.name || 'nieznana'}
+- Branża: ${company.industry || 'nieznana'}
+- Strona WWW: ${company.website || 'brak'}
+- Opis: ${company.description?.substring(0, 300) || 'brak'}
+- Przychody: ${company.revenue ? `${company.revenue} PLN` : 'nieznane'}
+- Zatrudnienie: ${company.employees_count || 'nieznane'}
+- Wzrost: ${company.growth_rate ? `${company.growth_rate}%` : 'nieznany'}
+- Pewność analizy: ${company.company_analysis_confidence || 'brak'}%`;
+
+      if (aiAnalysis) {
+        // Products and services
+        const products = aiAnalysis.products_and_services?.products || [];
+        const services = aiAnalysis.products_and_services?.services || [];
+        
+        companyContext += `
+
+## ANALIZA AI FIRMY (16 sekcji)
+### Produkty (${products.length}):
+${products.slice(0, 5).map((p: any) => `- ${p.name || p}: ${p.description?.substring(0, 80) || ''}`).join('\n') || 'brak danych'}
+
+### Usługi (${services.length}):
+${services.slice(0, 5).map((s: any) => `- ${s.name || s}: ${s.description?.substring(0, 80) || ''}`).join('\n') || 'brak danych'}
+
+### Model biznesowy:
+- Typ: ${aiAnalysis.business_model?.type || 'nieznany'}
+- Główne źródła przychodu: ${(aiAnalysis.business_model?.revenue_sources || []).join(', ') || 'nieznane'}
+
+### Klienci:
+- Typy klientów: ${(aiAnalysis.clients_projects?.client_types || []).join(', ') || 'nieznane'}
+- Sektory: ${(aiAnalysis.clients_projects?.sectors || []).join(', ') || 'nieznane'}
+
+### Konkurencja:
+${(aiAnalysis.competition?.competitors || []).slice(0, 3).map((c: any) => `- ${c.name || c}`).join('\n') || 'brak danych'}
+
+### Czego firma szuka:
+- Klienci: ${aiAnalysis.seeking?.clients?.substring(0, 100) || 'brak danych'}
+- Partnerzy: ${aiAnalysis.seeking?.partners?.substring(0, 100) || 'brak danych'}
+- Pracownicy: ${aiAnalysis.seeking?.employees?.substring(0, 100) || 'brak danych'}
+
+### Możliwości współpracy:
+${(aiAnalysis.collaboration?.opportunities || []).slice(0, 3).map((o: any) => `- ${o.area || o}: ${o.description?.substring(0, 80) || ''}`).join('\n') || 'brak danych'}
+
+### Zarząd firmy:
+${(aiAnalysis.management?.people || []).slice(0, 3).map((p: any) => `- ${p.name}: ${p.position || 'brak stanowiska'}`).join('\n') || 'brak danych'}
+
+### Najnowsze wiadomości:
+${(aiAnalysis.news_signals?.items || []).slice(0, 2).map((n: any) => `- ${n.title?.substring(0, 80) || n}`).join('\n') || 'brak'}`;
+      }
+      
+      // Add financial data if available
+      const financialData = company.company_financial_data as any;
+      if (financialData) {
+        companyContext += `
+
+### Dane finansowe:
+${JSON.stringify(financialData).substring(0, 400)}`;
+      }
+    }
+
+    // Build prompt for AI - now includes memory_summary, topics generation, AND company data
     const prompt = `Wygeneruj profil agenta AI dla kontaktu biznesowego.
 
 ## DANE KONTAKTU
 - Imię i nazwisko: ${contact.full_name}
 - Stanowisko: ${contact.position || 'nieznane'}
-- Firma: ${contact.company?.name || contact.company || 'nieznana'}
-- Branża: ${contact.company?.industry || 'nieznana'}
+- Firma: ${company?.name || contact.company || 'nieznana'}
+- Branża: ${company?.industry || 'nieznana'}
 - Miasto: ${contact.city || 'nieznane'}
 - Notatki: ${contact.notes || 'Brak'}
 - AI Profile Summary: ${contact.profile_summary || 'Brak'}
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
+${companyContext}
 
-## POTRZEBY: ${(needs.data || []).map((n: any) => `${n.title} (${n.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
-## OFERTY: ${(offers.data || []).map((o: any) => `${o.title} (${o.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
+## POTRZEBY KONTAKTU: ${(needs.data || []).map((n: any) => `${n.title} (${n.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
+## OFERTY KONTAKTU: ${(offers.data || []).map((o: any) => `${o.title} (${o.description?.substring(0, 50) || ''})`).join('; ') || 'Brak'}
 ## KONSULTACJI: ${consultations.data?.length || 0}
 ${consultations.data?.slice(0, 3).map((c: any) => `- ${c.notes?.substring(0, 100) || c.ai_summary?.substring(0, 100) || 'brak notatek'}`).join('\n') || ''}
+
+WAŻNE: Uwzględnij zarówno dane osoby JAK I jej firmy w analizie. Agent musi rozumieć kontekst biznesowy.
 
 Zwróć JSON:
 \`\`\`json
 {
-  "agent_persona": "Opis jak AI powinno myśleć o tej osobie (2-3 zdania)",
+  "agent_persona": "Opis jak AI powinno myśleć o tej osobie w kontekście jej firmy (2-3 zdania)",
   "agent_profile": {
-    "pain_points": ["wyzwania"],
-    "interests": ["zainteresowania"],
-    "goals": ["cele"],
+    "pain_points": ["wyzwania osoby I jej firmy"],
+    "interests": ["zainteresowania biznesowe"],
+    "goals": ["cele osoby i firmy"],
     "communication_style": "styl komunikacji",
-    "key_topics": ["tematy do poruszenia"],
-    "business_value": "wartość biznesowa"
+    "key_topics": ["tematy do poruszenia - w tym produkty/usługi firmy"],
+    "business_value": "wartość biznesowa relacji",
+    "company_context": "kluczowe informacje o firmie wpływające na relację"
   },
-  "memory_summary": "Zwięzłe podsumowanie (max 500 znaków): kim jest, czym się zajmuje, czego szuka, co oferuje",
-  "topics": ["słowa kluczowe", "branża", "specjalizacja", "produkty", "usługi", "zainteresowania biznesowe"],
-  "insights": [{"text": "insight", "source": "źródło", "importance": "high/medium/low"}],
-  "next_steps": ["następne kroki"],
-  "warnings": ["ostrzeżenia"]
+  "memory_summary": "Zwięzłe podsumowanie (max 600 znaków): kim jest osoba, jaka jest jej rola w firmie, czym firma się zajmuje, czego szuka, co oferuje",
+  "topics": ["słowa kluczowe osoby", "branża firmy", "produkty firmy", "usługi firmy", "specjalizacja", "zainteresowania biznesowe"],
+  "insights": [{"text": "insight o osobie lub firmie", "source": "źródło", "importance": "high/medium/low"}],
+  "next_steps": ["następne kroki w relacji"],
+  "warnings": ["ostrzeżenia dotyczące osoby lub firmy"]
 }
 \`\`\``;
 
