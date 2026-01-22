@@ -31,35 +31,54 @@ type PaginationLinkProps = {
 } & Pick<ButtonProps, "size"> &
   React.ComponentProps<"button">;
 
-const PaginationLink = ({ className, isActive, size = "icon", ...props }: PaginationLinkProps) => (
-  <button
-    type="button"
-    aria-current={isActive ? "page" : undefined}
-    className={cn(
-      buttonVariants({
-        variant: isActive ? "outline" : "ghost",
-        size,
-      }),
-      className,
-    )}
-    {...props}
-  />
+const PaginationLink = React.forwardRef<HTMLButtonElement, PaginationLinkProps>(
+  ({ className, isActive, size = "icon", ...props }, ref) => (
+    <button
+      ref={ref}
+      type="button"
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        buttonVariants({
+          variant: isActive ? "outline" : "ghost",
+          size,
+        }),
+        className,
+      )}
+      {...props}
+    />
+  )
 );
 PaginationLink.displayName = "PaginationLink";
 
-const PaginationPrevious = ({ className, ...props }: React.ComponentProps<typeof PaginationLink>) => (
-  <PaginationLink aria-label="Go to previous page" size="default" className={cn("gap-1 pl-2.5", className)} {...props}>
-    <ChevronLeft className="h-4 w-4" />
-    <span>Previous</span>
-  </PaginationLink>
+const PaginationPrevious = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof PaginationLink>>(
+  ({ className, ...props }, ref) => (
+    <PaginationLink
+      ref={ref}
+      aria-label="Poprzednia strona"
+      size="default"
+      className={cn("gap-1 pl-2.5", className)}
+      {...props}
+    >
+      <ChevronLeft className="h-4 w-4" />
+      <span>Poprzednia</span>
+    </PaginationLink>
+  )
 );
 PaginationPrevious.displayName = "PaginationPrevious";
 
-const PaginationNext = ({ className, ...props }: React.ComponentProps<typeof PaginationLink>) => (
-  <PaginationLink aria-label="Go to next page" size="default" className={cn("gap-1 pr-2.5", className)} {...props}>
-    <span>Next</span>
-    <ChevronRight className="h-4 w-4" />
-  </PaginationLink>
+const PaginationNext = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof PaginationLink>>(
+  ({ className, ...props }, ref) => (
+    <PaginationLink
+      ref={ref}
+      aria-label="Następna strona"
+      size="default"
+      className={cn("gap-1 pr-2.5", className)}
+      {...props}
+    >
+      <span>Następna</span>
+      <ChevronRight className="h-4 w-4" />
+    </PaginationLink>
+  )
 );
 PaginationNext.displayName = "PaginationNext";
 
