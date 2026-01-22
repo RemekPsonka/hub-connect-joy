@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface BugReport {
   id: string;
@@ -101,12 +102,13 @@ export function useCreateBugReport() {
         }
       }
 
-      const { data: report, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: report, error } = await (supabase
         .from('bug_reports')
         .insert({
           tenant_id: tenantId,
           reporter_user_id: user?.id,
-          reporter_name: director?.name || assistant?.name || 'Unknown',
+          reporter_name: director?.full_name || assistant?.full_name || 'Unknown',
           title: data.title,
           description: data.description,
           priority: data.priority,
@@ -114,9 +116,9 @@ export function useCreateBugReport() {
           screenshot_url: screenshotUrl,
           context_data: data.contextData,
           status: 'new',
-        })
+        } as any)
         .select()
-        .single();
+        .single());
 
       if (error) throw error;
       return report;
@@ -129,6 +131,47 @@ export function useCreateBugReport() {
     onError: (error) => {
       console.error('Error creating bug report:', error);
       toast.error('Nie udało się utworzyć zgłoszenia');
+    },
+  });
+}
+
+export function useUpdateBugReport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      title,
+      description,
+      priority,
+    }: {
+      id: string;
+      title: string;
+      description: string;
+      priority: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('bug_reports')
+        .update({
+          title,
+          description,
+          priority,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bug-reports'] });
+      toast.success('Zgłoszenie zaktualizowane');
+    },
+    onError: (error) => {
+      console.error('Error updating bug report:', error);
+      toast.error('Nie udało się zaktualizować zgłoszenia');
     },
   });
 }
@@ -176,6 +219,51 @@ export function useUpdateBugReportStatus() {
     onError: (error) => {
       console.error('Error updating bug report:', error);
       toast.error('Nie udało się zaktualizować zgłoszenia');
+    },
+  });
+}
+
+export function useAddFixNote() {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id, note, currentContextData }: { 
+      id: string; 
+      note: string;
+      currentContextData: Record<string, unknown> | null;
+    }) => {
+      const existingNotes = (currentContextData?.fix_notes as Array<Record<string, unknown>>) || [];
+      const newNote = {
+        text: note,
+        timestamp: new Date().toISOString(),
+        author: director?.full_name || assistant?.full_name || 'Unknown',
+      };
+
+      const updatedContextData = {
+        ...(currentContextData || {}),
+        fix_notes: [...existingNotes, newNote],
+      };
+
+      const { data, error } = await supabase
+        .from('bug_reports')
+        .update({
+          context_data: updatedContextData as Json,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bug-reports'] });
+    },
+    onError: (error) => {
+      console.error('Error adding fix note:', error);
+      toast.error('Nie udało się dodać notatki');
     },
   });
 }
