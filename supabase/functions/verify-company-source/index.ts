@@ -538,8 +538,18 @@ function extractProcurators(dzial2: any): Array<{ name: string; type: string; ve
   const procurators: Array<{ name: string; type: string; verified: boolean }> = [];
   
   try {
-    const prokura = dzial2?.prokura || dzial2?.prokurent || [];
-    const prokuraArray = Array.isArray(prokura) ? prokura : [prokura];
+    // DEBUG: Log prokura/prokurenci structure
+    console.log('[KRS] DEBUG - Prokurenci structure:', JSON.stringify({
+      dzial2_keys: Object.keys(dzial2 || {}),
+      prokurenci_exists: !!dzial2?.prokurenci,
+      prokura_exists: !!dzial2?.prokura,
+      prokurenci_type: typeof dzial2?.prokurenci,
+      prokurenci_sample: dzial2?.prokurenci
+    }, null, 2).substring(0, 2000));
+    
+    // Try multiple key names for prokura (KRS API varies)
+    const prokura = dzial2?.prokurenci || dzial2?.prokura || dzial2?.prokurent || [];
+    const prokuraArray = Array.isArray(prokura) ? prokura : (prokura ? [prokura] : []);
     
     for (const p of prokuraArray) {
       if (!p) continue;
@@ -699,17 +709,55 @@ function extractBranches(dzial1: any): Array<{ name: string; address: string; ci
   return branches;
 }
 
-// Helper: Extract registry court info from odpis
-function extractRegistryCourt(krsData: any): { name: string | null; department: string | null; entry_number: string | null } {
+// Helper: Extract registry court info from odpis - uses naglowekP.wpis[0] for first registration
+function extractRegistryCourt(krsData: any): { name: string | null; department: string | null; entry_number: string | null; first_entry_date: string | null } {
   try {
-    const naglowek = krsData?.odpis?.naglowek || krsData?.odpis?.sad || {};
+    const naglowekP = krsData?.odpis?.naglowekP || {};
+    const naglowek = krsData?.odpis?.naglowek || {};
+    
+    // First entry (registration) contains court info
+    const wpisy = naglowekP?.wpis || [];
+    const firstEntry = Array.isArray(wpisy) && wpisy.length > 0 ? wpisy[0] : null;
+    
+    console.log('[KRS] DEBUG - Court extraction:', JSON.stringify({
+      naglowekP_exists: !!naglowekP,
+      wpisy_count: Array.isArray(wpisy) ? wpisy.length : 0,
+      firstEntry: firstEntry,
+    }, null, 2).substring(0, 1500));
+    
+    // Extract court name from first entry
+    let courtName = firstEntry?.oznaczenieSaduDokonujacegoWpisu || 
+                    naglowekP?.sad || naglowek?.sad || null;
+    
+    // Clean up court name - extract just the court and department
+    let department: string | null = null;
+    if (courtName) {
+      // Pattern: "SĄD REJONOWY  W KATOWICACH WYDZIAŁ, GOSPODARCZY KRAJOWEGO REJESTRU SĄDOWEGO"
+      const match = courtName.match(/SĄD\s+REJONOWY\s+(?:[\w-]+\s+)?(?:W|DLA)\s+([A-ZĄĆĘŁŃÓŚŻŹ-]+)/i);
+      if (match) {
+        // Extract department info
+        const deptMatch = courtName.match(/WYDZIAŁ\s+([IVXLCDM]+)\s+GOSPODARCZY/i);
+        department = deptMatch ? `Wydział ${deptMatch[1]} Gospodarczy KRS` : 'Wydział Gospodarczy KRS';
+      }
+    }
+    
+    // Entry number from first registration
+    const entryNumber = firstEntry?.numerWpisu?.toString() || naglowekP?.numerWpisu || null;
+    
+    // First entry date
+    const firstEntryDate = firstEntry?.dataWpisu || null;
+    
+    console.log(`[KRS] Court extracted: ${courtName}, dept=${department}, entry=${entryNumber}, firstDate=${firstEntryDate}`);
+    
     return {
-      name: naglowek?.sad || naglowek?.nazwaSadu || null,
-      department: naglowek?.wydzial || naglowek?.nazwaWydzialu || null,
-      entry_number: naglowek?.numerWpisu || null
+      name: courtName,
+      department: department,
+      entry_number: entryNumber,
+      first_entry_date: firstEntryDate
     };
   } catch (e) {
-    return { name: null, department: null, entry_number: null };
+    console.error('[KRS] Error extracting court:', e);
+    return { name: null, department: null, entry_number: null, first_entry_date: null };
   }
 }
 
@@ -722,21 +770,39 @@ function extractDates(dzial1: any, dzial6: any): {
   suspension_end: string | null;
 } {
   try {
-    const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || dzial6 || {};
+    // DEBUG: Log date sources
+    console.log('[KRS] DEBUG - Date sources:', JSON.stringify({
+      dzial6_keys: Object.keys(dzial6 || {}),
+      dzial6_informacje: dzial6?.informacjeOWpisachDoRejestruIWykresleniach,
+      dzial6_wpisy: dzial6?.wpisy,
+      dzial1_danePodmiotu_keys: Object.keys(dzial1?.danePodmiotu || {}),
+      dzial1_dataRozpoczecia: dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci,
+    }, null, 2).substring(0, 2000));
+    
+    const statusInfo = dzial6?.informacjeOWpisachDoRejestruIWykresleniach || dzial6?.wpisy || dzial6 || {};
     
     // dataRozpoczeciaDzialalnosci is an ARRAY with history
     const dataRozpArray = dzial1?.danePodmiotu?.dataRozpoczeciaDzialalnosci || [];
     const dataRozp = getLatestEntry(dataRozpArray);
-    const registration = typeof dataRozp === 'string' ? dataRozp : (dataRozp?.dataRozpoczeciaDzialalnosci || null);
+    const registration = typeof dataRozp === 'string' ? dataRozp : (dataRozp?.dataRozpoczeciaDzialalnosci || dataRozp?.data || null);
+    
+    // Try multiple paths for first entry date
+    const firstEntry = statusInfo?.dataWpisuDoRejestru || 
+                       statusInfo?.dataPierwszegoWpisu ||
+                       dzial6?.dataPierwszegoWpisu ||
+                       null;
+    
+    console.log(`[KRS] Dates extracted: registration=${registration}, firstEntry=${firstEntry}`);
     
     return {
       registration,
-      first_entry: statusInfo?.dataWpisuDoRejestru || statusInfo?.dataPierwszegoWpisu || null,
+      first_entry: firstEntry,
       deletion: statusInfo?.dataWykreslenia || null,
       suspension_start: statusInfo?.dataZawieszenia || null,
       suspension_end: statusInfo?.dataWznowienia || null
     };
   } catch (e) {
+    console.error('[KRS] Error extracting dates:', e);
     return { registration: null, first_entry: null, deletion: null, suspension_start: null, suspension_end: null };
   }
 }
@@ -991,19 +1057,26 @@ function parseKRSResponse(krsData: any): any {
     const dzial2 = krsData?.odpis?.dane?.dzial2;
     const dzial3 = krsData?.odpis?.dane?.dzial3;
     const dzial6 = krsData?.odpis?.dane?.dzial6;
-    const naglowek = krsData?.odpis?.naglowek || {};
+    const naglowek = krsData?.odpis?.naglowekP || krsData?.odpis?.naglowek || {};
     
-    // DEBUG: Log raw structure to find correct paths
-    console.log('[KRS] DEBUG - Raw structure sample:', JSON.stringify({
-      naglowek_keys: Object.keys(naglowek),
-      naglowek: naglowek,
+    // DEBUG: Log TOP-LEVEL structure to find court data
+    console.log('[KRS] DEBUG - Top level structure:', JSON.stringify({
+      krsData_keys: Object.keys(krsData || {}),
+      odpis_keys: Object.keys(krsData?.odpis || {}),
+      naglowekP: krsData?.odpis?.naglowekP,
+      naglowek: krsData?.odpis?.naglowek,
+      // Check dzial6 for dates
+      dzial6_keys: Object.keys(dzial6 || {}),
+      dzial6_sample: dzial6,
+    }, null, 2).substring(0, 4000));
+    
+    // Also log dzial1 keys for debugging
+    console.log('[KRS] DEBUG - dzial1 structure:', JSON.stringify({
+      dzial1_keys: Object.keys(dzial1 || {}),
       dzial1_danePodmiotu_keys: Object.keys(dzial1?.danePodmiotu || {}),
-      dzial1_danePodmiotu_identyfikatory: dzial1?.danePodmiotu?.identyfikatory,
-      dzial1_kapitalSpolki: dzial1?.kapitalSpolki,
-      dzial1_siedzibaIAdres: dzial1?.siedzibaIAdres,
-      dzial2_keys: Object.keys(dzial2 || {}),
-      dzial2_wspolnicy: dzial2?.wspolnicy,
-    }, null, 2).substring(0, 3000));
+      dzial1_informacjeORejestracji: dzial1?.informacjeORejestracji,
+      dzial1_rejestracja: dzial1?.rejestracja,
+    }, null, 2).substring(0, 2000));
     
     if (!dzial1) {
       console.log(`[KRS] No dzial1 in response`);
@@ -1197,14 +1270,39 @@ function parseKRSResponse(krsData: any): any {
     const pkdPozostalaArray = Array.isArray(pkdPozostala) ? pkdPozostala : (pkdPozostala ? [pkdPozostala] : []);
     
     // Helper to extract PKD code and description from various formats
+    // PKD entries in OdpisPelny are nested: przedmiotPrzewazajacejDzialalnosci[0].pozycja[0]
     const extractPkdEntry = (p: any, isMain: boolean) => {
       if (!p) return null;
       
-      // Get latest entry if it's history array
+      // Get latest entry if it's history array (filter out deleted entries)
       const entry = getLatestEntry(Array.isArray(p) ? p : [p]);
       if (!entry) return null;
       
-      // Extract code from various key names
+      // PKD entries are NESTED in "pozycja" array in OdpisPelny format
+      // Structure: { pozycja: [{ kodDzial, kodKlasa, kodPodklasa, opis }] }
+      const pozycje = entry?.pozycja || [];
+      if (Array.isArray(pozycje) && pozycje.length > 0) {
+        // Get the latest pozycja entry (filter out deleted)
+        const activePozycje = pozycje.filter((poz: any) => !poz.nrWpisuWykr);
+        const pozycja = activePozycje.length > 0 ? activePozycje[activePozycje.length - 1] : pozycje[pozycje.length - 1];
+        
+        if (pozycja) {
+          // Build PKD code from parts: kodDzial.kodKlasa.kodPodklasa (e.g., "45.11.Z")
+          const codeParts = [pozycja.kodDzial, pozycja.kodKlasa, pozycja.kodPodklasa].filter(Boolean);
+          const code = codeParts.length > 0 ? codeParts.join('.') : (pozycja.kod || pozycja.pkd);
+          
+          if (code) {
+            console.log(`[KRS] Extracted PKD from pozycja: ${code} - ${pozycja.opis}`);
+            return {
+              code: code,
+              description: pozycja.opis || pozycja.nazwa || pozycja.opisDzialalnosci || null,
+              is_main: isMain
+            };
+          }
+        }
+      }
+      
+      // Fallback: direct structure (older API format)
       const code = entry?.kodDzial || entry?.kod || entry?.pkd || entry?.kodPKD ||
                    (typeof entry === 'string' ? entry : null);
       
@@ -1295,8 +1393,11 @@ function parseKRSResponse(krsData: any): any {
       // Branches
       branches,
       
-      // Dates
-      dates,
+      // Dates - merge with first_entry from court extraction
+      dates: {
+        ...dates,
+        first_entry: registryCourt.first_entry_date || dates.first_entry,
+      },
       
       // NEW: Correspondence address
       correspondence_address: correspondenceAddress.address,
