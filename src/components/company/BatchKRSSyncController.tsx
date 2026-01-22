@@ -91,8 +91,8 @@ export function BatchKRSSyncController() {
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('source_data_status', 'completed'),
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).or('source_data_status.eq.pending,source_data_status.is.null'),
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('source_data_status', 'error'),
-        supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).eq('is_active', true),
-        supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).eq('is_active', true).not('email', 'is', null)
+        supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).is('company_verified_at', null).eq('is_active', true),
+        supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).is('company_verified_at', null).eq('is_active', true).not('email', 'is', null)
       ]);
 
       setStats({
