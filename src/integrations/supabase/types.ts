@@ -247,6 +247,60 @@ export type Database = {
           },
         ]
       }
+      bug_reports: {
+        Row: {
+          context_data: Json | null
+          created_at: string | null
+          description: string
+          id: string
+          page_url: string | null
+          priority: string | null
+          reporter_name: string | null
+          reporter_user_id: string | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          screenshot_url: string | null
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          context_data?: Json | null
+          created_at?: string | null
+          description: string
+          id?: string
+          page_url?: string | null
+          priority?: string | null
+          reporter_name?: string | null
+          reporter_user_id?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          screenshot_url?: string | null
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          context_data?: Json | null
+          created_at?: string | null
+          description?: string
+          id?: string
+          page_url?: string | null
+          priority?: string | null
+          reporter_name?: string | null
+          reporter_user_id?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          screenshot_url?: string | null
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       capital_group_members: {
         Row: {
           created_at: string | null
