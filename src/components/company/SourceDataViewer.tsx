@@ -102,6 +102,7 @@ function EmptySection({ title, icon: Icon }: { title: string; icon: React.Compon
 
 export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: SourceDataViewerProps) {
   const [isPkdExpanded, setIsPkdExpanded] = useState(false);
+  const [isBranchesExpanded, setIsBranchesExpanded] = useState(false);
   
   const sourceType = data?.source || 'unknown';
   const isVerified = sourceType === 'krs_api' || sourceType === 'ceidg_api';
@@ -690,28 +691,47 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
       {/* Oddziały */}
       {branches.length > 0 ? (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              Oddziały
-              <Badge variant="outline">{branches.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {branches.map((branch: any, idx: number) => (
-                <div key={idx} className="flex items-start gap-2 py-2 px-3 rounded-md bg-muted/30">
-                  <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="font-medium">{branch.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {[branch.address, branch.postal_code, branch.city].filter(Boolean).join(', ')}
-                    </p>
+          <Collapsible open={isBranchesExpanded} onOpenChange={setIsBranchesExpanded}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                Oddziały
+                <Badge variant="outline">{branches.length}</Badge>
+                {branches.length > 3 && (
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-auto">
+                      <ChevronDown className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isBranchesExpanded && "rotate-180"
+                      )} />
+                    </Button>
+                  </CollapsibleTrigger>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Podsumowanie - zawsze widoczne */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" />
+                <span>{branches.length} oddziałów w rejestrze</span>
+              </div>
+              
+              {/* Lista oddziałów - zwijana */}
+              <CollapsibleContent className="space-y-2 pt-3 mt-3 border-t border-dashed">
+                {branches.map((branch: any, idx: number) => (
+                  <div key={idx} className="flex items-start gap-2 py-2 px-3 rounded-md bg-muted/30">
+                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p className="font-medium">{branch.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {[branch.address, branch.postal_code, branch.city].filter(Boolean).join(', ')}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
+                ))}
+              </CollapsibleContent>
+            </CardContent>
+          </Collapsible>
         </Card>
       ) : (
         <EmptySection title="Oddziały" icon={GitBranch} />
