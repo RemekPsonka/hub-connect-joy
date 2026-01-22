@@ -10,8 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +38,11 @@ import {
   Clock,
   Play,
   FlaskConical,
+  Pencil,
 } from 'lucide-react';
+import { EditBugReportModal } from './EditBugReportModal';
+import { BugFixSheet } from './BugFixSheet';
+import { useUpdateBugReport, useUpdateBugReportStatus, useAddFixNote } from '@/hooks/useBugReports';
 import type { BugReport } from '@/hooks/useBugReports';
 
 interface BugReportCardProps {
@@ -66,22 +68,48 @@ const statusConfig = {
 
 export function BugReportCard({ report, onUpdateStatus, onDelete }: BugReportCardProps) {
   const [showScreenshot, setShowScreenshot] = useState(false);
-  const [showResolveDialog, setShowResolveDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showFixSheet, setShowFixSheet] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [resolutionNotes, setResolutionNotes] = useState('');
+
+  const updateBugReport = useUpdateBugReport();
+  const updateStatus = useUpdateBugReportStatus();
+  const addFixNote = useAddFixNote();
 
   const priority = priorityConfig[report.priority];
   const status = statusConfig[report.status];
   const StatusIcon = status.icon;
 
   const handleStartFix = () => {
+    // First update status to in_progress, then open the sheet
     onUpdateStatus(report.id, 'in_progress');
+    setShowFixSheet(true);
   };
 
-  const handleResolve = () => {
-    onUpdateStatus(report.id, 'resolved', resolutionNotes || undefined);
-    setShowResolveDialog(false);
-    setResolutionNotes('');
+  const handleOpenFixSheet = () => {
+    setShowFixSheet(true);
+  };
+
+  const handleFixSheetStatusChange = (newStatus: string) => {
+    onUpdateStatus(report.id, newStatus);
+    if (newStatus === 'resolved' || newStatus === 'cancelled') {
+      setShowFixSheet(false);
+    }
+  };
+
+  const handleAddNote = (note: string) => {
+    addFixNote.mutate({
+      id: report.id,
+      note,
+      currentContextData: report.context_data as Record<string, unknown> | null,
+    });
+  };
+
+  const handleSaveEdit = (data: { title: string; description: string; priority: string }) => {
+    updateBugReport.mutate(
+      { id: report.id, ...data },
+      { onSuccess: () => setShowEditDialog(false) }
+    );
   };
 
   const handleDelete = () => {
@@ -168,8 +196,19 @@ export function BugReportCard({ report, onUpdateStatus, onDelete }: BugReportCar
                 <Button 
                   size="sm" 
                   variant="default"
+                  onClick={handleOpenFixSheet}
+                >
+                  <Wrench className="h-4 w-4 mr-1" />
+                  Kontynuuj
+                </Button>
+              )}
+
+              {report.status === 'testing' && (
+                <Button 
+                  size="sm" 
+                  variant="default"
                   className="bg-green-600 hover:bg-green-700"
-                  onClick={() => setShowResolveDialog(true)}
+                  onClick={() => onUpdateStatus(report.id, 'resolved')}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   Rozwiązane
@@ -183,6 +222,10 @@ export function BugReportCard({ report, onUpdateStatus, onDelete }: BugReportCar
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edytuj
+                  </DropdownMenuItem>
                   {report.status !== 'in_progress' && report.status !== 'resolved' && (
                     <DropdownMenuItem onClick={handleStartFix}>
                       <Wrench className="h-4 w-4 mr-2" />
@@ -190,9 +233,9 @@ export function BugReportCard({ report, onUpdateStatus, onDelete }: BugReportCar
                     </DropdownMenuItem>
                   )}
                   {report.status === 'in_progress' && (
-                    <DropdownMenuItem onClick={() => onUpdateStatus(report.id, 'testing')}>
-                      <FlaskConical className="h-4 w-4 mr-2" />
-                      Oznacz jako testowanie
+                    <DropdownMenuItem onClick={handleOpenFixSheet}>
+                      <Play className="h-4 w-4 mr-2" />
+                      Otwórz panel naprawy
                     </DropdownMenuItem>
                   )}
                   {report.status !== 'cancelled' && report.status !== 'resolved' && (
@@ -231,37 +274,24 @@ export function BugReportCard({ report, onUpdateStatus, onDelete }: BugReportCar
         </DialogContent>
       </Dialog>
 
-      {/* Resolve dialog */}
-      <Dialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Oznacz jako rozwiązane</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="resolution-notes">Notatka z naprawy (opcjonalne)</Label>
-              <Textarea
-                id="resolution-notes"
-                placeholder="Co zostało naprawione? Jakie zmiany wprowadzono?"
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowResolveDialog(false)}>
-                Anuluj
-              </Button>
-              <Button 
-                className="bg-green-600 hover:bg-green-700" 
-                onClick={handleResolve}
-              >
-                Rozwiązane
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Edit dialog */}
+      <EditBugReportModal
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        report={report}
+        onSave={handleSaveEdit}
+        isSaving={updateBugReport.isPending}
+      />
+
+      {/* Fix sheet */}
+      <BugFixSheet
+        open={showFixSheet}
+        onOpenChange={setShowFixSheet}
+        report={report}
+        onUpdateStatus={handleFixSheetStatusChange}
+        onAddNote={handleAddNote}
+        isUpdating={updateStatus.isPending || addFixNote.isPending}
+      />
 
       {/* Delete confirmation */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
