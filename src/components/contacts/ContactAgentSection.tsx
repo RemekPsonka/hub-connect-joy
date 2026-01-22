@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, RefreshCw, Send, Sparkles, AlertTriangle, Target, Heart, MessageSquare, Lightbulb, Check, X, Edit3, ListTodo, FileText, User, TrendingUp, Calendar, ChevronDown, ChevronUp, Building, ThumbsUp, ThumbsDown, Briefcase, Users, Zap, Shield } from 'lucide-react';
+import { Bot, RefreshCw, Send, Sparkles, AlertTriangle, Target, Heart, MessageSquare, Lightbulb, Check, X, Edit3, ListTodo, FileText, User, TrendingUp, Calendar, ChevronDown, ChevronUp, Building, ThumbsUp, ThumbsDown, Briefcase, Users, Zap, Shield, FileDown } from 'lucide-react';
+import { exportAgentProfileToPDF } from '@/utils/exportAgentProfile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -407,6 +408,27 @@ export function ContactAgentSection({ contactId, contactName }: ContactAgentSect
               Asystent: {contactName}
             </CardTitle>
             <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => exportAgentProfileToPDF({
+                  contactName,
+                  agentPersona: agentMemory.agent_persona || undefined,
+                  lastRefreshAt: agentMemory.last_refresh_at || undefined,
+                  meetingBrief,
+                  personProfile,
+                  challengesDetailed,
+                  goalsDetailed,
+                  topicsToDiscuss,
+                  companyContext,
+                  businessValueDetailed,
+                  insights
+                })}
+                className="gap-1"
+              >
+                <FileDown className="h-4 w-4" />
+                PDF
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm"
