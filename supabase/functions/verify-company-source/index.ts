@@ -554,16 +554,27 @@ function extractProcurators(dzial2: any): Array<{ name: string; type: string; ve
     for (const p of prokuraArray) {
       if (!p) continue;
       
-      // Get prokura type
-      const rodzaj = p?.rodzajProkury || p?.rodzaj || 'Prokura';
+      // Get prokura type - rodzajProkury can be an ARRAY with history
+      const rodzajArray = p?.rodzajProkury || p?.rodzaj || 'Prokura';
+      let rodzaj: string;
+      if (Array.isArray(rodzajArray)) {
+        const latestRodzaj = getLatestEntry(rodzajArray);
+        rodzaj = typeof latestRodzaj === 'string' ? latestRodzaj : (latestRodzaj?.rodzaj || latestRodzaj?.nazwa || 'Prokura');
+      } else {
+        rodzaj = typeof rodzajArray === 'string' ? rodzajArray : 'Prokura';
+      }
       
-      // Extract persons from sklad
+      // Extract persons from sklad - sklad entries can also have history
       const sklad = p?.sklad || p?.prokurenci || [];
       const skladArray = Array.isArray(sklad) ? sklad : [sklad];
       
       for (const person of skladArray) {
         if (!person) continue;
-        const name = extractName(person.imiona || person.imie, person.nazwisko);
+        // Person fields might be arrays with history too
+        const latestPerson = getLatestEntry(Array.isArray(person) ? person : [person]);
+        if (!latestPerson) continue;
+        
+        const name = extractName(latestPerson.imiona || latestPerson.imie, latestPerson.nazwisko);
         if (name) {
           procurators.push({
             name,
@@ -695,11 +706,11 @@ function extractBranches(dzial1: any): Array<{ name: string; address: string; ci
       exists: !!dzial1?.jednostkiTerenoweOddzialy,
       type: typeof jednostki,
       isArray: Array.isArray(jednostki),
-      keys: typeof jednostki === 'object' ? Object.keys(jednostki || {}) : [],
-      sample: jednostki
+      keys: typeof jednostki === 'object' ? Object.keys(jednostki || {}).slice(0, 10) : [],
+      firstItem: Array.isArray(jednostki) && jednostki.length > 0 ? jednostki[0] : null
     }, null, 2).substring(0, 2000));
     
-    // Helper to extract address
+    // Helper to extract address from adres object (after getLatestEntry)
     const buildAddress = (adres: any) => {
       if (!adres) return '';
       const parts = [];
@@ -712,56 +723,53 @@ function extractBranches(dzial1: any): Array<{ name: string; address: string; ci
       return parts.join(' ').trim();
     };
     
-    // Helper to process a branch entry
-    const processBranch = (item: any) => {
-      if (!item) return;
-      const latest = getLatestEntry(Array.isArray(item) ? item : [item]);
-      if (!latest) return;
+    // Helper to process a branch entry - each branch has fields that are ARRAYS with history
+    const processBranch = (branchItem: any) => {
+      if (!branchItem || typeof branchItem !== 'object') return;
+      
+      // Get latest name - nazwa is an ARRAY with history
+      const nazwaArray = branchItem?.nazwa || [];
+      const latestNazwa = getLatestEntry(Array.isArray(nazwaArray) ? nazwaArray : [nazwaArray]);
+      // nazwa can be { nazwa: "...", nrWpisuWprow: "..." } or just string
+      const name = typeof latestNazwa === 'string' ? latestNazwa : (latestNazwa?.nazwa || '');
       
       // Skip deleted entries
-      if (latest.nrWpisuWykr) return;
+      if (!name || (latestNazwa?.nrWpisuWykr && !latestNazwa?.nazwa)) return;
       
-      const adres = latest?.adres || latest?.adresSiedziby || latest?.siedzibaOddzialu || {};
-      const name = latest?.nazwaOddzialu || latest?.nazwa || latest?.oznaczenie || 'Oddział';
-      const address = buildAddress(adres);
-      const city = adres?.miejscowosc || '';
+      // Get latest address - adres is an ARRAY with history
+      const adresArray = branchItem?.adres || [];
+      const latestAdres = getLatestEntry(Array.isArray(adresArray) ? adresArray : [adresArray]);
       
-      if (name || city) {
+      // Get latest seat (for city) - siedziba is an ARRAY with history
+      const siedzibaArray = branchItem?.siedziba || [];
+      const latestSiedziba = getLatestEntry(Array.isArray(siedzibaArray) ? siedzibaArray : [siedzibaArray]);
+      
+      // Build address string
+      const address = buildAddress(latestAdres);
+      const city = latestAdres?.miejscowosc || latestSiedziba?.miejscowosc || '';
+      const postal_code = latestAdres?.kodPocztowy || '';
+      
+      if (name && typeof name === 'string') {
         branches.push({
           name,
           address,
           city,
-          postal_code: adres?.kodPocztowy
+          postal_code: postal_code || undefined
         });
       }
     };
     
-    // Check different structures used by KRS API
+    // jednostkiTerenoweOddzialy is typically an array with numeric keys
     if (Array.isArray(jednostki)) {
-      // Direct array of branches
-      for (const item of jednostki) {
-        processBranch(item);
+      for (const branchItem of jednostki) {
+        processBranch(branchItem);
       }
     } else if (typeof jednostki === 'object' && jednostki !== null) {
-      // Object with sub-keys like oddzialySamodzielnieBilansujace, pozostaleJednostki
-      const sources = [
-        jednostki?.oddzialySamodzielnieBilansujace,
-        jednostki?.pozostaleJednostki,
-        jednostki?.oddzialy,
-        jednostki?.jednostki,
-        jednostki?.pozycja
-      ].filter(Boolean);
-      
-      for (const source of sources) {
-        const items = Array.isArray(source) ? source : [source];
-        for (const item of items) {
-          processBranch(item);
+      // Fallback: iterate over object values (numeric keys like "0", "1", "2"...)
+      for (const key of Object.keys(jednostki)) {
+        if (!isNaN(Number(key))) {
+          processBranch(jednostki[key]);
         }
-      }
-      
-      // Also check if jednostki itself has branch data
-      if (Object.keys(jednostki).some(k => ['nazwaOddzialu', 'nazwa', 'adres', 'siedzibaOddzialu'].includes(k))) {
-        processBranch(jednostki);
       }
     }
     
