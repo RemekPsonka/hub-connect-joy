@@ -64,8 +64,8 @@ serve(async (req) => {
       .select(`*, 
         company:companies(
           id, name, industry, website, description, 
-          revenue, employees_count, growth_rate,
-          ai_analysis, company_analysis_confidence
+          revenue_amount, employee_count, growth_rate,
+          ai_analysis, analysis_confidence_score
         ), 
         primary_group:contact_groups(*)`)
       .eq('id', contact_id)
@@ -117,8 +117,8 @@ serve(async (req) => {
 - Branża: ${company.industry || 'nieznana'}
 - Strona WWW: ${company.website || 'brak'}
 - Opis: ${company.description?.substring(0, 200) || 'brak'}
-- Przychody: ${company.revenue ? `${company.revenue} PLN` : 'nieznane'}
-- Zatrudnienie: ${company.employees_count || 'nieznane'}`;
+- Przychody: ${company.revenue_amount ? `${company.revenue_amount} PLN` : 'nieznane'}
+- Zatrudnienie: ${company.employee_count || 'nieznane'}`;
 
       if (aiAnalysis) {
         const products = aiAnalysis.products_and_services?.products || [];
