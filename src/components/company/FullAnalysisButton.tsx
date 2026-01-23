@@ -4,7 +4,7 @@ import { Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
-import { FullAnalysisConfirmModal } from './FullAnalysisConfirmModal';
+import { FullAnalysisConfirmModal, type AnalysisOverrides } from './FullAnalysisConfirmModal';
 import { FullAnalysisProgress, type FullAnalysisStage, type StageState } from './FullAnalysisProgress';
 import type { Company } from './CompanyPipelineController';
 
@@ -43,11 +43,16 @@ export function FullAnalysisButton({ company, contactEmail, disabled }: FullAnal
     queryClient.invalidateQueries({ queryKey: ['contacts'] });
   }, [queryClient, company.id]);
 
-  const runFullAnalysis = useCallback(async () => {
+  const runFullAnalysis = useCallback(async (overrides?: AnalysisOverrides) => {
     setShowConfirm(false);
     setIsRunning(true);
     setStages(initialStages);
     setCurrentStage(0);
+
+    // Use overrides if provided, otherwise use original values
+    const effectiveKrs = overrides?.krs || company.krs;
+    const effectiveNip = overrides?.nip || company.nip;
+    const effectiveWebsite = overrides?.website || inferredWebsite;
 
     try {
       // Stage 1: Verify source
@@ -59,8 +64,8 @@ export function FullAnalysisButton({ company, contactEmail, disabled }: FullAnal
           company_id: company.id,
           company_name: company.name,
           email_domain: emailDomain,
-          existing_krs: company.krs || undefined,
-          existing_nip: company.nip || undefined,
+          existing_krs: effectiveKrs || undefined,
+          existing_nip: effectiveNip || undefined,
         }
       });
       
@@ -72,15 +77,15 @@ export function FullAnalysisButton({ company, contactEmail, disabled }: FullAnal
       invalidateCompany();
 
       // Get updated KRS from source result
-      const verifiedKrs = sourceResult?.krs || company.krs;
+      const verifiedKrs = sourceResult?.krs || effectiveKrs;
 
       // Stage 2: Scan website (if available)
       setCurrentStage(1);
-      if (inferredWebsite) {
+      if (effectiveWebsite) {
         updateStage('www', 'running');
         
         const { error: wwwError } = await supabase.functions.invoke('scan-company-website', {
-          body: { company_id: company.id, website: inferredWebsite }
+          body: { company_id: company.id, website: effectiveWebsite }
         });
         
         if (wwwError) {
