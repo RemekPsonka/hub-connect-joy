@@ -6,60 +6,337 @@ const corsHeaders = {
 };
 
 // ============================================
-// Company AI Profile - Flat Structure for UI
+// Company AI Profile - Tool Calling for reliable JSON
 // ============================================
 
-// Repair common JSON errors from AI responses
-function repairJson(jsonString: string): string {
-  let repaired = jsonString;
-  
-  // 1. Remove trailing commas before } or ]
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-  
-  // 2. Remove control characters that break JSON (except newlines, tabs)
-  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  
-  // 3. Fix double commas
-  repaired = repaired.replace(/,\s*,/g, ',');
-  
-  // 4. Fix missing commas between properties (simple heuristic)
-  repaired = repaired.replace(/"\s*\n\s*"/g, '",\n"');
-  
-  // 5. Ensure strings with newlines are properly escaped
-  repaired = repaired.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
-    return `: "${p1}\\n${p2}"`;
-  });
-  
-  return repaired;
-}
+// Full schema definition for structured output
+const profileToolSchema = {
+  type: "function",
+  function: {
+    name: "save_company_profile",
+    description: "Zapisz kompletny profil firmy ze wszystkimi sekcjami",
+    parameters: {
+      type: "object",
+      properties: {
+        // SEKCJA 1: Podstawowe informacje
+        name: { type: "string", description: "Oficjalna nazwa firmy" },
+        short_name: { type: "string", description: "Nazwa skrócona" },
+        legal_form: { type: "string", description: "Forma prawna (sp. z o.o., S.A., itp.)" },
+        industry: { type: "string", description: "Główna branża działalności" },
+        sub_industries: { type: "array", items: { type: "string" }, description: "Specjalizacje i podkategorie" },
+        description: { type: "string", description: "Zwięzły opis działalności firmy (2-4 zdania)" },
+        tagline: { type: "string", description: "Motto lub hasło firmy" },
+        year_founded: { type: "number", description: "Rok założenia" },
+        founder_info: { type: "string", description: "Informacje o założycielu/założycielach" },
+        founding_story: { type: "string", description: "Historia powstania firmy" },
 
-// Fallback: Extract key fields manually when JSON is severely malformed
-function extractFieldsManually(content: string): any {
-  const result: any = {};
-  
-  // Try to extract common fields
-  const fieldPatterns = [
-    { key: 'name', regex: /"name"\s*:\s*"([^"]+)"/ },
-    { key: 'description', regex: /"description"\s*:\s*"([^"]+)"/ },
-    { key: 'industry', regex: /"industry"\s*:\s*"([^"]+)"/ },
-    { key: 'legal_form', regex: /"legal_form"\s*:\s*"([^"]+)"/ },
-    { key: 'nip', regex: /"nip"\s*:\s*"([^"]+)"/ },
-    { key: 'krs', regex: /"krs"\s*:\s*"([^"]+)"/ },
-    { key: 'regon', regex: /"regon"\s*:\s*"([^"]+)"/ },
-  ];
-  
-  for (const { key, regex } of fieldPatterns) {
-    const match = content.match(regex);
-    if (match) {
-      result[key] = match[1];
+        // SEKCJA 2: Historia i rozwój
+        timeline: {
+          type: "array",
+          description: "Kluczowe wydarzenia w historii firmy",
+          items: {
+            type: "object",
+            properties: {
+              year: { type: "number" },
+              event: { type: "string" },
+              impact: { type: "string" }
+            },
+            required: ["year", "event"]
+          }
+        },
+        mergers_acquisitions: {
+          type: "array",
+          description: "Fuzje i przejęcia",
+          items: {
+            type: "object",
+            properties: {
+              year: { type: "number" },
+              type: { type: "string" },
+              company: { type: "string" },
+              details: { type: "string" }
+            }
+          }
+        },
+
+        // SEKCJA 3: Finanse
+        revenue: {
+          type: "object",
+          description: "Aktualne przychody",
+          properties: {
+            amount: { type: "number" },
+            year: { type: "number" },
+            currency: { type: "string" }
+          }
+        },
+        revenue_history: {
+          type: "array",
+          description: "Historia przychodów (ostatnie lata)",
+          items: {
+            type: "object",
+            properties: {
+              year: { type: "number" },
+              amount: { type: "number" },
+              growth_pct: { type: "number" }
+            }
+          }
+        },
+        financial_statements: {
+          type: "array",
+          description: "Kluczowe wskaźniki finansowe",
+          items: {
+            type: "object",
+            properties: {
+              year: { type: "number" },
+              net_profit: { type: "number" },
+              ebitda: { type: "number" },
+              assets: { type: "number" }
+            }
+          }
+        },
+        employee_count: { type: "string", description: "Liczba pracowników (np. '50-100')" },
+        company_size: { type: "string", description: "Rozmiar firmy (micro/small/medium/large)" },
+        market_position: { type: "string", description: "Pozycja rynkowa (lider/challenger/niche)" },
+        growth_rate: { type: "number", description: "Roczny wzrost w %" },
+
+        // SEKCJA 4: Model biznesowy
+        business_model: { type: "string", description: "Opis modelu biznesowego (B2B/B2C/SaaS/itp.)" },
+        value_proposition: { type: "string", description: "Główna propozycja wartości dla klientów" },
+        competitive_advantages: { type: "array", items: { type: "string" }, description: "Przewagi konkurencyjne" },
+        competitive_differentiation: { type: "string", description: "Czym firma wyróżnia się od konkurencji" },
+
+        // SEKCJA 5: Produkty i usługi
+        products: {
+          type: "array",
+          description: "Lista produktów firmy",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              category: { type: "string" },
+              description: { type: "string" },
+              target_customer: { type: "string" }
+            },
+            required: ["name"]
+          }
+        },
+        services: {
+          type: "array",
+          description: "Lista usług firmy",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              target: { type: "string" }
+            },
+            required: ["name"]
+          }
+        },
+        flagship_products: { type: "array", items: { type: "string" }, description: "Flagowe produkty/usługi" },
+        certifications: { type: "array", items: { type: "string" }, description: "Certyfikaty (ISO, itp.)" },
+        awards: { type: "array", items: { type: "string" }, description: "Nagrody i wyróżnienia" },
+
+        // SEKCJA 6: Marki i partnerstwa
+        represented_brands: {
+          type: "array",
+          description: "Reprezentowane marki",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              type: { type: "string", enum: ["own", "represented", "distributed"] }
+            }
+          }
+        },
+        partnerships: { type: "array", items: { type: "string" }, description: "Partnerstwa strategiczne" },
+
+        // SEKCJA 7: Lokalizacje
+        locations: {
+          type: "array",
+          description: "Lokalizacje firmy",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["headquarters", "branch", "warehouse", "office"] },
+              city: { type: "string" },
+              address: { type: "string" },
+              country: { type: "string" }
+            }
+          }
+        },
+        geographic_coverage: {
+          type: "object",
+          description: "Zasięg geograficzny działalności",
+          properties: {
+            poland_cities: { type: "array", items: { type: "string" } },
+            poland_regions: { type: "array", items: { type: "string" } },
+            international_countries: { type: "array", items: { type: "string" } }
+          }
+        },
+
+        // SEKCJA 8: Klienci i projekty
+        reference_projects: {
+          type: "array",
+          description: "Projekty referencyjne",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              client: { type: "string" },
+              description: { type: "string" },
+              year: { type: "number" },
+              value: { type: "string" }
+            }
+          }
+        },
+        key_clients: {
+          type: "array",
+          description: "Kluczowi klienci",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              industry: { type: "string" },
+              relationship_years: { type: "number" }
+            }
+          }
+        },
+        target_industries: { type: "array", items: { type: "string" }, description: "Branże docelowe" },
+
+        // SEKCJA 9: Konkurencja
+        main_competitors: {
+          type: "array",
+          description: "Główni konkurenci",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              strength: { type: "string" },
+              weakness: { type: "string" }
+            }
+          }
+        },
+        market_challenges: { type: "array", items: { type: "string" }, description: "Wyzwania rynkowe" },
+
+        // SEKCJA 10: Oferta
+        offer_summary: { type: "string", description: "Podsumowanie oferty" },
+        unique_selling_points: { type: "array", items: { type: "string" }, description: "Unikalne cechy oferty" },
+
+        // SEKCJA 11: Czego szuka firma
+        what_company_seeks: { type: "string", description: "Czego szuka firma (partnerzy, klienci, dostawcy)" },
+        expansion_plans: { type: "string", description: "Plany rozwoju i ekspansji" },
+        hiring_positions: { type: "array", items: { type: "string" }, description: "Poszukiwane stanowiska" },
+
+        // SEKCJA 12: Możliwości współpracy
+        collaboration_opportunities: {
+          type: "array",
+          description: "Możliwości współpracy",
+          items: {
+            type: "object",
+            properties: {
+              area: { type: "string" },
+              description: { type: "string" },
+              priority: { type: "string", enum: ["high", "medium", "low"] }
+            }
+          }
+        },
+        ideal_partner_profile: { type: "string", description: "Profil idealnego partnera biznesowego" },
+
+        // SEKCJA 13: Zarząd i właściciele
+        management: {
+          type: "array",
+          description: "Zarząd firmy",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              position: { type: "string" },
+              source: { type: "string" },
+              linkedin: { type: "string" }
+            },
+            required: ["name", "position"]
+          }
+        },
+        shareholders: {
+          type: "array",
+          description: "Udziałowcy/akcjonariusze",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              ownership_percent: { type: "number" },
+              type: { type: "string", enum: ["individual", "company", "fund"] }
+            }
+          }
+        },
+
+        // SEKCJA 14: Aktualności i sygnały
+        recent_news: {
+          type: "array",
+          description: "Ostatnie wiadomości o firmie",
+          items: {
+            type: "object",
+            properties: {
+              date: { type: "string" },
+              title: { type: "string" },
+              summary: { type: "string" },
+              source: { type: "string" },
+              url: { type: "string" },
+              sentiment: { type: "string", enum: ["positive", "neutral", "negative"] }
+            }
+          }
+        },
+        market_signals: {
+          type: "array",
+          description: "Sygnały rynkowe",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["expansion", "hiring", "investment", "partnership", "product_launch", "award"] },
+              description: { type: "string" },
+              date: { type: "string" }
+            }
+          }
+        },
+        sentiment: { type: "string", enum: ["positive", "neutral", "negative"], description: "Ogólny sentyment mediów" },
+
+        // SEKCJA 15: CSR i zrównoważony rozwój
+        csr_activities: {
+          type: "array",
+          description: "Aktywności CSR",
+          items: {
+            type: "object",
+            properties: {
+              area: { type: "string" },
+              description: { type: "string" }
+            }
+          }
+        },
+        sustainability_initiatives: { type: "array", items: { type: "string" }, description: "Inicjatywy zrównoważonego rozwoju" },
+
+        // SEKCJA 16: Dane rejestrowe
+        nip: { type: "string", description: "NIP" },
+        regon: { type: "string", description: "REGON" },
+        krs: { type: "string", description: "KRS" },
+        address: { type: "string", description: "Adres siedziby" },
+        city: { type: "string", description: "Miasto" },
+        postal_code: { type: "string", description: "Kod pocztowy" },
+        country: { type: "string", description: "Kraj" },
+        website: { type: "string", description: "Strona WWW" },
+        phone: { type: "string", description: "Telefon" },
+        email: { type: "string", description: "Email kontaktowy" },
+
+        // Metadata
+        confidence: { type: "string", enum: ["high", "medium", "low"], description: "Pewność danych" },
+        analysis_notes: { type: "array", items: { type: "string" }, description: "Uwagi o jakości danych" }
+      },
+      required: ["name", "description"]
     }
   }
-  
-  return result;
-}
+};
 
-// Lovable AI for synthesis with flat structure (matches CompanyAnalysis interface)
-async function synthesizeWithAI(
+// Synthesize company profile using Tool Calling
+async function synthesizeWithToolCalling(
   companyName: string,
   sourceData: any,
   wwwData: any,
@@ -68,111 +345,53 @@ async function synthesizeWithAI(
   internalNotes: string,
   apiKey: string
 ): Promise<any> {
-  const systemPrompt = `Jesteś analitykiem biznesowym. Na podstawie dostarczonych danych stwórz profil klienta w płaskiej strukturze JSON.
+  const systemPrompt = `Jesteś ekspertem od analizy biznesowej firm. Twoim zadaniem jest stworzenie KOMPLETNEGO profilu firmy na podstawie dostarczonych danych.
 
-Zwróć JSON z następującymi polami (wypełnij tylko te, dla których masz dane):
+ZASADY:
+1. Wypełnij WSZYSTKIE pola dla których masz jakiekolwiek dane - im więcej, tym lepiej
+2. Syntetyzuj dane z różnych źródeł - nie kopiuj surowych danych, ale twórz czytelne opisy
+3. Rozwiąż konflikty danych: priorytet KRS > WWW > Perplexity
+4. Użyj polskiego języka dla opisów
 
-{
-  "name": "Oficjalna nazwa firmy",
-  "short_name": "Nazwa skrócona",
-  "legal_form": "sp. z o.o. / S.A. / itp.",
-  "industry": "Główna branża",
-  "sub_industries": ["Specjalizacja 1", "Specjalizacja 2"],
-  "description": "Zwięzły opis działalności firmy (2-3 zdania)",
-  "tagline": "Motto lub hasło firmy",
-  "year_founded": 2000,
-  "founder_info": "Informacje o założycielu",
-  "founding_story": "Historia założenia firmy",
-  
-  "business_model": "Opis modelu biznesowego (B2B/B2C/SaaS/itp.)",
-  "value_proposition": "Główna propozycja wartości",
-  "competitive_advantages": ["Przewaga 1", "Przewaga 2"],
-  "competitive_differentiation": "Czym firma wyróżnia się od konkurencji",
-  
-  "revenue": {"amount": 50000000, "year": 2024, "currency": "PLN"},
-  "revenue_history": [{"year": 2024, "amount": 50000000, "growth_pct": 15}],
-  "employee_count": "50-100",
-  "company_size": "small/medium/large",
-  "market_position": "Pozycja na rynku (lider/challenger/niche)",
-  "growth_rate": 15,
-  
-  "products": [{"name": "Produkt", "category": "Kategoria", "description": "Opis", "target_customer": "Klient docelowy"}],
-  "services": [{"name": "Usługa", "description": "Opis", "target": "Klient docelowy"}],
-  "flagship_products": ["Główny produkt 1", "Główny produkt 2"],
-  "certifications": ["ISO 9001", "ISO 27001"],
-  "awards": ["Nagroda 1", "Nagroda 2"],
-  
-  "locations": [{"type": "headquarters/branch/warehouse", "city": "Warszawa", "address": "ul. Przykładowa 1"}],
-  "geographic_coverage": {
-    "poland_cities": ["Warszawa", "Kraków"],
-    "poland_regions": ["Mazowieckie", "Małopolskie"],
-    "international_countries": ["Niemcy", "Czechy"]
-  },
-  
-  "reference_projects": [{"name": "Projekt", "client": "Klient", "description": "Opis", "year": 2024}],
-  "key_clients": [{"name": "Klient", "industry": "Branża"}],
-  "target_industries": ["Finanse", "Retail", "Produkcja"],
-  
-  "management": [{"name": "Jan Kowalski", "position": "Prezes Zarządu", "source": "krs"}],
-  "shareholders": [{"name": "Udziałowiec", "ownership_percent": 50, "type": "individual/company"}],
-  
-  "main_competitors": [{"name": "Konkurent", "strength": "Mocna strona", "weakness": "Słaba strona"}],
-  "market_challenges": ["Wyzwanie rynkowe 1"],
-  
-  "collaboration_opportunities": [{"area": "Obszar współpracy", "description": "Opis możliwości", "priority": "high/medium/low"}],
-  "ideal_partner_profile": "Profil idealnego partnera biznesowego",
-  "what_company_seeks": "Czego szuka firma (partnerzy, klienci, dostawcy)",
-  "expansion_plans": "Plany rozwoju i ekspansji",
-  
-  "recent_news": [{"date": "2024-12", "title": "Tytuł", "summary": "Streszczenie", "source": "źródło", "sentiment": "positive/neutral/negative"}],
-  "market_signals": [{"type": "expansion/hiring/investment/partnership", "description": "Opis sygnału"}],
-  "sentiment": "positive/neutral/negative",
-  
-  "represented_brands": [{"name": "Marka", "type": "own/represented/distributed"}],
-  "partnerships": ["Partner strategiczny 1", "Partner technologiczny 2"],
-  
-  "csr_activities": [{"area": "Obszar CSR", "description": "Opis aktywności"}],
-  "sustainability_initiatives": ["Inicjatywa 1"],
-  
-  "timeline": [{"year": 2000, "event": "Założenie firmy"}, {"year": 2020, "event": "Ekspansja zagraniczna"}],
-  
-  "nip": "1234567890",
-  "regon": "123456789",
-  "krs": "0000123456",
-  "address": "ul. Przykładowa 1",
-  "city": "Warszawa",
-  "postal_code": "00-001",
-  
-  "confidence": "high/medium/low",
-  "analysis_notes": ["Uwaga 1 o jakości danych"]
-}
+ŹRÓDŁA DANYCH I CO Z NICH WYCIĄGNĄĆ:
+- KRS/CEIDG: name, legal_form, krs, nip, regon, address, management, shareholders, year_founded
+- WWW (Firecrawl): products, services, brands, locations, projects, description, offer_summary
+- External (Perplexity): recent_news, awards, market_signals, competitive_position, press mentions
+- Finanse: revenue, revenue_history, financial_statements, employee_count, growth_rate
 
 WAŻNE:
-- Wypełnij TYLKO pola dla których masz dane. Nie wymyślaj informacji.
-- Użyj tej płaskiej struktury, NIE używaj sekcji section_1_*, section_2_* itp.
-- Rozwiąż konflikty danych: priorytet KRS > WWW > Perplexity
-- Odpowiedz TYLKO JSON, bez dodatkowego tekstu.`;
+- Dla każdego pola tablicowego dodaj WSZYSTKIE znalezione elementy
+- Dla management - każda osoba z KRS MUSI być wymieniona
+- Dla products/services - wymień WSZYSTKIE znalezione na stronie WWW
+- Dla news - dodaj WSZYSTKIE znalezione artykuły
+- description powinien być syntezą 2-4 zdań opisujących firmę
+- timeline - ułóż chronologicznie kluczowe wydarzenia
 
-  const userPrompt = `Dane firmy "${companyName}":
+Użyj funkcji save_company_profile aby zapisać profil.`;
 
-=== DANE REJESTROWE (KRS/CEIDG API) ===
+  const userPrompt = `Stwórz pełny profil firmy "${companyName}" na podstawie następujących danych:
+
+=== DANE REJESTROWE (KRS/CEIDG) ===
 ${sourceData ? JSON.stringify(sourceData, null, 2) : 'Brak danych'}
 
-=== DANE ZE STRONY WWW (Firecrawl) ===
+=== DANE ZE STRONY WWW ===
 ${wwwData ? JSON.stringify(wwwData, null, 2) : 'Brak danych'}
 
-=== DANE ZEWNĘTRZNE (Perplexity - news, kontrakty, rynek) ===
+=== DANE ZEWNĘTRZNE (Perplexity - newsy, kontrakty, rynek) ===
 ${externalData ? JSON.stringify(externalData, null, 2) : 'Brak danych'}
 
-=== DANE FINANSOWE (3 lata) ===
+=== DANE FINANSOWE ===
 ${financialData ? JSON.stringify(financialData, null, 2) : 'Brak danych'}
 
-=== NOTATKI WEWNĘTRZNE (od handlowców) ===
+=== NOTATKI WEWNĘTRZNE ===
 ${internalNotes || 'Brak notatek'}
 
-Stwórz pełny profil klienta w płaskiej strukturze JSON. Zsyntetyzuj dane ze wszystkich źródeł.`;
+Wypełnij profil jak najdokładniej - każde pole dla którego masz dane. Użyj funkcji save_company_profile.`;
 
   try {
+    console.log(`[Lovable AI] Starting synthesis for: ${companyName}`);
+    console.log(`[Lovable AI] Data available: source=${!!sourceData}, www=${!!wwwData}, external=${!!externalData}, financial=${!!financialData}`);
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -185,70 +404,43 @@ Stwórz pełny profil klienta w płaskiej strukturze JSON. Zsyntetyzuj dane ze w
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
+        tools: [profileToolSchema],
+        tool_choice: { type: "function", function: { name: "save_company_profile" } },
         temperature: 0.2,
-        max_tokens: 8000
+        max_tokens: 12000
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Lovable AI] Error:', response.status, errorText);
+      console.error('[Lovable AI] API Error:', response.status, errorText);
       throw new Error(`AI API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content || '';
+    console.log('[Lovable AI] Response received, parsing tool call...');
 
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error('[Lovable AI] No JSON found in response');
-      throw new Error('No JSON in AI response');
+    // Extract profile from tool call
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    
+    if (!toolCall || toolCall.function.name !== 'save_company_profile') {
+      console.error('[Lovable AI] No tool call found in response');
+      console.log('[Lovable AI] Raw response:', JSON.stringify(data, null, 2).substring(0, 1000));
+      throw new Error('AI did not return structured profile');
     }
 
-    // Multi-tier parsing with repair logic
-    let parsed: any = null;
-    let lastError: Error | null = null;
+    const profile = JSON.parse(toolCall.function.arguments);
+    
+    console.log(`[Lovable AI] Profile parsed successfully with ${Object.keys(profile).length} fields`);
+    console.log(`[Lovable AI] Key fields: name=${profile.name}, management=${profile.management?.length || 0}, products=${profile.products?.length || 0}`);
 
-    // Attempt 1: Direct parse
-    try {
-      parsed = JSON.parse(jsonMatch[0]);
-      console.log('[Lovable AI] JSON parsed successfully on first attempt');
-    } catch (e1) {
-      console.warn('[Lovable AI] First parse failed, attempting repair...', (e1 as Error).message);
-      lastError = e1 as Error;
-      
-      // Attempt 2: Parse after repair
-      try {
-        const repaired = repairJson(jsonMatch[0]);
-        parsed = JSON.parse(repaired);
-        console.log('[Lovable AI] JSON repaired and parsed successfully');
-      } catch (e2) {
-        console.warn('[Lovable AI] Repair failed, trying manual extraction...', (e2 as Error).message);
-        
-        // Attempt 3: Manual field extraction
-        try {
-          parsed = extractFieldsManually(content);
-          if (Object.keys(parsed).length > 0) {
-            console.log('[Lovable AI] Extracted fields manually:', Object.keys(parsed).length);
-          } else {
-            throw new Error('No fields could be extracted');
-          }
-        } catch (e3) {
-          console.error('[Lovable AI] All parsing attempts failed');
-          throw lastError;
-        }
-      }
-    }
+    return profile;
 
-    return parsed;
   } catch (error) {
     console.error('[Lovable AI] Synthesis error:', error);
     throw error;
   }
 }
-
-
 
 // Build used_sources[] based on available data
 function buildUsedSources(sourceData: any, wwwData: any, externalData: any, financialData: any): string[] {
@@ -260,15 +452,6 @@ function buildUsedSources(sourceData: any, wwwData: any, externalData: any, fina
   if (externalData?.sources?.length > 0 || externalData?.citations?.length > 0) sources.push('perplexity_external');
   if (financialData?.year_2024 || financialData?.year_2023 || financialData?.years?.length > 0) {
     sources.push('financial_api');
-  }
-  
-  // Add specific financial data sources if available
-  if (financialData?.data_sources?.length > 0) {
-    financialData.data_sources.forEach((s: string) => {
-      if (!sources.includes(s) && typeof s === 'string') {
-        sources.push(s);
-      }
-    });
   }
   
   return sources;
@@ -366,7 +549,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[Stage 5] Starting flat profile synthesis for: ${company.name}`);
+    console.log(`[Stage 5] Starting profile synthesis for: ${company.name}`);
 
     // Update status to processing
     await supabase
@@ -386,8 +569,8 @@ Deno.serve(async (req) => {
       .filter(Boolean)
       .join('\n') || '';
 
-    // Synthesize profile with flat structure
-    const profile = await synthesizeWithAI(
+    // Synthesize profile with Tool Calling
+    const profile = await synthesizeWithToolCalling(
       company.name,
       company.source_data_api,
       company.www_data,
@@ -430,7 +613,7 @@ Deno.serve(async (req) => {
         analysis_confidence_score: confidenceScore,
         analysis_missing_sections: missingSections,
         analysis_data_sources: { used_sources: usedSources },
-        // Update basic fields from synthesis if not already set (flat structure)
+        // Update basic fields from synthesis if not already set
         ...(profile.industry && !company.industry ? { industry: profile.industry } : {}),
         ...(profile.employee_count && !company.employee_count ? { employee_count: profile.employee_count } : {}),
         ...(profile.company_size && !company.company_size ? { company_size: profile.company_size } : {}),
@@ -443,6 +626,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[Stage 5] Completed with confidence ${confidenceScore}, missing: ${missingSections.length} sections`);
+    console.log(`[Stage 5] Profile has ${Object.keys(profile).length} fields`);
 
     return new Response(
       JSON.stringify({ 
