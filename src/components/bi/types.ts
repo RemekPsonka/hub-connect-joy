@@ -119,9 +119,6 @@ export interface SectionJValueForCC {
   kontakty?: string;
   knowhow?: string;
   zasoby?: string;
-  ekspertyzy?: string[];
-  branze_wsparcia?: string[];
-  role_w_grupie?: string;
 }
 
 // Section K: Zaangażowanie w CC
@@ -138,6 +135,13 @@ export interface SectionKEngagement {
   integracja_opis?: string;
 }
 
+// Rodzina - członek rodziny
+export interface CzlonekRodziny {
+  imie?: string;
+  wiek?: number;
+  zajecie?: string;
+}
+
 // Section L: Prywatne
 export interface SectionLPersonal {
   miasto_bazowe?: string;
@@ -147,6 +151,9 @@ export interface SectionLPersonal {
   sukcesja?: boolean;
   sukcesja_opis?: string;
   zasady?: string;
+  // Rodzina
+  partner?: CzlonekRodziny;
+  dzieci?: CzlonekRodziny[];
 }
 
 // Section M: Organizacje/fundacje
