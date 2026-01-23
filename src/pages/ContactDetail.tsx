@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, User, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,6 @@ import { ContactTasksTab } from '@/components/contacts/ContactTasksTab';
 import { ContactNotesTab } from '@/components/contacts/ContactNotesTab';
 import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactModal } from '@/components/contacts/ContactModal';
-import { BIInterviewChat } from '@/components/agents/BIInterviewChat';
-import { BIDataViewer } from '@/components/agents/BIDataViewer';
 import { CompanyView } from '@/components/contacts/CompanyView';
 import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
 import { useAuth } from '@/contexts/AuthContext';
@@ -117,29 +115,7 @@ export default function ContactDetail() {
           </TabsContent>
 
           <TabsContent value="agent" className="mt-6">
-            <Tabs defaultValue="profile" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="profile">Profil Agenta</TabsTrigger>
-                <TabsTrigger value="bi-interview">Wywiad BI</TabsTrigger>
-                <TabsTrigger value="bi-data">Dane BI</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="profile">
-                <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
-              </TabsContent>
-              
-              <TabsContent value="bi-interview">
-                <BIInterviewChat 
-                  contactId={contact.id} 
-                  contactName={contact.full_name}
-                  tenantId={director?.tenant_id}
-                />
-              </TabsContent>
-              
-              <TabsContent value="bi-data">
-                <BIDataViewer contactId={contact.id} />
-              </TabsContent>
-            </Tabs>
+            <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
           </TabsContent>
 
           <TabsContent value="ownership" className="mt-6">
