@@ -27,6 +27,7 @@ export interface BusinessInterview {
 export interface SectionABasic {
   // Dane podstawowe
   branza?: string;
+  typ_kontaktu?: 'znajomy' | 'klient';
   branza_tagi?: string[];
   email_bezposredni?: string;
   telefon_prywatny?: string;
