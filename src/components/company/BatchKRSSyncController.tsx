@@ -4,10 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Play, Pause, RotateCcw, Loader2, Database, Building2, Users, Info } from 'lucide-react';
+import { Play, Pause, RotateCcw, Loader2, Database, Building2, Users, Info, CalendarIcon, RefreshCw } from 'lucide-react';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface SyncJob {
   id: string;
@@ -27,6 +32,7 @@ interface SyncJob {
   }>;
   started_at: string | null;
   completed_at: string | null;
+  updated_at?: string;
 }
 
 interface Stats {
@@ -34,6 +40,7 @@ interface Stats {
   completedCompanies: number;
   pendingCompanies: number;
   errorCompanies: number;
+  inProgressCompanies: number;
   contactsWithoutCompany: number;
   contactsWithBusinessEmail: number;
 }
@@ -46,12 +53,16 @@ export function BatchKRSSyncController() {
     completedCompanies: 0,
     pendingCompanies: 0,
     errorCompanies: 0,
+    inProgressCompanies: 0,
     contactsWithoutCompany: 0,
     contactsWithBusinessEmail: 0
   });
   const [emailJob, setEmailJob] = useState<SyncJob | null>(null);
   const [krsJob, setKrsJob] = useState<SyncJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [updateOlderThan, setUpdateOlderThan] = useState<Date | undefined>(undefined);
+  const [olderThanCount, setOlderThanCount] = useState<number>(0);
+  const [isCountingOlder, setIsCountingOlder] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -84,6 +95,7 @@ export function BatchKRSSyncController() {
         completedRes,
         pendingRes,
         errorRes,
+        inProgressRes,
         noCompanyRes,
         businessEmailRes
       ] = await Promise.all([
@@ -91,6 +103,7 @@ export function BatchKRSSyncController() {
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('source_data_status', 'completed'),
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).or('source_data_status.eq.pending,source_data_status.is.null'),
         supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('source_data_status', 'error'),
+        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('source_data_status', ['in_progress', 'processing']),
         supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).is('company_verified_at', null).eq('is_active', true),
         supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).is('company_id', null).is('company_verified_at', null).eq('is_active', true).not('email', 'is', null)
       ]);
@@ -100,6 +113,7 @@ export function BatchKRSSyncController() {
         completedCompanies: completedRes.count || 0,
         pendingCompanies: pendingRes.count || 0,
         errorCompanies: errorRes.count || 0,
+        inProgressCompanies: inProgressRes.count || 0,
         contactsWithoutCompany: noCompanyRes.count || 0,
         contactsWithBusinessEmail: businessEmailRes.count || 0
       });
@@ -107,6 +121,15 @@ export function BatchKRSSyncController() {
       console.error('Error fetching stats:', error);
     }
   }, [tenantId]);
+
+  // Check if job is stale (no updates for 5+ minutes)
+  const isJobStale = useCallback((job: SyncJob): boolean => {
+    const lastLog = job.logs?.[job.logs.length - 1];
+    if (!lastLog) return true;
+    const lastUpdate = new Date(lastLog.timestamp);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return lastUpdate < fiveMinutesAgo;
+  }, []);
 
   // Fetch active jobs
   const fetchJobs = useCallback(async () => {
@@ -138,6 +161,34 @@ export function BatchKRSSyncController() {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error);
+    }
+  }, [tenantId]);
+
+  // Cleanup stale jobs on mount
+  useEffect(() => {
+    const cleanupStaleJobs = async () => {
+      if (!tenantId) return;
+      
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      
+      // Mark stale running jobs as paused
+      await supabase
+        .from('sync_jobs')
+        .update({ status: 'paused' })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'running')
+        .lt('updated_at', tenMinutesAgo);
+        
+      // Reset stuck companies
+      await supabase
+        .from('companies')
+        .update({ source_data_status: 'pending' })
+        .eq('tenant_id', tenantId)
+        .in('source_data_status', ['in_progress', 'processing']);
+    };
+    
+    if (tenantId) {
+      cleanupStaleJobs();
     }
   }, [tenantId]);
 
@@ -176,6 +227,89 @@ export function BatchKRSSyncController() {
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [emailJob?.logs, krsJob?.logs]);
+
+  // Count companies older than selected date
+  useEffect(() => {
+    const countOlderCompanies = async () => {
+      if (!tenantId || !updateOlderThan) {
+        setOlderThanCount(0);
+        return;
+      }
+      
+      setIsCountingOlder(true);
+      try {
+        const isoDate = updateOlderThan.toISOString();
+        const { count } = await supabase
+          .from('companies')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('source_data_status', 'completed')
+          .lt('source_data_date', isoDate);
+        
+        setOlderThanCount(count || 0);
+      } catch (error) {
+        console.error('Error counting older companies:', error);
+      } finally {
+        setIsCountingOlder(false);
+      }
+    };
+    
+    countOlderCompanies();
+  }, [tenantId, updateOlderThan]);
+
+  // Reset companies older than date to pending
+  const resetOlderThanDate = async () => {
+    if (!tenantId || !updateOlderThan || olderThanCount === 0) return;
+
+    try {
+      const isoDate = updateOlderThan.toISOString();
+      const { error } = await supabase
+        .from('companies')
+        .update({ source_data_status: 'pending' })
+        .eq('tenant_id', tenantId)
+        .eq('source_data_status', 'completed')
+        .lt('source_data_date', isoDate);
+
+      if (error) throw error;
+
+      toast.success(`Zresetowano ${olderThanCount} firm do ponownej weryfikacji`);
+      setUpdateOlderThan(undefined);
+      setOlderThanCount(0);
+      await fetchStats();
+    } catch (error: any) {
+      toast.error('Błąd: ' + error.message);
+    }
+  };
+
+  // Resume pending sync (reset stuck + start new job)
+  const resumePendingSync = async () => {
+    if (!tenantId) return;
+
+    try {
+      // 1. Reset any stuck in_progress/processing companies
+      if (stats.inProgressCompanies > 0) {
+        await supabase
+          .from('companies')
+          .update({ source_data_status: 'pending' })
+          .eq('tenant_id', tenantId)
+          .in('source_data_status', ['in_progress', 'processing']);
+      }
+
+      // 2. Mark any stale running jobs as completed
+      await supabase
+        .from('sync_jobs')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('tenant_id', tenantId)
+        .eq('job_type', 'krs_sync')
+        .eq('status', 'running');
+
+      // 3. Start fresh job
+      await startKrsJob();
+      await fetchStats();
+    } catch (error: any) {
+      toast.error('Błąd: ' + error.message);
+    }
+  };
 
   // Start creating companies from emails
   const startEmailJob = async () => {
@@ -324,6 +458,12 @@ export function BatchKRSSyncController() {
     ? Math.round((krsJob.progress.processed / krsJob.progress.total) * 100) 
     : 0;
 
+  // Check if KRS job exists but is stale
+  const krsJobIsStale = krsJob && krsJob.status === 'running' && isJobStale(krsJob);
+
+  // Total pending including stuck companies
+  const totalPending = stats.pendingCompanies + stats.inProgressCompanies;
+
   if (isLoading) {
     return (
       <Card>
@@ -437,12 +577,13 @@ export function BatchKRSSyncController() {
               <div className="text-xs text-muted-foreground">Błędy</div>
             </div>
             <div className="text-center p-3 bg-yellow-500/10 rounded-lg">
-              <div className="text-2xl font-bold text-yellow-600">{stats.pendingCompanies}</div>
+              <div className="text-2xl font-bold text-yellow-600">{totalPending}</div>
               <div className="text-xs text-muted-foreground">Oczekujące</div>
             </div>
           </div>
 
-          {krsJob ? (
+          {/* Active job display */}
+          {krsJob && !krsJobIsStale ? (
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span>Postęp: {krsJob.progress.processed}/{krsJob.progress.total}</span>
@@ -511,15 +652,76 @@ export function BatchKRSSyncController() {
             </div>
           ) : (
             <div className="space-y-3">
-              <Button 
-                onClick={startKrsJob} 
-                className="w-full"
-                disabled={stats.pendingCompanies === 0}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Rozpocznij synchronizację KRS ({stats.pendingCompanies} firm)
-              </Button>
+              {/* Stale job warning */}
+              {krsJobIsStale && (
+                <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                  <Info className="h-4 w-4 text-yellow-600" />
+                  <AlertDescription className="text-yellow-700">
+                    Poprzednia synchronizacja została przerwana. Użyj przycisku poniżej, aby dokończyć oczekujące firmy.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Continue pending button - shown when there are pending companies and no active job */}
+              {totalPending > 0 && (
+                <Button 
+                  onClick={resumePendingSync} 
+                  className="w-full"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {krsJobIsStale ? 'Dokończ' : 'Rozpocznij'} synchronizację ({totalPending} firm)
+                </Button>
+              )}
+
+              {/* Date picker for updating older entries */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {updateOlderThan 
+                      ? `Aktualizuj wpisy starsze niż ${format(updateOlderThan, 'd MMMM yyyy', { locale: pl })}`
+                      : 'Aktualizuj wpisy starsze niż...'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={updateOlderThan}
+                    onSelect={setUpdateOlderThan}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                  {updateOlderThan && (
+                    <div className="p-3 border-t space-y-2">
+                      <div className="text-sm text-muted-foreground">
+                        {isCountingOlder ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Liczenie...
+                          </span>
+                        ) : (
+                          <>Znaleziono <strong>{olderThanCount}</strong> firm do aktualizacji</>
+                        )}
+                      </div>
+                      <Button 
+                        onClick={resetOlderThanDate} 
+                        disabled={olderThanCount === 0 || isCountingOlder}
+                        className="w-full"
+                        size="sm"
+                      >
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        Resetuj do ponownej weryfikacji
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
               
+              {/* Reset errors button */}
               {stats.errorCompanies > 0 && (
                 <Button 
                   onClick={resetErrors} 
@@ -529,6 +731,16 @@ export function BatchKRSSyncController() {
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Resetuj {stats.errorCompanies} błędnych firm
                 </Button>
+              )}
+
+              {/* Show message when nothing to sync */}
+              {totalPending === 0 && stats.errorCompanies === 0 && (
+                <Alert className="border-green-500/50 bg-green-500/10">
+                  <Info className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-700">
+                    Wszystkie firmy są zweryfikowane. Użyj date picker powyżej, aby zaktualizować starsze wpisy.
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
           )}
