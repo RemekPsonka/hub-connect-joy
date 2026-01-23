@@ -6,242 +6,115 @@ const corsHeaders = {
 };
 
 // ============================================
-// Company AI Profile - Simplified Tool Calling
+// Company AI Profile - JSON Response Format
 // ============================================
 
-// Simplified schema - fewer optional fields, flatter structure
-const profileToolSchema = {
-  type: "function",
-  function: {
-    name: "save_company_profile",
-    description: "Zapisz profil firmy",
-    parameters: {
-      type: "object",
-      properties: {
-        // Core identity
-        name: { type: "string" },
-        short_name: { type: "string" },
-        legal_form: { type: "string" },
-        industry: { type: "string" },
-        sub_industries: { type: "array", items: { type: "string" } },
-        description: { type: "string" },
-        tagline: { type: "string" },
-        year_founded: { type: "number" },
-        founder_info: { type: "string" },
-        founding_story: { type: "string" },
+// Robust JSON parser with repair logic
+function parseAIResponse(content: string): any {
+  // 1. Direct parse
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    console.log('[Parser] Direct parse failed, trying extraction');
+  }
 
-        // Timeline as simple array
-        timeline: { type: "array", items: { type: "string" } },
-
-        // Financials - simplified
-        revenue_amount: { type: "number" },
-        revenue_year: { type: "number" },
-        revenue_currency: { type: "string" },
-        revenue_history_json: { type: "string" },
-        employee_count: { type: "string" },
-        company_size: { type: "string" },
-        market_position: { type: "string" },
-        growth_rate: { type: "number" },
-
-        // Business model
-        business_model: { type: "string" },
-        value_proposition: { type: "string" },
-        competitive_advantages: { type: "array", items: { type: "string" } },
-        competitive_differentiation: { type: "string" },
-
-        // Products/Services as JSON strings
-        products_json: { type: "string" },
-        services_json: { type: "string" },
-        flagship_products: { type: "array", items: { type: "string" } },
-        certifications: { type: "array", items: { type: "string" } },
-        awards: { type: "array", items: { type: "string" } },
-
-        // Brands and partnerships
-        represented_brands_json: { type: "string" },
-        partnerships: { type: "array", items: { type: "string" } },
-
-        // Locations as JSON string
-        locations_json: { type: "string" },
-        geographic_coverage_json: { type: "string" },
-
-        // Clients/Projects as JSON strings
-        reference_projects_json: { type: "string" },
-        key_clients_json: { type: "string" },
-        target_industries: { type: "array", items: { type: "string" } },
-
-        // Competition
-        main_competitors_json: { type: "string" },
-        market_challenges: { type: "array", items: { type: "string" } },
-
-        // Offer
-        offer_summary: { type: "string" },
-        unique_selling_points: { type: "array", items: { type: "string" } },
-
-        // What company seeks
-        what_company_seeks: { type: "string" },
-        expansion_plans: { type: "string" },
-        hiring_positions: { type: "array", items: { type: "string" } },
-
-        // Collaboration
-        collaboration_opportunities_json: { type: "string" },
-        ideal_partner_profile: { type: "string" },
-
-        // Management as JSON string
-        management_json: { type: "string" },
-        shareholders_json: { type: "string" },
-
-        // News as JSON string
-        recent_news_json: { type: "string" },
-        market_signals_json: { type: "string" },
-        sentiment: { type: "string" },
-
-        // CSR
-        csr_activities_json: { type: "string" },
-        sustainability_initiatives: { type: "array", items: { type: "string" } },
-
-        // Registry data
-        nip: { type: "string" },
-        regon: { type: "string" },
-        krs: { type: "string" },
-        address: { type: "string" },
-        city: { type: "string" },
-        postal_code: { type: "string" },
-        country: { type: "string" },
-        website: { type: "string" },
-        phone: { type: "string" },
-        email: { type: "string" },
-
-        // Metadata
-        confidence: { type: "string" },
-        analysis_notes: { type: "array", items: { type: "string" } }
-      },
-      required: ["name", "description"]
+  // 2. Extract from markdown blocks
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      console.log('[Parser] Markdown extraction failed');
     }
   }
-};
 
-// Parse JSON fields safely
-function parseJsonField(value: string | undefined, fallback: any = []): any {
-  if (!value) return fallback;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
+  // 3. Find JSON object in text
+  const objectMatch = content.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    let jsonStr = objectMatch[0];
+    
+    // Try direct parse first
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.log('[Parser] Object extraction failed, attempting repair');
+    }
+
+    // 4. Repair truncated JSON
+    try {
+      // Count quotes and balance
+      const quoteCount = (jsonStr.match(/(?<!\\)"/g) || []).length;
+      if (quoteCount % 2 !== 0) {
+        jsonStr += '"';
+      }
+
+      // Balance brackets
+      const openBrackets = (jsonStr.match(/\[/g) || []).length;
+      const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+      jsonStr += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
+
+      // Balance braces
+      const openBraces = (jsonStr.match(/\{/g) || []).length;
+      const closeBraces = (jsonStr.match(/\}/g) || []).length;
+      jsonStr += '}'.repeat(Math.max(0, openBraces - closeBraces));
+
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.log('[Parser] Repair failed:', e);
+    }
   }
+
+  throw new Error('Could not parse AI response as JSON');
 }
 
-// Transform simplified response to full profile structure
-function transformToFullProfile(simplified: any): any {
+// Build fallback profile from raw source data
+function buildFallbackProfile(company: any): any {
+  const source = company.source_data_api || {};
+  const external = company.external_data || {};
+  const www = company.www_data || {};
+  const financial = company.financial_data_3y || {};
+
+  console.log('[Fallback] Building from raw sources');
+
   return {
-    // Core identity
-    name: simplified.name,
-    short_name: simplified.short_name,
-    legal_form: simplified.legal_form,
-    industry: simplified.industry,
-    sub_industries: simplified.sub_industries,
-    description: simplified.description,
-    tagline: simplified.tagline,
-    year_founded: simplified.year_founded,
-    founder_info: simplified.founder_info,
-    founding_story: simplified.founding_story,
-
-    // Timeline - parse string array to objects
-    timeline: (simplified.timeline || []).map((item: string, idx: number) => {
-      const yearMatch = item.match(/^(\d{4})/);
-      return {
-        year: yearMatch ? parseInt(yearMatch[1]) : 2000 + idx,
-        event: item.replace(/^\d{4}\s*[-:]\s*/, '')
-      };
-    }),
-
-    // Financials
-    revenue: simplified.revenue_amount ? {
-      amount: simplified.revenue_amount,
-      year: simplified.revenue_year || new Date().getFullYear(),
-      currency: simplified.revenue_currency || 'PLN'
+    name: source.name_official || source.official_name || company.name,
+    legal_form: source.legal_form,
+    industry: source.industry || company.industry,
+    description: external.summary || www.company_description || `Firma ${company.name}`,
+    
+    nip: source.nip,
+    krs: source.krs,
+    regon: source.regon,
+    address: source.address,
+    city: source.city,
+    postal_code: source.postal_code,
+    country: 'Polska',
+    website: company.website,
+    
+    management: source.management || [],
+    shareholders: source.shareholders || [],
+    
+    products: www.products || [],
+    services: www.services || [],
+    
+    recent_news: external.press_mentions || external.recent_news || [],
+    awards: external.awards || [],
+    certifications: www.certifications || [],
+    
+    revenue: financial.year_2024 || financial.year_2023 ? {
+      amount: financial.year_2024?.revenue || financial.year_2023?.revenue,
+      year: financial.year_2024 ? 2024 : 2023,
+      currency: 'PLN'
     } : undefined,
-    revenue_history: parseJsonField(simplified.revenue_history_json, []),
-    employee_count: simplified.employee_count,
-    company_size: simplified.company_size,
-    market_position: simplified.market_position,
-    growth_rate: simplified.growth_rate,
-
-    // Business model
-    business_model: simplified.business_model,
-    value_proposition: simplified.value_proposition,
-    competitive_advantages: simplified.competitive_advantages,
-    competitive_differentiation: simplified.competitive_differentiation,
-
-    // Products/Services
-    products: parseJsonField(simplified.products_json, []),
-    services: parseJsonField(simplified.services_json, []),
-    flagship_products: simplified.flagship_products,
-    certifications: simplified.certifications,
-    awards: simplified.awards,
-
-    // Brands
-    represented_brands: parseJsonField(simplified.represented_brands_json, []),
-    partnerships: simplified.partnerships,
-
-    // Locations
-    locations: parseJsonField(simplified.locations_json, []),
-    geographic_coverage: parseJsonField(simplified.geographic_coverage_json, {}),
-
-    // Clients/Projects
-    reference_projects: parseJsonField(simplified.reference_projects_json, []),
-    key_clients: parseJsonField(simplified.key_clients_json, []),
-    target_industries: simplified.target_industries,
-
-    // Competition
-    main_competitors: parseJsonField(simplified.main_competitors_json, []),
-    market_challenges: simplified.market_challenges,
-
-    // Offer
-    offer_summary: simplified.offer_summary,
-    unique_selling_points: simplified.unique_selling_points,
-
-    // What company seeks
-    what_company_seeks: simplified.what_company_seeks,
-    expansion_plans: simplified.expansion_plans,
-    hiring_positions: simplified.hiring_positions,
-
-    // Collaboration
-    collaboration_opportunities: parseJsonField(simplified.collaboration_opportunities_json, []),
-    ideal_partner_profile: simplified.ideal_partner_profile,
-
-    // Management
-    management: parseJsonField(simplified.management_json, []),
-    shareholders: parseJsonField(simplified.shareholders_json, []),
-
-    // News
-    recent_news: parseJsonField(simplified.recent_news_json, []),
-    market_signals: parseJsonField(simplified.market_signals_json, []),
-    sentiment: simplified.sentiment,
-
-    // CSR
-    csr_activities: parseJsonField(simplified.csr_activities_json, []),
-    sustainability_initiatives: simplified.sustainability_initiatives,
-
-    // Registry data
-    nip: simplified.nip,
-    regon: simplified.regon,
-    krs: simplified.krs,
-    address: simplified.address,
-    city: simplified.city,
-    postal_code: simplified.postal_code,
-    country: simplified.country,
-    website: simplified.website,
-    phone: simplified.phone,
-    email: simplified.email,
-
-    // Metadata
-    confidence: simplified.confidence,
-    analysis_notes: simplified.analysis_notes
+    
+    fallback_used: true,
+    confidence: 'low',
+    analysis_notes: ['Profil wygenerowany z surowych danych źródłowych (fallback)']
   };
 }
 
-// Synthesize company profile using Tool Calling
-async function synthesizeWithToolCalling(
+// Main synthesis function
+async function synthesizeProfile(
   companyName: string,
   sourceData: any,
   wwwData: any,
@@ -250,102 +123,178 @@ async function synthesizeWithToolCalling(
   internalNotes: string,
   apiKey: string
 ): Promise<any> {
-  const systemPrompt = `Jesteś ekspertem od analizy biznesowej. Stwórz KOMPLETNY profil firmy.
+  
+  const systemPrompt = `Jesteś ekspertem od analizy biznesowej firm polskich.
+Stwórz KOMPLETNY profil firmy w formacie JSON.
 
 ZASADY:
 1. Wypełnij WSZYSTKIE pola dla których masz dane
-2. Rozwiąż konflikty: KRS > WWW > Perplexity
+2. Priorytet źródeł: KRS/CEIDG > WWW > Perplexity
 3. Używaj polskiego języka
+4. Zwróć TYLKO valid JSON object, BEZ markdown, BEZ komentarzy
 
-WAŻNE - POLA JSON:
-Dla pól kończących się na "_json" (np. products_json, management_json) zwróć VALID JSON STRING, np:
-- products_json: "[{\\"name\\":\\"Produkt\\",\\"description\\":\\"Opis\\"}]"
-- management_json: "[{\\"name\\":\\"Jan Kowalski\\",\\"position\\":\\"Prezes\\"}]"
+STRUKTURA JSON (wypełnij tylko pola z danymi):
+{
+  "name": "Pełna nazwa firmy",
+  "short_name": "Nazwa skrócona",
+  "legal_form": "S.A./sp. z o.o./itp.",
+  "industry": "Główna branża",
+  "sub_industries": ["specjalizacja1", "specjalizacja2"],
+  "description": "Opis działalności 2-3 zdania",
+  "tagline": "Motto/slogan firmy",
+  "year_founded": 2000,
+  "founder_info": "Info o założycielu",
+  "founding_story": "Historia powstania",
+  
+  "timeline": [{"year": 2000, "event": "Założenie firmy"}],
+  
+  "revenue": {"amount": 50000000, "year": 2024, "currency": "PLN"},
+  "revenue_history": [{"year": 2024, "amount": 50000000, "growth_pct": 15}],
+  "employee_count": "50-100",
+  "company_size": "medium",
+  "market_position": "Pozycja rynkowa",
+  "growth_rate": 15,
+  
+  "business_model": "Model biznesowy",
+  "value_proposition": "Propozycja wartości",
+  "competitive_advantages": ["przewaga1", "przewaga2"],
+  "competitive_differentiation": "Wyróżniki",
+  
+  "products": [{"name": "Produkt", "category": "Kategoria", "description": "Opis"}],
+  "services": [{"name": "Usługa", "description": "Opis"}],
+  "flagship_products": ["Główny produkt"],
+  "certifications": ["ISO 9001"],
+  "awards": ["Nagroda"],
+  
+  "represented_brands": [{"name": "Marka", "type": "represented"}],
+  "partnerships": ["Partner"],
+  
+  "locations": [{"type": "headquarters", "city": "Miasto", "address": "Adres"}],
+  "geographic_coverage": {"poland_cities": [], "poland_regions": [], "international_countries": []},
+  
+  "reference_projects": [{"name": "Projekt", "client": "Klient", "year": 2024}],
+  "key_clients": [{"name": "Klient", "industry": "Branża"}],
+  "target_industries": ["Branża docelowa"],
+  
+  "main_competitors": [{"name": "Konkurent", "strength": "Mocna strona"}],
+  "market_challenges": ["Wyzwanie"],
+  
+  "offer_summary": "Podsumowanie oferty",
+  "unique_selling_points": ["USP1", "USP2"],
+  
+  "what_company_seeks": "Czego szuka firma",
+  "expansion_plans": "Plany rozwoju",
+  "hiring_positions": ["Stanowisko"],
+  
+  "collaboration_opportunities": [{"area": "Obszar", "description": "Opis", "priority": "high"}],
+  "ideal_partner_profile": "Profil partnera",
+  
+  "management": [{"name": "Imię Nazwisko", "position": "Stanowisko", "source": "krs"}],
+  "shareholders": [{"name": "Udziałowiec", "ownership_percent": 50}],
+  
+  "recent_news": [{"date": "2024-12", "title": "Tytuł", "summary": "Streszczenie"}],
+  "market_signals": [{"type": "expansion", "description": "Opis"}],
+  "sentiment": "positive/neutral/negative",
+  
+  "csr_activities": [{"area": "Ekologia", "description": "Działania"}],
+  "sustainability_initiatives": ["Inicjatywa"],
+  
+  "nip": "1234567890",
+  "regon": "123456789",
+  "krs": "0000123456",
+  "address": "ul. Przykładowa 1",
+  "city": "Warszawa",
+  "postal_code": "00-001",
+  "country": "Polska",
+  "website": "https://example.com",
+  "phone": "+48123456789",
+  "email": "kontakt@example.com",
+  
+  "confidence": "high/medium/low",
+  "analysis_notes": ["Uwaga 1"]
+}`;
 
-Dla timeline - zwróć tablicę stringów w formacie "YYYY - wydarzenie", np:
-- timeline: ["2000 - Założenie firmy", "2010 - Ekspansja zagraniczna"]
+  const userPrompt = `Stwórz profil firmy "${companyName}":
 
-SKĄD BRAĆ DANE:
-- KRS: name, krs, nip, regon, address, management_json, shareholders_json
-- WWW: products_json, services_json, locations_json, description
-- External: recent_news_json, awards, market_signals_json
-- Finanse: revenue_amount, revenue_year, growth_rate`;
-
-  const userPrompt = `Profil firmy "${companyName}":
-
-=== REJESTR (KRS/CEIDG) ===
-${sourceData ? JSON.stringify(sourceData, null, 2) : 'Brak'}
+=== REJESTR KRS/CEIDG ===
+${sourceData ? JSON.stringify(sourceData, null, 2) : 'Brak danych'}
 
 === STRONA WWW ===
-${wwwData ? JSON.stringify(wwwData, null, 2) : 'Brak'}
+${wwwData ? JSON.stringify(wwwData, null, 2) : 'Brak danych'}
 
-=== DANE ZEWNĘTRZNE ===
-${externalData ? JSON.stringify(externalData, null, 2) : 'Brak'}
+=== DANE ZEWNĘTRZNE (Perplexity) ===
+${externalData ? JSON.stringify(externalData, null, 2) : 'Brak danych'}
 
 === FINANSE ===
-${financialData ? JSON.stringify(financialData, null, 2) : 'Brak'}
+${financialData ? JSON.stringify(financialData, null, 2) : 'Brak danych'}
 
-=== NOTATKI ===
+=== NOTATKI WEWNĘTRZNE ===
 ${internalNotes || 'Brak'}
 
-Użyj save_company_profile. Pola *_json muszą zawierać valid JSON string.`;
+Zwróć TYLKO JSON object. Nie dodawaj markdown ani komentarzy.`;
 
-  try {
-    console.log(`[Lovable AI] Starting synthesis for: ${companyName}`);
+  console.log('[Synthesis] Starting for:', companyName);
+  console.log('[Synthesis] Input sizes:', {
+    source: JSON.stringify(sourceData || {}).length,
+    www: JSON.stringify(wwwData || {}).length,
+    external: JSON.stringify(externalData || {}).length,
+    financial: JSON.stringify(financialData || {}).length
+  });
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        tools: [profileToolSchema],
-        tool_choice: { type: "function", function: { name: "save_company_profile" } },
-        temperature: 0.2,
-        max_tokens: 12000
-      })
-    });
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      max_tokens: 16000
+    })
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Lovable AI] API Error:', response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
-    
-    if (!toolCall || toolCall.function.name !== 'save_company_profile') {
-      console.error('[Lovable AI] No tool call found');
-      throw new Error('AI did not return structured profile');
-    }
-
-    const simplified = JSON.parse(toolCall.function.arguments);
-    const profile = transformToFullProfile(simplified);
-    
-    console.log(`[Lovable AI] Profile parsed: ${Object.keys(profile).filter(k => profile[k]).length} fields`);
-
-    return profile;
-
-  } catch (error) {
-    console.error('[Lovable AI] Synthesis error:', error);
-    throw error;
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Synthesis] API Error:', response.status, errorText);
+    throw new Error(`AI API error: ${response.status}`);
   }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+
+  if (!content) {
+    console.error('[Synthesis] No content in response');
+    throw new Error('No content in AI response');
+  }
+
+  console.log('[Synthesis] Response length:', content.length);
+  console.log('[Synthesis] First 300 chars:', content.substring(0, 300));
+
+  const profile = parseAIResponse(content);
+  const filledFields = Object.keys(profile).filter(k => {
+    const v = profile[k];
+    return v !== null && v !== undefined && v !== '' && 
+           !(Array.isArray(v) && v.length === 0);
+  });
+  
+  console.log('[Synthesis] Parsed successfully, fields:', filledFields.length);
+  
+  return profile;
 }
 
-// Build used_sources[]
+// Build used_sources array
 function buildUsedSources(sourceData: any, wwwData: any, externalData: any, financialData: any): string[] {
   const sources: string[] = [];
   if (sourceData?.source === 'krs_api') sources.push('krs_api');
   if (sourceData?.source === 'ceidg_api') sources.push('ceidg_api');
   if (wwwData?.pages_scanned > 0 || wwwData?.categories) sources.push('website_firecrawl');
-  if (externalData?.sources?.length > 0 || externalData?.citations?.length > 0) sources.push('perplexity_external');
+  if (externalData?.sources?.length > 0 || externalData?.citations?.length > 0 || externalData?.raw_analyses) sources.push('perplexity_external');
   if (financialData?.year_2024 || financialData?.year_2023 || financialData?.years?.length > 0) sources.push('financial_api');
   return sources;
 }
@@ -369,7 +318,7 @@ function calculateConfidence(profile: any, sourceData: any, wwwData: any, extern
   // Source bonuses (2 pts each)
   if (sourceData?.source) score += 2;
   if (wwwData?.pages_scanned > 0 || wwwData?.categories) score += 2;
-  if (externalData?.sources?.length > 0) score += 2;
+  if (externalData?.sources?.length > 0 || externalData?.raw_analyses) score += 2;
   if (financialData?.year_2024 || financialData?.year_2023) score += 2;
   
   return Math.min(100, score);
@@ -442,18 +391,27 @@ Deno.serve(async (req) => {
 
     const internalNotes = relatedContacts?.map(c => c.notes).filter(Boolean).join('\n') || '';
 
-    const profile = await synthesizeWithToolCalling(
-      company.name,
-      company.source_data_api,
-      company.www_data,
-      company.external_data,
-      company.financial_data_3y,
-      internalNotes,
-      lovableKey
-    );
+    let profile: any;
+    let useFallback = false;
+
+    try {
+      profile = await synthesizeProfile(
+        company.name,
+        company.source_data_api,
+        company.www_data,
+        company.external_data,
+        company.financial_data_3y,
+        internalNotes,
+        lovableKey
+      );
+    } catch (synthError: any) {
+      console.error('[Stage 5] Synthesis failed, using fallback:', synthError.message);
+      profile = buildFallbackProfile(company);
+      useFallback = true;
+    }
 
     const usedSources = buildUsedSources(company.source_data_api, company.www_data, company.external_data, company.financial_data_3y);
-    const confidenceScore = calculateConfidence(profile, company.source_data_api, company.www_data, company.external_data, company.financial_data_3y);
+    const confidenceScore = useFallback ? 30 : calculateConfidence(profile, company.source_data_api, company.www_data, company.external_data, company.financial_data_3y);
     const missingSections = identifyMissingSections(profile);
 
     profile.overall_confidence_score = confidenceScore;
@@ -477,7 +435,7 @@ Deno.serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    console.log(`[Stage 5] Completed: confidence=${confidenceScore}, missing=${missingSections.length}`);
+    console.log(`[Stage 5] Completed: confidence=${confidenceScore}, missing=${missingSections.length}, fallback=${useFallback}`);
 
     return new Response(
       JSON.stringify({ 
@@ -485,7 +443,8 @@ Deno.serve(async (req) => {
         profile,
         overall_confidence_score: confidenceScore,
         used_sources: usedSources,
-        missing_sections: missingSections
+        missing_sections: missingSections,
+        fallback_used: useFallback
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
