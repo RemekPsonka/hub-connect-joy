@@ -182,7 +182,7 @@ export function useCompanyPipeline(companyId: string | undefined) {
       return data;
     },
     onSuccess: () => {
-      toast.success('Etap 5: Profil klienta wygenerowany');
+      toast.success('Etap 5: Profil firmy AI wygenerowany');
       invalidateCompany();
     },
     onError: (error: any) => {

@@ -63,7 +63,7 @@ export function CompanyFlatTabs({
 
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
-    { id: 'profile', label: 'Profil', icon: Building, always: hasAnalysis },
+    { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
     { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasFinancials },
     { id: 'products', label: 'Produkty', icon: Package, always: hasProducts },
     { id: 'collaboration', label: 'Współpraca', icon: Handshake, always: hasCollaboration },

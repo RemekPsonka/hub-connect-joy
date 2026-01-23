@@ -19,6 +19,7 @@ import { WebsiteDataViewer } from './WebsiteDataViewer';
 import { ExternalDataViewer } from './ExternalDataViewer';
 import { FinancialDataViewer } from './FinancialDataViewer';
 import { ConfirmCompanyModal } from './ConfirmCompanyModal';
+import { FullAnalysisButton } from './FullAnalysisButton';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import type { Company } from './CompanyPipelineController';
@@ -365,6 +366,42 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
 
   return (
     <div className="space-y-4">
+      {/* Full Analysis Button - prominent at top */}
+      <Card className="border-dashed border-2 border-primary/50 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardContent className="pt-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h4 className="font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Pełna Analiza Firmy AI
+              </h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                Jednym kliknięciem uruchom wszystkie 5 etapów automatycznie
+              </p>
+            </div>
+            <FullAnalysisButton 
+              company={company} 
+              contactEmail={contactEmail}
+              disabled={pipeline.verifySource.isPending || pipeline.scanWebsite.isPending || 
+                       pipeline.analyzeExternal.isPending || pipeline.fetchFinancials.isPending ||
+                       pipeline.synthesizeProfile.isPending}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Separator */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            lub wybierz etapy ręcznie
+          </span>
+        </div>
+      </div>
+
       {/* Pipeline stages as tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="grid grid-cols-4 w-full">
@@ -388,7 +425,7 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
         ))}
       </Tabs>
 
-      {/* Synthesis button - prominent */}
+      {/* Synthesis button - for manual triggering */}
       <Card className={profileStatus === 'completed' 
         ? 'border-primary bg-primary/5' 
         : canSynthesize 
@@ -410,7 +447,7 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
               <div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  <h4 className="font-medium">Synteza Profilu AI</h4>
+                  <h4 className="font-medium">Profil Firmy AI</h4>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Połączenie wszystkich źródeł w kompleksowy profil firmy
@@ -434,7 +471,7 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
               ) : (
                 <Sparkles className="h-4 w-4 mr-2" />
               )}
-              {profileStatus === 'completed' ? 'Regeneruj profil' : 'Generuj profil AI'}
+              {profileStatus === 'completed' ? 'Regeneruj profil' : 'Generuj profil firmy AI'}
             </Button>
           </div>
 
