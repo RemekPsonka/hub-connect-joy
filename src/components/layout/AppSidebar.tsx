@@ -6,7 +6,6 @@ import {
   Settings,
   Network,
   Search,
-  BarChart3,
   Shield,
   Building2,
   Bug,
@@ -35,7 +34,6 @@ const mainNavigationItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
   { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
-  { title: 'Analityka', url: '/analytics', icon: BarChart3 },
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },
 ];
 
