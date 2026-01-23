@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 // ============================================
-// Tabela 5: company_ai_profile - 16 Sections
+// Company AI Profile - Flat Structure for UI
 // ============================================
 
 // Repair common JSON errors from AI responses
@@ -16,24 +16,16 @@ function repairJson(jsonString: string): string {
   // 1. Remove trailing commas before } or ]
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
   
-  // 2. Fix unclosed quotes before comma, } or ]
-  repaired = repaired.replace(/([^"\\,\s])(\s*[,}\]])/g, (match, p1, p2) => {
-    if (!/["'\d\]}\w]/.test(p1)) {
-      return match;
-    }
-    return match;
-  });
-  
-  // 3. Remove control characters that break JSON (except newlines, tabs)
+  // 2. Remove control characters that break JSON (except newlines, tabs)
   repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
-  // 4. Fix double commas
+  // 3. Fix double commas
   repaired = repaired.replace(/,\s*,/g, ',');
   
-  // 5. Fix missing commas between properties (simple heuristic)
+  // 4. Fix missing commas between properties (simple heuristic)
   repaired = repaired.replace(/"\s*\n\s*"/g, '",\n"');
   
-  // 6. Ensure strings with newlines are properly escaped
+  // 5. Ensure strings with newlines are properly escaped
   repaired = repaired.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
     return `: "${p1}\\n${p2}"`;
   });
@@ -41,51 +33,32 @@ function repairJson(jsonString: string): string {
   return repaired;
 }
 
-// Fallback: Extract sections manually when JSON is severely malformed
-function extractSectionsManually(content: string): any {
+// Fallback: Extract key fields manually when JSON is severely malformed
+function extractFieldsManually(content: string): any {
   const result: any = {};
   
-  const sectionPatterns = [
-    'section_1_summary',
-    'section_2_key_data',
-    'section_3_business_activity',
-    'section_4_offer',
-    'section_5_realizations',
-    'section_6_management',
-    'section_7_history',
-    'section_8_financial_situation',
-    'section_9_market_position',
-    'section_10_partnerships',
-    'section_11_media_activity',
-    'section_12_social_media',
-    'section_13_cooperation_opportunities',
-    'section_14_risks',
-    'section_15_recommendations',
-    'section_16_missing_info'
+  // Try to extract common fields
+  const fieldPatterns = [
+    { key: 'name', regex: /"name"\s*:\s*"([^"]+)"/ },
+    { key: 'description', regex: /"description"\s*:\s*"([^"]+)"/ },
+    { key: 'industry', regex: /"industry"\s*:\s*"([^"]+)"/ },
+    { key: 'legal_form', regex: /"legal_form"\s*:\s*"([^"]+)"/ },
+    { key: 'nip', regex: /"nip"\s*:\s*"([^"]+)"/ },
+    { key: 'krs', regex: /"krs"\s*:\s*"([^"]+)"/ },
+    { key: 'regon', regex: /"regon"\s*:\s*"([^"]+)"/ },
   ];
   
-  for (const section of sectionPatterns) {
-    const pattern = new RegExp(`"${section}"\\s*:\\s*(\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\})`, 's');
-    const match = content.match(pattern);
+  for (const { key, regex } of fieldPatterns) {
+    const match = content.match(regex);
     if (match) {
-      try {
-        let sectionJson = match[1];
-        try {
-          result[section] = JSON.parse(sectionJson);
-        } catch {
-          sectionJson = repairJson(sectionJson);
-          result[section] = JSON.parse(sectionJson);
-        }
-      } catch {
-        console.warn(`[Lovable AI] Could not parse section: ${section}`);
-      }
+      result[key] = match[1];
     }
   }
   
   return result;
 }
 
-// Lovable AI for synthesis with 16-section structure
+// Lovable AI for synthesis with flat structure (matches CompanyAnalysis interface)
 async function synthesizeWithAI(
   companyName: string,
   sourceData: any,
@@ -95,144 +68,90 @@ async function synthesizeWithAI(
   internalNotes: string,
   apiKey: string
 ): Promise<any> {
-  const systemPrompt = `Jesteś analitykiem biznesowym. Na podstawie dostarczonych danych stwórz profil klienta w strukturze 16 sekcji.
+  const systemPrompt = `Jesteś analitykiem biznesowym. Na podstawie dostarczonych danych stwórz profil klienta w płaskiej strukturze JSON.
 
-Zwróć JSON z następującymi sekcjami:
+Zwróć JSON z następującymi polami (wypełnij tylko te, dla których masz dane):
 
 {
-  "section_1_summary": {
-    "short_description": "Zwięzłe podsumowanie firmy (2-3 zdania)",
-    "main_activity": "Główna działalność",
-    "key_facts": ["Fakt 1", "Fakt 2", "Fakt 3"]
+  "name": "Oficjalna nazwa firmy",
+  "short_name": "Nazwa skrócona",
+  "legal_form": "sp. z o.o. / S.A. / itp.",
+  "industry": "Główna branża",
+  "sub_industries": ["Specjalizacja 1", "Specjalizacja 2"],
+  "description": "Zwięzły opis działalności firmy (2-3 zdania)",
+  "tagline": "Motto lub hasło firmy",
+  "year_founded": 2000,
+  "founder_info": "Informacje o założycielu",
+  "founding_story": "Historia założenia firmy",
+  
+  "business_model": "Opis modelu biznesowego (B2B/B2C/SaaS/itp.)",
+  "value_proposition": "Główna propozycja wartości",
+  "competitive_advantages": ["Przewaga 1", "Przewaga 2"],
+  "competitive_differentiation": "Czym firma wyróżnia się od konkurencji",
+  
+  "revenue": {"amount": 50000000, "year": 2024, "currency": "PLN"},
+  "revenue_history": [{"year": 2024, "amount": 50000000, "growth_pct": 15}],
+  "employee_count": "50-100",
+  "company_size": "small/medium/large",
+  "market_position": "Pozycja na rynku (lider/challenger/niche)",
+  "growth_rate": 15,
+  
+  "products": [{"name": "Produkt", "category": "Kategoria", "description": "Opis", "target_customer": "Klient docelowy"}],
+  "services": [{"name": "Usługa", "description": "Opis", "target": "Klient docelowy"}],
+  "flagship_products": ["Główny produkt 1", "Główny produkt 2"],
+  "certifications": ["ISO 9001", "ISO 27001"],
+  "awards": ["Nagroda 1", "Nagroda 2"],
+  
+  "locations": [{"type": "headquarters/branch/warehouse", "city": "Warszawa", "address": "ul. Przykładowa 1"}],
+  "geographic_coverage": {
+    "poland_cities": ["Warszawa", "Kraków"],
+    "poland_regions": ["Mazowieckie", "Małopolskie"],
+    "international_countries": ["Niemcy", "Czechy"]
   },
   
-  "section_2_key_data": {
-    "name": "Oficjalna nazwa",
-    "short_name": "Nazwa skrócona",
-    "legal_form": "sp. z o.o.",
-    "nip": "1234567890",
-    "regon": "123456789",
-    "krs": "0000123456",
-    "founded_year": 2000,
-    "headquarters_city": "Warszawa",
-    "headquarters_address": "ul. Przykładowa 1",
-    "employee_count": "50-100",
-    "company_size": "small/medium/large"
-  },
+  "reference_projects": [{"name": "Projekt", "client": "Klient", "description": "Opis", "year": 2024}],
+  "key_clients": [{"name": "Klient", "industry": "Branża"}],
+  "target_industries": ["Finanse", "Retail", "Produkcja"],
   
-  "section_3_business_activity": {
-    "industry": "IT / Technologia",
-    "sub_industries": ["SaaS", "Cloud", "AI"],
-    "business_model": "B2B SaaS",
-    "value_proposition": "Główna propozycja wartości",
-    "target_clients": "Średnie i duże przedsiębiorstwa",
-    "geographic_scope": "Polska, Europa Środkowa"
-  },
+  "management": [{"name": "Jan Kowalski", "position": "Prezes Zarządu", "source": "krs"}],
+  "shareholders": [{"name": "Udziałowiec", "ownership_percent": 50, "type": "individual/company"}],
   
-  "section_4_offer": {
-    "products": [{"name": "Produkt", "category": "Kategoria", "description": "Opis"}],
-    "services": [{"name": "Usługa", "description": "Opis"}],
-    "key_features": ["Cecha 1", "Cecha 2"],
-    "pricing_model": "Subskrypcja / Projekt / Licencja",
-    "certifications": ["ISO 9001", "ISO 27001"]
-  },
+  "main_competitors": [{"name": "Konkurent", "strength": "Mocna strona", "weakness": "Słaba strona"}],
+  "market_challenges": ["Wyzwanie rynkowe 1"],
   
-  "section_5_realizations": {
-    "reference_projects": [{"name": "Projekt", "client": "Klient", "description": "Opis", "year": 2024}],
-    "key_clients": ["Klient 1", "Klient 2"],
-    "industries_served": ["Finanse", "Retail"],
-    "case_studies_available": true
-  },
+  "collaboration_opportunities": [{"area": "Obszar współpracy", "description": "Opis możliwości", "priority": "high/medium/low"}],
+  "ideal_partner_profile": "Profil idealnego partnera biznesowego",
+  "what_company_seeks": "Czego szuka firma (partnerzy, klienci, dostawcy)",
+  "expansion_plans": "Plany rozwoju i ekspansji",
   
-  "section_6_management": {
-    "board_members": [{"name": "Jan Kowalski", "position": "Prezes", "source": "krs/www"}],
-    "key_executives": [{"name": "Anna Nowak", "position": "CFO"}],
-    "shareholders": [{"name": "Udziałowiec", "share_percent": 50}],
-    "organizational_structure": "Opis struktury"
-  },
+  "recent_news": [{"date": "2024-12", "title": "Tytuł", "summary": "Streszczenie", "source": "źródło", "sentiment": "positive/neutral/negative"}],
+  "market_signals": [{"type": "expansion/hiring/investment/partnership", "description": "Opis sygnału"}],
+  "sentiment": "positive/neutral/negative",
   
-  "section_7_history": {
-    "founded_story": "Historia założenia",
-    "timeline": [{"year": 2000, "event": "Założenie firmy"}],
-    "major_milestones": ["Kamień milowy 1", "Kamień milowy 2"],
-    "mergers_acquisitions": []
-  },
+  "represented_brands": [{"name": "Marka", "type": "own/represented/distributed"}],
+  "partnerships": ["Partner strategiczny 1", "Partner technologiczny 2"],
   
-  "section_8_financial_situation": {
-    "latest_revenue": {"amount": 50000000, "year": 2024, "formatted": "50 mln PLN"},
-    "revenue_trend": "ascending/descending/stable",
-    "profitability": "profitable/break-even/loss",
-    "growth_rate_percent": 15,
-    "financial_health": "strong/stable/declining",
-    "ranking_positions": ["Gazele Biznesu 2024", "Forbes Diamenty"]
-  },
+  "csr_activities": [{"area": "Obszar CSR", "description": "Opis aktywności"}],
+  "sustainability_initiatives": ["Inicjatywa 1"],
   
-  "section_9_market_position": {
-    "market_share": "5-10%",
-    "position": "leader/challenger/follower/niche",
-    "main_competitors": ["Konkurent 1", "Konkurent 2"],
-    "competitive_advantages": ["Przewaga 1", "Przewaga 2"],
-    "market_challenges": ["Wyzwanie 1"]
-  },
+  "timeline": [{"year": 2000, "event": "Założenie firmy"}, {"year": 2020, "event": "Ekspansja zagraniczna"}],
   
-  "section_10_partnerships": {
-    "strategic_partners": ["Partner 1", "Partner 2"],
-    "technology_partners": ["Microsoft", "AWS"],
-    "distribution_partners": [],
-    "represented_brands": ["Marka 1"],
-    "partnership_types": ["Technology", "Distribution"]
-  },
+  "nip": "1234567890",
+  "regon": "123456789",
+  "krs": "0000123456",
+  "address": "ul. Przykładowa 1",
+  "city": "Warszawa",
+  "postal_code": "00-001",
   
-  "section_11_media_activity": {
-    "recent_news": [{"title": "Tytuł", "date": "2024-12", "summary": "Streszczenie", "source": "money.pl"}],
-    "press_mentions_count": 15,
-    "media_sentiment": "positive/neutral/negative",
-    "key_announcements": ["Ogłoszenie 1"]
-  },
-  
-  "section_12_social_media": {
-    "linkedin_url": "https://linkedin.com/company/...",
-    "linkedin_followers": 5000,
-    "facebook_url": "https://facebook.com/...",
-    "twitter_url": null,
-    "youtube_url": null,
-    "instagram_url": null,
-    "social_activity_level": "high/medium/low/none"
-  },
-  
-  "section_13_cooperation_opportunities": {
-    "what_company_seeks": "Czego szuka firma",
-    "ideal_partner_profile": "Profil idealnego partnera",
-    "collaboration_areas": [{"area": "Obszar", "description": "Opis", "priority": "high/medium/low"}],
-    "expansion_plans": "Plany ekspansji"
-  },
-  
-  "section_14_risks": {
-    "red_flags": ["Ryzyko 1", "Ryzyko 2"],
-    "financial_risks": [],
-    "operational_risks": [],
-    "reputation_risks": [],
-    "risk_level": "high/medium/low/none"
-  },
-  
-  "section_15_recommendations": {
-    "approach_strategy": "Jak podejść do firmy",
-    "key_contacts_to_find": ["Stanowisko 1", "Stanowisko 2"],
-    "meeting_topics": ["Temat 1", "Temat 2"],
-    "value_proposition_for_them": "Co możemy im zaoferować",
-    "timing_recommendation": "Dobry moment / Poczekać"
-  },
-  
-  "section_16_missing_info": {
-    "critical_gaps": ["Brak danych finansowych", "Brak zarządu"],
-    "nice_to_have": ["Struktura organizacyjna"],
-    "data_quality_issues": ["Nieaktualne dane WWW"],
-    "recommended_actions": ["Zweryfikować KRS", "Przeskanować ponownie stronę"]
-  }
+  "confidence": "high/medium/low",
+  "analysis_notes": ["Uwaga 1 o jakości danych"]
 }
 
-Wypełnij tylko te sekcje i pola, dla których masz dane. Jeśli brakuje danych, pozostaw pole puste lub jako null.
-Odpowiedz TYLKO JSON, bez dodatkowego tekstu.`;
+WAŻNE:
+- Wypełnij TYLKO pola dla których masz dane. Nie wymyślaj informacji.
+- Użyj tej płaskiej struktury, NIE używaj sekcji section_1_*, section_2_* itp.
+- Rozwiąż konflikty danych: priorytet KRS > WWW > Perplexity
+- Odpowiedz TYLKO JSON, bez dodatkowego tekstu.`;
 
   const userPrompt = `Dane firmy "${companyName}":
 
@@ -251,7 +170,7 @@ ${financialData ? JSON.stringify(financialData, null, 2) : 'Brak danych'}
 === NOTATKI WEWNĘTRZNE (od handlowców) ===
 ${internalNotes || 'Brak notatek'}
 
-Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszystkich źródeł, rozwiąż konflikty (priorytet: KRS > WWW > Perplexity), wypełnij sekcję section_16_missing_info o brakujących danych.`;
+Stwórz pełny profil klienta w płaskiej strukturze JSON. Zsyntetyzuj dane ze wszystkich źródeł.`;
 
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -267,7 +186,7 @@ Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszyst
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.2,
-        max_tokens: 6000
+        max_tokens: 8000
       })
     });
 
@@ -307,13 +226,13 @@ Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszyst
       } catch (e2) {
         console.warn('[Lovable AI] Repair failed, trying manual extraction...', (e2 as Error).message);
         
-        // Attempt 3: Manual section extraction
+        // Attempt 3: Manual field extraction
         try {
-          parsed = extractSectionsManually(content);
+          parsed = extractFieldsManually(content);
           if (Object.keys(parsed).length > 0) {
-            console.log('[Lovable AI] Extracted sections manually:', Object.keys(parsed).length);
+            console.log('[Lovable AI] Extracted fields manually:', Object.keys(parsed).length);
           } else {
-            throw new Error('No sections could be extracted');
+            throw new Error('No fields could be extracted');
           }
         } catch (e3) {
           console.error('[Lovable AI] All parsing attempts failed');
@@ -328,6 +247,7 @@ Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszyst
     throw error;
   }
 }
+
 
 
 // Build used_sources[] based on available data
@@ -354,7 +274,7 @@ function buildUsedSources(sourceData: any, wwwData: any, externalData: any, fina
   return sources;
 }
 
-// Calculate overall_confidence_score (0-100)
+// Calculate overall_confidence_score (0-100) for flat structure
 function calculateConfidence(
   profile: any, 
   sourceData: any, 
@@ -364,18 +284,17 @@ function calculateConfidence(
 ): number {
   let score = 0;
   
-  // Critical sections (15 points each - max 60)
-  if (profile.section_2_key_data?.nip || profile.section_2_key_data?.krs) score += 15;
-  if (profile.section_4_offer?.products?.length > 0 || profile.section_4_offer?.services?.length > 0) score += 15;
-  if (profile.section_6_management?.board_members?.length > 0) score += 15;
-  if (profile.section_8_financial_situation?.latest_revenue?.amount) score += 15;
+  // Critical fields (15 points each - max 60)
+  if (profile.nip || profile.krs) score += 15;
+  if (profile.products?.length > 0 || profile.services?.length > 0) score += 15;
+  if (profile.management?.length > 0) score += 15;
+  if (profile.revenue?.amount) score += 15;
   
-  // Important sections (8 points each - max 32)
-  if (profile.section_1_summary?.short_description) score += 8;
-  if (profile.section_3_business_activity?.industry) score += 8;
-  if (profile.section_5_realizations?.reference_projects?.length > 0 || 
-      profile.section_5_realizations?.key_clients?.length > 0) score += 8;
-  if (profile.section_9_market_position?.main_competitors?.length > 0) score += 8;
+  // Important fields (8 points each - max 32)
+  if (profile.description) score += 8;
+  if (profile.industry) score += 8;
+  if (profile.reference_projects?.length > 0 || profile.key_clients?.length > 0) score += 8;
+  if (profile.main_competitors?.length > 0) score += 8;
   
   // Data source bonuses (2 points each - max 8)
   if (sourceData?.source === 'krs_api' || sourceData?.source === 'ceidg_api') score += 2;
@@ -386,37 +305,22 @@ function calculateConfidence(
   return Math.min(100, score);
 }
 
-// Identify missing sections for 16-section structure
+// Identify missing data areas for flat structure
 function identifyMissingSections(profile: any): string[] {
   const missing: string[] = [];
   
-  if (!profile.section_1_summary?.short_description) missing.push('section_1_summary');
-  if (!profile.section_2_key_data?.name) missing.push('section_2_key_data');
-  if (!profile.section_3_business_activity?.industry) missing.push('section_3_business_activity');
-  if (!profile.section_4_offer?.products?.length && !profile.section_4_offer?.services?.length) {
-    missing.push('section_4_offer');
-  }
-  if (!profile.section_5_realizations?.reference_projects?.length && 
-      !profile.section_5_realizations?.key_clients?.length) {
-    missing.push('section_5_realizations');
-  }
-  if (!profile.section_6_management?.board_members?.length) missing.push('section_6_management');
-  if (!profile.section_7_history?.timeline?.length && !profile.section_7_history?.founded_story) {
-    missing.push('section_7_history');
-  }
-  if (!profile.section_8_financial_situation?.latest_revenue) missing.push('section_8_financial_situation');
-  if (!profile.section_9_market_position?.main_competitors?.length) missing.push('section_9_market_position');
-  if (!profile.section_10_partnerships?.strategic_partners?.length && 
-      !profile.section_10_partnerships?.technology_partners?.length) {
-    missing.push('section_10_partnerships');
-  }
-  if (!profile.section_11_media_activity?.recent_news?.length) missing.push('section_11_media_activity');
-  if (!profile.section_12_social_media?.linkedin_url) missing.push('section_12_social_media');
-  if (!profile.section_13_cooperation_opportunities?.collaboration_areas?.length) {
-    missing.push('section_13_cooperation_opportunities');
-  }
-  // section_14_risks and section_15_recommendations can be empty
-  // section_16_missing_info is always filled by AI
+  if (!profile.description) missing.push('description');
+  if (!profile.name) missing.push('name');
+  if (!profile.industry) missing.push('industry');
+  if (!profile.products?.length && !profile.services?.length) missing.push('products_services');
+  if (!profile.reference_projects?.length && !profile.key_clients?.length) missing.push('clients_projects');
+  if (!profile.management?.length) missing.push('management');
+  if (!profile.timeline?.length && !profile.founding_story) missing.push('history');
+  if (!profile.revenue?.amount) missing.push('financials');
+  if (!profile.main_competitors?.length) missing.push('competition');
+  if (!profile.partnerships?.length && !profile.represented_brands?.length) missing.push('partnerships');
+  if (!profile.recent_news?.length) missing.push('news');
+  if (!profile.collaboration_opportunities?.length) missing.push('collaboration');
   
   return missing;
 }
@@ -462,7 +366,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[Stage 5] Starting 16-section profile synthesis for: ${company.name}`);
+    console.log(`[Stage 5] Starting flat profile synthesis for: ${company.name}`);
 
     // Update status to processing
     await supabase
@@ -482,7 +386,7 @@ Deno.serve(async (req) => {
       .filter(Boolean)
       .join('\n') || '';
 
-    // Synthesize profile with 16-section structure
+    // Synthesize profile with flat structure
     const profile = await synthesizeWithAI(
       company.name,
       company.source_data_api,
@@ -526,13 +430,10 @@ Deno.serve(async (req) => {
         analysis_confidence_score: confidenceScore,
         analysis_missing_sections: missingSections,
         analysis_data_sources: { used_sources: usedSources },
-        // Update basic fields from synthesis if not already set
-        ...(profile.section_3_business_activity?.industry && !company.industry 
-            ? { industry: profile.section_3_business_activity.industry } : {}),
-        ...(profile.section_2_key_data?.employee_count && !company.employee_count 
-            ? { employee_count: profile.section_2_key_data.employee_count } : {}),
-        ...(profile.section_2_key_data?.company_size && !company.company_size 
-            ? { company_size: profile.section_2_key_data.company_size } : {}),
+        // Update basic fields from synthesis if not already set (flat structure)
+        ...(profile.industry && !company.industry ? { industry: profile.industry } : {}),
+        ...(profile.employee_count && !company.employee_count ? { employee_count: profile.employee_count } : {}),
+        ...(profile.company_size && !company.company_size ? { company_size: profile.company_size } : {}),
       })
       .eq('id', company_id);
 
