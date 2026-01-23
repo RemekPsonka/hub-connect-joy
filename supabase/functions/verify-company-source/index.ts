@@ -1687,8 +1687,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { company_id, company_name, email_domain, existing_krs, existing_nip } = await req.json();
+    const { 
+      company_id, 
+      company_name, 
+      email_domain, 
+      existing_krs, 
+      existing_nip,
+      preview_only,      // NEW: If true, don't save to DB, just return candidate
+      confirmed_krs,     // NEW: User-confirmed KRS to use directly
+      confirmed_nip      // NEW: User-confirmed NIP to use directly
+    } = await req.json();
 
+    // For confirmed mode, we just need company_id
     if (!company_id) {
       return new Response(
         JSON.stringify({ success: false, error: 'company_id is required' }),
@@ -1696,7 +1706,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!company_name && !email_domain) {
+    // For non-confirmed mode, need company_name or email_domain
+    if (!confirmed_krs && !confirmed_nip && !company_name && !email_domain) {
       return new Response(
         JSON.stringify({ success: false, error: 'company_name or email_domain is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -1709,13 +1720,11 @@ Deno.serve(async (req) => {
     const ceidgToken = Deno.env.get('CEIDG_JWT_TOKEN');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`[Stage 1] Starting verification for: ${company_name || email_domain}`);
+    console.log(`[Stage 1] Starting verification for: ${company_name || email_domain || `confirmed KRS=${confirmed_krs}`}`);
 
-    // Update status to processing
-    await supabase
-      .from('companies')
-      .update({ source_data_status: 'processing' })
-      .eq('id', company_id);
+    // If we have confirmed KRS/NIP, skip Perplexity search and go directly to registry
+    let krs = confirmed_krs || existing_krs;
+    let nip = confirmed_nip || existing_nip;
 
     let sourceData: any = {
       verified_at: new Date().toISOString(),
@@ -1723,11 +1732,8 @@ Deno.serve(async (req) => {
       email_domain_input: email_domain
     };
 
-    let krs = existing_krs;
-    let nip = existing_nip;
-
     // Step 1: Perplexity basic search if we don't have KRS/NIP
-    if (perplexityKey && !krs && !nip) {
+    if (perplexityKey && !krs && !nip && company_name) {
       const searchResult = await searchBasicInfo(company_name || email_domain, perplexityKey);
       if (searchResult.krs) krs = searchResult.krs;
       if (searchResult.nip) nip = searchResult.nip;
@@ -1801,6 +1807,38 @@ Deno.serve(async (req) => {
     // Add the found IDs
     if (krs && !sourceData.krs) sourceData.krs = krs;
     if (nip && !sourceData.nip) sourceData.nip = nip;
+
+    // =====================================================
+    // NEW: PREVIEW MODE - Return candidate without saving
+    // =====================================================
+    if (preview_only) {
+      // Determine if confirmation is needed:
+      // - No existing KRS/NIP provided by user
+      // - Data came from Perplexity search (not direct user input)
+      const needsConfirmation = !existing_krs && !existing_nip && sourceData.source !== undefined;
+      
+      console.log(`[Stage 1] Preview mode - needs_confirmation: ${needsConfirmation}`);
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          preview: true,
+          candidate: sourceData,
+          needs_confirmation: needsConfirmation
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // =====================================================
+    // SAVE MODE - Continue with database update
+    // =====================================================
+    
+    // Update status to processing
+    await supabase
+      .from('companies')
+      .update({ source_data_status: 'processing' })
+      .eq('id', company_id);
 
     // Check if website would conflict with another company (unique constraint)
     let websiteToUpdate = sourceData.website;
@@ -1923,7 +1961,7 @@ Deno.serve(async (req) => {
       }
     }
     
-    console.log(`[Stage 1] Completed successfully for ${company_name || email_domain}`);
+    console.log(`[Stage 1] Completed successfully for ${company_name || email_domain || `confirmed KRS=${confirmed_krs}`}`);
 
     return new Response(
       JSON.stringify({ 

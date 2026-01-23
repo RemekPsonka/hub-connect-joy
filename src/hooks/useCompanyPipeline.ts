@@ -18,6 +18,29 @@ export interface PipelineData {
   aiAnalysis: any;
 }
 
+export interface CompanyCandidate {
+  official_name?: string;
+  krs?: string;
+  nip?: string;
+  regon?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  legal_form?: string;
+  status?: string;
+  registration_date?: string;
+  management?: Array<{ name: string; position: string }>;
+  source: 'krs_api' | 'ceidg_api' | 'perplexity_only';
+  confidence?: 'verified' | 'high' | 'medium' | 'low';
+}
+
+export interface PreviewResult {
+  success: boolean;
+  preview: boolean;
+  candidate: CompanyCandidate;
+  needs_confirmation: boolean;
+}
+
 export function useCompanyPipeline(companyId: string | undefined) {
   const queryClient = useQueryClient();
 
@@ -28,7 +51,50 @@ export function useCompanyPipeline(companyId: string | undefined) {
     queryClient.invalidateQueries({ queryKey: ['contacts'] });
   };
 
-  // Stage 1: Verify source data (KRS/CEIDG/Perplexity)
+  // NEW: Preview source data (search without saving)
+  const previewSource = useMutation({
+    mutationFn: async (params: { companyName: string; emailDomain?: string; existingKrs?: string; existingNip?: string }) => {
+      const { data, error } = await supabase.functions.invoke('verify-company-source', {
+        body: {
+          company_id: companyId,
+          company_name: params.companyName,
+          email_domain: params.emailDomain,
+          existing_krs: params.existingKrs,
+          existing_nip: params.existingNip,
+          preview_only: true, // NEW: Don't save, just return candidate
+        }
+      });
+      if (error) throw error;
+      return data as PreviewResult;
+    },
+    onError: (error: any) => {
+      toast.error(`Błąd wyszukiwania: ${error.message}`);
+    }
+  });
+
+  // NEW: Confirm and save source data with confirmed KRS/NIP
+  const confirmSource = useMutation({
+    mutationFn: async (params: { confirmed_krs?: string; confirmed_nip?: string }) => {
+      const { data, error } = await supabase.functions.invoke('verify-company-source', {
+        body: {
+          company_id: companyId,
+          confirmed_krs: params.confirmed_krs,
+          confirmed_nip: params.confirmed_nip,
+        }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Etap 1: Dane źródłowe potwierdzone i zapisane');
+      invalidateCompany();
+    },
+    onError: (error: any) => {
+      toast.error(`Błąd zapisu: ${error.message}`);
+    }
+  });
+
+  // Stage 1: Verify source data (KRS/CEIDG/Perplexity) - original, auto-save when KRS/NIP provided
   const verifySource = useMutation({
     mutationFn: async (params: { companyName: string; emailDomain?: string; existingKrs?: string; existingNip?: string }) => {
       const { data, error } = await supabase.functions.invoke('verify-company-source', {
@@ -125,13 +191,15 @@ export function useCompanyPipeline(companyId: string | undefined) {
   });
 
   return {
+    previewSource,
+    confirmSource,
     verifySource,
     scanWebsite,
     analyzeExternal,
     fetchFinancials,
     synthesizeProfile,
-    isAnyLoading: verifySource.isPending || scanWebsite.isPending || 
-                  analyzeExternal.isPending || fetchFinancials.isPending || 
+    isAnyLoading: previewSource.isPending || confirmSource.isPending || verifySource.isPending || 
+                  scanWebsite.isPending || analyzeExternal.isPending || fetchFinancials.isPending || 
                   synthesizeProfile.isPending
   };
 }

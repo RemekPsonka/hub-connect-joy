@@ -16,3 +16,4 @@ export { WebsiteDataViewer } from './WebsiteDataViewer';
 export { ExternalDataViewer } from './ExternalDataViewer';
 export { FinancialDataViewer } from './FinancialDataViewer';
 export * from './types';
+export { ConfirmCompanyModal } from './ConfirmCompanyModal';
