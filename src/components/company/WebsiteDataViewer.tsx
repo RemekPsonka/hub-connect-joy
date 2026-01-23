@@ -105,7 +105,13 @@ export function WebsiteDataViewer({ data, onRefresh, isRefreshing }: WebsiteData
   const latestNews = data.latest_news || [];
   const extractedAddress = data.extracted_address;
   const description = data.description;
-  const socialMediaLinks = data.social_media_links || {};
+  
+  // Filter out null/empty social media links
+  const socialMediaLinksRaw = data.social_media_links || {};
+  const socialMediaLinks = Object.fromEntries(
+    Object.entries(socialMediaLinksRaw)
+      .filter(([_, url]) => url != null && url !== '')
+  ) as Record<string, string>;
   const scannedAt = data.scanned_at || data.scan_date;
   const totalPages = data.pages_scanned || crawledUrls.length;
 

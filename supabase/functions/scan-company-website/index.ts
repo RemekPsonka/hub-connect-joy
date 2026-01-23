@@ -199,6 +199,70 @@ function extractAddressFromContent(content: string): {
   return result;
 }
 
+// Noise patterns to filter out generic/navigation text
+const NOISE_PATTERNS = [
+  /^realizacje$/i,
+  /^referencje$/i,
+  /^partnerzy$/i,
+  /^klienci$/i,
+  /^usługi$/i,
+  /^produkty$/i,
+  /^oferta$/i,
+  /^galeria/i,
+  /^zobacz/i,
+  /^czytaj dalej/i,
+  /^dowiedz się/i,
+  /^więcej$/i,
+  /wśród naszych/i,
+  /znajdują się/i,
+  /poniżej przedstawiamy/i,
+  /przykłady realizacji/i,
+  /^nasze /i,
+  /^nasi /i,
+  /renomowanego/i,
+  /dostawcy.*usług$/i,
+  /dostawcy.*komponentów$/i,
+  /m\.in\.:?$/i,
+  /^strona główna$/i,
+  /^home$/i,
+  /^kontakt$/i,
+  /^o nas$/i,
+  /^about$/i,
+  /^menu$/i,
+  /^nawigacja$/i,
+  /^footer$/i,
+  /^copyright/i,
+  /wszelkie prawa/i,
+  /^previous$/i,
+  /^next$/i,
+  /^poprzedni/i,
+  /^następny/i,
+  /^wróć$/i,
+  /^back$/i,
+  /^loading/i,
+  /^ładowanie/i,
+  /^\d+$/,
+  /^page \d+/i,
+  /^strona \d+/i,
+];
+
+function isNoise(text: string): boolean {
+  const trimmed = text.trim();
+  // Too short or too long
+  if (trimmed.length < 5 || trimmed.length > 150) return true;
+  // All caps (likely navigation)
+  if (trimmed === trimmed.toUpperCase() && trimmed.length < 20) return true;
+  // Check patterns
+  return NOISE_PATTERNS.some(pattern => pattern.test(trimmed));
+}
+
+function cleanList(items: string[]): string[] {
+  return [...new Set(items)]
+    .map(item => item.replace(/^[-–•*#\s]+/, '').trim())
+    .filter(item => !isNoise(item))
+    .filter(item => item.length > 3);
+}
+
 // Parse scraped content into structured data
 function parseScrapedContent(pages: Array<{ url: string; content: string; title?: string }>): any {
   let description = '';
@@ -310,14 +374,14 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
     }
   }
 
-  // Deduplicate
-  services = [...new Set(services)].slice(0, 15);
-  products = [...new Set(products)].slice(0, 15);
-  brands = [...new Set(brands)].slice(0, 15);
-  realizations = [...new Set(realizations)].slice(0, 15);
-  references = [...new Set(references)].slice(0, 15);
+  // Deduplicate and clean noise
+  services = cleanList(services).slice(0, 15);
+  products = cleanList(products).slice(0, 15);
+  brands = cleanList(brands).slice(0, 15);
+  realizations = cleanList(realizations).slice(0, 15);
+  references = cleanList(references).slice(0, 15);
   management_web = management_web.slice(0, 10);
-  latest_news = latest_news.slice(0, 10);
+  latest_news = latest_news.filter(n => n.title && !isNoise(n.title)).slice(0, 10);
 
   // Extract social media from all content
   const social_media_links = extractSocialMedia(allContent);
