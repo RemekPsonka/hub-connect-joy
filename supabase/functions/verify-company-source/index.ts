@@ -1813,11 +1813,12 @@ Deno.serve(async (req) => {
     // =====================================================
     if (preview_only) {
       // Determine if confirmation is needed:
-      // - No existing KRS/NIP provided by user
-      // - Data came from Perplexity search (not direct user input)
-      const needsConfirmation = !existing_krs && !existing_nip && sourceData.source !== undefined;
+      // - No KRS/NIP was provided by user (existing_krs/existing_nip)
+      // - Data was found via Perplexity search (not confirmed by user)
+      // ALWAYS require confirmation when we had to search for the company
+      const needsConfirmation = !existing_krs && !existing_nip && !confirmed_krs && !confirmed_nip;
       
-      console.log(`[Stage 1] Preview mode - needs_confirmation: ${needsConfirmation}`);
+      console.log(`[Stage 1] Preview mode - needs_confirmation: ${needsConfirmation}, existing_krs: ${existing_krs}, existing_nip: ${existing_nip}`);
       
       return new Response(
         JSON.stringify({
