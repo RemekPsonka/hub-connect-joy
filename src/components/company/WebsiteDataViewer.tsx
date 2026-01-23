@@ -2,16 +2,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   RefreshCw, Loader2, Globe, FileText, Link2, 
   Facebook, Linkedin, Twitter, Instagram, Youtube,
   ExternalLink, Briefcase, Package, Building2, FolderOpen,
   Quote, Users, History, Newspaper, MapPin, Share2,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, FileCode
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface WebsiteDataViewerProps {
   data: any;
@@ -105,6 +107,7 @@ export function WebsiteDataViewer({ data, onRefresh, isRefreshing }: WebsiteData
   const latestNews = data.latest_news || [];
   const extractedAddress = data.extracted_address;
   const description = data.description;
+  const scrapedPagesRaw = data.scraped_pages_raw || [];
   
   // Filter out null/empty social media links
   const socialMediaLinksRaw = data.social_media_links || {};
@@ -112,7 +115,7 @@ export function WebsiteDataViewer({ data, onRefresh, isRefreshing }: WebsiteData
     Object.entries(socialMediaLinksRaw)
       .filter(([_, url]) => url != null && url !== '')
   ) as Record<string, string>;
-  const scannedAt = data.scanned_at || data.scan_date;
+  const scannedAt = data.scanned_at || data.scan_date || data.crawled_at;
   const totalPages = data.pages_scanned || crawledUrls.length;
 
   const getSocialIcon = (platform: string) => {
@@ -139,7 +142,7 @@ export function WebsiteDataViewer({ data, onRefresh, isRefreshing }: WebsiteData
   const hasContent = services.length > 0 || products.length > 0 || brands.length > 0 || 
     realizations.length > 0 || references.length > 0 || managementWeb.length > 0 ||
     companyHistory || latestNews.length > 0 || extractedAddress || description ||
-    Object.keys(socialMediaLinks).length > 0;
+    Object.keys(socialMediaLinks).length > 0 || scrapedPagesRaw.length > 0;
 
   return (
     <div className="space-y-4">
@@ -449,6 +452,46 @@ export function WebsiteDataViewer({ data, onRefresh, isRefreshing }: WebsiteData
                       <ExternalLink className="h-3 w-3 opacity-50" />
                     </a>
                   )
+                ))}
+              </div>
+            </CollapsibleSection>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Scraped Pages Raw Content - NEW SECTION */}
+      {scrapedPagesRaw.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
+            <CollapsibleSection 
+              title="Pełna treść stron" 
+              icon={<FileCode className="h-4 w-4" />}
+              count={scrapedPagesRaw.length}
+              defaultOpen={false}
+            >
+              <div className="space-y-4">
+                {scrapedPagesRaw.map((page: any, idx: number) => (
+                  <div key={idx} className="border rounded-lg p-3 bg-muted/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <a 
+                        href={page.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-primary hover:underline truncate"
+                      >
+                        {page.title || page.url}
+                      </a>
+                      <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
+                    </div>
+                    <ScrollArea className="h-[300px]">
+                      <div className="prose prose-sm max-w-none dark:prose-invert text-muted-foreground">
+                        <ReactMarkdown>
+                          {page.content}
+                        </ReactMarkdown>
+                      </div>
+                    </ScrollArea>
+                  </div>
                 ))}
               </div>
             </CollapsibleSection>
