@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,9 +18,11 @@ import { SourceDataViewer } from './SourceDataViewer';
 import { WebsiteDataViewer } from './WebsiteDataViewer';
 import { ExternalDataViewer } from './ExternalDataViewer';
 import { FinancialDataViewer } from './FinancialDataViewer';
+import { ConfirmCompanyModal } from './ConfirmCompanyModal';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import type { Company } from './CompanyPipelineController';
+import type { CompanyCandidate, PreviewResult } from '@/hooks/useCompanyPipeline';
 
 interface SourcesTabContentProps {
   company: Company;
@@ -27,6 +30,14 @@ interface SourcesTabContentProps {
   pipeline: {
     verifySource: {
       mutate: (params: { companyName: string; emailDomain?: string; existingKrs?: string; existingNip?: string }) => void;
+      isPending: boolean;
+    };
+    previewSource: {
+      mutateAsync: (params: { companyName: string; emailDomain?: string; existingKrs?: string; existingNip?: string }) => Promise<PreviewResult>;
+      isPending: boolean;
+    };
+    confirmSource: {
+      mutate: (params: { confirmed_krs?: string; confirmed_nip?: string }) => void;
       isPending: boolean;
     };
     scanWebsite: {
@@ -223,6 +234,10 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
   // Infer website from email domain if company.website is missing
   const inferredWebsite = company.website || (emailDomain ? `https://${emailDomain}` : null);
 
+  // State for confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [candidateData, setCandidateData] = useState<CompanyCandidate | null>(null);
+
   const sourceStatus = getStatusFromDb(company.source_data_status);
   const wwwStatus = getStatusFromDb(company.www_data_status);
   const externalStatus = getStatusFromDb(company.external_data_status);
@@ -232,6 +247,54 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
   const canSynthesize = sourceStatus === 'completed' && 
     (wwwStatus === 'completed' || externalStatus === 'completed');
 
+  // Handle source verification with confirmation modal
+  const handleVerifySource = async () => {
+    // If we already have KRS or NIP, skip confirmation and verify directly
+    if (company.krs || company.nip) {
+      pipeline.verifySource.mutate({
+        companyName: company.name,
+        emailDomain,
+        existingKrs: company.krs || undefined,
+        existingNip: company.nip || undefined,
+      });
+      return;
+    }
+
+    // Otherwise, use preview mode to show confirmation modal
+    try {
+      const result = await pipeline.previewSource.mutateAsync({
+        companyName: company.name,
+        emailDomain,
+        existingKrs: company.krs || undefined,
+        existingNip: company.nip || undefined,
+      });
+
+      if (result.needs_confirmation) {
+        setCandidateData(result.candidate);
+        setShowConfirmModal(true);
+      } else {
+        // No confirmation needed, save directly
+        pipeline.confirmSource.mutate({
+          confirmed_krs: result.candidate.krs,
+          confirmed_nip: result.candidate.nip,
+        });
+      }
+    } catch (error) {
+      console.error('Preview source error:', error);
+    }
+  };
+
+  // Handle confirm from modal
+  const handleConfirm = (krs?: string, nip?: string) => {
+    setShowConfirmModal(false);
+    pipeline.confirmSource.mutate({
+      confirmed_krs: krs,
+      confirmed_nip: nip,
+    });
+  };
+
+  const isSourceLoading = pipeline.verifySource.isPending || pipeline.previewSource.isPending || pipeline.confirmSource.isPending;
+
   const stages: StageConfig[] = [
     {
       id: 'source',
@@ -240,14 +303,9 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
       description: 'Weryfikacja w KRS/CEIDG lub przez AI',
       icon: Database,
       status: sourceStatus,
-      isLoading: pipeline.verifySource.isPending,
+      isLoading: isSourceLoading,
       canRun: true,
-      onRun: () => pipeline.verifySource.mutate({
-        companyName: company.name,
-        emailDomain,
-        existingKrs: company.krs || undefined,
-        existingNip: company.nip || undefined,
-      }),
+      onRun: handleVerifySource,
       data: company.source_data_api as object | null,
       DataViewer: ({ data, company: comp }: any) => (
         <SourceDataViewer data={data} company={comp || company} />
@@ -406,6 +464,17 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmation Modal */}
+      <ConfirmCompanyModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        candidate={candidateData}
+        companyName={company.name}
+        onConfirm={handleConfirm}
+        onReject={() => setShowConfirmModal(false)}
+        isLoading={pipeline.confirmSource.isPending}
+      />
     </div>
   );
 }
