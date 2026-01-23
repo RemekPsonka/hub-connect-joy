@@ -7,6 +7,11 @@ import { RelationshipAlerts } from '@/components/dashboard/RelationshipAlerts';
 import { AIRecommendations } from '@/components/dashboard/AIRecommendations';
 import { TodaysPriorities } from '@/components/dashboard/TodaysPriorities';
 import { DailySerendipity } from '@/components/dashboard/DailySerendipity';
+import { UpcomingConsultations } from '@/components/dashboard/UpcomingConsultations';
+import { PendingMatches } from '@/components/dashboard/PendingMatches';
+import { NetworkOverview } from '@/components/dashboard/NetworkOverview';
+import { MeetingsOverview } from '@/components/dashboard/MeetingsOverview';
+import { ContactsToRenew } from '@/components/dashboard/ContactsToRenew';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -102,7 +107,7 @@ export default function Dashboard() {
           loading={loading}
         />
         <StatsCard
-          title="Dzisiejsze spotkania"
+          title="Dzisiejsze konsultacje"
           value={stats.todayMeetings}
           icon={Calendar}
           loading={loading}
@@ -151,6 +156,25 @@ export default function Dashboard() {
           {/* Serendipity - full width */}
           <DailySerendipity />
           
+          {/* Contacts to renew - full width alert */}
+          <ContactsToRenew />
+          
+          {/* Main grid - 4 columns */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            {/* Kolumna 1: Konsultacje */}
+            <UpcomingConsultations />
+            
+            {/* Kolumna 2: Spotkania grupowe */}
+            <MeetingsOverview />
+            
+            {/* Kolumna 3: Dopasowania AI */}
+            <PendingMatches />
+            
+            {/* Kolumna 4: Sieć */}
+            <NetworkOverview />
+          </div>
+          
+          {/* Second row - 3 columns */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TodaysPriorities />
             <AIRecommendations />
