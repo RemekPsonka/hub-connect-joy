@@ -263,6 +263,92 @@ function cleanList(items: string[]): string[] {
     .filter(item => item.length > 3);
 }
 
+// Section header patterns for content-based extraction
+const SECTION_HEADERS = {
+  services: ['usługi', 'oferta', 'zakres usług', 'co oferujemy', 'nasze usługi', 'services', 'what we offer', 'nasza oferta', 'zakres działalności'],
+  products: ['produkty', 'asortyment', 'w ofercie', 'products', 'modele', 'nasza oferta produktowa', 'nasze produkty'],
+  brands: ['marki', 'producenci', 'partnerzy', 'brands', 'partners', 'współpracujemy z', 'nasze marki', 'reprezentowane marki', 'autoryzowany dealer', 'autoryzowany serwis'],
+  realizations: ['realizacje', 'portfolio', 'projekty', 'case studies', 'nasze projekty', 'wykonane prace', 'nasze realizacje', 'references', 'referencje projektów'],
+  references: ['referencje', 'opinie', 'testimonials', 'reviews', 'klienci', 'clients', 'nasi klienci', 'zaufali nam', 'współpracowaliśmy z'],
+};
+
+// Helper function to capitalize words
+function capitalizeWords(str: string): string {
+  return str.split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('-');
+}
+
+// Extract content under section headers in markdown
+function extractSectionContent(content: string, sectionNames: string[]): string[] {
+  const results: string[] = [];
+  
+  // Pattern to find headers with section names
+  for (const sectionName of sectionNames) {
+    // Match markdown headers (##, ###) containing the section name
+    const headerPattern = new RegExp(
+      `(?:^|\\n)#{1,4}\\s*[^\\n]*${sectionName}[^\\n]*\\n([\\s\\S]*?)(?=\\n#{1,4}\\s|$)`,
+      'gi'
+    );
+    
+    let match;
+    while ((match = headerPattern.exec(content)) !== null) {
+      const sectionContent = match[1];
+      
+      // Extract bullet points
+      const bullets = sectionContent.match(/^[-*•]\s+(.+)$/gm);
+      if (bullets) {
+        results.push(...bullets.map(b => b.replace(/^[-*•]\s+/, '').trim()));
+      }
+      
+      // Extract numbered items
+      const numbered = sectionContent.match(/^\d+\.\s+(.+)$/gm);
+      if (numbered) {
+        results.push(...numbered.map(n => n.replace(/^\d+\.\s+/, '').trim()));
+      }
+      
+      // Extract sub-headers (could be items themselves)
+      const subHeaders = sectionContent.match(/^#{2,5}\s+([^\n]+)$/gm);
+      if (subHeaders && subHeaders.length > 0 && subHeaders.length < 20) {
+        results.push(...subHeaders.map(h => h.replace(/^#{2,5}\s+/, '').trim()));
+      }
+    }
+  }
+  
+  return results;
+}
+
+// Extract brands from URL patterns (for car dealers, distributors etc.)
+function extractBrandsFromUrls(urls: string[]): string[] {
+  const brands: string[] = [];
+  const brandPatterns = [
+    /\/marka[s]?[-\/]([a-z-]+)/i,
+    /\/brand[s]?[-\/]([a-z-]+)/i,
+    /\/dealer[-\/]([a-z-]+)/i,
+    /\/([a-z-]+)[-\/]dealer/i,
+    /\/autoryzowany[-\/]([a-z-]+)/i,
+    /\/a\/([a-z-]+)\//i,
+  ];
+  
+  for (const url of urls) {
+    for (const pattern of brandPatterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        const brand = match[1].replace(/-/g, ' ').trim();
+        // Filter out common non-brand words
+        if (brand.length > 1 && !['numer', 'oferta', 'kontakt', 'about', 'news'].includes(brand.toLowerCase())) {
+          brands.push(capitalizeWords(brand));
+        }
+      }
+    }
+  }
+  
+  return [...new Set(brands)];
+}
+
 // Parse scraped content into structured data
 function parseScrapedContent(pages: Array<{ url: string; content: string; title?: string }>): any {
   let description = '';
@@ -276,18 +362,22 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
   let latest_news: Array<{ title: string; date?: string }> = [];
   let extracted_address: { address?: string; city?: string; postal_code?: string } = {};
   let allContent = '';
+  const allUrls: string[] = [];
 
   for (const page of pages) {
     const lowerUrl = page.url.toLowerCase();
     const content = page.content;
     allContent += content + '\n';
+    allUrls.push(page.url);
 
     // Description (about us)
     if (/o-nas|about|o-firmie|kim-jestesmy/.test(lowerUrl) && content.length > 100) {
       description = content.slice(0, 2000);
     }
 
-    // Services/Products
+    // ===== URL-BASED EXTRACTION (existing logic) =====
+    
+    // Services/Products from URL patterns
     if (/oferta|uslugi|services|produkty|products/.test(lowerUrl)) {
       const lines = content.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* ') || l.trim().startsWith('## '));
       const items = lines.map(l => l.replace(/^[-*#\s]+/, '').trim()).filter(l => l.length > 3 && l.length < 100);
@@ -298,7 +388,7 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
       }
     }
 
-    // Brands/Partners
+    // Brands/Partners from URL patterns
     if (/marki|brands|producenci|dealers|partnerzy|partners/.test(lowerUrl)) {
       const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
       brands.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(b => b.length > 2 && b.length < 50));
@@ -307,13 +397,11 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
       brands.push(...bullets.map(l => l.replace(/^[-*\s]+/, '').trim()).filter(b => b.length > 2 && b.length < 50));
     }
 
-    // References/Testimonials
+    // References/Testimonials from URL patterns
     if (/referencje|opinie|testimonials|reviews|klienci|clients/.test(lowerUrl)) {
-      // Look for quotes
       const quotes = content.match(/"([^"]{20,200})"/g) || [];
       references.push(...quotes.slice(0, 10).map(q => q.replace(/"/g, '').trim()));
       
-      // Look for company names in references
       const companyPattern = /(?:dla|for)\s+(?:firmy\s+)?([A-ZŻŹĆĄŚĘŁÓŃ][A-Za-zżźćąśęłóń\s&]+(?:Sp\.\s*z\s*o\.o\.|S\.A\.|Ltd|GmbH)?)/gi;
       let match;
       while ((match = companyPattern.exec(content)) !== null) {
@@ -321,9 +409,8 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
       }
     }
 
-    // Management/Team (with positions)
+    // Management/Team
     if (/zespol|team|zarzad|management/.test(lowerUrl)) {
-      // Pattern: Name - Position or Name\nPosition
       const personPattern = /(?:^|\n)(?:#+\s*)?([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)(?:\s*[-–—]\s*|\n\s*)([A-ZŻŹĆĄŚĘŁÓŃa-zżźćąśęłóń\s]+)?/g;
       let match;
       const seenNames = new Set<string>();
@@ -345,16 +432,15 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
       company_history = content.slice(0, 1500);
     }
 
-    // Realizations/Portfolio
+    // Realizations/Portfolio from URL patterns
     if (/realizacje|portfolio|projekty|projects|case/.test(lowerUrl)) {
       const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
       realizations.push(...headings.map(h => h.replace(/^[\n#\s]+/, '').trim()).filter(p => p.length > 3 && p.length < 100));
     }
 
-    // Latest news (2023-2025)
+    // Latest news
     if (/aktualnosci|news|blog/.test(lowerUrl)) {
       const headings = content.match(/(?:^|\n)#{1,3}\s*([^\n]+)/g) || [];
-      // Try to extract dates
       headings.slice(0, 10).forEach(h => {
         const title = h.replace(/^[\n#\s]+/, '').trim();
         const dateMatch = title.match(/(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|\d{4}[.\/-]\d{1,2}[.\/-]\d{1,2})/);
@@ -374,7 +460,52 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
     }
   }
 
-  // Deduplicate and clean noise
+  // ===== CONTENT-BASED EXTRACTION (NEW - fallback for any page) =====
+  
+  // If services are empty, try content-based extraction from all pages
+  if (services.length === 0) {
+    const contentServices = extractSectionContent(allContent, SECTION_HEADERS.services);
+    services.push(...contentServices);
+    console.log(`[parseScrapedContent] Content-based services found: ${contentServices.length}`);
+  }
+  
+  // If products are empty, try content-based extraction
+  if (products.length === 0) {
+    const contentProducts = extractSectionContent(allContent, SECTION_HEADERS.products);
+    products.push(...contentProducts);
+    console.log(`[parseScrapedContent] Content-based products found: ${contentProducts.length}`);
+  }
+  
+  // If brands are empty, try content-based extraction
+  if (brands.length === 0) {
+    const contentBrands = extractSectionContent(allContent, SECTION_HEADERS.brands);
+    brands.push(...contentBrands);
+    console.log(`[parseScrapedContent] Content-based brands found: ${contentBrands.length}`);
+  }
+  
+  // If brands are still empty, try URL pattern extraction (for car dealers etc.)
+  if (brands.length === 0) {
+    const urlBrands = extractBrandsFromUrls(allUrls);
+    brands.push(...urlBrands);
+    console.log(`[parseScrapedContent] URL-based brands found: ${urlBrands.length}`);
+  }
+  
+  // If realizations are empty, try content-based extraction
+  if (realizations.length === 0) {
+    const contentRealizations = extractSectionContent(allContent, SECTION_HEADERS.realizations);
+    realizations.push(...contentRealizations);
+    console.log(`[parseScrapedContent] Content-based realizations found: ${contentRealizations.length}`);
+  }
+  
+  // If references are empty, try content-based extraction
+  if (references.length === 0) {
+    const contentReferences = extractSectionContent(allContent, SECTION_HEADERS.references);
+    references.push(...contentReferences);
+    console.log(`[parseScrapedContent] Content-based references found: ${contentReferences.length}`);
+  }
+
+  // ===== FINAL DEDUPLICATION AND CLEANING =====
+  
   services = cleanList(services).slice(0, 15);
   products = cleanList(products).slice(0, 15);
   brands = cleanList(brands).slice(0, 15);
