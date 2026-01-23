@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { 
+import type { Json } from '@/integrations/supabase/types';
+import type {
   BusinessInterview, 
   BIAIOutput, 
   BIValidationResult,
@@ -99,27 +100,28 @@ export function useSaveBusinessInterview() {
       if (!director?.tenant_id) throw new Error('No tenant');
 
       // Convert typed sections to JSON for Supabase
-      const dbData = {
-        ...data,
-        section_a_basic: data.section_a_basic as unknown as Record<string, unknown>,
-        section_c_company_profile: data.section_c_company_profile as unknown as Record<string, unknown>,
-        section_d_scale: data.section_d_scale as unknown as Record<string, unknown>,
-        section_f_strategy: data.section_f_strategy as unknown as Record<string, unknown>,
-        section_g_needs: data.section_g_needs as unknown as Record<string, unknown>,
-        section_h_investments: data.section_h_investments as unknown as Record<string, unknown>,
-        section_j_value_for_cc: data.section_j_value_for_cc as unknown as Record<string, unknown>,
-        section_k_engagement: data.section_k_engagement as unknown as Record<string, unknown>,
-        section_l_personal: data.section_l_personal as unknown as Record<string, unknown>,
-        section_m_organizations: data.section_m_organizations as unknown as Record<string, unknown>,
-        section_n_followup: data.section_n_followup as unknown as Record<string, unknown>,
-      };
+      const dbData: Record<string, Json | string | undefined> = {};
+      
+      // Only include defined sections
+      if (data.section_a_basic) dbData.section_a_basic = data.section_a_basic as unknown as Json;
+      if (data.section_c_company_profile) dbData.section_c_company_profile = data.section_c_company_profile as unknown as Json;
+      if (data.section_d_scale) dbData.section_d_scale = data.section_d_scale as unknown as Json;
+      if (data.section_f_strategy) dbData.section_f_strategy = data.section_f_strategy as unknown as Json;
+      if (data.section_g_needs) dbData.section_g_needs = data.section_g_needs as unknown as Json;
+      if (data.section_h_investments) dbData.section_h_investments = data.section_h_investments as unknown as Json;
+      if (data.section_j_value_for_cc) dbData.section_j_value_for_cc = data.section_j_value_for_cc as unknown as Json;
+      if (data.section_k_engagement) dbData.section_k_engagement = data.section_k_engagement as unknown as Json;
+      if (data.section_l_personal) dbData.section_l_personal = data.section_l_personal as unknown as Json;
+      if (data.section_m_organizations) dbData.section_m_organizations = data.section_m_organizations as unknown as Json;
+      if (data.section_n_followup) dbData.section_n_followup = data.section_n_followup as unknown as Json;
+      if (data.status) dbData.status = data.status;
 
       if (existingId) {
         // Update existing
         const { data: updated, error } = await supabase
           .from('business_interviews')
           .update({
-            ...dbData,
+            ...dbData as any,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingId)
@@ -137,7 +139,7 @@ export function useSaveBusinessInterview() {
             tenant_id: director.tenant_id,
             filled_by: director.id,
             meeting_date: new Date().toISOString(),
-            ...dbData,
+            ...dbData as any,
           })
           .select()
           .single();
