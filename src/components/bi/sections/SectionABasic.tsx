@@ -6,6 +6,26 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { User, Building } from 'lucide-react';
 import type { SectionABasic } from '../types';
 
+const BRANZE_OPTIONS = [
+  { value: 'ubezpieczenia_finanse', label: 'Ubezpieczenia i Finanse' },
+  { value: 'hr_rekrutacja', label: 'HR i Rekrutacja' },
+  { value: 'marketing_reklama', label: 'Marketing i Reklama' },
+  { value: 'it_technologia', label: 'IT i Technologia' },
+  { value: 'budownictwo_nieruchomosci', label: 'Budownictwo i Nieruchomości' },
+  { value: 'transport_logistyka', label: 'Transport i Logistyka' },
+  { value: 'energia_ekologia', label: 'Energia i Ekologia' },
+  { value: 'produkcja_przemysl', label: 'Produkcja i Przemysł' },
+  { value: 'medycyna_zdrowie', label: 'Medycyna i Zdrowie' },
+  { value: 'prawo_doradztwo', label: 'Prawo i Doradztwo' },
+  { value: 'handel_sprzedaz', label: 'Handel i Sprzedaż' },
+  { value: 'gastronomia_hotelarstwo', label: 'Gastronomia i Hotelarstwo' },
+  { value: 'rolnictwo_zywnosc', label: 'Rolnictwo i Żywność' },
+  { value: 'tekstylia_moda', label: 'Tekstylia i Moda' },
+  { value: 'meble_wnetrza', label: 'Meble i Wnętrza' },
+  { value: 'edukacja', label: 'Edukacja' },
+  { value: 'inne', label: 'Inne' },
+] as const;
+
 interface SectionABasicProps {
   data: SectionABasic;
   contactName?: string;
@@ -44,11 +64,21 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
         {/* Branża */}
         <div className="space-y-2">
           <Label>Branża</Label>
-          <Input
+          <Select
             value={data.branza || ''}
-            onChange={(e) => updateField('branza', e.target.value)}
-            placeholder="np. IT, Produkcja, Usługi"
-          />
+            onValueChange={(value) => updateField('branza', value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Wybierz branżę" />
+            </SelectTrigger>
+            <SelectContent>
+              {BRANZE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Email bezpośredni */}
