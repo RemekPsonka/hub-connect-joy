@@ -244,7 +244,7 @@ export function BatchKRSSyncController() {
           .select('*', { count: 'exact', head: true })
           .eq('tenant_id', tenantId)
           .eq('source_data_status', 'completed')
-          .lt('source_data_date', isoDate);
+          .or(`source_data_date.lt.${isoDate},source_data_date.is.null`);
         
         setOlderThanCount(count || 0);
       } catch (error) {
@@ -268,7 +268,7 @@ export function BatchKRSSyncController() {
         .update({ source_data_status: 'pending' })
         .eq('tenant_id', tenantId)
         .eq('source_data_status', 'completed')
-        .lt('source_data_date', isoDate);
+        .or(`source_data_date.lt.${isoDate},source_data_date.is.null`);
 
       if (error) throw error;
 
