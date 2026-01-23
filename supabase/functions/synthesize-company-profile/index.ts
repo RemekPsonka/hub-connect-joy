@@ -9,6 +9,82 @@ const corsHeaders = {
 // Tabela 5: company_ai_profile - 16 Sections
 // ============================================
 
+// Repair common JSON errors from AI responses
+function repairJson(jsonString: string): string {
+  let repaired = jsonString;
+  
+  // 1. Remove trailing commas before } or ]
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+  
+  // 2. Fix unclosed quotes before comma, } or ]
+  repaired = repaired.replace(/([^"\\,\s])(\s*[,}\]])/g, (match, p1, p2) => {
+    if (!/["'\d\]}\w]/.test(p1)) {
+      return match;
+    }
+    return match;
+  });
+  
+  // 3. Remove control characters that break JSON (except newlines, tabs)
+  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // 4. Fix double commas
+  repaired = repaired.replace(/,\s*,/g, ',');
+  
+  // 5. Fix missing commas between properties (simple heuristic)
+  repaired = repaired.replace(/"\s*\n\s*"/g, '",\n"');
+  
+  // 6. Ensure strings with newlines are properly escaped
+  repaired = repaired.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
+    return `: "${p1}\\n${p2}"`;
+  });
+  
+  return repaired;
+}
+
+// Fallback: Extract sections manually when JSON is severely malformed
+function extractSectionsManually(content: string): any {
+  const result: any = {};
+  
+  const sectionPatterns = [
+    'section_1_summary',
+    'section_2_key_data',
+    'section_3_business_activity',
+    'section_4_offer',
+    'section_5_realizations',
+    'section_6_management',
+    'section_7_history',
+    'section_8_financial_situation',
+    'section_9_market_position',
+    'section_10_partnerships',
+    'section_11_media_activity',
+    'section_12_social_media',
+    'section_13_cooperation_opportunities',
+    'section_14_risks',
+    'section_15_recommendations',
+    'section_16_missing_info'
+  ];
+  
+  for (const section of sectionPatterns) {
+    const pattern = new RegExp(`"${section}"\\s*:\\s*(\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\})`, 's');
+    const match = content.match(pattern);
+    if (match) {
+      try {
+        let sectionJson = match[1];
+        try {
+          result[section] = JSON.parse(sectionJson);
+        } catch {
+          sectionJson = repairJson(sectionJson);
+          result[section] = JSON.parse(sectionJson);
+        }
+      } catch {
+        console.warn(`[Lovable AI] Could not parse section: ${section}`);
+      }
+    }
+  }
+  
+  return result;
+}
+
 // Lovable AI for synthesis with 16-section structure
 async function synthesizeWithAI(
   companyName: string,
@@ -253,85 +329,6 @@ Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszyst
   }
 }
 
-// Repair common JSON errors from AI responses
-function repairJson(jsonString: string): string {
-  let repaired = jsonString;
-  
-  // 1. Remove trailing commas before } or ]
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-  
-  // 2. Fix unclosed quotes before comma, } or ]
-  repaired = repaired.replace(/([^"\\,\s])(\s*[,}\]])/g, (match, p1, p2) => {
-    // If previous char is not a quote or escape, and next is punctuation, might need quote
-    if (!/["'\d\]}\w]/.test(p1)) {
-      return match;
-    }
-    return match;
-  });
-  
-  // 3. Remove control characters that break JSON (except newlines, tabs)
-  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  
-  // 4. Fix double commas
-  repaired = repaired.replace(/,\s*,/g, ',');
-  
-  // 5. Fix missing commas between properties (simple heuristic)
-  repaired = repaired.replace(/"\s*\n\s*"/g, '",\n"');
-  
-  // 6. Ensure strings with newlines are properly escaped
-  repaired = repaired.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
-    return `: "${p1}\\n${p2}"`;
-  });
-  
-  return repaired;
-}
-
-// Fallback: Extract sections manually when JSON is severely malformed
-function extractSectionsManually(content: string): any {
-  const result: any = {};
-  
-  const sectionPatterns = [
-    'section_1_summary',
-    'section_2_key_data',
-    'section_3_business_activity',
-    'section_4_offer',
-    'section_5_realizations',
-    'section_6_management',
-    'section_7_history',
-    'section_8_financial_situation',
-    'section_9_market_position',
-    'section_10_partnerships',
-    'section_11_media_activity',
-    'section_12_social_media',
-    'section_13_cooperation_opportunities',
-    'section_14_risks',
-    'section_15_recommendations',
-    'section_16_missing_info'
-  ];
-  
-  for (const section of sectionPatterns) {
-    // Try to find each section as a complete JSON object
-    const pattern = new RegExp(`"${section}"\\s*:\\s*(\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\})`, 's');
-    const match = content.match(pattern);
-    if (match) {
-      try {
-        // Try to parse the section, with repair if needed
-        let sectionJson = match[1];
-        try {
-          result[section] = JSON.parse(sectionJson);
-        } catch {
-          sectionJson = repairJson(sectionJson);
-          result[section] = JSON.parse(sectionJson);
-        }
-      } catch {
-        // Skip malformed sections
-        console.warn(`[Lovable AI] Could not parse section: ${section}`);
-      }
-    }
-  }
-  
-  return result;
-}
 
 // Build used_sources[] based on available data
 function buildUsedSources(sourceData: any, wwwData: any, externalData: any, financialData: any): string[] {
