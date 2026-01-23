@@ -57,8 +57,19 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const { isAdmin } = useOwnerPanel();
-  const { isAssistant } = useAuth();
+  const { isAssistant, director, assistant } = useAuth();
   const { isSuperadmin } = useSuperadmin();
+
+  const getUserRole = () => {
+    if (isSuperadmin) return 'Superadmin';
+    if (isAssistant) return 'Asystent';
+    if (isAdmin) return 'Administrator';
+    return 'Dyrektor';
+  };
+
+  const userName = isAssistant 
+    ? assistant?.full_name 
+    : director?.full_name;
 
   // Dla asystenta - ograniczona nawigacja
   // Dla admina - pełna nawigacja + zarządzanie
@@ -86,6 +97,17 @@ export function AppSidebar() {
             </span>
           )}
         </div>
+        
+        {!isCollapsed && userName && (
+          <div className="px-2 pb-3 space-y-0.5">
+            <p className="text-sm font-medium text-foreground">
+              Witaj, {userName}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {getUserRole()}
+            </p>
+          </div>
+        )}
       </SidebarHeader>
       
       <SidebarContent>
