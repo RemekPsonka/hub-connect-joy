@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Building2,
   Globe,
@@ -18,7 +21,15 @@ import {
   DollarSign,
   Sparkles,
   ArrowRight,
+  Pencil,
+  X,
 } from 'lucide-react';
+
+export interface AnalysisOverrides {
+  krs?: string;
+  nip?: string;
+  website?: string;
+}
 
 interface FullAnalysisConfirmModalProps {
   isOpen: boolean;
@@ -27,8 +38,9 @@ interface FullAnalysisConfirmModalProps {
   krs?: string | null;
   nip?: string | null;
   website?: string | null;
-  onConfirm: () => void;
+  onConfirm: (overrides?: AnalysisOverrides) => void;
   isLoading?: boolean;
+  onEditCompany?: () => void;
 }
 
 const stages = [
@@ -48,7 +60,62 @@ export function FullAnalysisConfirmModal({
   website,
   onConfirm,
   isLoading,
+  onEditCompany,
 }: FullAnalysisConfirmModalProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editKrs, setEditKrs] = useState(krs || '');
+  const [editNip, setEditNip] = useState(nip || '');
+  const [editWebsite, setEditWebsite] = useState(website || '');
+
+  // Reset state when modal opens with new data
+  useEffect(() => {
+    if (isOpen) {
+      setEditKrs(krs || '');
+      setEditNip(nip || '');
+      setEditWebsite(website || '');
+      setIsEditing(false);
+    }
+  }, [isOpen, krs, nip, website]);
+
+  const handleKrsChange = (value: string) => {
+    // Only digits, max 10 chars
+    setEditKrs(value.replace(/\D/g, '').slice(0, 10));
+  };
+
+  const handleNipChange = (value: string) => {
+    // Only digits, max 10 chars
+    setEditNip(value.replace(/\D/g, '').slice(0, 10));
+  };
+
+  const handleWebsiteChange = (value: string) => {
+    setEditWebsite(value);
+  };
+
+  const handleConfirm = () => {
+    const overrides: AnalysisOverrides = {};
+    
+    // Only include if different from original
+    if (editKrs && editKrs !== krs) overrides.krs = editKrs;
+    if (editNip && editNip !== nip) overrides.nip = editNip;
+    if (editWebsite && editWebsite !== website) {
+      // Auto-add https:// if missing
+      let url = editWebsite.trim();
+      if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      overrides.website = url;
+    }
+    
+    onConfirm(Object.keys(overrides).length > 0 ? overrides : undefined);
+  };
+
+  const cancelEditing = () => {
+    setEditKrs(krs || '');
+    setEditNip(nip || '');
+    setEditWebsite(website || '');
+    setIsEditing(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
@@ -64,52 +131,152 @@ export function FullAnalysisConfirmModal({
 
         <div className="space-y-4 py-4">
           {/* Company info */}
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <Building2 className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground">Nazwa firmy</p>
-                <p className="font-medium">{companyName}</p>
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+            {/* Company name */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Building2 className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Nazwa firmy</p>
+                  <p className="font-medium">{companyName}</p>
+                </div>
               </div>
+              {onEditCompany && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={onEditCompany}
+                  className="text-xs"
+                >
+                  Zmień firmę
+                </Button>
+              )}
             </div>
 
-            <div className="flex items-start gap-3">
-              <Hash className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground">KRS / NIP</p>
-                {krs || nip ? (
-                  <div className="flex items-center gap-2">
-                    {krs && <Badge variant="outline">KRS: {krs}</Badge>}
-                    {nip && <Badge variant="outline">NIP: {nip}</Badge>}
+            {/* KRS / NIP */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1">
+                <Hash className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">KRS / NIP</p>
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-amber-600 dark:text-amber-400">
-                    Zostanie wykryte automatycznie
-                  </p>
-                )}
+                  
+                  {isEditing ? (
+                    <div className="flex gap-2 mt-1">
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">KRS</Label>
+                        <Input
+                          value={editKrs}
+                          onChange={(e) => handleKrsChange(e.target.value)}
+                          placeholder="0000000000"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">NIP</Label>
+                        <Input
+                          value={editNip}
+                          onChange={(e) => handleNipChange(e.target.value)}
+                          placeholder="0000000000"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {(krs || nip || editKrs || editNip) ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(editKrs || krs) && (
+                            <Badge variant="outline">KRS: {editKrs || krs}</Badge>
+                          )}
+                          {(editNip || nip) && (
+                            <Badge variant="outline">NIP: {editNip || nip}</Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          Zostanie wykryte automatycznie
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* Website */}
             <div className="flex items-start gap-3">
               <Globe className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground">Strona WWW</p>
-                {website ? (
-                  <a 
-                    href={website} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {website}
-                  </a>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Strona WWW</p>
+                  {!isEditing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+                
+                {isEditing ? (
+                  <div className="mt-1">
+                    <Input
+                      value={editWebsite}
+                      onChange={(e) => handleWebsiteChange(e.target.value)}
+                      placeholder="https://example.com"
+                      className="h-8 text-sm"
+                    />
+                  </div>
                 ) : (
-                  <p className="text-sm text-amber-600 dark:text-amber-400">
-                    Brak - etap WWW zostanie pominięty
-                  </p>
+                  <>
+                    {(editWebsite || website) ? (
+                      <a 
+                        href={editWebsite || website || '#'} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        {editWebsite || website}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
+                        Brak - etap WWW zostanie pominięty
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
+
+            {/* Cancel editing button */}
+            {isEditing && (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelEditing}
+                  className="text-xs gap-1"
+                >
+                  <X className="h-3 w-3" />
+                  Anuluj edycję
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Process stages */}
@@ -144,7 +311,7 @@ export function FullAnalysisConfirmModal({
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             Anuluj
           </Button>
-          <Button onClick={onConfirm} disabled={isLoading}>
+          <Button onClick={handleConfirm} disabled={isLoading}>
             <Sparkles className="h-4 w-4 mr-2" />
             Rozpocznij analizę
             <ArrowRight className="h-4 w-4 ml-2" />
