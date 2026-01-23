@@ -11,7 +11,7 @@ import {
   CheckCircle2, Clock, AlertCircle, Loader2, Lock,
   Building, RefreshCw
 } from 'lucide-react';
-import { useCompanyPipeline } from '@/hooks/useCompanyPipeline';
+import { useCompanyPipeline, type CompanyCandidate } from '@/hooks/useCompanyPipeline';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { SourceDataViewer } from './SourceDataViewer';
@@ -19,6 +19,7 @@ import { WebsiteDataViewer } from './WebsiteDataViewer';
 import { ExternalDataViewer } from './ExternalDataViewer';
 import { FinancialDataViewer } from './FinancialDataViewer';
 import { CompanyAnalysisViewer } from './CompanyAnalysisViewer';
+import { ConfirmCompanyModal } from './ConfirmCompanyModal';
 
 export interface Company {
   id: string;
@@ -150,6 +151,56 @@ export function CompanyPipelineController({
     pipelineState === 'complete' ? 'profile-ai' : 'basic'
   );
 
+  // NEW: State for confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [candidateData, setCandidateData] = useState<CompanyCandidate | null>(null);
+
+  // NEW: Handle the "Check company data" button click
+  const handleVerifyClick = async () => {
+    // If we already have KRS or NIP, skip confirmation and verify directly
+    if (company.krs || company.nip) {
+      pipeline.verifySource.mutate({
+        companyName: company.name,
+        existingKrs: company.krs || undefined,
+        existingNip: company.nip || undefined
+      });
+      return;
+    }
+
+    // Otherwise, use preview mode to show confirmation modal
+    const result = await pipeline.previewSource.mutateAsync({
+      companyName: company.name,
+      existingKrs: company.krs || undefined,
+      existingNip: company.nip || undefined
+    });
+
+    if (result.needs_confirmation) {
+      setCandidateData(result.candidate);
+      setShowConfirmModal(true);
+    } else {
+      // No confirmation needed, save directly
+      pipeline.confirmSource.mutate({
+        confirmed_krs: result.candidate.krs,
+        confirmed_nip: result.candidate.nip
+      });
+    }
+  };
+
+  // NEW: Handle confirm from modal
+  const handleConfirm = (krs?: string, nip?: string) => {
+    setShowConfirmModal(false);
+    pipeline.confirmSource.mutate({
+      confirmed_krs: krs,
+      confirmed_nip: nip
+    });
+  };
+
+  // NEW: Handle reject from modal
+  const handleReject = () => {
+    setShowConfirmModal(false);
+    setCandidateData(null);
+  };
+
   // Determine confidence badge
   const getConfidenceBadge = () => {
     const score = company.analysis_confidence_score || 0;
@@ -177,50 +228,61 @@ export function CompanyPipelineController({
     return management.map((m: any) => `${m.name} (${m.position})`).join(', ');
   };
 
+  const isSearching = pipeline.previewSource.isPending || pipeline.confirmSource.isPending || pipeline.verifySource.isPending;
+
   // INITIAL STATE: Show input form
   if (pipelineState === 'initial') {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building className="h-5 w-5" />
-            FIRMA
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Nazwa firmy</Label>
-              <Input value={company.name || ''} readOnly className="bg-muted" />
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="h-5 w-5" />
+              FIRMA
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Nazwa firmy</Label>
+                <Input value={company.name || ''} readOnly className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label>Email kontaktu</Label>
+                <Input value={contactEmail || ''} readOnly className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label>Strona WWW</Label>
+                <Input value={company.website || ''} readOnly className="bg-muted" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Email kontaktu</Label>
-              <Input value={contactEmail || ''} readOnly className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label>Strona WWW</Label>
-              <Input value={company.website || ''} readOnly className="bg-muted" />
-            </div>
-          </div>
 
-          <Button
-            onClick={() => pipeline.verifySource.mutate({
-              companyName: company.name,
-              existingKrs: company.krs || undefined,
-              existingNip: company.nip || undefined
-            })}
-            disabled={!buttonStates.button1.canRun || pipeline.verifySource.isPending}
-            className="w-full md:w-auto"
-          >
-            {pipeline.verifySource.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Database className="h-4 w-4 mr-2" />
-            )}
-            Sprawdź dane firmy
-          </Button>
-        </CardContent>
-      </Card>
+            <Button
+              onClick={handleVerifyClick}
+              disabled={!buttonStates.button1.canRun || isSearching}
+              className="w-full md:w-auto"
+            >
+              {isSearching ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4 mr-2" />
+              )}
+              Sprawdź dane firmy
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Confirmation Modal */}
+        <ConfirmCompanyModal
+          isOpen={showConfirmModal}
+          onClose={() => setShowConfirmModal(false)}
+          candidate={candidateData}
+          companyName={company.name}
+          onConfirm={handleConfirm}
+          onReject={handleReject}
+          isLoading={pipeline.confirmSource.isPending}
+        />
+      </>
     );
   }
 
