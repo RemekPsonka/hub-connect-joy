@@ -321,6 +321,21 @@ function extractSectionContent(content: string, sectionNames: string[]): string[
   return results;
 }
 
+// Words to exclude when extracting brands from URLs
+const EXCLUDED_BRAND_PATTERNS = [
+  'numer', 'oferta', 'kontakt', 'about', 'news', 'home', 'index',
+  'polityka', 'prywatnosci', 'regulamin', 'cookies', 'rodo', 'privacy',
+  'leasing', 'finansowanie', 'kredyt', 'ubezpieczenie', 'finance',
+  'serwis', 'service', 'czesci', 'parts', 'akcesoria', 'accessories',
+  'download', 'attachment', 'pdf', 'img', 'image', 'media', 'file',
+  'site', 'page', 'article', 'post', 'category', 'tag', 'blog',
+  'admin', 'login', 'user', 'account', 'cart', 'checkout', 'order',
+  'search', 'szukaj', 'wyniki', 'results', 'filter', 'sort',
+  'samochody', 'cars', 'auto', 'pojazdy', 'vehicles', 'nowe', 'uzywane',
+  'salon', 'dealer', 'showroom', 'autoryzowany', 'authorized',
+  'sprzedaz', 'sales', 'wynajem', 'rental', 'fleet',
+];
+
 // Extract brands from URL patterns (for car dealers, distributors etc.)
 function extractBrandsFromUrls(urls: string[]): string[] {
   const brands: string[] = [];
@@ -338,8 +353,9 @@ function extractBrandsFromUrls(urls: string[]): string[] {
       const match = url.match(pattern);
       if (match && match[1]) {
         const brand = match[1].replace(/-/g, ' ').trim();
-        // Filter out common non-brand words
-        if (brand.length > 1 && !['numer', 'oferta', 'kontakt', 'about', 'news'].includes(brand.toLowerCase())) {
+        // Filter out common non-brand words using expanded exclusion list
+        const lowerBrand = brand.toLowerCase();
+        if (brand.length > 2 && !EXCLUDED_BRAND_PATTERNS.some(ex => lowerBrand.includes(ex))) {
           brands.push(capitalizeWords(brand));
         }
       }
@@ -504,15 +520,42 @@ function parseScrapedContent(pages: Array<{ url: string; content: string; title?
     console.log(`[parseScrapedContent] Content-based references found: ${contentReferences.length}`);
   }
 
+  // ===== FALLBACK DESCRIPTION FROM HOMEPAGE =====
+  
+  if (!description && pages.length > 0) {
+    // Find homepage (shortest path or first page)
+    const homepage = pages.find(p => {
+      try {
+        const path = new URL(p.url).pathname;
+        return path === '/' || path === '';
+      } catch {
+        return false;
+      }
+    }) || pages[0];
+    
+    if (homepage && homepage.content.length > 100) {
+      // Extract meaningful paragraphs (skip navigation, headers)
+      const paragraphs = homepage.content
+        .split(/\n\n+/)
+        .filter(p => p.length > 50 && !p.startsWith('#') && !p.startsWith('*') && !p.startsWith('-'))
+        .filter(p => !isNoise(p));
+      
+      if (paragraphs.length > 0) {
+        description = paragraphs.slice(0, 3).join('\n\n').slice(0, 2000);
+        console.log(`[parseScrapedContent] Fallback description from homepage: ${description.slice(0, 100)}...`);
+      }
+    }
+  }
+
   // ===== FINAL DEDUPLICATION AND CLEANING =====
   
-  services = cleanList(services).slice(0, 15);
-  products = cleanList(products).slice(0, 15);
-  brands = cleanList(brands).slice(0, 15);
-  realizations = cleanList(realizations).slice(0, 15);
-  references = cleanList(references).slice(0, 15);
-  management_web = management_web.slice(0, 10);
-  latest_news = latest_news.filter(n => n.title && !isNoise(n.title)).slice(0, 10);
+  services = cleanList(services).slice(0, 20);
+  products = cleanList(products).slice(0, 20);
+  brands = cleanList(brands).slice(0, 20);
+  realizations = cleanList(realizations).slice(0, 20);
+  references = cleanList(references).slice(0, 20);
+  management_web = management_web.slice(0, 15);
+  latest_news = latest_news.filter(n => n.title && !isNoise(n.title)).slice(0, 15);
 
   // Extract social media from all content
   const social_media_links = extractSocialMedia(allContent);
@@ -682,6 +725,12 @@ Deno.serve(async (req) => {
       urls_found: allUrls.length,
       crawled_at: new Date().toISOString(),
       crawled_urls: scrapedPages.map(p => p.url),
+      // Store raw content from scraped pages (limited to ~5KB per page for storage)
+      scraped_pages_raw: scrapedPages.map(p => ({
+        url: p.url,
+        title: p.title || '',
+        content: p.content.slice(0, 5000),
+      })),
     };
 
     // Get current company data to avoid overwriting existing values
