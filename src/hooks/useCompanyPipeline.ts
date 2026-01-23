@@ -45,10 +45,23 @@ export function useCompanyPipeline(companyId: string | undefined) {
   const queryClient = useQueryClient();
 
   const invalidateCompany = () => {
-    queryClient.invalidateQueries({ queryKey: ['company', companyId] });
-    queryClient.invalidateQueries({ queryKey: ['companies'] });
-    queryClient.invalidateQueries({ queryKey: ['contact'] }); // Refresh contact views with company data
-    queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    // Force full refetch, not just mark as stale
+    queryClient.invalidateQueries({ 
+      queryKey: ['company', companyId],
+      refetchType: 'all'
+    });
+    queryClient.invalidateQueries({ 
+      queryKey: ['companies'],
+      refetchType: 'all'
+    });
+    queryClient.invalidateQueries({ 
+      queryKey: ['contact'],
+      refetchType: 'all'
+    });
+    queryClient.invalidateQueries({ 
+      queryKey: ['contacts'],
+      refetchType: 'all'
+    });
   };
 
   // NEW: Preview source data (search without saving)

@@ -48,30 +48,30 @@ export function CompanyFlatTabs({
 
   // Parse AI analysis
   const aiAnalysis = company.ai_analysis as CompanyAnalysis | null;
-  const hasAnalysis = !!aiAnalysis && company.company_analysis_status === 'completed';
+  const hasAnalysis = aiAnalysis !== null && 
+    typeof aiAnalysis === 'object' && 
+    Object.keys(aiAnalysis).length > 0 &&
+    company.company_analysis_status === 'completed';
   const fallbackUsed = aiAnalysis?.fallback_used;
 
-  // Check which sections have data
-  const hasFinancials = !!(aiAnalysis?.revenue || aiAnalysis?.revenue_history?.length || aiAnalysis?.financial_statements?.length);
-  const hasProducts = !!(aiAnalysis?.products?.length || aiAnalysis?.services?.length);
-  const hasCollaboration = !!(aiAnalysis?.collaboration_opportunities || aiAnalysis?.ideal_partner_profile || aiAnalysis?.synergy_potential);
-  const hasNews = !!(aiAnalysis?.recent_news || aiAnalysis?.market_signals);
-  const hasPersonnel = !!(aiAnalysis?.management?.length);
-  const hasAffiliations = !!(aiAnalysis?.group_companies?.length || aiAnalysis?.represented_brands?.length);
-  const hasLocations = !!(aiAnalysis?.locations?.length || aiAnalysis?.geographic_coverage);
-  const hasProjects = !!(aiAnalysis?.reference_projects?.length || aiAnalysis?.key_clients?.length);
+  // Debug logging
+  console.log('[CompanyFlatTabs] company:', company.name);
+  console.log('[CompanyFlatTabs] status:', company.company_analysis_status);
+  console.log('[CompanyFlatTabs] ai_analysis keys:', aiAnalysis ? Object.keys(aiAnalysis).length : 0);
+  console.log('[CompanyFlatTabs] hasAnalysis:', hasAnalysis);
 
+  // Show ALL tabs when analysis is complete - individual sections handle empty states
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
     { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
-    { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasFinancials },
-    { id: 'products', label: 'Produkty', icon: Package, always: hasProducts },
-    { id: 'collaboration', label: 'Współpraca', icon: Handshake, always: hasCollaboration },
-    { id: 'news', label: 'Aktualności', icon: Newspaper, always: hasNews },
-    { id: 'personnel', label: 'Osoby', icon: Users, always: hasPersonnel },
-    { id: 'affiliations', label: 'Powiązania', icon: Network, always: hasAffiliations },
-    { id: 'locations', label: 'Lokalizacje', icon: MapPin, always: hasLocations },
-    { id: 'projects', label: 'Realizacje', icon: Briefcase, always: hasProjects },
+    { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasAnalysis },
+    { id: 'products', label: 'Produkty', icon: Package, always: hasAnalysis },
+    { id: 'collaboration', label: 'Współpraca', icon: Handshake, always: hasAnalysis },
+    { id: 'news', label: 'Aktualności', icon: Newspaper, always: hasAnalysis },
+    { id: 'personnel', label: 'Osoby', icon: Users, always: hasAnalysis },
+    { id: 'affiliations', label: 'Powiązania', icon: Network, always: hasAnalysis },
+    { id: 'locations', label: 'Lokalizacje', icon: MapPin, always: hasAnalysis },
+    { id: 'projects', label: 'Realizacje', icon: Briefcase, always: hasAnalysis },
   ];
 
   // Filter to show only tabs with data (except Sources which is always shown)
