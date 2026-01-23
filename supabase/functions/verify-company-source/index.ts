@@ -197,6 +197,20 @@ async function fetchKRSData(krs: string): Promise<any | null> {
 }
 
 /**
+ * Normalize REGON to 9-digit format.
+ * KRS API sometimes returns 14-digit REGON (for local units), but standard is 9 digits.
+ */
+function normalizeRegon(regon: string | null | undefined): string | null {
+  if (!regon) return null;
+  const clean = regon.replace(/\D/g, '');
+  // If 14 digits (local unit format), take first 9 (company identifier)
+  if (clean.length === 14) {
+    return clean.substring(0, 9);
+  }
+  return clean;
+}
+
+/**
  * KRS OdpisPełny returns arrays with history entries (nrWpisuWprow/nrWpisuWykr).
  * This function returns the latest active (not deleted) entry from the array.
  */
@@ -1292,11 +1306,11 @@ function parseKRSResponse(krsData: any): any {
                 naglowek?.nip ||
                 null;
     
-    const regon = identyfikatory?.regon || 
-                  naglowek?.regon ||
-                  null;
+    // Extract and normalize REGON (14-digit -> 9-digit)
+    const rawRegon = identyfikatory?.regon || naglowek?.regon || null;
+    const regon = normalizeRegon(rawRegon);
     
-    console.log(`[KRS] Identyfikatory: ${Array.isArray(identyfikatoryArray) ? identyfikatoryArray.length : 0} entries, NIP=${nip}, REGON=${regon}`);
+    console.log(`[KRS] Identyfikatory: ${Array.isArray(identyfikatoryArray) ? identyfikatoryArray.length : 0} entries, NIP=${nip}, REGON=${regon} (raw: ${rawRegon})`);
     
     // Address - adres is an ARRAY with history entries
     const siedzibaIAdres = dzial1?.siedzibaIAdres || {};
@@ -1883,6 +1897,9 @@ Deno.serve(async (req) => {
         ...(sourceData.city ? { city: sourceData.city } : {}),
         ...(sourceData.postal_code ? { postal_code: sourceData.postal_code } : {}),
         ...(sourceData.legal_form ? { legal_form: sourceData.legal_form } : {}),
+        // Update official company name from verified KRS data
+        ...(sourceData.name_official && sourceData.source === 'krs_api' 
+          ? { name: sourceData.name_official } : {}),
         // New fields from Stage 1
         ...(sourceData.registration_date ? { registration_date: sourceData.registration_date } : {}),
         ...(sourceData.pkd_codes?.length ? { pkd_codes: sourceData.pkd_codes } : {}),
