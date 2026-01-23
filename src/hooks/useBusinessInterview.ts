@@ -273,7 +273,7 @@ export function useBIVersions(businessInterviewId: string | undefined) {
 }
 
 // Validation helper
-export function validateBIForAI(bi: BusinessInterview | null): BIValidationResult {
+export function validateBIForAI(bi: Partial<BusinessInterview> | null): BIValidationResult {
   const missing: string[] = [];
   
   if (!bi) {

@@ -15,6 +15,7 @@ import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactModal } from '@/components/contacts/ContactModal';
 import { CompanyView } from '@/components/contacts/CompanyView';
 import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
+import { BITab } from '@/components/bi/BITab';
 import { useAuth } from '@/contexts/AuthContext';
 
 // List of public email domains that should not enable company view
@@ -98,8 +99,9 @@ export default function ContactDetail() {
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
             </TabsList>
           ) : (
-            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-8">
+            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-9">
               <TabsTrigger value="overview">Przegląd</TabsTrigger>
+              <TabsTrigger value="bi">BI</TabsTrigger>
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
               <TabsTrigger value="ownership">Udziały</TabsTrigger>
               <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
@@ -112,6 +114,10 @@ export default function ContactDetail() {
 
           <TabsContent value="overview" className="mt-6">
             <ContactOverviewTab contact={contact} />
+          </TabsContent>
+
+          <TabsContent value="bi" className="mt-6">
+            <BITab contactId={contact.id} contactName={contact.full_name} />
           </TabsContent>
 
           <TabsContent value="agent" className="mt-6">
