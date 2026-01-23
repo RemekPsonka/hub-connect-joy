@@ -365,9 +365,15 @@ export function useUpdateCompany() {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Dane firmy zostały zaktualizowane');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error updating company:', error);
-      toast.error('Błąd podczas aktualizacji danych firmy');
+      
+      // Obsługa błędu duplikatu website
+      if (error?.code === '23505' && error?.message?.includes('companies_website_tenant_unique')) {
+        toast.error('Inna firma w systemie ma już ten adres strony WWW. Zmień adres lub połącz firmy.');
+      } else {
+        toast.error('Błąd podczas aktualizacji danych firmy');
+      }
     },
   });
 }

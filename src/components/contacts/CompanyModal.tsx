@@ -471,9 +471,10 @@ export function CompanyModal({ open, onOpenChange, company, ownerContactId }: Co
                       <FormItem>
                         <div className="flex gap-3 items-center">
                           <Avatar className="h-14 w-14 border">
-                            <AvatarImage 
+                          <AvatarImage 
                               src={field.value || getCompanyLogoUrl(form.watch('website')) || ''} 
                               alt="Logo firmy"
+                              key={field.value || 'no-logo'}
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                               }}
