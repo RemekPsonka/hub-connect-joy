@@ -143,7 +143,7 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Status relacji - WYMAGANE */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -161,6 +161,23 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
                   <SelectItem value="nowy">Nowy kontakt</SelectItem>
                   <SelectItem value="polecony">Polecony</SelectItem>
                   <SelectItem value="powracajacy">Powracający</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Typ kontaktu - NOWE */}
+            <div className="space-y-2">
+              <Label>Typ kontaktu</Label>
+              <Select
+                value={data.typ_kontaktu || ''}
+                onValueChange={(value) => updateField('typ_kontaktu', value as SectionABasic['typ_kontaktu'])}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz typ" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="znajomy">Znajomy</SelectItem>
+                  <SelectItem value="klient">Klient</SelectItem>
                 </SelectContent>
               </Select>
             </div>
