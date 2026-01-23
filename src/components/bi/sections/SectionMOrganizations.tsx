@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Landmark, X, Plus } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import type { SectionMOrganizations } from '../types';
 
 interface SectionMOrganizationsProps {
@@ -77,29 +76,21 @@ export function SectionMOrganizationsComponent({ data, onChange }: SectionMOrgan
   );
 
   return (
-    <AccordionItem value="section-m">
-      <AccordionTrigger className="text-base font-medium">
-        <div className="flex items-center gap-2">
-          <Landmark className="h-4 w-4 text-primary" />
-          M. Organizacje / fundacje
-        </div>
-      </AccordionTrigger>
-      <AccordionContent className="pt-4 space-y-6">
-        {renderTagField('fundacje_csr', 'Fundacje / CSR', 'Dodaj fundację...', newFundacja, setNewFundacja)}
-        {renderTagField('organizacje_branzowe', 'Organizacje branżowe', 'Dodaj organizację...', newOrganizacja, setNewOrganizacja)}
-        {renderTagField('izby_handlowe', 'Izby handlowe', 'Dodaj izbę...', newIzba, setNewIzba)}
-        {renderTagField('stowarzyszenia', 'Stowarzyszenia', 'Dodaj stowarzyszenie...', newStowarzyszenie, setNewStowarzyszenie)}
+    <div className="space-y-6">
+      {renderTagField('fundacje_csr', 'Fundacje / CSR', 'Dodaj fundację...', newFundacja, setNewFundacja)}
+      {renderTagField('organizacje_branzowe', 'Organizacje branżowe', 'Dodaj organizację...', newOrganizacja, setNewOrganizacja)}
+      {renderTagField('izby_handlowe', 'Izby handlowe', 'Dodaj izbę...', newIzba, setNewIzba)}
+      {renderTagField('stowarzyszenia', 'Stowarzyszenia', 'Dodaj stowarzyszenie...', newStowarzyszenie, setNewStowarzyszenie)}
 
-        <div className="space-y-2">
-          <Label>Inne członkostwa</Label>
-          <Textarea
-            value={data.inne || ''}
-            onChange={(e) => updateField('inne', e.target.value)}
-            placeholder="Inne organizacje, kluby, sieci..."
-            className="min-h-[60px]"
-          />
-        </div>
-      </AccordionContent>
-    </AccordionItem>
+      <div className="space-y-2">
+        <Label>Inne członkostwa</Label>
+        <Textarea
+          value={data.inne || ''}
+          onChange={(e) => updateField('inne', e.target.value)}
+          placeholder="Inne organizacje, kluby, sieci..."
+          className="min-h-[60px]"
+        />
+      </div>
+    </div>
   );
 }
