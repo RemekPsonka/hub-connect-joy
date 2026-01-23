@@ -186,6 +186,13 @@ export function useUpdateConsultation() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: ConsultationUpdate & { id: string }) => {
+      // First get the current consultation to check status change
+      const { data: currentConsultation } = await supabase
+        .from('consultations')
+        .select('status, contact_id')
+        .eq('id', id)
+        .single();
+
       const { data, error } = await supabase
         .from('consultations')
         .update(updates)
@@ -194,6 +201,19 @@ export function useUpdateConsultation() {
         .single();
 
       if (error) throw error;
+
+      // If status changed to 'completed', update last_contact_date
+      if (
+        updates.status === 'completed' &&
+        currentConsultation?.status !== 'completed' &&
+        currentConsultation?.contact_id
+      ) {
+        await supabase
+          .from('contacts')
+          .update({ last_contact_date: new Date().toISOString() })
+          .eq('id', currentConsultation.contact_id);
+      }
+
       return data;
     },
     onSuccess: (data) => {
@@ -202,6 +222,9 @@ export function useUpdateConsultation() {
       queryClient.invalidateQueries({ queryKey: ['contact-consultations', data.contact_id] });
       queryClient.invalidateQueries({ queryKey: ['consultations', 'upcoming'] });
       queryClient.invalidateQueries({ queryKey: ['consultations', 'today-count'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['contact', data.contact_id] });
+      queryClient.invalidateQueries({ queryKey: ['contacts-to-renew'] });
     },
   });
 }
