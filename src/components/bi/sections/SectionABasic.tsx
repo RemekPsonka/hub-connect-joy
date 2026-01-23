@@ -60,26 +60,46 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Branża */}
-        <div className="space-y-2">
-          <Label>Branża</Label>
-          <Select
-            value={data.branza || ''}
-            onValueChange={(value) => updateField('branza', value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Wybierz branżę" />
-            </SelectTrigger>
-            <SelectContent>
-              {BRANZE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="space-y-4">
+        {/* Branże - Multi-select */}
+        <div className="space-y-3">
+          <Label>Branże</Label>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 p-3 border rounded-lg bg-background">
+            {BRANZE_OPTIONS.map((option) => {
+              const isChecked = (data.branza || []).includes(option.value);
+              return (
+                <div key={option.value} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`branza-${option.value}`}
+                    checked={isChecked}
+                    onCheckedChange={(checked) => {
+                      const current = data.branza || [];
+                      if (checked) {
+                        updateField('branza', [...current, option.value]);
+                      } else {
+                        updateField('branza', current.filter(b => b !== option.value));
+                      }
+                    }}
+                  />
+                  <Label 
+                    htmlFor={`branza-${option.value}`} 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    {option.label}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
+          {(data.branza?.length || 0) > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Wybrano: {data.branza?.length} branż(e)
+            </p>
+          )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Email bezpośredni */}
         <div className="space-y-2">

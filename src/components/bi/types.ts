@@ -26,7 +26,7 @@ export interface BusinessInterview {
 // Section A: Dane podstawowe + Kontekst spotkania (B merged into A)
 export interface SectionABasic {
   // Dane podstawowe
-  branza?: string;
+  branza?: string[];  // Multi-select - może działać w kilku branżach
   typ_kontaktu?: 'znajomy' | 'klient';
   branza_tagi?: string[];
   email_bezposredni?: string;
