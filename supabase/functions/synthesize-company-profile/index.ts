@@ -178,7 +178,7 @@ ${internalNotes || 'Brak notatek'}
 Stwórz pełny profil klienta w strukturze 16 sekcji. Zsyntetyzuj dane ze wszystkich źródeł, rozwiąż konflikty (priorytet: KRS > WWW > Perplexity), wypełnij sekcję section_16_missing_info o brakujących danych.`;
 
   try {
-    const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
