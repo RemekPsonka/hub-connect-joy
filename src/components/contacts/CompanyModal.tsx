@@ -409,57 +409,30 @@ export function CompanyModal({ open, onOpenChange, company, ownerContactId }: Co
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="employee_count"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Wielkość firmy (legacy)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Wybierz wielkość" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {sizeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="company_size"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Wielkość firmy</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Wybierz wielkość" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {sizeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="company_size"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Wielkość firmy</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Wybierz wielkość" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {sizeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/* Logo section */}
                 <div className="border-t pt-4">
