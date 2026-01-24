@@ -23,12 +23,10 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useContacts, type Contact } from '@/hooks/useContacts';
 import { useCreateTask, useCreateCrossTask, useUpdateTask } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 
 interface TaskInitialData {
   title?: string;
@@ -64,20 +62,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
   const [status, setStatus] = useState('pending');
   const [dueDate, setDueDate] = useState<Date | undefined>();
 
-  // Fetch contacts for dropdowns
-  const { data: contactsData = [] } = useQuery({
-    queryKey: ['contacts-simple'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('id, full_name, company')
-        .eq('is_active', true)
-        .order('full_name');
-      if (error) throw error;
-      return data || [];
-    },
-  });
-  const contacts = contactsData;
+  // ConnectionContactSelect handles its own data fetching with search
   const createTask = useCreateTask();
   const createCrossTask = useCreateCrossTask();
   const updateTask = useUpdateTask();
@@ -269,19 +254,11 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
           {taskType === 'standard' && !isEditing && (
             <div className="space-y-2">
               <Label>Kontakt</Label>
-              <Select value={contactId} onValueChange={setContactId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Wybierz kontakt (opcjonalne)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map((contact) => (
-                    <SelectItem key={contact.id} value={contact.id}>
-                      {contact.full_name}
-                      {contact.company && ` (${contact.company})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ConnectionContactSelect
+                value={contactId || null}
+                onChange={(id) => setContactId(id || '')}
+                placeholder="Wybierz kontakt (opcjonalne)"
+              />
             </div>
           )}
 
@@ -291,35 +268,20 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Kontakt A *</Label>
-                  <Select value={contactAId} onValueChange={setContactAId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Wybierz kontakt A" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contacts.map((contact) => (
-                        <SelectItem key={contact.id} value={contact.id}>
-                          {contact.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ConnectionContactSelect
+                    value={contactAId || null}
+                    onChange={(id) => setContactAId(id || '')}
+                    placeholder="Wybierz kontakt A"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Kontakt B *</Label>
-                  <Select value={contactBId} onValueChange={setContactBId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Wybierz kontakt B" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contacts
-                        .filter((c) => c.id !== contactAId)
-                        .map((contact) => (
-                          <SelectItem key={contact.id} value={contact.id}>
-                            {contact.full_name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <ConnectionContactSelect
+                    value={contactBId || null}
+                    onChange={(id) => setContactBId(id || '')}
+                    placeholder="Wybierz kontakt B"
+                    excludeIds={contactAId ? [contactAId] : []}
+                  />
                 </div>
               </div>
 
