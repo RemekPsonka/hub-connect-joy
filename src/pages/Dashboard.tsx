@@ -157,13 +157,7 @@ export default function Dashboard() {
       {/* AI Widgets - show only when there are contacts */}
       {!loading && !hasNoContacts && (
         <>
-          {/* Serendipity - full width */}
-          <DailySerendipity />
-          
-          {/* Contacts to renew - full width alert */}
-          <ContactsToRenew />
-          
-          {/* Task widgets - KPI, My Tasks, Team Tasks */}
+          {/* Task widgets - KPI, My Tasks, Team Tasks (najważniejsze) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <KPITasksWidget />
             <MyTasksWidget />
@@ -188,11 +182,17 @@ export default function Dashboard() {
           {/* Analityka - full width */}
           <AnalyticsOverview />
           
-          {/* Second row - 3 columns */}
+          {/* Zarządzanie relacjami - 3 columns */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TodaysPriorities />
             <AIRecommendations />
             <RelationshipAlerts />
+          </div>
+          
+          {/* DÓŁ STRONY - mniej pilne, obok siebie */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <DailySerendipity />
+            <ContactsToRenew />
           </div>
         </>
       )}

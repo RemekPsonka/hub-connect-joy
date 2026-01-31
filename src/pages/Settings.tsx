@@ -18,6 +18,7 @@ import { TwoFactorSettings } from '@/components/settings/TwoFactorSettings';
 import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
 import { BatchKRSSyncController } from '@/components/company/BatchKRSSyncController';
 import { TaskCategoriesManager } from '@/components/settings/TaskCategoriesManager';
+import { GroupRefreshPolicyEditor } from '@/components/settings/GroupRefreshPolicyEditor';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -368,6 +369,9 @@ export default function Settings() {
 
           {/* Default Positions */}
           <DefaultPositionsManager />
+
+          {/* Polityka odświeżania kontaktów */}
+          <GroupRefreshPolicyEditor />
 
           {/* Synonyms Dictionary */}
           <SynonymsDictionary />
