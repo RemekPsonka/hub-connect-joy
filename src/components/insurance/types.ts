@@ -185,4 +185,14 @@ export interface DomainProps<T> {
   data: T;
   onChange: (data: T) => void;
   operationalTypes: TypDzialnosci[];
+  companyId?: string;
+  onAddPolicy?: (data: {
+    policy_type: string;
+    policy_name: string;
+    start_date: string;
+    end_date: string;
+    sum_insured?: number;
+    premium?: number;
+    is_our_policy?: boolean;
+  }) => void;
 }

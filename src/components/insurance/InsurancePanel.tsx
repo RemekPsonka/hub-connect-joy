@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { RiskMatrixPanel } from './RiskMatrixPanel';
 import { AIRiskConsultantPanel } from './AIRiskConsultantPanel';
 import { useInsuranceRisk } from '@/hooks/useInsuranceRisk';
+import { useInsurancePolicies } from '@/hooks/useInsurancePolicies';
 import { exportInsuranceBriefToPDF } from '@/utils/exportInsuranceBrief';
 import {
   DEFAULT_RYZYKO_MAJATKOWE,
@@ -25,6 +26,8 @@ import type {
   RyzykoFinansowe,
   PodpowiedzAI,
 } from './types';
+import type { QuickPolicyData } from './QuickAddPolicyButton';
+import type { PolicyType } from '@/components/renewal/types';
 
 interface Company {
   id: string;
@@ -41,6 +44,7 @@ interface InsurancePanelProps {
 
 export function InsurancePanel({ company }: InsurancePanelProps) {
   const { assessment, isLoading, saveAssessment, isSaving, analyzeRisk, isAnalyzing, generateBrief, isGeneratingBrief } = useInsuranceRisk(company.id);
+  const { createPolicy } = useInsurancePolicies(company.id);
 
   // Lokalne stany formularza
   const [operationalTypes, setOperationalTypes] = useState<TypDzialnosci[]>([]);
@@ -111,6 +115,19 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
     setFinansowe(data);
     markChanged();
   };
+
+  const handleAddPolicy = useCallback((data: QuickPolicyData) => {
+    createPolicy.mutate({
+      company_id: company.id,
+      policy_type: data.policy_type as PolicyType,
+      policy_name: data.policy_name,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      sum_insured: data.sum_insured,
+      premium: data.premium,
+      is_our_policy: data.is_our_policy,
+    });
+  }, [company.id, createPolicy]);
 
   const handleSave = async () => {
     try {
@@ -245,6 +262,8 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
             onSpecjalistyczneChange={handleSpecjalistyczneChange}
             onPracownicyChange={handlePracownicyChange}
             onFinansoweChange={handleFinansoweChange}
+            companyId={company.id}
+            onAddPolicy={handleAddPolicy}
           />
         </ResizablePanel>
         

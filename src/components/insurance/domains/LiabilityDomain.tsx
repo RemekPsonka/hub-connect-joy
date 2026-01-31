@@ -5,11 +5,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle } from 'lucide-react';
 import { InsuranceStatusToggle } from '../InsuranceStatusToggle';
+import { QuickAddPolicyButton } from '../QuickAddPolicyButton';
 import type { RyzykoOC, DomainProps } from '../types';
 
 const TERYTORIA = ['Polska', 'UE', 'UK', 'USA', 'Kanada', 'Azja', 'Świat'];
 
-export function LiabilityDomain({ data, onChange }: DomainProps<RyzykoOC>) {
+export function LiabilityDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoOC>) {
   const updateField = <K extends keyof RyzykoOC>(field: K, value: RyzykoOC[K]) => {
     onChange({ ...data, [field]: value });
   };
@@ -25,12 +26,25 @@ export function LiabilityDomain({ data, onChange }: DomainProps<RyzykoOC>) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
-        <InsuranceStatusToggle
-          value={data.status}
-          onChange={(status) => updateField('status', status)}
-        />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
+          <InsuranceStatusToggle
+            value={data.status}
+            onChange={(status) => updateField('status', status)}
+          />
+        </div>
+        
+        {data.status === 'ubezpieczone' && companyId && onAddPolicy && (
+          <QuickAddPolicyButton
+            policyType="liability"
+            defaultPolicyName="Ubezpieczenie OC"
+            onAdd={(policyData) => onAddPolicy({
+              ...policyData,
+              policy_type: policyData.policy_type,
+            })}
+          />
+        )}
       </div>
 
       {data.status !== 'nie_dotyczy' && (

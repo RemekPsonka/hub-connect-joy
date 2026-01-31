@@ -6,14 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CreditCard, Package, Scale, Shield } from 'lucide-react';
 import { InsuranceStatusToggle } from '../InsuranceStatusToggle';
-import type { RyzykoFinansowe, TypDzialnosci, TypGwarancji, ZakresOchronyPrawnej } from '../types';
+import { QuickAddPolicyButton } from '../QuickAddPolicyButton';
+import type { RyzykoFinansowe, TypDzialnosci, TypGwarancji, ZakresOchronyPrawnej, DomainProps } from '../types';
 import { TYP_GWARANCJI_LABELS, ZAKRES_OCHRONY_LABELS } from '../types';
-
-interface FinancialDomainProps {
-  data: RyzykoFinansowe;
-  onChange: (data: RyzykoFinansowe) => void;
-  operationalTypes: TypDzialnosci[];
-}
 
 const GWARANCJA_TYPES: TypGwarancji[] = ['wadium', 'nalezyte_wykonanie', 'usuniecie_wad', 'zaliczkowa', 'platnicza'];
 const ZAKRES_OPTIONS: ZakresOchronyPrawnej[] = ['podstawowy', 'rozszerzony', 'pelny'];
@@ -38,7 +33,7 @@ function getRecommendations(operationalTypes: TypDzialnosci[]): string[] {
   return recommendations;
 }
 
-export function FinancialDomain({ data, onChange, operationalTypes }: FinancialDomainProps) {
+export function FinancialDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoFinansowe>) {
   const recommendations = getRecommendations(operationalTypes);
   
   const handleGwarancjaTypeToggle = (type: TypGwarancji, checked: boolean) => {
@@ -70,9 +65,22 @@ export function FinancialDomain({ data, onChange, operationalTypes }: FinancialD
 
       {/* Gwarancje Kontraktowe */}
       <div className="space-y-3 p-4 border rounded-lg">
-        <div className="flex items-center gap-2">
-          <CreditCard className="h-4 w-4 text-muted-foreground" />
-          <h4 className="font-medium">Gwarancje Kontraktowe</h4>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <h4 className="font-medium">Gwarancje Kontraktowe</h4>
+          </div>
+          {data.gwarancje_kontraktowe_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="other"
+              defaultPolicyName="Gwarancje kontraktowe"
+              defaultSumInsured={data.gwarancje_limit_roczny}
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
+          )}
         </div>
         
         <InsuranceStatusToggle
@@ -117,11 +125,24 @@ export function FinancialDomain({ data, onChange, operationalTypes }: FinancialD
 
       {/* Gwarancje Celne i Podatkowe */}
       <div className="space-y-3 p-4 border rounded-lg">
-        <div className="flex items-center gap-2">
-          <Package className="h-4 w-4 text-muted-foreground" />
-          <h4 className="font-medium">Gwarancje Celne i Podatkowe</h4>
-          {operationalTypes.includes('import_export') && (
-            <Badge variant="outline" className="text-xs">Rekomendowane</Badge>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-muted-foreground" />
+            <h4 className="font-medium">Gwarancje Celne i Podatkowe</h4>
+            {operationalTypes.includes('import_export') && (
+              <Badge variant="outline" className="text-xs">Rekomendowane</Badge>
+            )}
+          </div>
+          {data.gwarancje_celne_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="other"
+              defaultPolicyName="Gwarancje celne i podatkowe"
+              defaultSumInsured={data.gwarancje_celne_limit}
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
           )}
         </div>
         
@@ -150,11 +171,24 @@ export function FinancialDomain({ data, onChange, operationalTypes }: FinancialD
 
       {/* Kredyt Kupiecki (Trade Credit) */}
       <div className="space-y-3 p-4 border rounded-lg">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-muted-foreground" />
-          <h4 className="font-medium">Kredyt Kupiecki (Trade Credit)</h4>
-          {(operationalTypes.includes('handel') || operationalTypes.includes('produkcja')) && (
-            <Badge variant="outline" className="text-xs">Rekomendowane</Badge>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-muted-foreground" />
+            <h4 className="font-medium">Kredyt Kupiecki (Trade Credit)</h4>
+            {(operationalTypes.includes('handel') || operationalTypes.includes('produkcja')) && (
+              <Badge variant="outline" className="text-xs">Rekomendowane</Badge>
+            )}
+          </div>
+          {data.kredyt_kupiecki_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="other"
+              defaultPolicyName="Ubezpieczenie kredytu kupieckiego"
+              defaultSumInsured={data.kredyt_kupiecki_obroty_ubezpieczone}
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
           )}
         </div>
         
@@ -217,9 +251,21 @@ export function FinancialDomain({ data, onChange, operationalTypes }: FinancialD
 
       {/* Ochrona Prawna (Wierzytelności) */}
       <div className="space-y-3 p-4 border rounded-lg">
-        <div className="flex items-center gap-2">
-          <Scale className="h-4 w-4 text-muted-foreground" />
-          <h4 className="font-medium">Ochrona Prawna (Wierzytelności)</h4>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Scale className="h-4 w-4 text-muted-foreground" />
+            <h4 className="font-medium">Ochrona Prawna (Wierzytelności)</h4>
+          </div>
+          {data.ochrona_prawna_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="other"
+              defaultPolicyName="Ochrona prawna"
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
+          )}
         </div>
         
         <InsuranceStatusToggle
