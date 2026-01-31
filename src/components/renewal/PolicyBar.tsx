@@ -21,8 +21,9 @@ interface PolicyBarProps {
   onDelete: (policyId: string) => void;
 }
 
-const DANGER_ZONE_DAYS = 30;
-const ACTION_PHASE_DAYS = 90;
+const DANGER_ZONE_DAYS = 30;       // T-1 miesiąc (strefa zagrożenia)
+const PREPARATION_DAYS = 90;       // T-3 miesiące (strefa przygotowania - pełny zielony)
+const EARLY_WARNING_DAYS = 120;    // T-4 miesiące (początek narastania koloru)
 
 export function PolicyBar({
   policy,
@@ -51,24 +52,37 @@ export function PolicyBar({
     const endOffset = (differenceInDays(visibleEnd, timelineStart) / totalDays) * 100;
     const width = endOffset - startOffset;
     
-    // Action phase (90 days before expiry)
-    const actionPhaseStart = new Date(policyEnd);
-    actionPhaseStart.setDate(actionPhaseStart.getDate() - ACTION_PHASE_DAYS);
-    const visibleActionStart = max([actionPhaseStart, visibleStart]);
-    const actionStartOffset = (differenceInDays(visibleActionStart, timelineStart) / totalDays) * 100;
-    const actionWidth = Math.max(0, endOffset - actionStartOffset);
+    // Early warning phase (T-4 to T-3) - 120 to 90 days before expiry
+    const earlyWarningStart = new Date(policyEnd);
+    earlyWarningStart.setDate(earlyWarningStart.getDate() - EARLY_WARNING_DAYS);
+    const visibleEarlyWarningStart = max([earlyWarningStart, visibleStart]);
+    const earlyWarningStartOffset = (differenceInDays(visibleEarlyWarningStart, timelineStart) / totalDays) * 100;
     
-    // Danger zone (30 days before expiry)
+    // Preparation phase (T-3 to T-1) - 90 to 30 days before expiry
+    const preparationStart = new Date(policyEnd);
+    preparationStart.setDate(preparationStart.getDate() - PREPARATION_DAYS);
+    const visiblePreparationStart = max([preparationStart, visibleStart]);
+    const preparationStartOffset = (differenceInDays(visiblePreparationStart, timelineStart) / totalDays) * 100;
+    
+    // Danger zone (T-1) - 30 days before expiry
     const dangerZoneStart = new Date(policyEnd);
     dangerZoneStart.setDate(dangerZoneStart.getDate() - DANGER_ZONE_DAYS);
     const visibleDangerStart = max([dangerZoneStart, visibleStart]);
     const dangerStartOffset = (differenceInDays(visibleDangerStart, timelineStart) / totalDays) * 100;
     const dangerWidth = Math.max(0, endOffset - dangerStartOffset);
     
+    // Early warning width (from T-4 to T-3)
+    const earlyWarningEndOffset = preparationStartOffset;
+    const earlyWarningWidth = Math.max(0, earlyWarningEndOffset - earlyWarningStartOffset);
+    
+    // Preparation width (from T-3 to T-1)
+    const preparationEndOffset = dangerStartOffset;
+    const preparationWidth = Math.max(0, preparationEndOffset - preparationStartOffset);
+    
     const daysLeft = differenceInDays(policyEnd, today);
     const isExpired = daysLeft < 0;
     const isInDanger = daysLeft >= 0 && daysLeft <= DANGER_ZONE_DAYS;
-    const isInAction = daysLeft > DANGER_ZONE_DAYS && daysLeft <= ACTION_PHASE_DAYS;
+    const isInPreparation = daysLeft > DANGER_ZONE_DAYS && daysLeft <= PREPARATION_DAYS;
     
     const isVisible = visibleStart <= visibleEnd && 
       isWithinInterval(visibleStart, { start: timelineStart, end: timelineEnd });
@@ -76,13 +90,15 @@ export function PolicyBar({
     return {
       startOffset,
       width,
-      actionStartOffset: actionStartOffset - startOffset,
-      actionWidth,
+      earlyWarningStartOffset: earlyWarningStartOffset - startOffset,
+      earlyWarningWidth,
+      preparationStartOffset: preparationStartOffset - startOffset,
+      preparationWidth,
       dangerStartOffset: dangerStartOffset - startOffset,
       dangerWidth,
       isExpired,
       isInDanger,
-      isInAction,
+      isInPreparation,
       isVisible,
       daysLeft,
     };
@@ -119,13 +135,27 @@ export function PolicyBar({
               }}
             />
             
-            {/* Action phase overlay (green) */}
-            {calculations.actionWidth > 0 && (
+            {/* Early warning phase overlay (T-4 to T-3) - gradient from transparent to green */}
+            {calculations.earlyWarningWidth > 0 && (
               <div
-                className="absolute top-0 bottom-0 rounded-r-md"
+                className="absolute top-0 bottom-0"
                 style={{
-                  left: `${Math.max(0, (calculations.actionStartOffset / calculations.width) * 100)}%`,
-                  width: `${Math.min(100, (calculations.actionWidth / calculations.width) * 100)}%`,
+                  left: `${Math.max(0, (calculations.earlyWarningStartOffset / calculations.width) * 100)}%`,
+                  width: `${Math.min(100, (calculations.earlyWarningWidth / calculations.width) * 100)}%`,
+                  background: darkMode 
+                    ? 'linear-gradient(to right, hsla(142, 71%, 45%, 0), hsla(142, 71%, 45%, 0.7))'
+                    : 'linear-gradient(to right, hsla(142, 76%, 36%, 0), hsla(142, 76%, 36%, 0.6))',
+                }}
+              />
+            )}
+            
+            {/* Preparation phase overlay (T-3 to T-1) - solid green */}
+            {calculations.preparationWidth > 0 && (
+              <div
+                className="absolute top-0 bottom-0"
+                style={{
+                  left: `${Math.max(0, (calculations.preparationStartOffset / calculations.width) * 100)}%`,
+                  width: `${Math.min(100, (calculations.preparationWidth / calculations.width) * 100)}%`,
                   backgroundColor: darkMode 
                     ? 'hsla(142, 71%, 45%, 0.7)'
                     : 'hsla(142, 76%, 36%, 0.6)',
@@ -133,7 +163,7 @@ export function PolicyBar({
               />
             )}
             
-            {/* Danger zone overlay (red gradient) */}
+            {/* Danger zone overlay (T-1) - red gradient */}
             {calculations.dangerWidth > 0 && (
               <div
                 className="absolute top-0 bottom-0 rounded-r-md"
