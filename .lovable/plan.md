@@ -1,261 +1,400 @@
 
-
-## Plan: Edycja i usuwanie polis w harmonogramie
+## Plan: Profesjonalny Dashboard Planowania i Rozliczania Produkcji Ubezpieczeniowej
 
 ### Cel
-Dodać możliwość edycji danych polisy oraz jej usunięcia bezpośrednio z widoku harmonogramu (Renewal Timeline). Akcje będą dostępne po kliknięciu na pasek polisy lub w tooltipie.
+Zbudować kompleksowy moduł do planowania finansowego brokera ubezpieczeniowego, który umożliwi:
+- Ustalanie celów rocznych/kwartalnych/miesięcznych (KPI)
+- Rejestrowanie realnej produkcji (składki, prowizje)
+- Analizę odchyleń plan vs. realizacja
+- Prognozowanie na podstawie terminów wygasania obcych polis
 
 ---
 
-## Architektura rozwiązania
+## Architektura Danych
 
-Obecnie `TimelineTooltip` wyświetla tylko checklistę i informacje o polisie. Trzeba rozszerzyć tooltip o przyciski "Edytuj" i "Usuń", a także stworzyć modal do edycji polisy (podobny do `AddPolicyModal`, ale z wczytanymi danymi).
+### Nowe tabele w bazie danych
 
----
-
-## Zmiany w plikach
-
-| Plik | Typ | Opis |
-|------|-----|------|
-| `src/components/renewal/EditPolicyModal.tsx` | NOWY | Modal do edycji polisy z wszystkimi polami |
-| `src/components/renewal/TimelineTooltip.tsx` | MOD | Dodanie przycisków "Edytuj" i "Usuń" |
-| `src/components/renewal/PolicyBar.tsx` | MOD | Przekazanie callbacków `onEdit` i `onDelete` |
-| `src/components/renewal/TimelineRow.tsx` | MOD | Przekazanie callbacków do `PolicyBar` |
-| `src/components/renewal/RenewalTimeline.tsx` | MOD | Integracja z `updatePolicy`, `deletePolicy` i obsługa modali |
-| `src/components/renewal/index.ts` | MOD | Eksport nowego komponentu |
-
----
-
-## Nowy komponent: `EditPolicyModal.tsx`
-
-Modal do edycji polisy z formularzem analogicznym do `AddPolicyModal`, ale z wczytanymi danymi:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Edytuj polisę                                              │
-├─────────────────────────────────────────────────────────────┤
-│  Typ polisy *          [Flota ▼]                            │
-│  Numer polisy          [POL-2026-001        ]               │
-│                                                             │
-│  Nazwa polisy *        [UG flota                ]           │
-│                                                             │
-│  Ubezpieczyciel        [PZU SA              ]               │
-│  Broker                [                    ]               │
-│                                                             │
-│  Data rozpoczęcia *    [01.02.2026]                         │
-│  Data zakończenia *    [01.02.2027]                         │
-│                                                             │
-│  Suma ubezpieczenia    [5 000 000] PLN                      │
-│  Składka               [   45 000] PLN                      │
-│                                                             │
-│  ☑ Nasza polisa (obsługujemy jako broker)                  │
-│                                                             │
-│  Notatki:              [________________________]           │
-│                                                             │
-│  ┌────────────────────────────────────────────────────────┐│
-│  │  🗑️ Usuń polisę                              [Usuń]   ││
-│  └────────────────────────────────────────────────────────┘│
-│                                                             │
-│                      [Anuluj]  [Zapisz zmiany]              │
-└─────────────────────────────────────────────────────────────┘
+#### 1. `pipeline_kpi_targets` - Cele KPI
+```sql
+CREATE TABLE public.pipeline_kpi_targets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) NOT NULL,
+  year INTEGER NOT NULL,
+  month INTEGER, -- NULL = cel roczny, 1-12 = cel miesięczny
+  
+  -- Cele składkowe
+  target_premium NUMERIC(15,2) NOT NULL DEFAULT 0,
+  
+  -- Cele prowizyjne (alternatywnie kalkulowane)
+  target_commission NUMERIC(15,2),
+  target_commission_rate NUMERIC(5,2), -- % średnia prowizja
+  
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(tenant_id, year, month)
+);
 ```
 
+#### 2. `insurance_products` - Katalog produktów ubezpieczeniowych
+```sql
+CREATE TABLE public.insurance_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) NOT NULL,
+  
+  code VARCHAR(50) NOT NULL, -- np. "MAJ-OGN", "OC-DZ"
+  name VARCHAR(255) NOT NULL, -- np. "Ubezpieczenie od ognia"
+  category VARCHAR(50) NOT NULL, -- property, liability, fleet, etc.
+  subcategory VARCHAR(100), -- np. "all-risk", "named perils"
+  
+  default_commission_rate NUMERIC(5,2), -- domyślna % prowizji
+  
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(tenant_id, code)
+);
+```
+
+#### 3. `policy_production_records` - Rekordy produkcji (realna składka/prowizja)
+```sql
+CREATE TABLE public.policy_production_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) NOT NULL,
+  policy_id UUID REFERENCES insurance_policies(id) ON DELETE SET NULL,
+  company_id UUID REFERENCES companies(id),
+  
+  -- Identyfikacja okresu
+  production_year INTEGER NOT NULL,
+  production_month INTEGER NOT NULL, -- 1-12
+  
+  -- Produkt ubezpieczeniowy
+  product_id UUID REFERENCES insurance_products(id),
+  product_category VARCHAR(50), -- fallback jeśli brak produktu
+  
+  -- Składka
+  forecasted_premium NUMERIC(15,2) DEFAULT 0,
+  actual_premium NUMERIC(15,2) DEFAULT 0,
+  
+  -- Prowizja
+  commission_rate NUMERIC(5,2), -- % prowizji
+  forecasted_commission NUMERIC(15,2) DEFAULT 0,
+  actual_commission NUMERIC(15,2) DEFAULT 0,
+  
+  -- Status
+  status VARCHAR(20) DEFAULT 'pending', -- pending, invoiced, paid
+  invoice_date DATE,
+  payment_date DATE,
+  
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### 4. Rozszerzenie `insurance_policies`
+```sql
+ALTER TABLE insurance_policies ADD COLUMN IF NOT EXISTS
+  product_id UUID REFERENCES insurance_products(id),
+  commission_rate NUMERIC(5,2),
+  forecasted_premium NUMERIC(15,2),
+  actual_premium NUMERIC(15,2),
+  forecasted_commission NUMERIC(15,2),
+  actual_commission NUMERIC(15,2);
+```
+
 ---
 
-## Modyfikacja `TimelineTooltip.tsx`
+## Nowe Komponenty UI
 
-Dodanie przycisków akcji na dole tooltipa:
+### Struktura plików
 
+```
+src/components/pipeline/
+├── index.ts                       (eksporty - MOD)
+├── PolicyPipelineDashboard.tsx    (MOD - nowy tab "Planowanie")
+├── ProductionKPIEditor.tsx        (NOWY - edycja celów rocznych/mies.)
+├── ProductionDashboard.tsx        (NOWY - główny dashboard produkcji)
+├── ProductionChart.tsx            (NOWY - wykresy plan vs realizacja)
+├── ProductionTable.tsx            (NOWY - tabela produkcji miesięcznej)
+├── RenewalPotentialAnalysis.tsx   (NOWY - analiza potencjału obcych polis)
+├── CommissionRatesEditor.tsx      (NOWY - edytor stawek prowizji wg ryzyka)
+├── InsuranceProductsManager.tsx   (NOWY - zarządzanie katalogiem produktów)
+└── AddProductionRecordModal.tsx   (NOWY - formularz dodawania produkcji)
+```
+
+### Główny Dashboard Produkcji
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Ofertowanie                                                            │
+│  Zarządzaj procesem odnowień i monitoruj portfel polis                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│  [Dashboard] [Timeline] [Planowanie] [Raporty finansowe] [Produkty]     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                         ▼ Tab: Planowanie ▼
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          FILTR OKRESU                                    │
+│  [2026 ▼]  [Rok] [Kwartał] [Miesiąc]   [← Q1 →]   [Edytuj cele ⚙️]      │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────┐ ┌─────────────────────────┐ ┌─────────────────────────┐ ┌─────────────────────────┐
+│ 📊 CEL SKŁADKI          │ │ 💰 REALNA SKŁADKA       │ │ 📈 CEL PROWIZJI         │ │ 💵 REALNA PROWIZJA      │
+│ 20 000 000 PLN          │ │ 4 500 000 PLN           │ │ 3 000 000 PLN           │ │ 675 000 PLN             │
+│ cel roczny              │ │ 22.5% celu              │ │ avg 15%                 │ │ 22.5% celu              │
+│ ▓▓▓░░░░░░░░░░░░ 22.5%   │ │ +500k vs plan mies.     │ │ ▓▓▓░░░░░░░░░░░░ 22.5%   │ │ -25k vs plan mies.      │
+└─────────────────────────┘ └─────────────────────────┘ └─────────────────────────┘ └─────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ WYKRES: PLAN vs REALIZACJA - Składka miesięczna                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │  2.5M │            ░░░                                                                                  │ │
+│ │       │     ██     ██     ░░                                                                            │ │
+│ │  2.0M │     ██░░   ██░░   ░░                                                                            │ │
+│ │       │  ██ ██░░   ██░░   ░░░░   ░░   ░░   ░░   ░░   ░░   ░░   ░░                                        │ │
+│ │  1.5M │  ██ ██     ██     ░░░░   ░░   ░░   ░░   ░░   ░░   ░░   ░░                                        │ │
+│ │       │  ██ ██     ██     ░░░░   ░░   ░░   ░░   ░░   ░░   ░░   ░░                                        │ │
+│ │  1.0M │  ██        ██     ░░░░                                                                          │ │
+│ │       └──Sty──Lut──Mar──Kwi──Maj──Cze──Lip──Sie──Wrz──Paź──Lis──Gru                                     │ │
+│ │         ██ = Realizacja    ░░ = Plan                                                                    │ │
+│ └─────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────┐ ┌──────────────────────────────────────────────────────┐
+│ PRODUKCJA MIESIĘCZNA                    [+ Dodaj]    │ │ POTENCJAŁ ODNOWIEŃ OBCYCH POLIS                      │
+├───────────────────────────────────────────────────────┤ ├──────────────────────────────────────────────────────┤
+│ Miesiąc  │ Plan skł. │ Real skł. │ Δ      │ Prowizja │ │ Polisy wygasające w Q2 2026:                         │
+├──────────┼───────────┼───────────┼────────┼──────────┤ │ ┌─────────────────────────────────────────────────┐  │
+│ Styczeń  │ 1.5M      │ 2.0M      │ +500k  │ 300k     │ │ │ Firma ABC - Majątek          2.5M PLN   Kwi     │  │
+│ Luty     │ 1.5M      │ 1.8M      │ +300k  │ 270k     │ │ │ Firma XYZ - OC               1.2M PLN   Maj     │  │
+│ Marzec   │ 2.0M      │ -         │ -      │ -        │ │ │ Holding DEF - Flota          800k PLN   Cze     │  │
+│ ...      │           │           │        │          │ │ └─────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────┘ │ SUMA POTENCJAŁU: 4.5M PLN = 22.5% celu rocznego      │
+                                                          └──────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ PODZIAŁ PRODUKCJI WG RYZYKA                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Ryzyko      │ Składka plan │ Składka real │ Δ       │ Avg. prow. │ Prowizja real │                          │
+├─────────────┼──────────────┼──────────────┼─────────┼────────────┼───────────────┤                          │
+│ Majątek     │ 8.0M         │ 2.1M         │ -5.9M   │ 18%        │ 378k          │ ▓▓▓▓░░░░░░░ 26%          │
+│ OC          │ 5.0M         │ 1.5M         │ -3.5M   │ 12%        │ 180k          │ ▓▓▓░░░░░░░░ 30%          │
+│ Flota       │ 3.0M         │ 600k         │ -2.4M   │ 8%         │ 48k           │ ▓▓░░░░░░░░░ 20%          │
+│ D&O         │ 2.0M         │ 200k         │ -1.8M   │ 25%        │ 50k           │ ▓░░░░░░░░░░ 10%          │
+│ Cyber       │ 1.0M         │ 100k         │ -900k   │ 20%        │ 20k           │ ▓░░░░░░░░░░ 10%          │
+│ Inne        │ 1.0M         │ 0            │ -1.0M   │ 15%        │ 0             │ ░░░░░░░░░░░ 0%           │
+├─────────────┼──────────────┼──────────────┼─────────┼────────────┼───────────────┤                          │
+│ RAZEM       │ 20.0M        │ 4.5M         │ -15.5M  │ 15%        │ 675k          │                          │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Nowe Hooki
+
+### `usePipelineKPI.ts`
 ```typescript
-interface TimelineTooltipProps {
-  policy: InsurancePolicy;
-  onChecklistChange: (key: keyof RenewalChecklist, value: boolean) => void;
-  onEdit?: () => void;    // NOWE
-  onDelete?: () => void;  // NOWE
-}
-
-// W komponencie - dodać sekcję na końcu:
-<div className="border-t pt-2 mt-2 flex gap-2">
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="flex-1 text-xs"
-    onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
-  >
-    <Pencil className="h-3 w-3 mr-1" />
-    Edytuj
-  </Button>
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="text-xs text-destructive hover:bg-destructive/10"
-    onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
-  >
-    <Trash2 className="h-3 w-3" />
-  </Button>
-</div>
-```
-
----
-
-## Modyfikacja `PolicyBar.tsx`
-
-Dodanie callbacków:
-
-```typescript
-interface PolicyBarProps {
-  policy: InsurancePolicy;
-  // ... istniejące
-  onEdit: (policy: InsurancePolicy) => void;    // NOWE
-  onDelete: (policyId: string) => void;         // NOWE
-}
-
-// W TimelineTooltip:
-<TimelineTooltip
-  policy={policy}
-  onChecklistChange={(key, value) => onChecklistChange(policy.id, key, value)}
-  onEdit={() => onEdit(policy)}
-  onDelete={() => onDelete(policy.id)}
-/>
-```
-
----
-
-## Modyfikacja `TimelineRow.tsx`
-
-Przekazanie callbacków:
-
-```typescript
-interface TimelineRowProps {
-  // ... istniejące
-  onEditPolicy: (policy: InsurancePolicy) => void;
-  onDeletePolicy: (policyId: string) => void;
-}
-
-// W mapowaniu PolicyBar:
-<PolicyBar
-  key={policy.id}
-  policy={policy}
-  // ... istniejące
-  onEdit={onEditPolicy}
-  onDelete={onDeletePolicy}
-/>
-```
-
----
-
-## Modyfikacja `RenewalTimeline.tsx`
-
-Integracja z hookiem i obsługa modali:
-
-```typescript
-const {
-  policies,
-  isLoading,
-  createPolicy,
-  updatePolicy,    // DODANE
-  deletePolicy,    // DODANE
-  updateChecklist,
-  criticalPolicies,
-} = useInsurancePolicies(companyId);
-
-const [editModalOpen, setEditModalOpen] = useState(false);
-const [policyToEdit, setPolicyToEdit] = useState<InsurancePolicy | null>(null);
-const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
-
-// Handlery
-const handleEditPolicy = useCallback((policy: InsurancePolicy) => {
-  setPolicyToEdit(policy);
-  setEditModalOpen(true);
-}, []);
-
-const handleUpdatePolicy = useCallback((data: UpdatePolicyInput) => {
-  updatePolicy.mutate(data, {
-    onSuccess: () => setEditModalOpen(false),
-  });
-}, [updatePolicy]);
-
-const handleDeletePolicy = useCallback((policyId: string) => {
-  setPolicyToDelete(policyId);
-  setDeleteConfirmOpen(true);
-}, []);
-
-const confirmDelete = useCallback(() => {
-  if (policyToDelete) {
-    deletePolicy.mutate(policyToDelete, {
-      onSuccess: () => {
-        setDeleteConfirmOpen(false);
-        setPolicyToDelete(null);
-      },
-    });
+// Zarządzanie celami KPI
+export function usePipelineKPI(year: number) {
+  // Pobieranie i edycja celów rocznych/miesięcznych
+  return {
+    targets: PipelineKPITarget[],
+    yearlyTarget: PipelineKPITarget,
+    monthlyTargets: PipelineKPITarget[],
+    setYearlyTarget: (data) => void,
+    setMonthlyTarget: (month, data) => void,
   }
-}, [policyToDelete, deletePolicy]);
-
-// W TimelineRow:
-<TimelineRow
-  // ... istniejące
-  onEditPolicy={handleEditPolicy}
-  onDeletePolicy={handleDeletePolicy}
-/>
-
-// Nowe modale:
-<EditPolicyModal
-  open={editModalOpen}
-  onOpenChange={setEditModalOpen}
-  policy={policyToEdit}
-  onSubmit={handleUpdatePolicy}
-  isLoading={updatePolicy.isPending}
-/>
-
-<AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Usunąć polisę?</AlertDialogTitle>
-      <AlertDialogDescription>
-        Ta operacja jest nieodwracalna. Polisa zostanie trwale usunięta z harmonogramu.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>Anuluj</AlertDialogCancel>
-      <AlertDialogAction onClick={confirmDelete} className="bg-destructive">
-        Usuń polisę
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
+}
 ```
+
+### `useProductionRecords.ts`
+```typescript
+// Zarządzanie rekordami produkcji
+export function useProductionRecords(year: number, month?: number) {
+  return {
+    records: ProductionRecord[],
+    addRecord: (data) => void,
+    updateRecord: (id, data) => void,
+    deleteRecord: (id) => void,
+    
+    // Agregaty
+    totalForecastedPremium: number,
+    totalActualPremium: number,
+    totalForecastedCommission: number,
+    totalActualCommission: number,
+    
+    // Grupowanie
+    byMonth: Record<number, ProductionRecord[]>,
+    byCategory: Record<string, { premium: number, commission: number }>,
+  }
+}
+```
+
+### `useInsuranceProducts.ts`
+```typescript
+// Zarządzanie katalogiem produktów
+export function useInsuranceProducts() {
+  return {
+    products: InsuranceProduct[],
+    createProduct: (data) => void,
+    updateProduct: (id, data) => void,
+    deleteProduct: (id) => void,
+    getProductsByCategory: (category) => InsuranceProduct[],
+  }
+}
+```
+
+### `useRenewalPotential.ts`
+```typescript
+// Analiza potencjału odnowień obcych polis
+export function useRenewalPotential(dateRange: { start: Date, end: Date }) {
+  return {
+    foreignPoliciesInRange: PolicyWithCompany[],
+    totalPotentialPremium: number,
+    potentialByMonth: Record<string, number>,
+    potentialByCategory: Record<string, number>,
+  }
+}
+```
+
+---
+
+## Rozszerzenie typów (`src/components/renewal/types.ts`)
+
+```typescript
+// Nowe typy dla planowania produkcji
+export interface PipelineKPITarget {
+  id: string;
+  tenant_id: string;
+  year: number;
+  month: number | null;
+  target_premium: number;
+  target_commission: number | null;
+  target_commission_rate: number | null;
+  notes: string | null;
+}
+
+export interface InsuranceProduct {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  category: PolicyType;
+  subcategory: string | null;
+  default_commission_rate: number | null;
+  is_active: boolean;
+}
+
+export interface ProductionRecord {
+  id: string;
+  tenant_id: string;
+  policy_id: string | null;
+  company_id: string | null;
+  production_year: number;
+  production_month: number;
+  product_id: string | null;
+  product_category: PolicyType;
+  forecasted_premium: number;
+  actual_premium: number;
+  commission_rate: number | null;
+  forecasted_commission: number;
+  actual_commission: number;
+  status: 'pending' | 'invoiced' | 'paid';
+  invoice_date: string | null;
+  payment_date: string | null;
+  notes: string | null;
+}
+
+// Rozszerzenie PolicyType o średnią prowizję
+export const DEFAULT_COMMISSION_RATES: Record<PolicyType, number> = {
+  property: 18,
+  fleet: 8,
+  do: 25,
+  cyber: 20,
+  liability: 12,
+  life: 15,
+  health: 10,
+  other: 15,
+};
+```
+
+---
+
+## Modyfikacje istniejących plików
+
+| Plik | Zmiany |
+|------|--------|
+| `PolicyPipelineDashboard.tsx` | Dodanie nowych tabów: "Planowanie", "Produkty" |
+| `PolicyFinancialReports.tsx` | Integracja z danymi produkcji (zamiast hardcoded goal) |
+| `useAllPolicies.ts` | Rozszerzenie o dane prowizyjne |
 
 ---
 
 ## Przepływ użytkownika
 
-1. **Kliknięcie na pasek polisy** → pojawia się tooltip z checklistą
-2. **Przycisk "Edytuj"** → otwiera modal edycji z wczytanymi danymi
-3. **Edycja pól** → zmiana typu, nazwy, dat, sumy, składki, notatek
-4. **Zapisz** → wywołuje `updatePolicy.mutate()` → odświeżenie timeline
-5. **Przycisk "Usuń"** → otwiera dialog potwierdzenia
-6. **Potwierdzenie** → wywołuje `deletePolicy.mutate()` → polisa znika z harmonogramu
+### 1. Ustalanie celów (początek roku)
+1. Wejdź w tab "Planowanie"
+2. Kliknij "Edytuj cele"
+3. Wpisz cel roczny składki: 20M PLN
+4. Wpisz średnią prowizję: 15%
+5. System kalkuluje cel prowizji: 3M PLN
+6. Opcjonalnie rozbij na cele miesięczne
+
+### 2. Rejestrowanie produkcji (co miesiąc)
+1. Kliknij "+ Dodaj produkcję"
+2. Wybierz miesiąc: Styczeń 2026
+3. Wybierz firmę/polisę (opcjonalnie)
+4. Wybierz produkt z katalogu
+5. Wpisz składkę realną: 2M PLN
+6. System sugeruje prowizję na podstawie % produktu
+7. Wpisz realną prowizję: 300k PLN
+
+### 3. Analiza odchyleń
+1. Dashboard pokazuje wykresy plan vs realizacja
+2. Kolory wskazują nadwyżkę (zielony) lub niedobór (czerwony)
+3. Tabela podsumowuje każdy miesiąc
+
+### 4. Prognozowanie na podstawie odnowień
+1. System analizuje obce polisy wygasające w badanym okresie
+2. Pokazuje potencjalną składkę do przejęcia
+3. Pomaga ocenić, czy cel jest osiągalny
 
 ---
 
 ## Podsumowanie zmian
 
-| Plik | Zmiany |
-|------|--------|
-| `EditPolicyModal.tsx` | Nowy modal z formularzem edycji |
-| `TimelineTooltip.tsx` | Przyciski "Edytuj" i "Usuń" na dole tooltipa |
-| `PolicyBar.tsx` | Nowe propsy `onEdit`, `onDelete` |
-| `TimelineRow.tsx` | Przekazanie callbacków do PolicyBar |
-| `RenewalTimeline.tsx` | Stan dla modali, handlery, integracja z hookiem |
-| `index.ts` | Eksport EditPolicyModal |
+| Plik | Typ | Opis |
+|------|-----|------|
+| **Baza danych** |
+| Migracja SQL | NOWY | 3 nowe tabele + ALTER TABLE |
+| **Komponenty** |
+| `ProductionDashboard.tsx` | NOWY | Główny dashboard planowania |
+| `ProductionKPIEditor.tsx` | NOWY | Modal edycji celów KPI |
+| `ProductionChart.tsx` | NOWY | Wykresy Recharts |
+| `ProductionTable.tsx` | NOWY | Tabela produkcji miesięcznej |
+| `RenewalPotentialAnalysis.tsx` | NOWY | Analiza potencjału odnowień |
+| `CommissionRatesEditor.tsx` | NOWY | Edytor stawek prowizji |
+| `InsuranceProductsManager.tsx` | NOWY | Zarządzanie katalogiem |
+| `AddProductionRecordModal.tsx` | NOWY | Formularz produkcji |
+| `PolicyPipelineDashboard.tsx` | MOD | Nowe taby |
+| **Hooki** |
+| `usePipelineKPI.ts` | NOWY | Zarządzanie celami |
+| `useProductionRecords.ts` | NOWY | Rekordy produkcji |
+| `useInsuranceProducts.ts` | NOWY | Katalog produktów |
+| `useRenewalPotential.ts` | NOWY | Analiza potencjału |
+| **Typy** |
+| `src/components/renewal/types.ts` | MOD | Nowe interfejsy |
 
 ---
 
-## Korzyści
+## Korzyści biznesowe
 
-1. **Szybka edycja** - poprawka danych bez wychodzenia z harmonogramu
-2. **Bezpieczne usuwanie** - dialog potwierdzenia zapobiega przypadkowemu usunięciu
-3. **Pełna funkcjonalność CRUD** - tworzenie, odczyt, aktualizacja, usuwanie polis
-4. **Spójne UX** - podobny wygląd modali jak przy dodawaniu polisy
-
+1. **Kontrola celów** - Przejrzyste KPI na rok/kwartał/miesiąc
+2. **Monitoring w czasie rzeczywistym** - Bieżąca analiza realizacji planu
+3. **Prognozowanie** - Ocena potencjału na podstawie terminów odnowień
+4. **Rozliczanie prowizji** - Śledzenie statusu płatności
+5. **Analiza rentowności** - Które ryzyka przynoszą najwyższą prowizję
+6. **Decyzje strategiczne** - Gdzie skupić wysiłki sprzedażowe
