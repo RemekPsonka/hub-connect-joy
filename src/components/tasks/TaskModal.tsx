@@ -93,8 +93,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setPriority(task.priority || 'medium');
       setStatus(task.status || 'pending');
       setDueDate(task.due_date ? new Date(task.due_date) : undefined);
-      setCategoryId(task.category_id || '');
-      setAssignedTo(task.assigned_to || '');
+      setCategoryId(task.category_id || 'none');
+      setAssignedTo(task.assigned_to || 'self');
       setVisibility((task.visibility as 'private' | 'team') || 'private');
 
       // Set contacts for existing task
@@ -138,8 +138,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setPriority('medium');
       setStatus('pending');
       setDueDate(undefined);
-      setCategoryId('');
-      setAssignedTo('');
+      setCategoryId('none');
+      setAssignedTo('self');
       setVisibility('private');
     }
   }, [task, preselectedContactId, initialData, open]);
@@ -216,8 +216,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
             due_date: dueDate?.toISOString().split('T')[0],
           },
           contactId: contactId || undefined,
-          categoryId: categoryId || undefined,
-          assignedTo: assignedTo || undefined,
+          categoryId: categoryId === 'none' ? undefined : (categoryId || undefined),
+          assignedTo: assignedTo === 'self' ? undefined : (assignedTo || undefined),
           visibility: isTeamCategory ? 'team' : visibility,
         });
         toast.success('Zadanie utworzone');
@@ -281,7 +281,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
                   <SelectValue placeholder="Wybierz kategorię (opcjonalne)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Brak kategorii</SelectItem>
+                  <SelectItem value="none">Brak kategorii</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       <div className="flex items-center gap-2">
@@ -342,7 +342,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
                   <SelectValue placeholder="Ja (domyślnie)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Ja ({currentDirector?.full_name})</SelectItem>
+                  <SelectItem value="self">Ja ({currentDirector?.full_name})</SelectItem>
                   {otherDirectors.map((dir) => (
                     <SelectItem key={dir.id} value={dir.id}>
                       {dir.full_name}
