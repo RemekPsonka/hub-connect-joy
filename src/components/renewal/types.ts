@@ -44,6 +44,10 @@ export interface InsurancePolicy {
   sum_insured?: number | null;
   premium?: number | null;
   notes?: string | null;
+  is_our_policy?: boolean;
+  workflow_status?: string;
+  moved_to_finalization_at?: string | null;
+  closed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
