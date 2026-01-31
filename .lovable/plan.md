@@ -1,127 +1,110 @@
 
+## Plan: Implementacja funkcji "Opracuj AI" dla arkusza BI
 
-## Plan: Integracja pola "Siła relacji" w BI, nagłówku kontaktu i analizie AI
+### Problem
+Kliknięcie przycisku "Opracuj AI" w arkuszu Business Interview nic nie robi - pokazuje tylko toast "Przetwarzanie AI zostanie dodane wkrótce". Funkcjonalność AI nie została zaimplementowana.
 
-### Podsumowanie zmian
-1. **Arkusz BI (sekcja A)**: Dodanie pola `sila_relacji` (1-10) pod "Status relacji"
-2. **Karta kontaktu**: Przeniesienie wskaznika siły relacji bezpośrednio pod imię i nazwisko
-3. **AI Agent**: Wzmocnienie promptów o kontekst budowania relacji zależny od siły
+### Co powinno się wydarzyć:
+1. **Krok 1 - Wzbogacenie danych**: AI powinno poprawić i uzupełnić dane z arkusza BI (np. rozwinąć skróty, poprawić błędy, uzupełnić brakujące informacje)
+2. **Krok 2 - Generowanie propozycji**: AI powinno wygenerować:
+   - Listę pytań o brakujące informacje
+   - Propozycje potrzeb/ofert do dodania
+   - Propozycje zadań follow-up
+   - Rekomendacje połączeń z innymi kontaktami
 
 ---
 
 ## Szczegóły implementacji
 
-### 1. Typy BI (`src/components/bi/types.ts`)
+### 1. Nowa Edge Function: `process-bi-ai/index.ts`
 
-Dodanie nowego pola do interfejsu `SectionABasic`:
+Funkcja która:
+1. Pobiera dane kontaktu i Business Interview
+2. Pobiera dane firmy (jeśli przypisana)
+3. Wysyła do AI z prośbą o:
+   - Uzupełnienie i poprawienie danych BI
+   - Wygenerowanie `missing_info` (max 10 pytań)
+   - Wygenerowanie `needs_offers` propozycji
+   - Wygenerowanie `task_proposals`
+   - Wygenerowanie `connection_recommendations` (szukanie pasujących kontaktów w bazie)
+4. Zapisuje wyniki do tabeli `bi_ai_outputs`
+5. Aktualizuje status BI na `ai_processed`
+6. Opcjonalnie aktualizuje dane osobowe kontaktu (imię, email, telefon itd.)
 
+**Struktura Edge Function:**
 ```typescript
-// Kontekst spotkania (B)
-podpowiedzi_brief?: string;
-status_relacji?: 'nowy' | 'polecony' | 'powracajacy' | 'znajomy' | 'klient';
-sila_relacji?: number;  // NOWE: 1-10
-rozważa_aplikacje_cc?: 'tak' | 'nie' | 'nie_wiem';
+// Główne kroki:
+// 1. Autoryzacja
+// 2. Pobranie BI + kontaktu + firmy
+// 3. Pobranie innych kontaktów do matchowania
+// 4. Wywołanie AI z promptem
+// 5. Parsowanie odpowiedzi
+// 6. Zapis do bi_ai_outputs
+// 7. Opcjonalnie: aktualizacja kontaktu
+// 8. Zwrot wyniku
 ```
 
----
+### 2. Aktualizacja `BITab.tsx`
 
-### 2. Formularz BI (`src/components/bi/sections/SectionABasic.tsx`)
+Zmiana funkcji `handleProcessAI`:
 
-Dodanie pola "Siła relacji" ze sliderem 1-10 pod polem "Status relacji":
+```typescript
+// Obecny kod (placeholder):
+const handleProcessAI = async () => {
+  setIsProcessingAI(true);
+  try {
+    // TODO: Call process-bi-ai edge function
+    toast.info('Przetwarzanie AI zostanie dodane wkrótce');
+  } finally {
+    setIsProcessingAI(false);
+  }
+};
+
+// Nowy kod:
+const processBI = useProcessBIWithAI();
+
+const handleProcessAI = async () => {
+  if (!biData?.id) {
+    toast.error('Najpierw zapisz dane BI');
+    return;
+  }
+  
+  setIsProcessingAI(true);
+  try {
+    const result = await processBI.mutateAsync({ biId: biData.id });
+    toast.success('AI przeanalizowało dane');
+    // Opcjonalnie: wyświetl wyniki
+  } catch (error) {
+    toast.error('Błąd przetwarzania AI');
+    console.error(error);
+  } finally {
+    setIsProcessingAI(false);
+  }
+};
+```
+
+### 3. Prompt AI - kluczowe elementy
 
 ```text
-┌─────────────────────────────────────────┐
-│ Status relacji *                        │
-│ [▼ Wybierz status]                      │
-└─────────────────────────────────────────┘
+## ZADANIA:
+1. UZUPEŁNIJ DANE: Na podstawie dostępnych informacji uzupełnij puste pola w sekcjach BI
+2. POPRAW BŁĘDY: Popraw literówki, rozwiń skróty, ustandaryzuj formaty
+3. WYGENERUJ PYTANIA: Zidentyfikuj max 10 najważniejszych brakujących informacji
+4. PROPOZYCJE POTRZEB/OFERT: Na podstawie danych wygeneruj propozycje
+5. PROPOZYCJE ZADAŃ: Zaproponuj konkretne działania follow-up
+6. REKOMENDACJE POŁĄCZEŃ: Znajdź pasujące kontakty z sieci
 
-┌─────────────────────────────────────────┐  ← NOWE
-│ Siła relacji                            │
-│ ●──────────────────────────────● 7/10   │
-│ [Słaba]                       [Silna]   │
-└─────────────────────────────────────────┘
+## DANE KONTAKTU
+[imię, nazwisko, stanowisko, firma, email, telefon...]
 
-┌─────────────────────────────────────────┐
-│ Czy rozważa aplikację do CC?            │
-│ [▼ Wybierz]                             │
-└─────────────────────────────────────────┘
-```
+## DANE FIRMY (jeśli dostępne)
+[nazwa, branża, przychody, produkty, usługi...]
 
-Komponent:
-- Slider Radix 1-10 z wizualnym paskiem
-- Etykiety "Słaba" / "Silna"
-- Domyślna wartość: 5
+## DANE Z ARKUSZA BI
+[wszystkie sekcje A-N]
 
----
-
-### 3. Nagłowek kontaktu (`src/components/contacts/ContactDetailHeader.tsx`)
-
-Przeniesienie `RelationshipStrengthBar` bezpośrednio pod imię osoby:
-
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ [Avatar]  Jan Kowalski              [Właściciel]                     │
-│           [●●●●●●●○○○] 7/10 siła relacji  ← NOWE (pod imieniem)      │
-│           Dyrektor Sprzedaży                                         │
-│           📧 jan@firma.pl  📞 +48 123 456  🔗 LinkedIn                │
-│           [Grupa: A-klasa]                                           │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-Zmiana:
-- Usunięcie sekcji "Wskazniki relacji" (linie 242-257)
-- Dodanie `RelationshipStrengthBar` bezpośrednio po imieniu, przed stanowiskiem
-- Zmiana na bardziej kompaktowy format inline
-
----
-
-### 4. Edge Functions - AI Agent
-
-#### A. `supabase/functions/initialize-contact-agent/index.ts`
-
-Dodanie informacji o sile relacji do promptu AI z instrukcją jak to uwzględnić:
-
-```typescript
-// W sekcji DANE KONTAKTU (ok. linia 167):
-- Siła relacji: ${contact.relationship_strength || 5}/10
-  ${contact.relationship_strength <= 3 ? '⚠️ SŁABA RELACJA - priorytet: BUDOWANIE RELACJI' : ''}
-  ${contact.relationship_strength >= 7 ? '✓ SILNA RELACJA - można przejść do konkretu biznesowego' : ''}
-
-// Dodanie do promptu (nowa sekcja zasad):
-## INSTRUKCJE DOT. SIŁY RELACJI
-- Jeśli siła relacji <= 3: Agent powinien położyć DUŻY nacisk na budowanie relacji, poznawanie osoby, znajdowanie wspólnych tematów
-- Jeśli siła relacji 4-6: Zbalansowane podejście - budowanie relacji + lekkie tematy biznesowe
-- Jeśli siła relacji >= 7: Można przejść od razu do konkretów biznesowych, bo relacja jest już zbudowana
-```
-
-#### B. `supabase/functions/query-contact-agent/index.ts`
-
-Dodanie kontekstu relacji do odpowiedzi AI:
-
-```typescript
-// W promptzie (ok. linia 144):
-- Siła relacji: ${contact?.relationship_strength || 5}/10
-${(contact?.relationship_strength || 5) <= 3 ? `
-⚠️ UWAGA: Słaba relacja! W odpowiedziach:
-- Sugeruj sposoby na budowanie zaufania
-- Proponuj tematy "ludzkie" (hobby, rodzina, wspólne zainteresowania)
-- Unikaj nachalnych propozycji sprzedażowych
-` : ''}
-${(contact?.relationship_strength || 5) >= 7 ? `
-✓ Silna relacja - możesz:
-- Proponować konkretne działania biznesowe
-- Być bezpośredni w komunikacji
-- Sugerować ambitniejsze cele współpracy
-` : ''}
-```
-
-#### C. `supabase/functions/learn-contact-agent/index.ts`
-
-Dodanie analizy siły relacji do procesu uczenia:
-
-```typescript
-// W sekcji DANE PODSTAWOWE OSOBY (ok. linia 226):
-- Siła relacji: ${contact.relationship_strength || 5}/10 ${contact.relationship_strength <= 3 ? '(słaba - wymaga budowania)' : contact.relationship_strength >= 7 ? '(silna - można działać biznesowo)' : '(średnia)'}
+## INNI KONTAKTY DO MATCHOWANIA
+[lista kontaktów z potrzebami/ofertami które mogą pasować]
 ```
 
 ---
@@ -130,42 +113,37 @@ Dodanie analizy siły relacji do procesu uczenia:
 
 | Plik | Typ zmiany | Opis |
 |------|------------|------|
-| `src/components/bi/types.ts` | Modyfikacja | Dodanie `sila_relacji?: number` do `SectionABasic` |
-| `src/components/bi/sections/SectionABasic.tsx` | Modyfikacja | Dodanie slidera 1-10 pod "Status relacji" |
-| `src/components/contacts/ContactDetailHeader.tsx` | Modyfikacja | Przeniesienie wskaznika pod imię, usunięcie sekcji wskazników |
-| `supabase/functions/initialize-contact-agent/index.ts` | Modyfikacja | Dodanie kontekstu siły relacji do promptu |
-| `supabase/functions/query-contact-agent/index.ts` | Modyfikacja | Dodanie instrukcji zależnych od siły relacji |
-| `supabase/functions/learn-contact-agent/index.ts` | Modyfikacja | Uwzględnienie siły relacji w analizie |
+| `supabase/functions/process-bi-ai/index.ts` | **NOWY** | Edge function do przetwarzania BI przez AI |
+| `src/components/bi/BITab.tsx` | Modyfikacja | Podłączenie hooka `useProcessBIWithAI` i wywołanie edge function |
 
 ---
 
-## Logika AI - szczegóły
+## Przepływ danych
 
-### Słaba relacja (1-3):
 ```text
-PRIORYTET: Budowanie zaufania
-- Szukaj wspólnych zainteresowań (hobby, sport, rodzina)
-- Zadawaj pytania osobiste (ale nie natarczywe)
-- Unikaj twardych tematów sprzedażowych
-- Proponuj spotkania nieformalne
-- DO: poznaj człowieka zanim przejdziesz do biznesu
-- DON'T: nie naciskaj na decyzje biznesowe
+[Użytkownik klika "Opracuj AI"]
+          ↓
+[BITab.tsx wywołuje processBI.mutateAsync()]
+          ↓
+[Edge function process-bi-ai]
+    ├── Pobiera: kontakt, firma, BI, inne kontakty
+    ├── Wysyła do AI (Gemini)
+    ├── Parsuje odpowiedź JSON
+    ├── Zapisuje do bi_ai_outputs
+    └── Zwraca wynik
+          ↓
+[Toast "AI przeanalizowało dane"]
+          ↓
+[Odświeżenie queryClient - nowe dane widoczne]
 ```
 
-### Średnia relacja (4-6):
-```text
-PODEJŚCIE: Zbalansowane
-- Mieszaj tematy osobiste z biznesowymi
-- Buduj dalej, ale możesz proponować współpracę
-- Sprawdzaj czy jest otwarty na konkretne propozycje
-```
+---
 
-### Silna relacja (7-10):
-```text
-PRIORYTET: Działanie biznesowe
-- Możesz przejść od razu do konkretów
-- Proponuj ambitne cele i projekty
-- Bądź bezpośredni w komunikacji
-- Możesz prosić o polecenia i referencje
-```
+## Oczekiwany rezultat
 
+Po kliknięciu "Opracuj AI":
+1. Pojawi się animacja ładowania
+2. AI przetworzy dane BI
+3. Wyniki zostaną zapisane w bazie
+4. Status BI zmieni się na "AI przetworzony"
+5. Użytkownik zobaczy wygenerowane propozycje do akceptacji/odrzucenia
