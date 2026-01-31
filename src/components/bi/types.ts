@@ -27,7 +27,6 @@ export interface BusinessInterview {
 export interface SectionABasic {
   // Dane podstawowe
   branza?: string[];  // Multi-select - może działać w kilku branżach
-  typ_kontaktu?: 'znajomy' | 'klient';
   branza_tagi?: string[];
   email_bezposredni?: string;
   telefon_prywatny?: string;
@@ -38,7 +37,7 @@ export interface SectionABasic {
   zrodlo_kontaktu?: string;
   // Kontekst spotkania (B)
   podpowiedzi_brief?: string;
-  status_relacji?: 'nowy' | 'polecony' | 'powracajacy';
+  status_relacji?: 'nowy' | 'polecony' | 'powracajacy' | 'znajomy' | 'klient';
   rozważa_aplikacje_cc?: 'tak' | 'nie' | 'nie_wiem';
   firma_nieznana?: boolean;
 }
