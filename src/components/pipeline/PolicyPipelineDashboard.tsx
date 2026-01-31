@@ -4,8 +4,8 @@ import { PolicyKPICards } from './PolicyKPICards';
 import { PolicyTimelineView } from './PolicyTimelineView';
 import { PolicyFunnelView } from './PolicyFunnelView';
 import { PolicyFinancialReports } from './PolicyFinancialReports';
+import { ProductionDashboard } from './ProductionDashboard';
 import { useAllPolicies } from '@/hooks/useAllPolicies';
-import { useInsurancePolicies } from '@/hooks/useInsurancePolicies';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { RenewalChecklist } from '@/components/renewal/types';
 import type { Json } from '@/integrations/supabase/types';
@@ -66,6 +66,7 @@ export function PolicyPipelineDashboard() {
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="planning">Planowanie</TabsTrigger>
           <TabsTrigger value="reports">Raporty finansowe</TabsTrigger>
         </TabsList>
 
@@ -92,6 +93,10 @@ export function PolicyPipelineDashboard() {
           <div className="h-[700px] border rounded-lg p-6 bg-card">
             <PolicyTimelineView policies={policies} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="planning" className="mt-6">
+          <ProductionDashboard />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
