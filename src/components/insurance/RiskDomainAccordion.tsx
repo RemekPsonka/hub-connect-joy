@@ -22,6 +22,7 @@ import type {
   RyzykoPracownicy,
   RyzykoFinansowe,
 } from './types';
+import type { QuickPolicyData } from './QuickAddPolicyButton';
 
 interface RiskDomainAccordionProps {
   operationalTypes: TypDzialnosci[];
@@ -37,6 +38,8 @@ interface RiskDomainAccordionProps {
   onSpecjalistyczneChange: (data: RyzykoSpecjalistyczne) => void;
   onPracownicyChange: (data: RyzykoPracownicy) => void;
   onFinansoweChange: (data: RyzykoFinansowe) => void;
+  companyId?: string;
+  onAddPolicy?: (data: QuickPolicyData) => void;
 }
 
 function getStatusBadge(status: StatusUbezpieczenia) {
@@ -131,6 +134,8 @@ export function RiskDomainAccordion({
   onSpecjalistyczneChange,
   onPracownicyChange,
   onFinansoweChange,
+  companyId,
+  onAddPolicy,
 }: RiskDomainAccordionProps) {
   return (
     <div className="space-y-3">
@@ -151,6 +156,8 @@ export function RiskDomainAccordion({
               data={majatek}
               onChange={onMajatekChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>
@@ -170,6 +177,8 @@ export function RiskDomainAccordion({
               data={oc}
               onChange={onOcChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>
@@ -189,6 +198,8 @@ export function RiskDomainAccordion({
               data={flota}
               onChange={onFlotaChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>
@@ -208,6 +219,8 @@ export function RiskDomainAccordion({
               data={specjalistyczne}
               onChange={onSpecjalistyczneChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>
@@ -227,6 +240,8 @@ export function RiskDomainAccordion({
               data={finansowe}
               onChange={onFinansoweChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>
@@ -246,6 +261,8 @@ export function RiskDomainAccordion({
               data={pracownicy}
               onChange={onPracownicyChange}
               operationalTypes={operationalTypes}
+              companyId={companyId}
+              onAddPolicy={onAddPolicy}
             />
           </AccordionContent>
         </AccordionItem>

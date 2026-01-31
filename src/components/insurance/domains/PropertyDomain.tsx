@@ -4,9 +4,10 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InsuranceStatusToggle } from '../InsuranceStatusToggle';
+import { QuickAddPolicyButton } from '../QuickAddPolicyButton';
 import type { RyzykoMajatkowe, DomainProps } from '../types';
 
-export function PropertyDomain({ data, onChange, operationalTypes }: DomainProps<RyzykoMajatkowe>) {
+export function PropertyDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoMajatkowe>) {
   const showProductionFields = operationalTypes.includes('produkcja');
   
   const updateField = <K extends keyof RyzykoMajatkowe>(field: K, value: RyzykoMajatkowe[K]) => {
@@ -15,12 +16,26 @@ export function PropertyDomain({ data, onChange, operationalTypes }: DomainProps
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
-        <InsuranceStatusToggle
-          value={data.status}
-          onChange={(status) => updateField('status', status)}
-        />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
+          <InsuranceStatusToggle
+            value={data.status}
+            onChange={(status) => updateField('status', status)}
+          />
+        </div>
+        
+        {data.status === 'ubezpieczone' && companyId && onAddPolicy && (
+          <QuickAddPolicyButton
+            policyType="property"
+            defaultPolicyName="Ubezpieczenie majątkowe"
+            defaultSumInsured={data.suma_ubezp_majatek}
+            onAdd={(policyData) => onAddPolicy({
+              ...policyData,
+              policy_type: policyData.policy_type,
+            })}
+          />
+        )}
       </div>
 
       {data.status !== 'nie_dotyczy' && (

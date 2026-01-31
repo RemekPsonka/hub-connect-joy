@@ -3,9 +3,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Heart, Stethoscope, Plane } from 'lucide-react';
 import { InsuranceStatusToggle } from '../InsuranceStatusToggle';
+import { QuickAddPolicyButton } from '../QuickAddPolicyButton';
 import type { RyzykoPracownicy, DomainProps } from '../types';
 
-export function EmployeesDomain({ data, onChange }: DomainProps<RyzykoPracownicy>) {
+export function EmployeesDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoPracownicy>) {
   const updateField = <K extends keyof RyzykoPracownicy>(field: K, value: RyzykoPracownicy[K]) => {
     onChange({ ...data, [field]: value });
   };
@@ -14,9 +15,21 @@ export function EmployeesDomain({ data, onChange }: DomainProps<RyzykoPracownicy
     <div className="space-y-6">
       {/* Życie */}
       <div className="space-y-3 p-4 rounded-lg border bg-card">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Heart className="h-4 w-4 text-muted-foreground" />
-          Ubezpieczenie na życie
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Heart className="h-4 w-4 text-muted-foreground" />
+            Ubezpieczenie na życie
+          </div>
+          {data.zycie_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="life"
+              defaultPolicyName="Ubezpieczenie grupowe na życie"
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
+          )}
         </div>
         <InsuranceStatusToggle
           value={data.zycie_status}
@@ -39,9 +52,21 @@ export function EmployeesDomain({ data, onChange }: DomainProps<RyzykoPracownicy
 
       {/* Zdrowie */}
       <div className="space-y-3 p-4 rounded-lg border bg-card">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Stethoscope className="h-4 w-4 text-muted-foreground" />
-          Ubezpieczenie zdrowotne
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Stethoscope className="h-4 w-4 text-muted-foreground" />
+            Ubezpieczenie zdrowotne
+          </div>
+          {data.zdrowie_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="health"
+              defaultPolicyName="Ubezpieczenie zdrowotne grupowe"
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
+          )}
         </div>
         <InsuranceStatusToggle
           value={data.zdrowie_status}
@@ -62,9 +87,21 @@ export function EmployeesDomain({ data, onChange }: DomainProps<RyzykoPracownicy
 
       {/* Podróże */}
       <div className="space-y-3 p-4 rounded-lg border bg-card">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Plane className="h-4 w-4 text-muted-foreground" />
-          Ubezpieczenie podróży służbowych
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Plane className="h-4 w-4 text-muted-foreground" />
+            Ubezpieczenie podróży służbowych
+          </div>
+          {data.podroze_status === 'ubezpieczone' && companyId && onAddPolicy && (
+            <QuickAddPolicyButton
+              policyType="other"
+              defaultPolicyName="Ubezpieczenie podróży służbowych"
+              onAdd={(policyData) => onAddPolicy({
+                ...policyData,
+                policy_type: policyData.policy_type,
+              })}
+            />
+          )}
         </div>
         <InsuranceStatusToggle
           value={data.podroze_status}

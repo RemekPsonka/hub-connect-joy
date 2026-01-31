@@ -14,6 +14,7 @@ import type {
   RyzykoPracownicy,
   RyzykoFinansowe,
 } from './types';
+import type { QuickPolicyData } from './QuickAddPolicyButton';
 
 interface RiskMatrixPanelProps {
   companyName: string;
@@ -35,6 +36,8 @@ interface RiskMatrixPanelProps {
   onSpecjalistyczneChange: (data: RyzykoSpecjalistyczne) => void;
   onPracownicyChange: (data: RyzykoPracownicy) => void;
   onFinansoweChange: (data: RyzykoFinansowe) => void;
+  companyId?: string;
+  onAddPolicy?: (data: QuickPolicyData) => void;
 }
 
 function formatRevenue(amount: number): string {
@@ -70,6 +73,8 @@ export function RiskMatrixPanel({
   onSpecjalistyczneChange,
   onPracownicyChange,
   onFinansoweChange,
+  companyId,
+  onAddPolicy,
 }: RiskMatrixPanelProps) {
   return (
     <ScrollArea className="h-full">
@@ -123,6 +128,8 @@ export function RiskMatrixPanel({
           onSpecjalistyczneChange={onSpecjalistyczneChange}
           onPracownicyChange={onPracownicyChange}
           onFinansoweChange={onFinansoweChange}
+          companyId={companyId}
+          onAddPolicy={onAddPolicy}
         />
       </div>
     </ScrollArea>

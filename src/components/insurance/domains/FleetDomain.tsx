@@ -3,21 +3,36 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { InsuranceStatusToggle } from '../InsuranceStatusToggle';
+import { QuickAddPolicyButton } from '../QuickAddPolicyButton';
 import type { RyzykoFlota, DomainProps } from '../types';
 
-export function FleetDomain({ data, onChange }: DomainProps<RyzykoFlota>) {
+export function FleetDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoFlota>) {
   const updateField = <K extends keyof RyzykoFlota>(field: K, value: RyzykoFlota[K]) => {
     onChange({ ...data, [field]: value });
   };
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
-        <InsuranceStatusToggle
-          value={data.status}
-          onChange={(status) => updateField('status', status)}
-        />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <Label className="text-xs text-muted-foreground mb-2 block">Status ubezpieczenia</Label>
+          <InsuranceStatusToggle
+            value={data.status}
+            onChange={(status) => updateField('status', status)}
+          />
+        </div>
+        
+        {data.status === 'ubezpieczone' && companyId && onAddPolicy && (
+          <QuickAddPolicyButton
+            policyType="fleet"
+            defaultPolicyName="Ubezpieczenie floty"
+            defaultSumInsured={data.wartosc_floty}
+            onAdd={(policyData) => onAddPolicy({
+              ...policyData,
+              policy_type: policyData.policy_type,
+            })}
+          />
+        )}
       </div>
 
       {data.status !== 'nie_dotyczy' && (
