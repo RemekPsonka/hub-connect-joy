@@ -1,236 +1,174 @@
 
-## Plan: Rozbudowa Modułu Ryzyka o Domenę Ubezpieczeń Finansowych
+## Plan: Dodanie polisy bezpośrednio z panelu Domen Ryzyka
 
 ### Cel
-Dodać nową domenę ryzyka "Ubezpieczenia Finansowe" obejmującą gwarancje ubezpieczeniowe, kredyty kupieckie (trade credit insurance), ochronę należności i inne produkty finansowe. Ta domena jest kluczowa dla firm handlowych, produkcyjnych i budowlanych.
+Umożliwić użytkownikowi dodanie polisy bezpośrednio z panelu analizy ryzyka (np. przy domenie "Majątek i Przerwy w Działalności"). Gdy status jest "Ubezpieczone", pojawi się przycisk "Dodaj polisę" z uproszczonym formularzem zawierającym: datę początkową, sumę ubezpieczenia i szacowaną składkę. Po zapisie polisa trafia do harmonogramu, gdzie można uzupełnić pozostałe szczegóły.
 
 ---
 
-## Zakres Nowej Domeny
+### Architektura rozwiązania
 
-### Ubezpieczenia Finansowe - Podkategorie:
+Obecnie komponenty domen (PropertyDomain, LiabilityDomain, itd.) otrzymują tylko `data`, `onChange` i `operationalTypes`. Aby dodać polisę, potrzebujemy dostępu do `companyId` oraz funkcji tworzenia polisy.
 
-| Produkt | Opis | Kto potrzebuje |
-|---------|------|----------------|
-| **Gwarancje kontraktowe** | Wadium, należyte wykonanie, usunięcie wad | Firmy budowlane, wykonawcy |
-| **Gwarancje celne i podatkowe** | Zabezpieczenie należności celnych/VAT | Import/eksport |
-| **Kredyt kupiecki** | Ochrona należności handlowych (trade credit) | Handel, produkcja, usługi B2B |
-| **Faktoring z ubezpieczeniem** | Ochrona należności faktoringowych | Firmy z odroczonym terminem płatności |
-| **Wierzytelności sporne** | Koszty dochodzenia roszczeń | Wszystkie branże B2B |
+**Podejście**: Stworzyć nowy komponent `QuickAddPolicyButton` wyświetlany wewnątrz każdej domeny, gdy status = "ubezpieczone". Komponent będzie zawierał uproszczony modal inline lub popover.
 
 ---
 
-## Zmiany Techniczne
-
-### 1. Rozszerzenie typów (`src/components/insurance/types.ts`)
-
-```typescript
-// Nowa domena - Ubezpieczenia Finansowe
-export interface RyzykoFinansowe {
-  // Gwarancje kontraktowe
-  gwarancje_kontraktowe_status: StatusUbezpieczenia;
-  gwarancje_limit_roczny?: number;
-  gwarancje_typy?: ('wadium' | 'nalezyte_wykonanie' | 'usuniecie_wad' | 'zaliczkowa' | 'platnicza')[];
-  
-  // Gwarancje celne/podatkowe
-  gwarancje_celne_status: StatusUbezpieczenia;
-  gwarancje_celne_limit?: number;
-  
-  // Kredyt kupiecki (trade credit)
-  kredyt_kupiecki_status: StatusUbezpieczenia;
-  kredyt_kupiecki_obroty_ubezpieczone?: number;
-  kredyt_kupiecki_eksport?: boolean;
-  kredyt_kupiecki_glowne_kraje?: string[];
-  
-  // Wierzytelności i windykacja
-  ochrona_prawna_status: StatusUbezpieczenia;
-  ochrona_prawna_zakres?: 'podstawowy' | 'rozszerzony' | 'pelny';
-  
-  uwagi?: string;
-}
-
-// Domyślne wartości
-export const DEFAULT_RYZYKO_FINANSOWE: RyzykoFinansowe = {
-  gwarancje_kontraktowe_status: 'nie_dotyczy',
-  gwarancje_celne_status: 'nie_dotyczy',
-  kredyt_kupiecki_status: 'nie_dotyczy',
-  ochrona_prawna_status: 'nie_dotyczy',
-};
-```
-
-### 2. Rozszerzenie głównej struktury analizy
-
-```typescript
-export interface AnalizaRyzykaUbezpieczeniowego {
-  // ... istniejące pola
-  
-  // Nowa domena
-  ryzyko_finansowe: RyzykoFinansowe;
-  
-  // ... reszta pól
-}
-```
-
----
-
-## Nowe Pliki
-
-### Plik 1: `src/components/insurance/domains/FinancialDomain.tsx`
-
-Nowy komponent formularza z sekcjami:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│ 💳 Gwarancje Kontraktowe                                     │
-├──────────────────────────────────────────────────────────────┤
-│ [Ubezpieczone] [LUKA] [N/D]                                  │
-│                                                              │
-│ Limit roczny:     [_____________] PLN                        │
-│                                                              │
-│ Typy gwarancji:                                              │
-│ ☐ Wadium  ☐ Należyte wykonanie  ☐ Usunięcie wad             │
-│ ☐ Zaliczkowa  ☐ Płatnicza                                   │
-└──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│ 🛃 Gwarancje Celne i Podatkowe                               │
-├──────────────────────────────────────────────────────────────┤
-│ [Ubezpieczone] [LUKA] [N/D]                                  │
-│                                                              │
-│ Limit zabezpieczeń: [_____________] PLN                      │
-└──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│ 📊 Kredyt Kupiecki (Trade Credit)                            │
-├──────────────────────────────────────────────────────────────┤
-│ [Ubezpieczone] [LUKA] [N/D]                                  │
-│                                                              │
-│ Obroty ubezpieczone: [_____________] PLN                     │
-│ ☑ Eksport (ryzyko zagraniczne)                              │
-│ Główne kraje: [PL, DE, CZ...]                               │
-└──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│ ⚖️ Ochrona Prawna (Wierzytelności)                          │
-├──────────────────────────────────────────────────────────────┤
-│ [Ubezpieczone] [LUKA] [N/D]                                  │
-│                                                              │
-│ Zakres: [Podstawowy ▼]                                       │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Modyfikacje Istniejących Plików
-
-### 1. `src/components/insurance/types.ts`
-- Dodanie interfejsu `RyzykoFinansowe`
-- Dodanie `DEFAULT_RYZYKO_FINANSOWE`
-- Rozszerzenie `AnalizaRyzykaUbezpieczeniowego` o nową domenę
-
-### 2. `src/components/insurance/RiskDomainAccordion.tsx`
-- Import nowego komponentu `FinancialDomain`
-- Dodanie nowego `AccordionItem` z ikoną `Banknote` lub `CreditCard`
-- Dodanie funkcji `getFinancialStatusSummary()` dla badge'a statusu
-
-### 3. `src/components/insurance/RiskMatrixPanel.tsx`
-- Dodanie propsa `finansowe` i `onFinansoweChange`
-- Przekazanie do `RiskDomainAccordion`
-
-### 4. `src/components/insurance/InsurancePanel.tsx`
-- Dodanie stanu `finansowe` z `useState`
-- Inicjalizacja z `assessment.ryzyko_finansowe`
-- Handler `handleFinansoweChange`
-- Przekazanie do `RiskMatrixPanel`
-
-### 5. `src/hooks/useInsuranceRisk.ts`
-- Rozszerzenie interfejsu `InsuranceAssessment` o `ryzyko_finansowe`
-- Rozszerzenie `SaveAssessmentData` o `ryzyko_finansowe`
-- Dodanie parsowania pola z bazy danych
-
-### 6. `src/utils/exportInsuranceBrief.ts`
-- Rozszerzenie `InsuranceBriefExportData` o `finansowe`
-- Dodanie sekcji "UBEZPIECZENIA FINANSOWE" w PDF
-- Uwzględnienie luk w gwarancjach/kredycie kupieckim
-
----
-
-## Migracja Bazy Danych
-
-```sql
--- Dodanie nowej kolumny JSONB dla ryzyka finansowego
-ALTER TABLE public.insurance_risk_assessments
-ADD COLUMN IF NOT EXISTS ryzyko_finansowe JSONB DEFAULT '{
-  "gwarancje_kontraktowe_status": "nie_dotyczy",
-  "gwarancje_celne_status": "nie_dotyczy",
-  "kredyt_kupiecki_status": "nie_dotyczy",
-  "ochrona_prawna_status": "nie_dotyczy"
-}'::jsonb;
-
--- Komentarz opisujący kolumnę
-COMMENT ON COLUMN public.insurance_risk_assessments.ryzyko_finansowe IS 
-  'Ubezpieczenia finansowe: gwarancje kontraktowe, celne, kredyt kupiecki, ochrona prawna';
-```
-
----
-
-## Logika Biznesowa - Automatyczne Sugestie
-
-W zależności od wybranych typów działalności (DNA Operacyjne), system automatycznie podświetla rekomendowane produkty:
-
-| DNA Operacyjne | Rekomendowane produkty finansowe |
-|----------------|----------------------------------|
-| **Produkcja** | Kredyt kupiecki, Gwarancje kontraktowe |
-| **Handel** | Kredyt kupiecki (eksport/import), Gwarancje płatnicze |
-| **Import/Eksport** | Gwarancje celne, Kredyt kupiecki eksportowy |
-| **Usługi** | Gwarancje kontraktowe (dla usług B2B) |
-| **e-Commerce** | Ochrona prawna (wierzytelności) |
-
----
-
-## Wizualizacja w Akordenie
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 🏦 Majątek i Przerwy w Działalności                       N/D  │
-├─────────────────────────────────────────────────────────────────┤
-│ ⚖️ Odpowiedzialność Cywilna (OC)                         N/D  │
-├─────────────────────────────────────────────────────────────────┤
-│ 🚚 Flota i Logistyka                                      N/D  │
-├─────────────────────────────────────────────────────────────────┤
-│ 🔒 Ryzyka Specjalistyczne                                 N/D  │
-├─────────────────────────────────────────────────────────────────┤
-│ 💰 Ubezpieczenia Finansowe                    [NOWE]    LUKI  │ ◀── NOWA DOMENA
-├─────────────────────────────────────────────────────────────────┤
-│ 👥 Pracownicy                                             N/D  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Podsumowanie Zmian w Plikach
+### Zmiany w plikach
 
 | Plik | Typ | Opis |
 |------|-----|------|
-| **Baza danych** |
-| Migracja SQL | NOWY | Kolumna `ryzyko_finansowe` (JSONB) |
-| **Komponenty** |
-| `src/components/insurance/domains/FinancialDomain.tsx` | NOWY | Formularz domeny finansowej |
-| `src/components/insurance/types.ts` | MOD | Interfejs `RyzykoFinansowe`, domyślne wartości |
-| `src/components/insurance/RiskDomainAccordion.tsx` | MOD | Dodanie 6. sekcji akordeonu |
-| `src/components/insurance/RiskMatrixPanel.tsx` | MOD | Props dla nowej domeny |
-| `src/components/insurance/InsurancePanel.tsx` | MOD | Stan i handler dla domeny finansowej |
-| **Hooki** |
-| `src/hooks/useInsuranceRisk.ts` | MOD | Parsowanie i zapis nowego pola |
-| **Eksport PDF** |
-| `src/utils/exportInsuranceBrief.ts` | MOD | Sekcja "Ubezpieczenia Finansowe" w briefie |
+| `src/components/insurance/QuickAddPolicyButton.tsx` | NOWY | Przycisk z popoverem/dialogiem do szybkiego dodania polisy |
+| `src/components/insurance/types.ts` | MOD | Rozszerzenie `DomainProps` o `companyId` i `onAddPolicy` |
+| `src/components/insurance/domains/PropertyDomain.tsx` | MOD | Dodanie przycisku przy statusie "ubezpieczone" |
+| `src/components/insurance/domains/LiabilityDomain.tsx` | MOD | Analogicznie |
+| `src/components/insurance/domains/FleetDomain.tsx` | MOD | Analogicznie |
+| `src/components/insurance/domains/SpecialtyDomain.tsx` | MOD | Dla każdego produktu (Cyber, D&O, CAR/EAR) |
+| `src/components/insurance/domains/EmployeesDomain.tsx` | MOD | Dla produktów życie/zdrowie/podróże |
+| `src/components/insurance/domains/FinancialDomain.tsx` | MOD | Dla gwarancji, trade credit, etc. |
+| `src/components/insurance/RiskDomainAccordion.tsx` | MOD | Przekazanie `companyId` i `onAddPolicy` do domen |
+| `src/components/insurance/RiskMatrixPanel.tsx` | MOD | Dodanie propsa `companyId` i `onAddPolicy` |
+| `src/components/insurance/InsurancePanel.tsx` | MOD | Integracja z `useInsurancePolicies` i przekazanie funkcji tworzenia |
 
 ---
 
-## Korzyści Biznesowe
+### Nowy komponent: `QuickAddPolicyButton.tsx`
 
-1. **Kompleksowa analiza ryzyka** - Broker ma pełny obraz potrzeb klienta
-2. **Identyfikacja luk w gwarancjach** - Często pomijany obszar
-3. **Cross-selling** - Możliwość zaproponowania produktów finansowych
-4. **Raportowanie** - Brief zawiera wszystkie zidentyfikowane potrzeby
-5. **AI Recommendations** - System może sugerować produkty na podstawie DNA operacyjnego
+Uproszczony formularz w popoverze:
+
+```
+┌─────────────────────────────────────────────┐
+│  Dodaj polisę do harmonogramu               │
+├─────────────────────────────────────────────┤
+│  Data rozpoczęcia *   [01.02.2026     ]     │
+│  (koniec: auto +1 rok)                      │
+│                                             │
+│  Suma ubezpieczenia   [45 000 000  ] PLN    │
+│                                             │
+│  Składka szacowana    [    120 000 ] PLN    │
+│                                             │
+│  ☐ Nasza polisa (obsługujemy)               │
+│                                             │
+│            [Anuluj]  [Dodaj do harmonogramu]│
+└─────────────────────────────────────────────┘
+```
+
+**Logika:**
+- Typ polisy automatycznie mapowany z domeny (np. PropertyDomain → `property`)
+- Nazwa polisy generowana automatycznie (np. "Majątek - Auto")
+- Data końcowa = data początkowa + 1 rok
+- Po zapisie toast z linkiem "Otwórz harmonogram" → `/companies/{id}?tab=harmonogram`
+
+---
+
+### Mapowanie domen → typy polis
+
+| Domena | PolicyType |
+|--------|------------|
+| PropertyDomain (majątek) | `property` |
+| LiabilityDomain (OC) | `liability` |
+| FleetDomain (flota) | `fleet` |
+| SpecialtyDomain - Cyber | `cyber` |
+| SpecialtyDomain - D&O | `do` |
+| SpecialtyDomain - CAR/EAR | `other` |
+| EmployeesDomain - Życie | `life` |
+| EmployeesDomain - Zdrowie | `health` |
+| EmployeesDomain - Podróże | `other` |
+| FinancialDomain - Gwarancje | `other` |
+| FinancialDomain - Trade Credit | `other` |
+
+---
+
+### Rozszerzenie interfejsu DomainProps
+
+```typescript
+export interface DomainProps<T> {
+  data: T;
+  onChange: (data: T) => void;
+  operationalTypes: TypDzialnosci[];
+  // Nowe pola dla szybkiego dodawania polis
+  companyId?: string;
+  onAddPolicy?: (data: {
+    policy_type: string;
+    policy_name: string;
+    start_date: string;
+    end_date: string;
+    sum_insured?: number;
+    premium?: number;
+    is_our_policy?: boolean;
+  }) => void;
+}
+```
+
+---
+
+### Przykład integracji w PropertyDomain
+
+```typescript
+export function PropertyDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoMajatkowe>) {
+  // ... istniejący kod
+  
+  return (
+    <div className="space-y-4">
+      {/* Status toggle */}
+      <InsuranceStatusToggle ... />
+      
+      {/* Quick Add Policy - widoczne gdy ubezpieczone */}
+      {data.status === 'ubezpieczone' && companyId && onAddPolicy && (
+        <QuickAddPolicyButton
+          policyType="property"
+          defaultPolicyName="Ubezpieczenie majątkowe"
+          defaultSumInsured={data.suma_ubezp_majatek}
+          onAdd={onAddPolicy}
+        />
+      )}
+      
+      {/* Reszta formularza */}
+      {data.status !== 'nie_dotyczy' && (
+        <div className="grid ...">
+          ...
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+### Przepływ danych
+
+1. `InsurancePanel` tworzy instancję `useInsurancePolicies(company.id)` → dostaje `createPolicy`
+2. `InsurancePanel` przekazuje do `RiskMatrixPanel`:
+   - `companyId={company.id}`
+   - `onAddPolicy={createPolicy.mutate}`
+3. `RiskMatrixPanel` przekazuje do `RiskDomainAccordion`
+4. `RiskDomainAccordion` przekazuje do każdej domeny
+5. Domeny renderują `QuickAddPolicyButton` gdy status = "ubezpieczone"
+
+---
+
+### Podsumowanie zmian
+
+| Plik | Zmiany |
+|------|--------|
+| `QuickAddPolicyButton.tsx` | Nowy komponent z Popover + formularzem |
+| `types.ts` | Rozszerzenie `DomainProps` o `companyId`, `onAddPolicy` |
+| `PropertyDomain.tsx` | Import + render `QuickAddPolicyButton` |
+| `LiabilityDomain.tsx` | Jak wyżej |
+| `FleetDomain.tsx` | Jak wyżej |
+| `SpecialtyDomain.tsx` | 3x QuickAddPolicyButton (Cyber, D&O, CAR/EAR) |
+| `EmployeesDomain.tsx` | 3x QuickAddPolicyButton (Życie, Zdrowie, Podróże) |
+| `FinancialDomain.tsx` | 4x QuickAddPolicyButton (Gwarancje, Celne, Trade Credit, Ochrona) |
+| `RiskDomainAccordion.tsx` | Props `companyId`, `onAddPolicy` |
+| `RiskMatrixPanel.tsx` | Props `companyId`, `onAddPolicy` |
+| `InsurancePanel.tsx` | Integracja z `useInsurancePolicies`, przekazanie funkcji |
+
+---
+
+### Korzyści
+
+1. **Szybsze workflow** - dodanie polisy bez wychodzenia z analizy ryzyka
+2. **Spójność danych** - suma ubezpieczenia z formularza ryzyka automatycznie przepisana do polisy
+3. **Mniej kliknięć** - nie trzeba osobno otwierać harmonogramu
+4. **Automatyczne nazewnictwo** - polisa od razu ma sensowną nazwę i typ
