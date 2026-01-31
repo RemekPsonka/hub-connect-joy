@@ -19,6 +19,7 @@ interface CreatePolicyInput {
   sum_insured?: number;
   premium?: number;
   notes?: string;
+  is_our_policy?: boolean;
 }
 
 interface UpdatePolicyInput extends Partial<CreatePolicyInput> {

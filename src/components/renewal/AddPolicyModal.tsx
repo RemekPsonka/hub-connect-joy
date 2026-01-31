@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { format, addYears } from 'date-fns';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ interface AddPolicyModalProps {
     sum_insured?: number;
     premium?: number;
     notes?: string;
+    is_our_policy?: boolean;
   }) => void;
   isLoading?: boolean;
 }
@@ -54,11 +56,22 @@ export function AddPolicyModal({
     insurer_name: '',
     broker_name: '',
     start_date: format(new Date(), 'yyyy-MM-dd'),
-    end_date: format(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+    end_date: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
     sum_insured: '',
     premium: '',
     notes: '',
+    is_our_policy: false,
   });
+
+  const handleStartDateChange = (startDate: string) => {
+    const start = new Date(startDate);
+    const end = addYears(start, 1);
+    setFormData(prev => ({
+      ...prev,
+      start_date: startDate,
+      end_date: format(end, 'yyyy-MM-dd'),
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +88,7 @@ export function AddPolicyModal({
       sum_insured: formData.sum_insured ? parseFloat(formData.sum_insured) : undefined,
       premium: formData.premium ? parseFloat(formData.premium) : undefined,
       notes: formData.notes || undefined,
+      is_our_policy: formData.is_our_policy,
     });
   };
 
@@ -88,10 +102,11 @@ export function AddPolicyModal({
       insurer_name: '',
       broker_name: '',
       start_date: format(new Date(), 'yyyy-MM-dd'),
-      end_date: format(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+      end_date: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
       sum_insured: '',
       premium: '',
       notes: '',
+      is_our_policy: false,
     });
   };
 
@@ -174,7 +189,7 @@ export function AddPolicyModal({
                 id="start_date"
                 type="date"
                 value={formData.start_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                onChange={(e) => handleStartDateChange(e.target.value)}
                 required
               />
             </div>
@@ -213,6 +228,19 @@ export function AddPolicyModal({
                 placeholder="np. 50000"
               />
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="is_our_policy"
+              checked={formData.is_our_policy}
+              onCheckedChange={(checked) =>
+                setFormData(prev => ({ ...prev, is_our_policy: !!checked }))
+              }
+            />
+            <Label htmlFor="is_our_policy" className="text-sm font-medium cursor-pointer">
+              Nasza polisa (obsługujemy jako broker)
+            </Label>
           </div>
 
           <div className="space-y-2">

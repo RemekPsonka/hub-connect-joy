@@ -10,6 +10,7 @@ import {
   Building2,
   Bug,
   UserCog,
+  Briefcase,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -33,6 +34,7 @@ import {
 const mainNavigationItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
   { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },

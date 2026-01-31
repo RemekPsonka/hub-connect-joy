@@ -33,6 +33,7 @@ import NotFound from "./pages/NotFound";
 import CompanyDetail from "./pages/CompanyDetail";
 import BugReports from "./pages/BugReports";
 import Representatives from "./pages/Representatives";
+import PolicyPipeline from "./pages/PolicyPipeline";
 
 // Lazy load Network page to isolate sigma library issues
 const Network = lazy(() => import("./pages/Network"));
@@ -83,6 +84,7 @@ const App = () => (
                 } 
               />
               <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
+              <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
               <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
               <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
               <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />

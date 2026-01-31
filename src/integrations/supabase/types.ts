@@ -2058,11 +2058,14 @@ export type Database = {
       insurance_policies: {
         Row: {
           broker_name: string | null
+          closed_at: string | null
           company_id: string
           created_at: string | null
           end_date: string
           id: string
           insurer_name: string | null
+          is_our_policy: boolean | null
+          moved_to_finalization_at: string | null
           notes: string | null
           policy_name: string
           policy_number: string | null
@@ -2073,14 +2076,18 @@ export type Database = {
           sum_insured: number | null
           tenant_id: string
           updated_at: string | null
+          workflow_status: string | null
         }
         Insert: {
           broker_name?: string | null
+          closed_at?: string | null
           company_id: string
           created_at?: string | null
           end_date: string
           id?: string
           insurer_name?: string | null
+          is_our_policy?: boolean | null
+          moved_to_finalization_at?: string | null
           notes?: string | null
           policy_name: string
           policy_number?: string | null
@@ -2091,14 +2098,18 @@ export type Database = {
           sum_insured?: number | null
           tenant_id: string
           updated_at?: string | null
+          workflow_status?: string | null
         }
         Update: {
           broker_name?: string | null
+          closed_at?: string | null
           company_id?: string
           created_at?: string | null
           end_date?: string
           id?: string
           insurer_name?: string | null
+          is_our_policy?: boolean | null
+          moved_to_finalization_at?: string | null
           notes?: string | null
           policy_name?: string
           policy_number?: string | null
@@ -2109,6 +2120,7 @@ export type Database = {
           sum_insured?: number | null
           tenant_id?: string
           updated_at?: string | null
+          workflow_status?: string | null
         }
         Relationships: [
           {
