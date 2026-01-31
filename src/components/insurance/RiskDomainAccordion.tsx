@@ -1,4 +1,4 @@
-import { Building, Scale, Truck, Lock, Users } from 'lucide-react';
+import { Building, Scale, Truck, Lock, Users, Banknote } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -11,6 +11,7 @@ import { LiabilityDomain } from './domains/LiabilityDomain';
 import { FleetDomain } from './domains/FleetDomain';
 import { SpecialtyDomain } from './domains/SpecialtyDomain';
 import { EmployeesDomain } from './domains/EmployeesDomain';
+import { FinancialDomain } from './domains/FinancialDomain';
 import type {
   TypDzialnosci,
   StatusUbezpieczenia,
@@ -19,6 +20,7 @@ import type {
   RyzykoFlota,
   RyzykoSpecjalistyczne,
   RyzykoPracownicy,
+  RyzykoFinansowe,
 } from './types';
 
 interface RiskDomainAccordionProps {
@@ -28,11 +30,13 @@ interface RiskDomainAccordionProps {
   flota: RyzykoFlota;
   specjalistyczne: RyzykoSpecjalistyczne;
   pracownicy: RyzykoPracownicy;
+  finansowe: RyzykoFinansowe;
   onMajatekChange: (data: RyzykoMajatkowe) => void;
   onOcChange: (data: RyzykoOC) => void;
   onFlotaChange: (data: RyzykoFlota) => void;
   onSpecjalistyczneChange: (data: RyzykoSpecjalistyczne) => void;
   onPracownicyChange: (data: RyzykoPracownicy) => void;
+  onFinansoweChange: (data: RyzykoFinansowe) => void;
 }
 
 function getStatusBadge(status: StatusUbezpieczenia) {
@@ -89,6 +93,30 @@ function getEmployeeStatusSummary(data: RyzykoPracownicy) {
   return <Badge variant="secondary" className="text-xs">N/D</Badge>;
 }
 
+function getFinancialStatusSummary(data: RyzykoFinansowe) {
+  const gaps = [];
+  if (data.gwarancje_kontraktowe_status === 'luka') gaps.push('Gwarancje');
+  if (data.gwarancje_celne_status === 'luka') gaps.push('Celne');
+  if (data.kredyt_kupiecki_status === 'luka') gaps.push('Trade Credit');
+  if (data.ochrona_prawna_status === 'luka') gaps.push('Ochrona prawna');
+  
+  if (gaps.length > 0) {
+    return <Badge variant="destructive" className="text-xs">LUKI: {gaps.join(', ')}</Badge>;
+  }
+  
+  const insured = [];
+  if (data.gwarancje_kontraktowe_status === 'ubezpieczone') insured.push('Gwarancje');
+  if (data.gwarancje_celne_status === 'ubezpieczone') insured.push('Celne');
+  if (data.kredyt_kupiecki_status === 'ubezpieczone') insured.push('Trade Credit');
+  if (data.ochrona_prawna_status === 'ubezpieczone') insured.push('Ochrona');
+  
+  if (insured.length > 0) {
+    return <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs">{insured.join(', ')}</Badge>;
+  }
+  
+  return <Badge variant="secondary" className="text-xs">N/D</Badge>;
+}
+
 export function RiskDomainAccordion({
   operationalTypes,
   majatek,
@@ -96,11 +124,13 @@ export function RiskDomainAccordion({
   flota,
   specjalistyczne,
   pracownicy,
+  finansowe,
   onMajatekChange,
   onOcChange,
   onFlotaChange,
   onSpecjalistyczneChange,
   onPracownicyChange,
+  onFinansoweChange,
 }: RiskDomainAccordionProps) {
   return (
     <div className="space-y-3">
@@ -177,6 +207,25 @@ export function RiskDomainAccordion({
             <SpecialtyDomain
               data={specjalistyczne}
               onChange={onSpecjalistyczneChange}
+              operationalTypes={operationalTypes}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="finansowe" className="border rounded-lg px-4">
+          <AccordionTrigger className="hover:no-underline">
+            <div className="flex items-center justify-between w-full pr-4">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-muted-foreground" />
+                <span>Ubezpieczenia Finansowe</span>
+              </div>
+              {getFinancialStatusSummary(finansowe)}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-4">
+            <FinancialDomain
+              data={finansowe}
+              onChange={onFinansoweChange}
               operationalTypes={operationalTypes}
             />
           </AccordionContent>

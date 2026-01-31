@@ -13,6 +13,7 @@ import {
   DEFAULT_RYZYKO_FLOTA,
   DEFAULT_RYZYKO_SPECJALISTYCZNE,
   DEFAULT_RYZYKO_PRACOWNICY,
+  DEFAULT_RYZYKO_FINANSOWE,
 } from './types';
 import type {
   TypDzialnosci,
@@ -21,6 +22,7 @@ import type {
   RyzykoFlota,
   RyzykoSpecjalistyczne,
   RyzykoPracownicy,
+  RyzykoFinansowe,
   PodpowiedzAI,
 } from './types';
 
@@ -47,6 +49,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
   const [flota, setFlota] = useState<RyzykoFlota>(DEFAULT_RYZYKO_FLOTA);
   const [specjalistyczne, setSpecjalistyczne] = useState<RyzykoSpecjalistyczne>(DEFAULT_RYZYKO_SPECJALISTYCZNE);
   const [pracownicy, setPracownicy] = useState<RyzykoPracownicy>(DEFAULT_RYZYKO_PRACOWNICY);
+  const [finansowe, setFinansowe] = useState<RyzykoFinansowe>(DEFAULT_RYZYKO_FINANSOWE);
   const [aiAnalysis, setAiAnalysis] = useState<string | undefined>();
   const [aiPrompts, setAiPrompts] = useState<PodpowiedzAI[] | undefined>();
   const [aiBrief, setAiBrief] = useState<string | undefined>();
@@ -62,6 +65,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
       setFlota(assessment.ryzyko_flota || DEFAULT_RYZYKO_FLOTA);
       setSpecjalistyczne(assessment.ryzyko_specjalistyczne || DEFAULT_RYZYKO_SPECJALISTYCZNE);
       setPracownicy(assessment.ryzyko_pracownicy || DEFAULT_RYZYKO_PRACOWNICY);
+      setFinansowe(assessment.ryzyko_finansowe || DEFAULT_RYZYKO_FINANSOWE);
       setAiAnalysis(assessment.ai_analiza_kontekstu || undefined);
       setAiPrompts(assessment.ai_podpowiedzi || undefined);
       setAiBrief(assessment.ai_brief_brokerski || undefined);
@@ -103,6 +107,11 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
     markChanged();
   };
 
+  const handleFinansoweChange = (data: RyzykoFinansowe) => {
+    setFinansowe(data);
+    markChanged();
+  };
+
   const handleSave = async () => {
     try {
       await saveAssessment({
@@ -112,6 +121,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
         ryzyko_flota: flota,
         ryzyko_specjalistyczne: specjalistyczne,
         ryzyko_pracownicy: pracownicy,
+        ryzyko_finansowe: finansowe,
       });
       setHasChanges(false);
       toast.success('Dane zapisane');
@@ -129,6 +139,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
         ryzyko_flota: flota,
         ryzyko_specjalistyczne: specjalistyczne,
         ryzyko_pracownicy: pracownicy,
+        ryzyko_finansowe: finansowe,
       });
       if (result) {
         setAiAnalysis(result.ai_analiza_kontekstu);
@@ -149,6 +160,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
         ryzyko_flota: flota,
         ryzyko_specjalistyczne: specjalistyczne,
         ryzyko_pracownicy: pracownicy,
+        ryzyko_finansowe: finansowe,
       });
       if (result) {
         setAiBrief(result.ai_brief_brokerski);
@@ -173,6 +185,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
       flota,
       specjalistyczne,
       pracownicy,
+      finansowe,
       aiBrief,
     });
     toast.success('Brief PDF wygenerowany');
@@ -225,11 +238,13 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
             flota={flota}
             specjalistyczne={specjalistyczne}
             pracownicy={pracownicy}
+            finansowe={finansowe}
             onMajatekChange={handleMajatekChange}
             onOcChange={handleOcChange}
             onFlotaChange={handleFlotaChange}
             onSpecjalistyczneChange={handleSpecjalistyczneChange}
             onPracownicyChange={handlePracownicyChange}
+            onFinansoweChange={handleFinansoweChange}
           />
         </ResizablePanel>
         
