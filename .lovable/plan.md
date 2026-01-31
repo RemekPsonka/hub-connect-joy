@@ -1,90 +1,95 @@
 
-
-## Plan: Moduł Harmonogramu Strategii Odnowień (Renewal Strategy Timeline)
+## Plan: Moduł "Multi-Site Exposure Manager" (Menadżer Ekspozycji Wielolokalizacyjnej)
 
 ### Cel
-Stworzenie modułu wizualizacji typu Gantt Chart do zarządzania złożonym harmonogramem odnawiania korporacyjnych polis ubezpieczeniowych, nie tylko datami wygaśnięcia, ale całym cyklem życia polisy.
+Strategiczne narzędzie do wizualizacji lokalizacji klienta i akumulacji wartości ubezpieczeniowej. Pozwala brokerowi szybko przechwycić listę lokalizacji, ich główną działalność i szacowane sumy ubezpieczenia podczas spotkań.
 
 ---
 
 ## Architektura
 
-### Biblioteki
-Moduł wykorzysta istniejącą bibliotekę **recharts** (już zainstalowaną) do stworzenia niestandardowego wykresu Gantt. Nie wymaga dodatkowych zależności.
-
----
-
 ### Nowe pliki do utworzenia
 
 | Plik | Cel |
 |------|-----|
-| `src/components/renewal/types.ts` | Typy dla polis i harmonogramu |
-| `src/components/renewal/RenewalTimeline.tsx` | Główny komponent wizualizacji |
-| `src/components/renewal/TimelineRow.tsx` | Pojedynczy wiersz (track) polisy |
-| `src/components/renewal/PolicyBar.tsx` | Pasek reprezentujący aktywne pokrycie |
-| `src/components/renewal/TimelineHeader.tsx` | Nagłówek z osią czasu (miesiące/kwartały) |
-| `src/components/renewal/TimelineTooltip.tsx` | Tooltip z checklistą i szczegółami |
-| `src/components/renewal/TimelineToolbar.tsx` | Pasek narzędzi (filtry, Critical Path, tryb ciemny) |
-| `src/components/renewal/index.ts` | Eksporty modułu |
-| `src/hooks/useInsurancePolicies.ts` | Hook do pobierania i zarządzania polisami |
+| `src/components/exposure/types.ts` | Typy dla lokalizacji i ekspozycji |
+| `src/components/exposure/ExposureManager.tsx` | Główny kontener modułu |
+| `src/components/exposure/ExposureMapView.tsx` | Widok mapy (placeholder) z pinezkami |
+| `src/components/exposure/LocationCard.tsx` | Karta pojedynczej lokalizacji |
+| `src/components/exposure/ValueSlider.tsx` | Suwak do szybkiej estymacji wartości |
+| `src/components/exposure/ExposureSummaryFooter.tsx` | Podsumowanie TIV i alertów |
+| `src/components/exposure/AddLocationModal.tsx` | Modal dodawania lokalizacji |
+| `src/components/exposure/RiskAlerts.tsx` | Komponent alertów AI |
+| `src/components/exposure/index.ts` | Eksporty modułu |
+| `src/hooks/useExposureLocations.ts` | Hook do zarządzania lokalizacjami |
 
 ### Pliki do modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/company/CompanyFlatTabs.tsx` | Dodanie zakładki "Harmonogram" z ikoną CalendarClock |
+| `src/components/company/CompanyFlatTabs.tsx` | Dodanie zakładki "Ekspozycja" z ikoną MapPinned |
 
 ---
 
 ## Model danych
 
-### Nowa tabela: `insurance_policies`
+### Nowa tabela: `exposure_locations`
 
 ```sql
-CREATE TABLE insurance_policies (
+CREATE TABLE public.exposure_locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   
-  -- Podstawowe dane polisy
-  policy_type TEXT NOT NULL CHECK (policy_type IN ('property', 'fleet', 'do', 'cyber', 'liability', 'life', 'health', 'other')),
-  policy_number TEXT,
-  policy_name TEXT NOT NULL,
-  insurer_name TEXT,
-  broker_name TEXT,
+  -- Lokalizacja
+  name TEXT NOT NULL,              -- "Wrocław HQ", "Fabryka Poznań"
+  address TEXT,
+  city TEXT,
+  lat NUMERIC(10, 7),              -- Współrzędne dla mapy
+  lng NUMERIC(10, 7),
   
-  -- Daty
-  start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
+  -- Typ działalności (krytyczne dla oceny ryzyka)
+  activity_type TEXT NOT NULL CHECK (
+    activity_type IN ('production', 'warehouse', 'office', 'retail')
+  ),
   
-  -- Status checklisty odnowienia
-  renewal_checklist JSONB DEFAULT '{
-    "data_update_requested": false,
-    "market_tender_done": false,
-    "negotiation_completed": false,
-    "board_approval_obtained": false
-  }'::jsonb,
+  -- Konstrukcja
+  construction_type TEXT NOT NULL DEFAULT 'non_combustible' CHECK (
+    construction_type IN ('non_combustible', 'combustible')
+  ),
   
-  -- Dodatkowe informacje
-  sum_insured NUMERIC,
-  premium NUMERIC,
+  -- Wartości (przechowywane w PLN)
+  building_value NUMERIC DEFAULT 0,
+  machinery_value NUMERIC DEFAULT 0,
+  stock_value NUMERIC DEFAULT 0,
+  stock_fluctuation BOOLEAN DEFAULT false,
+  
+  -- Metadata
   notes TEXT,
-  
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Indeksy
-CREATE INDEX idx_insurance_policies_company ON insurance_policies(company_id);
-CREATE INDEX idx_insurance_policies_end_date ON insurance_policies(end_date);
+CREATE INDEX idx_exposure_locations_company ON public.exposure_locations(company_id);
+CREATE INDEX idx_exposure_locations_tenant ON public.exposure_locations(tenant_id);
 
 -- RLS
-ALTER TABLE insurance_policies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exposure_locations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Tenant access for insurance_policies"
-  ON insurance_policies
+CREATE POLICY "exposure_locations_tenant_access"
+  ON public.exposure_locations
   FOR ALL
-  USING (tenant_id = (SELECT tenant_id FROM directors WHERE user_id = auth.uid()));
+  USING (
+    auth.uid() IS NOT NULL AND 
+    tenant_id = get_current_tenant_id()
+  );
+
+-- Trigger updated_at
+CREATE TRIGGER update_exposure_locations_updated_at
+  BEFORE UPDATE ON public.exposure_locations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
 ```
 
 ---
@@ -92,96 +97,106 @@ CREATE POLICY "Tenant access for insurance_policies"
 ## Struktura typów
 
 ```typescript
-// src/components/renewal/types.ts
+// src/components/exposure/types.ts
 
-export type PolicyType = 'property' | 'fleet' | 'do' | 'cyber' | 'liability' | 'life' | 'health' | 'other';
+export type ActivityType = 'production' | 'warehouse' | 'office' | 'retail';
+export type ConstructionType = 'non_combustible' | 'combustible';
 
-export const POLICY_TYPE_LABELS: Record<PolicyType, string> = {
-  property: 'Majątek',
-  fleet: 'Flota',
-  do: 'D&O',
-  cyber: 'Cyber',
-  liability: 'OC',
-  life: 'Życie',
-  health: 'Zdrowie',
-  other: 'Inne',
+export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+  production: 'Produkcja',
+  warehouse: 'Magazyn',
+  office: 'Biuro',
+  retail: 'Handel',
 };
 
-export const POLICY_TYPE_COLORS: Record<PolicyType, string> = {
-  property: '#3B82F6',   // blue
-  fleet: '#10B981',      // emerald
-  do: '#8B5CF6',         // violet
-  cyber: '#F59E0B',      // amber
-  liability: '#EF4444',  // red
-  life: '#06B6D4',       // cyan
-  health: '#EC4899',     // pink
-  other: '#6B7280',      // gray
+export const ACTIVITY_TYPE_COLORS: Record<ActivityType, string> = {
+  production: 'bg-amber-500',
+  warehouse: 'bg-emerald-500',
+  office: 'bg-sky-500',
+  retail: 'bg-violet-500',
 };
 
-export interface RenewalChecklist {
-  data_update_requested: boolean;
-  market_tender_done: boolean;
-  negotiation_completed: boolean;
-  board_approval_obtained: boolean;
-}
+export const CONSTRUCTION_TYPE_LABELS: Record<ConstructionType, string> = {
+  non_combustible: 'Niepalna',
+  combustible: 'Palna / Płyta warstwowa',
+};
 
-export interface InsurancePolicy {
+export interface ExposureLocation {
   id: string;
   company_id: string;
   tenant_id: string;
-  policy_type: PolicyType;
-  policy_number?: string;
-  policy_name: string;
-  insurer_name?: string;
-  broker_name?: string;
-  start_date: string;
-  end_date: string;
-  renewal_checklist: RenewalChecklist;
-  sum_insured?: number;
-  premium?: number;
-  notes?: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  activity_type: ActivityType;
+  construction_type: ConstructionType;
+  building_value: number;
+  machinery_value: number;
+  stock_value: number;
+  stock_fluctuation: boolean;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface TimelineConfig {
-  startDate: Date;
-  endDate: Date;
-  dangerZoneDays: number;       // 30 dni
-  actionPhaseDays: number;      // 90 dni
-  showCriticalPath: boolean;
-  darkMode: boolean;
+// Obliczone wartości
+export interface LocationExposure extends ExposureLocation {
+  total_value: number;           // building + machinery + stock
+  risk_tier: 'low' | 'medium' | 'high';  // based on total
 }
+
+export interface RiskAlert {
+  id: string;
+  type: 'warning' | 'info' | 'critical';
+  message: string;
+  locationId?: string;
+}
+
+// Progi dla kolorowania pinezek
+export const VALUE_THRESHOLDS = {
+  LOW: 10_000_000,      // < 10M = zielony
+  MEDIUM: 50_000_000,   // < 50M = żółty
+  // > 50M = czerwony
+};
 ```
 
 ---
 
 ## Layout interfejsu
 
-### Układ główny
+### Układ główny (Split View)
 
 ```text
 +-----------------------------------------------------------------------------------+
 |  [Toolbar]                                                                         |
-|  +Dodaj polisę+  | Widok: [Kwartały ▼] | [✓] Critical Path | [☾] Tryb ciemny     |
-+-----------------------------------------------------------------------------------+
-|  LEGENDA:  [■ Aktywna polisa]  [■ Faza działań (90 dni)]  [■ Strefa zagrożenia]  |
+|  +Dodaj lokalizację+  | Widok: [Lista ▼] / [Mapa]                                 |
 +-----------------------------------------------------------------------------------+
 |                                                                                    |
-|  POLISY     |  STY  |  LUT  |  MAR  |  KWI  |  MAJ  |  CZE  |  LIP  |  SIE  |    |
-|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
-|  Majątek    |  [██████████████████POLISA████████████████]      |                  |
-|             |                                    ↑ Action Phase ↑ Danger Zone    |
-|             |                               [======ZIELONY======][CZERW]          |
-|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
-|  Flota      |       [███████████████████POLISA██████████████████████]             |
-|             |                                                [====][XXX]          |
-|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
-|  D&O        |  [████POLISA████]  ← PRZETERMINOWANA (Critical Path podświetlone)   |
-|             |                                                                      |
-|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
-|  Cyber      |              [██████████████POLISA████████████████]                 |
-|             |                                          [======][XXX]              |
+|  +------------------------+  +--------------------------------------------------+ |
+|  |                        |  |  KARTA LOKALIZACJI #1                            | |
+|  |      MAPA              |  |  ┌─────────────────────────────────────────────┐ | |
+|  |   (Placeholder)        |  |  │  📍 Wrocław HQ                               │ | |
+|  |                        |  |  │  [Produkcja] [Magazyn] [Biuro] [Handel]      │ | |
+|  |   📍 - Zielona (<10M)  |  |  │  ○ Niepalna  ● Palna                         │ | |
+|  |   📍 - Żółta (<50M)    |  |  │  ─────────────────────────────────────────── │ | |
+|  |   📍 - Czerwona (>50M) |  |  │  Budynek:    [═══════════░░░░] 25M    [📝]   │ | |
+|  |                        |  |  │  Maszyny:    [════░░░░░░░░░░░] 8M     [📝]   │ | |
+|  |                        |  |  │  Zapasy:     [══════════════░] 12M  [✓Fluk]  │ | |
+|  |                        |  |  │  ─────────────────────────────────────────── │ | |
+|  |                        |  |  │  SUMA EKSPOZYCJI: 45M PLN                    │ | |
+|  +------------------------+  |  └─────────────────────────────────────────────┘ | |
+|                              |                                                    | |
+|                              |  KARTA LOKALIZACJI #2                            | |
+|                              |  ...                                              | |
++-----------------------------------------------------------------------------------+
+|  PODSUMOWANIE                                                                      |
+|  Lokalizacje: 5  |  Łączny TIV: 187M PLN  |  Top ryzyko: Fabryka Poznań (78M)    |
++-----------------------------------------------------------------------------------+
+|  ⚠️ ALERTY:                                                                       |
+|  • Zapasy > Budynek przy Magazynie → Sprawdź systemy p.poż (tryskacze?)          |
+|  • 5+ lokalizacji → Rozważ polisę Master z sumami zmiennymi                      |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -189,193 +204,175 @@ export interface TimelineConfig {
 
 ## Komponenty wizualne
 
-### 1. Pasek Polisy (PolicyBar)
+### 1. Karta Lokalizacji (LocationCard)
 
 ```text
-+--------------------------------------------------------------------------------+
-|  [████████████████████ AKTYWNA POLISA (niebieski) ████████████████████████████]|
-|                                        |← 90 dni →|← 30 →|                      |
-|                                        [ZIELONY    ][CZERW ]                    |
-|                                        Action Phase Danger                      |
-+--------------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────┐
+│  📍 Wrocław HQ                                           [🗑️]  │
+│  ul. Fabryczna 12, 50-001 Wrocław                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Typ działalności:                                              │
+│  [Produkcja✓] [Magazyn] [Biuro] [Handel]     ← Toggle badges   │
+│                                                                 │
+│  Konstrukcja:                                                   │
+│  ○ Niepalna    ● Palna/Płyta warstwowa       ← Radio toggle    │
+├─────────────────────────────────────────────────────────────────┤
+│  SUWAKI WARTOŚCI:                                               │
+│                                                                 │
+│  Budynek         [═══════════════════░░░░░░░] 45M    [📝100M]  │
+│                  0                         100M+                │
+│                                                                 │
+│  Maszyny/Sprzęt  [════════░░░░░░░░░░░░░░░░░] 15M    [📝50M]   │
+│                  0                          50M+                │
+│                                                                 │
+│  Zapasy/Towary   [══════════════════░░░░░░░] 22M    [✓Fluktuacja] │
+│                  0                          50M+                │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  SUMA EKSPOZYCJI:  82 000 000 PLN                        │  │
+│  │  ██████████████████████████████████████░░░░░░░░░░░░░░░░  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Polisa aktywna** (niebieski/kolor typu): Główny pasek reprezentujący okres pokrycia
-- **Faza działań** (zielony nakładka): 90 dni przed wygaśnięciem - "Okno Przetargu i Negocjacji"
-- **Strefa zagrożenia** (czerwony gradient): Ostatnie 30 dni przed wygaśnięciem
+### 2. ValueSlider (Suwak wartości)
 
-### 2. Interaktywny Tooltip
-
-Po najechaniu na "Fazę działań":
-
-```text
-+--------------------------------+
-|  FAZA DZIAŁAŃ (90 DNI)         |
-|  Okno Przetargu i Negocjacji   |
-+--------------------------------+
-|  Checklist:                    |
-|  [✓] Aktualizacja danych       |
-|  [ ] Przetarg rynkowy          |
-|  [ ] Negocjacje                |
-|  [✓] Zgoda Zarządu             |
-+--------------------------------+
-|  Pozostało: 45 dni             |
-|  Data wygaśnięcia: 2026-04-15  |
-+--------------------------------+
-```
-
-### 3. Widok "Critical Path"
-
-Toggle który podświetla polisy wymagające natychmiastowej uwagi:
-- Polisy w "Strefie zagrożenia" (< 30 dni) bez kompletnej checklisty
-- Polisy przeterminowane (end_date < today)
-- Polisy w "Fazie działań" bez rozpoczętych kroków
-
----
-
-## Paleta kolorów
-
-### Tryb jasny
-```typescript
-const LIGHT_THEME = {
-  policyBar: '#3B82F6',           // niebieski
-  actionPhase: '#22C55E',         // zielony
-  dangerZone: 'linear-gradient(to right, #FEE2E2, #EF4444)', // gradient czerwony
-  criticalHighlight: '#FCD34D',   // żółty (highlight)
-  gridLine: '#E5E7EB',
-  text: '#374151',
-  background: '#FFFFFF',
-};
-```
-
-### Tryb ciemny
-```typescript
-const DARK_THEME = {
-  policyBar: '#60A5FA',           // jasnoniebieski
-  actionPhase: '#4ADE80',         // jasnozielony
-  dangerZone: 'linear-gradient(to right, #7F1D1D, #DC2626)',
-  criticalHighlight: '#FBBF24',
-  gridLine: '#374151',
-  text: '#F3F4F6',
-  background: '#111827',
-};
-```
-
----
-
-## Funkcjonalności
-
-### 1. Dodawanie/Edycja polisy
-
-Modal z formularzem:
-- Typ polisy (select)
-- Nazwa polisy
-- Numer polisy (opcjonalnie)
-- Ubezpieczyciel
-- Broker
-- Data rozpoczęcia / zakończenia
-- Suma ubezpieczenia
-- Składka
-- Notatki
-
-### 2. Zarządzanie checklistą
-
-Kliknięcie w "Fazę działań" otwiera edytowalną checklistę:
-- Checkbox: Aktualizacja danych klienta
-- Checkbox: Przetarg rynkowy
-- Checkbox: Negocjacje zakończone
-- Checkbox: Zgoda Zarządu uzyskana
-
-### 3. Widoki czasowe
-
-Select do przełączania widoku osi X:
-- **Miesiące**: Widok szczegółowy (domyślny)
-- **Kwartały**: Widok strategiczny
-- **Półrocza**: Widok planowania rocznego
-
-### 4. Eksport
-
-- **PDF**: Wizualizacja harmonogramu do prezentacji
-- **Raport**: Lista polis z datami i statusami
-
----
-
-## Hook: useInsurancePolicies
+Suwak z:
+- Zakres logarytmiczny dla lepszego UX (0-100M+)
+- Pole tekstowe do ręcznej edycji
+- Wizualizacja progress bar
+- Formatowanie walutowe (PLN)
 
 ```typescript
-export function useInsurancePolicies(companyId: string) {
-  const queryClient = useQueryClient();
-  const { director } = useAuth();
-  const tenantId = director?.tenant_id;
-
-  const { data: policies, isLoading } = useQuery({
-    queryKey: ['insurance-policies', companyId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('insurance_policies')
-        .select('*')
-        .eq('company_id', companyId)
-        .order('end_date', { ascending: true });
-      
-      if (error) throw error;
-      return data as InsurancePolicy[];
-    },
-    enabled: !!companyId && !!tenantId,
-  });
-
-  const createPolicy = useMutation({ /* ... */ });
-  const updatePolicy = useMutation({ /* ... */ });
-  const updateChecklist = useMutation({ /* ... */ });
-  const deletePolicy = useMutation({ /* ... */ });
-
-  // Computed properties
-  const criticalPolicies = useMemo(() => {
-    if (!policies) return [];
-    const today = new Date();
-    return policies.filter(p => {
-      const endDate = new Date(p.end_date);
-      const daysLeft = differenceInDays(endDate, today);
-      const checklist = p.renewal_checklist;
-      
-      // Critical if:
-      // 1. Expired
-      // 2. In danger zone without complete checklist
-      // 3. In action phase with no started items
-      return daysLeft < 0 || 
-        (daysLeft <= 30 && !isChecklistComplete(checklist)) ||
-        (daysLeft <= 90 && !hasChecklistStarted(checklist));
-    });
-  }, [policies]);
-
-  return {
-    policies,
-    isLoading,
-    createPolicy,
-    updatePolicy,
-    updateChecklist,
-    deletePolicy,
-    criticalPolicies,
-  };
+interface ValueSliderProps {
+  label: string;
+  value: number;
+  max: number;               // 100M dla budynku, 50M dla maszyn/zapasów
+  onChange: (value: number) => void;
+  showFluctuation?: boolean;
+  hasFluctuation?: boolean;
+  onFluctuationChange?: (checked: boolean) => void;
 }
 ```
 
+### 3. Mapa (Placeholder)
+
+Przygotowany pod przyszłą integrację z Leaflet/Google Maps:
+- Pinezki kolorowane według wartości TIV
+- Kliknięcie pinezki scrolluje do karty
+- Legenda kolorów
+
+```text
++------------------------------------------+
+|                                          |
+|        🗺️ Mapa Lokalizacji              |
+|        (Placeholder)                     |
+|                                          |
+|   📍 Zielony: < 10M PLN                 |
+|   📍 Żółty:   10-50M PLN                |
+|   📍 Czerwony: > 50M PLN                |
+|                                          |
+|   [+ Dodaj lokalizację na mapie]        |
+|                                          |
++------------------------------------------+
+```
+
+### 4. Alerty ryzyka (RiskAlerts)
+
+Logika alertów:
+- `stock_value > building_value && activity_type === 'warehouse'` → "Sprawdź systemy p.poż (tryskacze?)"
+- `locations.length > 5` → "Rozważ polisę Master z sumami zmiennymi"
+- `construction_type === 'combustible' && (building_value + machinery_value) > 20M` → "Ryzyko pożarowe - konstrukcja palna"
+
 ---
 
-## Integracja z istniejącymi komponentami
+## Integracja z CompanyFlatTabs
 
-### Modyfikacja CompanyFlatTabs
-
-Dodanie zakładki "Harmonogram" między "Ubezpieczenia" a "Profil AI":
+Dodanie zakładki "Ekspozycja" po "Harmonogram":
 
 ```typescript
 // W tablicy tabs dodaj:
-{ id: 'timeline', label: 'Harmonogram', icon: CalendarClock, always: true },
+{ id: 'exposure', label: 'Ekspozycja', icon: MapPinned, always: true },
 ```
 
 ```tsx
-<TabsContent value="timeline" className="mt-0">
-  <RenewalTimeline companyId={company.id} />
+<TabsContent value="exposure" className="mt-0">
+  <ExposureManager companyId={company.id} />
 </TabsContent>
+```
+
+---
+
+## Hook: useExposureLocations
+
+```typescript
+export function useExposureLocations(companyId: string) {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  const { data: locations, isLoading } = useQuery({
+    queryKey: ['exposure-locations', companyId],
+    queryFn: async () => { /* fetch from exposure_locations */ },
+    enabled: !!companyId && !!tenantId,
+  });
+
+  const createLocation = useMutation({ /* insert */ });
+  const updateLocation = useMutation({ /* update */ });
+  const deleteLocation = useMutation({ /* delete */ });
+
+  // Computed values
+  const totalTIV = useMemo(() => 
+    locations?.reduce((sum, loc) => 
+      sum + loc.building_value + loc.machinery_value + loc.stock_value, 0
+    ) || 0,
+    [locations]
+  );
+
+  const topRiskLocation = useMemo(() => 
+    locations?.reduce((max, loc) => {
+      const total = loc.building_value + loc.machinery_value + loc.stock_value;
+      return total > (max?.total || 0) ? { ...loc, total } : max;
+    }, null),
+    [locations]
+  );
+
+  const riskAlerts = useMemo(() => {
+    const alerts: RiskAlert[] = [];
+    
+    if (locations && locations.length > 5) {
+      alerts.push({
+        id: 'master-policy',
+        type: 'info',
+        message: 'Rozważ polisę Master z sumami zmiennymi',
+      });
+    }
+    
+    locations?.forEach(loc => {
+      if (loc.stock_value > loc.building_value && loc.activity_type === 'warehouse') {
+        alerts.push({
+          id: `fire-${loc.id}`,
+          type: 'warning',
+          locationId: loc.id,
+          message: `${loc.name}: Sprawdź systemy p.poż (tryskacze?)`,
+        });
+      }
+    });
+    
+    return alerts;
+  }, [locations]);
+
+  return {
+    locations,
+    isLoading,
+    createLocation,
+    updateLocation,
+    deleteLocation,
+    totalTIV,
+    topRiskLocation,
+    riskAlerts,
+  };
+}
 ```
 
 ---
@@ -384,41 +381,54 @@ Dodanie zakładki "Harmonogram" między "Ubezpieczenia" a "Profil AI":
 
 | Plik | Typ zmiany | Opis |
 |------|------------|------|
-| `src/components/renewal/types.ts` | **NOWY** | Typy dla polis i harmonogramu |
-| `src/components/renewal/RenewalTimeline.tsx` | **NOWY** | Główny komponent Gantt chart |
-| `src/components/renewal/TimelineRow.tsx` | **NOWY** | Wiersz dla typu polisy |
-| `src/components/renewal/PolicyBar.tsx` | **NOWY** | Pasek wizualizacji polisy |
-| `src/components/renewal/TimelineHeader.tsx` | **NOWY** | Nagłówek z osią czasu |
-| `src/components/renewal/TimelineTooltip.tsx` | **NOWY** | Tooltip z checklistą |
-| `src/components/renewal/TimelineToolbar.tsx` | **NOWY** | Pasek narzędzi |
-| `src/components/renewal/AddPolicyModal.tsx` | **NOWY** | Modal dodawania polisy |
-| `src/components/renewal/index.ts` | **NOWY** | Eksporty modułu |
-| `src/hooks/useInsurancePolicies.ts` | **NOWY** | Hook zarządzania polisami |
-| `src/components/company/CompanyFlatTabs.tsx` | Modyfikacja | Zakładka "Harmonogram" |
+| `src/components/exposure/types.ts` | **NOWY** | Typy lokalizacji i ekspozycji |
+| `src/components/exposure/ExposureManager.tsx` | **NOWY** | Główny kontener z split view |
+| `src/components/exposure/ExposureMapView.tsx` | **NOWY** | Placeholder mapy z pinezkami |
+| `src/components/exposure/LocationCard.tsx` | **NOWY** | Karta lokalizacji z suwakami |
+| `src/components/exposure/ValueSlider.tsx` | **NOWY** | Suwak wartości z manual override |
+| `src/components/exposure/ExposureSummaryFooter.tsx` | **NOWY** | Footer z TIV i top risk |
+| `src/components/exposure/AddLocationModal.tsx` | **NOWY** | Modal dodawania lokalizacji |
+| `src/components/exposure/RiskAlerts.tsx` | **NOWY** | Panel alertów AI |
+| `src/components/exposure/index.ts` | **NOWY** | Eksporty modułu |
+| `src/hooks/useExposureLocations.ts` | **NOWY** | Hook CRUD + computed values |
+| `src/components/company/CompanyFlatTabs.tsx` | Modyfikacja | Zakładka "Ekspozycja" |
 
 ### Migracja SQL
 
-Utworzenie tabeli `insurance_policies` z RLS.
+Utworzenie tabeli `exposure_locations` z RLS.
+
+---
+
+## Paleta kolorów pinezek
+
+```typescript
+function getPinColor(totalValue: number): string {
+  if (totalValue < 10_000_000) return 'text-emerald-500';  // Zielony < 10M
+  if (totalValue < 50_000_000) return 'text-amber-500';    // Żółty < 50M
+  return 'text-red-500';                                    // Czerwony > 50M
+}
+```
 
 ---
 
 ## Przepływ użytkownika
 
-1. Użytkownik wchodzi do widoku firmy → zakładka **"Harmonogram"**
-2. Widzi wizualizację Gantt z aktualnymi polisami firmy
-3. Może dodać nową polisę przyciskiem "Dodaj polisę"
-4. Najeżdżając na "Fazę działań" widzi tooltip z checklistą
-5. Kliknięcie checkboxa aktualizuje status (zapis do bazy)
-6. Toggle "Critical Path" podświetla polisy wymagające uwagi
-7. Przełącznik trybu ciemnego dla wysokiego kontrastu
+1. Użytkownik wchodzi do widoku firmy → zakładka **"Ekspozycja"**
+2. Widzi pustą mapę i przycisk "Dodaj lokalizację"
+3. Klika "Dodaj lokalizację" → modal z nazwą i adresem
+4. Po dodaniu pojawia się karta z suwakami wartości
+5. Przeciąga suwaki lub wpisuje wartości ręcznie
+6. System automatycznie oblicza sumę ekspozycji
+7. Footer pokazuje łączny TIV i największą ekspozycję
+8. Panel alertów wyświetla sugestie oparte na regułach
 
 ---
 
 ## Estetyka
 
 - Czysta, profesjonalna estetyka dashboardu
-- Minimalistyczny UI zgodny z preferencjami użytkownika
-- Przyciemnione, stonowane kolory (bez intensywnego niebieskiego jako głównego)
-- Wysoki kontrast w trybie ciemnym dla lepszej czytelności
-- Animowane przejścia dla lepszego UX
+- Karty z subtelnymi cieniami i zaokrągleniami
+- Progress bary do wizualizacji rozkładu wartości
+- Stonowane kolory zgodne z preferencjami użytkownika
+- Responsywny layout: na mobile karty pod mapą
 
