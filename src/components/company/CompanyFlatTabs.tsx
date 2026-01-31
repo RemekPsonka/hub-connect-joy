@@ -11,7 +11,8 @@ import {
   Network, 
   MapPin, 
   Briefcase,
-  AlertTriangle
+  AlertTriangle,
+  Shield
 } from 'lucide-react';
 import { SourcesTabContent } from './SourcesTabContent';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -25,6 +26,7 @@ import { LocationsCoverageSection } from './sections/LocationsCoverageSection';
 import { ClientsProjectsSection } from './sections/ClientsProjectsSection';
 import { FallbackDataSection } from './sections/FallbackDataSection';
 import { useCompanyPipeline } from '@/hooks/useCompanyPipeline';
+import { InsurancePanel } from '@/components/insurance';
 import type { Company } from './CompanyPipelineController';
 import type { CompanyAnalysis } from './types';
 
@@ -63,6 +65,7 @@ export function CompanyFlatTabs({
   // Show ALL tabs when analysis is complete - individual sections handle empty states
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
+    { id: 'insurance', label: 'Ubezpieczenia', icon: Shield, always: true },
     { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
     { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasAnalysis },
     { id: 'products', label: 'Produkty', icon: Package, always: hasAnalysis },
@@ -114,6 +117,10 @@ export function CompanyFlatTabs({
           contactEmail={contactEmail}
           pipeline={pipeline}
         />
+      </TabsContent>
+
+      <TabsContent value="insurance" className="mt-0">
+        <InsurancePanel company={company} />
       </TabsContent>
 
       {hasAnalysis && aiAnalysis && (
