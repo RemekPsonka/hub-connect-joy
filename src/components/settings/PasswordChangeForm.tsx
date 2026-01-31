@@ -6,22 +6,36 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { PASSWORD_REQUIREMENTS, isPasswordStrong } from '@/utils/passwordValidation';
 
 export function PasswordChangeForm() {
+  const { user } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const checkRequirements = (password: string) => {
+    return PASSWORD_REQUIREMENTS.map((req) => ({
+      ...req,
+      met: req.regex.test(password),
+    }));
+  };
+
+  const requirements = checkRequirements(newPassword);
+  const allRequirementsMet = isPasswordStrong(newPassword);
+  const passwordsMatch = newPassword === confirmPassword && newPassword.length > 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword.length < 6) {
-      toast.error('Hasło musi mieć co najmniej 6 znaków');
+    if (!allRequirementsMet) {
+      toast.error('Hasło nie spełnia wszystkich wymagań');
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (!passwordsMatch) {
       toast.error('Hasła nie są identyczne');
       return;
     }
@@ -34,7 +48,18 @@ export function PasswordChangeForm() {
 
       if (error) throw error;
 
-      toast.success('Hasło zostało zmienione');
+      // Update password_changed_at in policy
+      if (user) {
+        await supabase
+          .from('user_password_policies')
+          .update({ 
+            password_changed_at: new Date().toISOString(),
+            force_password_change: false,
+          })
+          .eq('user_id', user.id);
+      }
+
+      toast.success('Hasło zostało zmienione pomyślnie');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
@@ -53,7 +78,7 @@ export function PasswordChangeForm() {
           Zmiana hasła
         </CardTitle>
         <CardDescription>
-          Ustaw nowe hasło do swojego konta
+          Ustaw nowe hasło do swojego konta. Hasło wygasa co 30 dni.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,7 +93,6 @@ export function PasswordChangeForm() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Wprowadź nowe hasło"
                 required
-                minLength={6}
               />
               <Button
                 type="button"
@@ -95,11 +119,40 @@ export function PasswordChangeForm() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Potwierdź nowe hasło"
               required
-              minLength={6}
             />
+            {confirmPassword && !passwordsMatch && (
+              <p className="text-sm text-destructive">Hasła nie są identyczne</p>
+            )}
           </div>
 
-          <Button type="submit" disabled={isLoading}>
+          {/* Password requirements checklist */}
+          {newPassword.length > 0 && (
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Wymagania hasła:</p>
+              <ul className="space-y-1">
+                {requirements.map((req) => (
+                  <li
+                    key={req.id}
+                    className={`text-sm flex items-center gap-2 ${
+                      req.met ? 'text-emerald-600' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${
+                      req.met ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {req.met ? '✓' : '○'}
+                    </span>
+                    {req.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Button 
+            type="submit" 
+            disabled={isLoading || !allRequirementsMet || !passwordsMatch}
+          >
             {isLoading ? 'Zapisywanie...' : 'Zmień hasło'}
           </Button>
         </form>
