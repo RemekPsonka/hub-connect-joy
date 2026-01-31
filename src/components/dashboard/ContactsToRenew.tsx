@@ -27,27 +27,64 @@ export function ContactsToRenew() {
   const { data: contacts, isLoading } = useQuery({
     queryKey: ['contacts-to-renew', director?.tenant_id],
     queryFn: async (): Promise<ContactToRenew[]> => {
-      const sixtyDaysAgo = new Date();
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      // First, get contact groups with their refresh policies
+      const { data: groups, error: groupsError } = await supabase
+        .from('contact_groups')
+        .select('id, refresh_days, include_in_health_stats');
+      
+      if (groupsError) throw groupsError;
+      
+      // Create maps for group policies
+      const groupRefreshMap = new Map<string, number>();
+      const groupIncludeMap = new Map<string, boolean>();
+      
+      (groups || []).forEach(g => {
+        groupRefreshMap.set(g.id, g.refresh_days ?? 90);
+        groupIncludeMap.set(g.id, g.include_in_health_stats ?? true);
+      });
 
+      // Get all active contacts
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, last_contact_date')
+        .select('id, full_name, last_contact_date, primary_group_id')
         .eq('is_active', true)
-        .or(`last_contact_date.lt.${sixtyDaysAgo.toISOString()},last_contact_date.is.null`)
-        .order('last_contact_date', { ascending: true, nullsFirst: true })
-        .limit(5);
+        .order('last_contact_date', { ascending: true, nullsFirst: true });
 
       if (error) throw error;
 
-      return (data || []).map((contact) => ({
-        id: contact.id,
-        full_name: contact.full_name,
-        last_contact_date: contact.last_contact_date,
-        days_since_contact: contact.last_contact_date
-          ? differenceInDays(new Date(), new Date(contact.last_contact_date))
-          : 999,
-      }));
+      const now = new Date();
+      const defaultRefreshDays = 90;
+      
+      // Filter and map contacts based on their group's refresh policy
+      const contactsNeedingRenewal = (data || [])
+        .filter(contact => {
+          // Skip contacts in groups with include_in_health_stats = false
+          if (contact.primary_group_id && groupIncludeMap.get(contact.primary_group_id) === false) {
+            return false;
+          }
+          
+          const refreshDays = contact.primary_group_id 
+            ? (groupRefreshMap.get(contact.primary_group_id) ?? defaultRefreshDays)
+            : defaultRefreshDays;
+          
+          const daysSinceContact = contact.last_contact_date
+            ? differenceInDays(now, new Date(contact.last_contact_date))
+            : 999;
+          
+          // Include contacts that are overdue (past refresh_days)
+          return daysSinceContact >= refreshDays;
+        })
+        .map((contact) => ({
+          id: contact.id,
+          full_name: contact.full_name,
+          last_contact_date: contact.last_contact_date,
+          days_since_contact: contact.last_contact_date
+            ? differenceInDays(now, new Date(contact.last_contact_date))
+            : 999,
+        }))
+        .slice(0, 5);
+
+      return contactsNeedingRenewal;
     },
     enabled: !!director?.tenant_id,
   });
@@ -88,7 +125,7 @@ export function ContactsToRenew() {
             <UserX className="h-4 w-4 text-orange-500" />
             Kontakty do odnowienia
             <span className="ml-auto text-xs font-normal text-muted-foreground">
-              60+ dni bez kontaktu
+              wg polityki grupy
             </span>
           </CardTitle>
         </CardHeader>

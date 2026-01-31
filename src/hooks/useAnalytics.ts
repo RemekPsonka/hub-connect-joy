@@ -132,7 +132,8 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
           consultationsResult,
           tasksResult,
           matchesResult,
-          healthResult,
+          contactsWithGroupsResult,
+          groupsResult,
         ] = await Promise.all([
           // Current period contacts
           supabase
@@ -177,10 +178,17 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
             .from('matches')
             .select('id, created_at, status')
             .eq('tenant_id', tenantId),
-          // Relationship health
+          // Contacts with groups for health calculation
           supabase
-            .from('relationship_health')
-            .select('health_score, days_since_contact, contact_id'),
+            .from('contacts')
+            .select('id, last_contact_date, primary_group_id')
+            .eq('tenant_id', tenantId)
+            .eq('is_active', true),
+          // Contact groups with refresh policies
+          supabase
+            .from('contact_groups')
+            .select('id, refresh_days, include_in_health_stats')
+            .eq('tenant_id', tenantId),
         ]);
 
         const contacts = contactsResult.data || [];
@@ -190,7 +198,8 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
         const consultations = consultationsResult.data || [];
         const tasks = tasksResult.data || [];
         const matches = matchesResult.data || [];
-        const healthData = healthResult.data || [];
+        const contactsWithGroups = contactsWithGroupsResult.data || [];
+        const groups = groupsResult.data || [];
 
         // Calculate metrics
         const totalContacts = contacts.length;
@@ -228,8 +237,8 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
         // Top categories from needs
         const topCategories = getTopCategories(needs);
 
-        // Network health
-        const networkHealth = calculateNetworkHealth(healthData);
+        // Network health - use group-specific refresh policies
+        const networkHealth = calculateNetworkHealthWithGroups(contactsWithGroups, groups);
 
         const analyticsData: AnalyticsData = {
           metrics: {
@@ -430,15 +439,71 @@ function getTopCategories(needs: any[]): CategoryDataPoint[] {
     .slice(0, 5);
 }
 
-function calculateNetworkHealth(healthData: any[]): NetworkHealth {
-  const total = healthData.length || 1;
+interface GroupPolicy {
+  id: string;
+  refresh_days: number | null;
+  include_in_health_stats: boolean | null;
+}
+
+interface ContactWithGroup {
+  id: string;
+  last_contact_date: string | null;
+  primary_group_id: string | null;
+}
+
+function calculateNetworkHealthWithGroups(
+  contacts: ContactWithGroup[], 
+  groups: GroupPolicy[]
+): NetworkHealth {
+  // Create a map of group_id -> refresh_days
+  const groupRefreshMap = new Map<string, number>();
+  const groupIncludeMap = new Map<string, boolean>();
   
-  const healthy = healthData.filter(h => (h.days_since_contact || 0) < 30).length;
-  const warning = healthData.filter(h => {
-    const days = h.days_since_contact || 0;
-    return days >= 30 && days < 90;
-  }).length;
-  const critical = healthData.filter(h => (h.days_since_contact || 0) >= 90).length;
+  groups.forEach(g => {
+    groupRefreshMap.set(g.id, g.refresh_days ?? 90);
+    groupIncludeMap.set(g.id, g.include_in_health_stats ?? true);
+  });
+
+  // Default refresh days for contacts without group
+  const defaultRefreshDays = 90;
+  
+  // Filter contacts that should be included in health stats
+  const includedContacts = contacts.filter(c => {
+    if (!c.primary_group_id) return true; // Include ungrouped by default
+    return groupIncludeMap.get(c.primary_group_id) !== false;
+  });
+
+  const total = includedContacts.length || 1;
+  const now = new Date();
+  
+  let healthy = 0;
+  let warning = 0;
+  let critical = 0;
+
+  includedContacts.forEach(contact => {
+    const refreshDays = contact.primary_group_id 
+      ? (groupRefreshMap.get(contact.primary_group_id) ?? defaultRefreshDays)
+      : defaultRefreshDays;
+    
+    const lastContact = contact.last_contact_date 
+      ? new Date(contact.last_contact_date) 
+      : null;
+    
+    const daysSinceContact = lastContact 
+      ? Math.floor((now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24))
+      : 999;
+    
+    // Healthy: less than refresh_days
+    // Warning: refresh_days to 1.5x refresh_days
+    // Critical: more than 1.5x refresh_days
+    if (daysSinceContact < refreshDays) {
+      healthy++;
+    } else if (daysSinceContact < refreshDays * 1.5) {
+      warning++;
+    } else {
+      critical++;
+    }
+  });
 
   return {
     healthy,

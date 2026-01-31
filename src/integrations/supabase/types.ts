@@ -1450,8 +1450,11 @@ export type Database = {
           color: string | null
           description: string | null
           id: string
+          include_in_health_stats: boolean | null
           is_system: boolean | null
           name: string
+          refresh_days: number | null
+          refresh_policy: string | null
           sort_order: number | null
           tenant_id: string
         }
@@ -1459,8 +1462,11 @@ export type Database = {
           color?: string | null
           description?: string | null
           id?: string
+          include_in_health_stats?: boolean | null
           is_system?: boolean | null
           name: string
+          refresh_days?: number | null
+          refresh_policy?: string | null
           sort_order?: number | null
           tenant_id: string
         }
@@ -1468,8 +1474,11 @@ export type Database = {
           color?: string | null
           description?: string | null
           id?: string
+          include_in_health_stats?: boolean | null
           is_system?: boolean | null
           name?: string
+          refresh_days?: number | null
+          refresh_policy?: string | null
           sort_order?: number | null
           tenant_id?: string
         }
@@ -2679,6 +2688,124 @@ export type Database = {
           },
         ]
       }
+      representative_contacts: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          completed_at: string | null
+          contact_id: string
+          deadline_at: string | null
+          deadline_days: number | null
+          extended_count: number | null
+          id: string
+          notes: string | null
+          representative_id: string
+          status: string | null
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          completed_at?: string | null
+          contact_id: string
+          deadline_at?: string | null
+          deadline_days?: number | null
+          extended_count?: number | null
+          id?: string
+          notes?: string | null
+          representative_id: string
+          status?: string | null
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          completed_at?: string | null
+          contact_id?: string
+          deadline_at?: string | null
+          deadline_days?: number | null
+          extended_count?: number | null
+          id?: string
+          notes?: string | null
+          representative_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "representative_contacts_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "representative_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "representative_contacts_representative_id_fkey"
+            columns: ["representative_id"]
+            isOneToOne: false
+            referencedRelation: "sales_representatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_representatives: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean | null
+          parent_director_id: string
+          role_type: string | null
+          tenant_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name: string
+          id?: string
+          is_active?: boolean | null
+          parent_director_id: string
+          role_type?: string | null
+          tenant_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean | null
+          parent_director_id?: string
+          role_type?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_representatives_parent_director_id_fkey"
+            columns: ["parent_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_representatives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       search_synonyms: {
         Row: {
           category: string | null
@@ -3304,6 +3431,10 @@ export type Database = {
       get_assistant_tenant_id: { Args: { _user_id: string }; Returns: string }
       get_current_director_id: { Args: never; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
+      get_sales_representative_id: {
+        Args: { _user_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -3314,11 +3445,16 @@ export type Database = {
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
+      is_sales_representative: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin:
         | { Args: never; Returns: boolean }
         | { Args: { check_user_id: string }; Returns: boolean }
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      representative_can_access_contact: {
+        Args: { _contact_id: string; _rep_id: string }
         Returns: boolean
       }
       search_all_fts: {

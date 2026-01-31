@@ -20,19 +20,45 @@ export function useRelationshipHealth() {
       try {
         setIsLoading(true);
         
-        // Get all active contacts
+        // Get all active contacts with their group info
         const { data: contacts, error: contactsError } = await supabase
           .from('contacts')
-          .select('id, full_name, company, last_contact_date')
+          .select('id, full_name, company, last_contact_date, primary_group_id')
           .eq('is_active', true)
           .order('last_contact_date', { ascending: true, nullsFirst: true });
         
         if (contactsError) throw contactsError;
         
+        // Get contact groups with refresh policies
+        const { data: groups, error: groupsError } = await supabase
+          .from('contact_groups')
+          .select('id, refresh_days, include_in_health_stats');
+        
+        if (groupsError) throw groupsError;
+        
+        // Create maps for group policies
+        const groupRefreshMap = new Map<string, number>();
+        const groupIncludeMap = new Map<string, boolean>();
+        
+        (groups || []).forEach(g => {
+          groupRefreshMap.set(g.id, g.refresh_days ?? 90);
+          groupIncludeMap.set(g.id, g.include_in_health_stats ?? true);
+        });
+        
         const now = new Date();
+        const defaultRefreshDays = 90;
         const alertsData: RelationshipAlert[] = [];
         
         for (const contact of contacts || []) {
+          // Skip contacts in groups with include_in_health_stats = false
+          if (contact.primary_group_id && groupIncludeMap.get(contact.primary_group_id) === false) {
+            continue;
+          }
+          
+          const refreshDays = contact.primary_group_id 
+            ? (groupRefreshMap.get(contact.primary_group_id) ?? defaultRefreshDays)
+            : defaultRefreshDays;
+          
           const lastContactDate = contact.last_contact_date 
             ? new Date(contact.last_contact_date) 
             : null;
@@ -44,16 +70,17 @@ export function useRelationshipHealth() {
           let healthScore: number;
           let status: 'healthy' | 'warning' | 'critical';
           
-          if (daysSinceContact <= 30) {
+          // Use group-specific refresh_days for health calculation
+          if (daysSinceContact < refreshDays) {
             healthScore = 100;
             status = 'healthy';
-          } else if (daysSinceContact <= 60) {
+          } else if (daysSinceContact < refreshDays * 1.25) {
             healthScore = 75;
             status = 'healthy';
-          } else if (daysSinceContact <= 90) {
+          } else if (daysSinceContact < refreshDays * 1.5) {
             healthScore = 50;
             status = 'warning';
-          } else if (daysSinceContact <= 180) {
+          } else if (daysSinceContact < refreshDays * 2) {
             healthScore = 25;
             status = 'warning';
           } else {

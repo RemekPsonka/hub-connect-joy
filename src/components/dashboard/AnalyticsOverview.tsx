@@ -31,7 +31,7 @@ export function AnalyticsOverview() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" />
-            Analityka sieci
+            Analityka sieci kontaktów
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -52,7 +52,7 @@ export function AnalyticsOverview() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" />
-            Analityka sieci
+            Analityka sieci kontaktów
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -72,7 +72,7 @@ export function AnalyticsOverview() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-primary" />
-          Analityka sieci
+          Analityka sieci kontaktów
           <span className="ml-auto text-xs font-normal text-muted-foreground">
             Ostatnie 30 dni
           </span>

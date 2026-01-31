@@ -9,6 +9,7 @@ import {
   Shield,
   Building2,
   Bug,
+  UserCog,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -71,8 +72,9 @@ export function AppSidebar() {
     adminItems.push({ title: 'Ustawienia', url: '/settings', icon: Settings });
   }
   
-  // Zgłoszenia błędów tylko dla adminów
+  // Przedstawiciele handlowi, Zgłoszenia błędów i Zarządzanie tylko dla adminów
   if (isAdmin) {
+    adminItems.push({ title: 'Przedstawiciele', url: '/representatives', icon: UserCog });
     adminItems.push({ title: 'Zgłoszenia', url: '/bug-reports', icon: Bug });
     adminItems.push({ title: 'Zarządzanie', url: '/owner', icon: Shield });
   }
