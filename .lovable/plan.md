@@ -1,62 +1,84 @@
 
 
-## Plan: Naprawa błędu zapętlania przy zapisie konsultacji
-
-### Zidentyfikowany problem
-
-W pliku `src/components/consultations/ConsultationQuestionnaire.tsx`:
-
-1. **Linia 96**: Pole `next_meeting_date` jest inicjalizowane jako pusty string `''`
-2. **Linie 166-174**: useEffect z debounce 1500ms automatycznie wywołuje `saveFormData`
-3. **Linie 142-163**: `saveFormData` wysyła pusty string `""` do bazy danych
-4. PostgreSQL odrzuca pusty string dla kolumny typu `date` z błędem: `invalid input syntax for type date: ""`
-5. Błąd jest logowany, toast wyświetlany, ale `formData` się nie zmienia
-6. Po 1500ms auto-save próbuje ponownie → **nieskończona pętla błędów**
-
----
-
-### Rozwiązanie
-
-#### Plik: `src/components/consultations/ConsultationQuestionnaire.tsx`
-
-**Zmiana w funkcji `saveFormData` (linie 142-163)**
-
-Przed wysłaniem danych do bazy, zamienić puste stringi na `null` dla pól typu `date`:
-
-```typescript
-// Obecny kod (linia 145-151):
-await upsertQuestionnaire.mutateAsync({
-  consultationId: consultation.id,
-  data: {
-    ...data,
-    group_engagement_rating: data.group_engagement_rating,
-  },
-});
-
-// Nowy kod:
-await upsertQuestionnaire.mutateAsync({
-  consultationId: consultation.id,
-  data: {
-    ...data,
-    // Zamień puste stringi na null dla pól daty - PostgreSQL nie akceptuje ""
-    next_meeting_date: data.next_meeting_date || null,
-    group_engagement_rating: data.group_engagement_rating,
-  },
-});
-```
-
----
+## Plan: Modyfikacja pola "Status relacji" w formularzu BI
 
 ### Podsumowanie zmian
+1. **Dodanie opcji** do pola "Status relacji": `Znajomy` i `Klient`
+2. **Usunięcie** pola "Typ kontaktu" z formularza
+
+---
+
+## Szczegóły implementacji
+
+### Plik 1: `src/components/bi/types.ts`
+
+**Zmiana w interface `SectionABasic`:**
+
+| Przed | Po |
+|-------|-----|
+| `status_relacji?: 'nowy' \| 'polecony' \| 'powracajacy'` | `status_relacji?: 'nowy' \| 'polecony' \| 'powracajacy' \| 'znajomy' \| 'klient'` |
+| `typ_kontaktu?: 'znajomy' \| 'klient'` | **USUNIĘTE** |
+
+---
+
+### Plik 2: `src/components/bi/sections/SectionABasic.tsx`
+
+**Zmiana 1: Aktualizacja opcji w polu "Status relacji" (linie 210-214)**
+
+```text
+Obecne opcje:
+- Nowy kontakt
+- Polecony
+- Powracający
+
+Nowe opcje:
+- Nowy kontakt
+- Polecony
+- Powracający
+- Znajomy      ← NOWA
+- Klient       ← NOWA
+```
+
+**Zmiana 2: Usunięcie całego bloku pola "Typ kontaktu" (linie 218-233)**
+
+Usunięty kod:
+```typescript
+{/* Typ kontaktu - NOWE */}
+<div className="space-y-2">
+  <Label>Typ kontaktu</Label>
+  <Select ...>
+    ...
+  </Select>
+</div>
+```
+
+**Zmiana 3: Aktualizacja grid layout**
+- Było: `grid-cols-1 md:grid-cols-3` (3 kolumny)
+- Będzie: `grid-cols-1 md:grid-cols-2` (2 kolumny, bo jest o jedno pole mniej)
+
+---
+
+## Podsumowanie zmian
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/consultations/ConsultationQuestionnaire.tsx` | Sanityzacja pustego stringa `next_meeting_date` na `null` przed zapisem |
+| `src/components/bi/types.ts` | Rozszerzenie typu `status_relacji`, usunięcie `typ_kontaktu` |
+| `src/components/bi/sections/SectionABasic.tsx` | Dodanie opcji do select, usunięcie pola "Typ kontaktu", zmiana layoutu na 2 kolumny |
 
-### Oczekiwany rezultat
+---
 
-1. Błąd zapętlenia zostanie naprawiony
-2. Auto-save będzie działać poprawnie
-3. Toast "Nie udało się zapisać danych" przestanie się pojawiać w pętli
-4. Konsultacja z Adamem Osoba pojawi się poprawnie na dashboardzie (cache się odświeży po pomyślnym zapisie)
+## Wizualizacja po zmianach
+
+```text
+Kontekst spotkania
+┌─────────────────────────────────┐  ┌─────────────────────────────────┐
+│ Status relacji *                │  │ Czy rozważa aplikację do CC?   │
+│ [▼ Wybierz status            ]  │  │ [▼ Wybierz                   ] │
+│   • Nowy kontakt                │  │   • Tak                        │
+│   • Polecony                    │  │   • Nie                        │
+│   • Powracający                 │  │   • Nie wiem                   │
+│   • Znajomy         ← NOWA      │  └─────────────────────────────────┘
+│   • Klient          ← NOWA      │
+└─────────────────────────────────┘
+```
 
