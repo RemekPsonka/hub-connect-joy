@@ -8,12 +8,8 @@ import type {
   RyzykoFlota,
   RyzykoSpecjalistyczne,
   RyzykoPracownicy,
+  RyzykoFinansowe,
   PodpowiedzAI,
-  DEFAULT_RYZYKO_MAJATKOWE,
-  DEFAULT_RYZYKO_OC,
-  DEFAULT_RYZYKO_FLOTA,
-  DEFAULT_RYZYKO_SPECJALISTYCZNE,
-  DEFAULT_RYZYKO_PRACOWNICY,
 } from '@/components/insurance/types';
 import type { Json } from '@/integrations/supabase/types';
 
@@ -28,6 +24,7 @@ interface InsuranceAssessment {
   ryzyko_flota: RyzykoFlota;
   ryzyko_specjalistyczne: RyzykoSpecjalistyczne;
   ryzyko_pracownicy: RyzykoPracownicy;
+  ryzyko_finansowe: RyzykoFinansowe;
   ai_analiza_kontekstu?: string;
   ai_podpowiedzi?: PodpowiedzAI[];
   ai_brief_brokerski?: string;
@@ -42,6 +39,7 @@ interface SaveAssessmentData {
   ryzyko_flota: RyzykoFlota;
   ryzyko_specjalistyczne: RyzykoSpecjalistyczne;
   ryzyko_pracownicy: RyzykoPracownicy;
+  ryzyko_finansowe: RyzykoFinansowe;
 }
 
 interface AIAnalysisResult {
@@ -89,6 +87,7 @@ export function useInsuranceRisk(companyId: string) {
         ryzyko_flota: parseJsonField<RyzykoFlota>(data.ryzyko_flota, { status: 'nie_dotyczy' }),
         ryzyko_specjalistyczne: parseJsonField<RyzykoSpecjalistyczne>(data.ryzyko_specjalistyczne, { cyber_status: 'nie_dotyczy', do_status: 'nie_dotyczy', car_ear_status: 'nie_dotyczy' }),
         ryzyko_pracownicy: parseJsonField<RyzykoPracownicy>(data.ryzyko_pracownicy, { zycie_status: 'nie_dotyczy', zdrowie_status: 'nie_dotyczy', podroze_status: 'nie_dotyczy' }),
+        ryzyko_finansowe: parseJsonField<RyzykoFinansowe>(data.ryzyko_finansowe, { gwarancje_kontraktowe_status: 'nie_dotyczy', gwarancje_celne_status: 'nie_dotyczy', kredyt_kupiecki_status: 'nie_dotyczy', ochrona_prawna_status: 'nie_dotyczy' }),
         ai_analiza_kontekstu: data.ai_analiza_kontekstu || undefined,
         ai_podpowiedzi: parseJsonField<PodpowiedzAI[]>(data.ai_podpowiedzi, []),
         ai_brief_brokerski: data.ai_brief_brokerski || undefined,
@@ -112,6 +111,7 @@ export function useInsuranceRisk(companyId: string) {
         ryzyko_flota: data.ryzyko_flota as unknown as Json,
         ryzyko_specjalistyczne: data.ryzyko_specjalistyczne as unknown as Json,
         ryzyko_pracownicy: data.ryzyko_pracownicy as unknown as Json,
+        ryzyko_finansowe: data.ryzyko_finansowe as unknown as Json,
         updated_at: new Date().toISOString(),
       };
 

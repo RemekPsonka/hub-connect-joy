@@ -70,6 +70,47 @@ export interface RyzykoPracownicy {
   uwagi?: string;
 }
 
+// Nowa domena - Ubezpieczenia Finansowe
+export type TypGwarancji = 'wadium' | 'nalezyte_wykonanie' | 'usuniecie_wad' | 'zaliczkowa' | 'platnicza';
+export type ZakresOchronyPrawnej = 'podstawowy' | 'rozszerzony' | 'pelny';
+
+export const TYP_GWARANCJI_LABELS: Record<TypGwarancji, string> = {
+  wadium: 'Wadium',
+  nalezyte_wykonanie: 'Należyte wykonanie',
+  usuniecie_wad: 'Usunięcie wad',
+  zaliczkowa: 'Zaliczkowa',
+  platnicza: 'Płatnicza',
+};
+
+export const ZAKRES_OCHRONY_LABELS: Record<ZakresOchronyPrawnej, string> = {
+  podstawowy: 'Podstawowy',
+  rozszerzony: 'Rozszerzony',
+  pelny: 'Pełny',
+};
+
+export interface RyzykoFinansowe {
+  // Gwarancje kontraktowe
+  gwarancje_kontraktowe_status: StatusUbezpieczenia;
+  gwarancje_limit_roczny?: number;
+  gwarancje_typy?: TypGwarancji[];
+  
+  // Gwarancje celne/podatkowe
+  gwarancje_celne_status: StatusUbezpieczenia;
+  gwarancje_celne_limit?: number;
+  
+  // Kredyt kupiecki (trade credit)
+  kredyt_kupiecki_status: StatusUbezpieczenia;
+  kredyt_kupiecki_obroty_ubezpieczone?: number;
+  kredyt_kupiecki_eksport?: boolean;
+  kredyt_kupiecki_glowne_kraje?: string[];
+  
+  // Wierzytelności i windykacja
+  ochrona_prawna_status: StatusUbezpieczenia;
+  ochrona_prawna_zakres?: ZakresOchronyPrawnej;
+  
+  uwagi?: string;
+}
+
 // Podpowiedź AI
 export interface PodpowiedzAI {
   id: string;
@@ -95,6 +136,7 @@ export interface AnalizaRyzykaUbezpieczeniowego {
   ryzyko_flota: RyzykoFlota;
   ryzyko_specjalistyczne: RyzykoSpecjalistyczne;
   ryzyko_pracownicy: RyzykoPracownicy;
+  ryzyko_finansowe: RyzykoFinansowe;
   
   // Wygenerowane przez AI
   ai_analiza_kontekstu?: string;
@@ -129,6 +171,13 @@ export const DEFAULT_RYZYKO_PRACOWNICY: RyzykoPracownicy = {
   zycie_status: 'nie_dotyczy',
   zdrowie_status: 'nie_dotyczy',
   podroze_status: 'nie_dotyczy',
+};
+
+export const DEFAULT_RYZYKO_FINANSOWE: RyzykoFinansowe = {
+  gwarancje_kontraktowe_status: 'nie_dotyczy',
+  gwarancje_celne_status: 'nie_dotyczy',
+  kredyt_kupiecki_status: 'nie_dotyczy',
+  ochrona_prawna_status: 'nie_dotyczy',
 };
 
 // Props dla komponentów domen

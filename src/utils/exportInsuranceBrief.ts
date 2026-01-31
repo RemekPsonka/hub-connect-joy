@@ -7,6 +7,7 @@ import type {
   RyzykoFlota,
   RyzykoSpecjalistyczne,
   RyzykoPracownicy,
+  RyzykoFinansowe,
   StatusUbezpieczenia,
 } from '@/components/insurance/types';
 
@@ -32,6 +33,7 @@ export interface InsuranceBriefExportData {
   flota: RyzykoFlota;
   specjalistyczne: RyzykoSpecjalistyczne;
   pracownicy: RyzykoPracownicy;
+  finansowe: RyzykoFinansowe;
   aiBrief?: string;
 }
 
@@ -306,9 +308,33 @@ export function exportInsuranceBriefToPDF(data: InsuranceBriefExportData): void 
 
   yPos = doc.lastAutoTable.finalY + 8;
 
-  // Section 6: Pracownicy
+  // Section 6: Ubezpieczenia Finansowe
   doc.setFont('helvetica', 'bold');
-  doc.text('6. PRACOWNICY', margin, yPos);
+  doc.text('6. UBEZPIECZENIA FINANSOWE', margin, yPos);
+  yPos += 6;
+
+  const finansoweData = [
+    ['Gwarancje kontraktowe', formatStatus(data.finansowe.gwarancje_kontraktowe_status || 'nie_dotyczy'), data.finansowe.gwarancje_limit_roczny ? formatCurrency(data.finansowe.gwarancje_limit_roczny) : '—'],
+    ['Gwarancje celne', formatStatus(data.finansowe.gwarancje_celne_status || 'nie_dotyczy'), data.finansowe.gwarancje_celne_limit ? formatCurrency(data.finansowe.gwarancje_celne_limit) : '—'],
+    ['Kredyt kupiecki', formatStatus(data.finansowe.kredyt_kupiecki_status || 'nie_dotyczy'), data.finansowe.kredyt_kupiecki_obroty_ubezpieczone ? formatCurrency(data.finansowe.kredyt_kupiecki_obroty_ubezpieczone) : '—'],
+    ['Ochrona prawna', formatStatus(data.finansowe.ochrona_prawna_status || 'nie_dotyczy'), data.finansowe.ochrona_prawna_zakres || '—'],
+  ];
+
+  doc.autoTable({
+    startY: yPos,
+    head: [['Produkt', 'Status', 'Szczegóły']],
+    body: finansoweData,
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 9, cellPadding: 2, textColor: COLORS.text },
+    headStyles: { fillColor: COLORS.sectionHeader, textColor: COLORS.text, fontStyle: 'bold' },
+    theme: 'grid',
+  });
+
+  yPos = doc.lastAutoTable.finalY + 8;
+
+  // Section 7: Pracownicy
+  doc.setFont('helvetica', 'bold');
+  doc.text('7. PRACOWNICY', margin, yPos);
   yPos += 6;
 
   const pracData = [
@@ -329,7 +355,7 @@ export function exportInsuranceBriefToPDF(data: InsuranceBriefExportData): void 
 
   yPos = doc.lastAutoTable.finalY + 8;
 
-  // Section 7: Zidentyfikowane Luki
+  // Section 8: Zidentyfikowane Luki
   const luki: string[] = [];
   if (data.majatek.status === 'luka') luki.push('Majątek - brak pokrycia');
   if (data.oc.status === 'luka') luki.push('OC - brak aktualnej polisy');
@@ -337,6 +363,10 @@ export function exportInsuranceBriefToPDF(data: InsuranceBriefExportData): void 
   if (data.specjalistyczne.cyber_status === 'luka') luki.push('Cyber - ekspozycja bez ochrony');
   if (data.specjalistyczne.do_status === 'luka') luki.push('D&O - brak polisy');
   if (data.specjalistyczne.car_ear_status === 'luka') luki.push('CAR/EAR - brak pokrycia projektów');
+  if (data.finansowe.gwarancje_kontraktowe_status === 'luka') luki.push('Gwarancje kontraktowe - brak limitu');
+  if (data.finansowe.gwarancje_celne_status === 'luka') luki.push('Gwarancje celne - brak zabezpieczenia');
+  if (data.finansowe.kredyt_kupiecki_status === 'luka') luki.push('Kredyt kupiecki - brak ochrony należności');
+  if (data.finansowe.ochrona_prawna_status === 'luka') luki.push('Ochrona prawna - brak polisy');
   if (data.pracownicy.zycie_status === 'luka') luki.push('Życie pracowników - brak grupowego');
   if (data.pracownicy.zdrowie_status === 'luka') luki.push('Zdrowie pracowników - brak pakietu');
   if (data.pracownicy.podroze_status === 'luka') luki.push('Podróże służbowe - brak polisy');
@@ -350,7 +380,7 @@ export function exportInsuranceBriefToPDF(data: InsuranceBriefExportData): void 
 
     doc.setTextColor(...COLORS.luka);
     doc.setFont('helvetica', 'bold');
-    doc.text('7. ZIDENTYFIKOWANE LUKI', margin, yPos);
+    doc.text('8. ZIDENTYFIKOWANE LUKI', margin, yPos);
     yPos += 6;
 
     doc.setTextColor(...COLORS.text);
@@ -376,7 +406,7 @@ export function exportInsuranceBriefToPDF(data: InsuranceBriefExportData): void 
     doc.setTextColor(...COLORS.text);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${luki.length > 0 ? '8' : '7'}. ANALIZA AI`, margin, yPos);
+    doc.text(`${luki.length > 0 ? '9' : '8'}. ANALIZA AI`, margin, yPos);
     yPos += 6;
 
     doc.setFont('helvetica', 'normal');

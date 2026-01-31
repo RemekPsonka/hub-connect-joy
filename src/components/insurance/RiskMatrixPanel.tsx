@@ -12,6 +12,7 @@ import type {
   RyzykoFlota,
   RyzykoSpecjalistyczne,
   RyzykoPracownicy,
+  RyzykoFinansowe,
 } from './types';
 
 interface RiskMatrixPanelProps {
@@ -27,11 +28,13 @@ interface RiskMatrixPanelProps {
   flota: RyzykoFlota;
   specjalistyczne: RyzykoSpecjalistyczne;
   pracownicy: RyzykoPracownicy;
+  finansowe: RyzykoFinansowe;
   onMajatekChange: (data: RyzykoMajatkowe) => void;
   onOcChange: (data: RyzykoOC) => void;
   onFlotaChange: (data: RyzykoFlota) => void;
   onSpecjalistyczneChange: (data: RyzykoSpecjalistyczne) => void;
   onPracownicyChange: (data: RyzykoPracownicy) => void;
+  onFinansoweChange: (data: RyzykoFinansowe) => void;
 }
 
 function formatRevenue(amount: number): string {
@@ -60,11 +63,13 @@ export function RiskMatrixPanel({
   flota,
   specjalistyczne,
   pracownicy,
+  finansowe,
   onMajatekChange,
   onOcChange,
   onFlotaChange,
   onSpecjalistyczneChange,
   onPracownicyChange,
+  onFinansoweChange,
 }: RiskMatrixPanelProps) {
   return (
     <ScrollArea className="h-full">
@@ -111,11 +116,13 @@ export function RiskMatrixPanel({
           flota={flota}
           specjalistyczne={specjalistyczne}
           pracownicy={pracownicy}
+          finansowe={finansowe}
           onMajatekChange={onMajatekChange}
           onOcChange={onOcChange}
           onFlotaChange={onFlotaChange}
           onSpecjalistyczneChange={onSpecjalistyczneChange}
           onPracownicyChange={onPracownicyChange}
+          onFinansoweChange={onFinansoweChange}
         />
       </div>
     </ScrollArea>

@@ -2149,6 +2149,7 @@ export type Database = {
           created_by: string | null
           id: string
           ryzyka_specyficzne_branzowe: Json | null
+          ryzyko_finansowe: Json | null
           ryzyko_flota: Json | null
           ryzyko_majatkowe: Json | null
           ryzyko_oc: Json | null
@@ -2167,6 +2168,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           ryzyka_specyficzne_branzowe?: Json | null
+          ryzyko_finansowe?: Json | null
           ryzyko_flota?: Json | null
           ryzyko_majatkowe?: Json | null
           ryzyko_oc?: Json | null
@@ -2185,6 +2187,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           ryzyka_specyficzne_branzowe?: Json | null
+          ryzyko_finansowe?: Json | null
           ryzyko_flota?: Json | null
           ryzyko_majatkowe?: Json | null
           ryzyko_oc?: Json | null
