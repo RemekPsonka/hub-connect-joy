@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { RiskMatrixPanel } from './RiskMatrixPanel';
 import { AIRiskConsultantPanel } from './AIRiskConsultantPanel';
 import { useInsuranceRisk } from '@/hooks/useInsuranceRisk';
+import { exportInsuranceBriefToPDF } from '@/utils/exportInsuranceBrief';
 import {
   DEFAULT_RYZYKO_MAJATKOWE,
   DEFAULT_RYZYKO_OC,
@@ -26,8 +27,10 @@ import type {
 interface Company {
   id: string;
   name: string;
+  nip?: string | null;
   industry?: string | null;
   revenue_amount?: number | null;
+  employee_count?: string | null;
 }
 
 interface InsurancePanelProps {
@@ -47,6 +50,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
   const [aiAnalysis, setAiAnalysis] = useState<string | undefined>();
   const [aiPrompts, setAiPrompts] = useState<PodpowiedzAI[] | undefined>();
   const [aiBrief, setAiBrief] = useState<string | undefined>();
+  const [meetingDate, setMeetingDate] = useState<string>('');
   const [hasChanges, setHasChanges] = useState(false);
 
   // Inicjalizacja z danych z bazy
@@ -155,6 +159,25 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
     }
   };
 
+  const handleExportBrief = () => {
+    exportInsuranceBriefToPDF({
+      companyName: company.name,
+      companyNip: company.nip,
+      industry: company.industry,
+      revenue: company.revenue_amount,
+      employeeCount: company.employee_count,
+      meetingDate: meetingDate || undefined,
+      operationalTypes,
+      majatek,
+      oc,
+      flota,
+      specjalistyczne,
+      pracownicy,
+      aiBrief,
+    });
+    toast.success('Brief PDF wygenerowany');
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -193,6 +216,8 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
             companyName={company.name}
             industry={company.industry}
             revenue={company.revenue_amount}
+            meetingDate={meetingDate}
+            onMeetingDateChange={setMeetingDate}
             operationalTypes={operationalTypes}
             onOperationalTypesChange={handleOperationalTypesChange}
             majatek={majatek}
@@ -221,6 +246,7 @@ export function InsurancePanel({ company }: InsurancePanelProps) {
             pracownicy={pracownicy}
             onAnalyze={handleAnalyze}
             onGenerateBrief={handleGenerateBrief}
+            onExportBrief={handleExportBrief}
             isAnalyzing={isAnalyzing}
             isGeneratingBrief={isGeneratingBrief}
           />

@@ -1,4 +1,4 @@
-import { Shield, AlertTriangle, Lightbulb, Info, FileText, Loader2, Sparkles } from 'lucide-react';
+import { Shield, AlertTriangle, Lightbulb, Info, FileText, Loader2, Sparkles, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,7 @@ interface AIRiskConsultantPanelProps {
   pracownicy: RyzykoPracownicy;
   onGenerateBrief: () => void;
   onAnalyze: () => void;
+  onExportBrief: () => void;
   isAnalyzing?: boolean;
   isGeneratingBrief?: boolean;
 }
@@ -150,6 +151,7 @@ export function AIRiskConsultantPanel({
   pracownicy,
   onGenerateBrief,
   onAnalyze,
+  onExportBrief,
   isAnalyzing,
   isGeneratingBrief,
 }: AIRiskConsultantPanelProps) {
@@ -300,6 +302,15 @@ export function AIRiskConsultantPanel({
               Generuj Brief Brokerski
             </>
           )}
+        </Button>
+        <Button
+          onClick={onExportBrief}
+          disabled={operationalTypes.length === 0}
+          variant="outline"
+          className="w-full bg-slate-800 border-slate-600 hover:bg-slate-700 text-slate-200"
+        >
+          <Printer className="h-4 w-4 mr-2" />
+          Drukuj Brief PDF
         </Button>
       </div>
     </div>
