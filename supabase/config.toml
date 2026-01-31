@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.background-sync-runner]
 verify_jwt = false
+
+[functions.create-representative]
+verify_jwt = false
