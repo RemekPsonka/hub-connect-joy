@@ -146,6 +146,8 @@ export function ConsultationQuestionnaire({ consultation }: ConsultationQuestion
         consultationId: consultation.id,
         data: {
           ...data,
+          // Zamień puste stringi na null dla pól daty - PostgreSQL nie akceptuje ""
+          next_meeting_date: data.next_meeting_date || null,
           group_engagement_rating: data.group_engagement_rating,
         },
       });
