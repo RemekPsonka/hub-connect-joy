@@ -1929,6 +1929,81 @@ export type Database = {
           },
         ]
       }
+      exposure_locations: {
+        Row: {
+          activity_type: string
+          address: string | null
+          building_value: number | null
+          city: string | null
+          company_id: string
+          construction_type: string
+          created_at: string | null
+          id: string
+          lat: number | null
+          lng: number | null
+          machinery_value: number | null
+          name: string
+          notes: string | null
+          stock_fluctuation: boolean | null
+          stock_value: number | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          activity_type: string
+          address?: string | null
+          building_value?: number | null
+          city?: string | null
+          company_id: string
+          construction_type?: string
+          created_at?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          machinery_value?: number | null
+          name: string
+          notes?: string | null
+          stock_fluctuation?: boolean | null
+          stock_value?: number | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          activity_type?: string
+          address?: string | null
+          building_value?: number | null
+          city?: string | null
+          company_id?: string
+          construction_type?: string
+          created_at?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          machinery_value?: number | null
+          name?: string
+          notes?: string | null
+          stock_fluctuation?: boolean | null
+          stock_value?: number | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exposure_locations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exposure_locations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_meetings: {
         Row: {
           actual_participant_count: number | null
