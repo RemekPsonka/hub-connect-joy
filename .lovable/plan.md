@@ -1,351 +1,570 @@
 
 
-## Plan: Dokończenie Modułu Grupy Kapitałowej i Wizualizacji Struktury
+## Plan: Panel Zarządzania Ofertowaniem i Raportami Finansowymi Polis
 
 ### Cel
-Połączyć funkcjonalność dodawania spółek do grupy kapitałowej z wizualizacją struktury. Użytkownik z poziomu zakładki "Struktura" powinien móc dodawać firmy do grupy i widzieć je na grafie React Flow.
-
----
-
-## Analiza Obecnego Stanu
-
-### Co już działa:
-1. **`CapitalGroupViewer`** - pełny widok grupy kapitałowej z tabelą, grafikiem statycznym i modalem dodawania
-2. **`StructureVisualization`** + **`StructureCanvas`** - wizualizacja React Flow z węzłami i krawędziami
-3. **`AddCapitalGroupMemberModal`** - modal do dodawania spółek ręcznie
-4. **`useCapitalGroupMembers`** hook - CRUD dla tabeli `capital_group_members`
-5. **Węzły graficzne** (`ParentCompanyNode`, `SubsidiaryNode`) - komponenty React Flow
-
-### Wykryty Problem:
-W widoku kontaktu (zakładka "Struktura") użytkownik widzi pusty graf z komunikatem "Dodaj spółki zależne w zakładce 'Grupa kapitałowa'", ale takiej zakładki nie ma w tym widoku. Przycisk dodawania spółek jest niedostępny.
+Stworzenie kompleksowego widoku do zarządzania procesem ofertowania polis ubezpieczeniowych ze wszystkich firm, z lejkiem sprzedażowym, timeline'em i raportami finansowymi. System odróżnia "nasze polisy" od "obcych" i pozwala śledzić postęp prac nad odnowieniami.
 
 ---
 
 ## Architektura Rozwiązania
 
-### 1. Rozszerzenie `StructureVisualization` o możliwość dodawania spółek
+### Nowe pliki do utworzenia
 
-Zmodyfikuj `StructureVisualization.tsx`:
-- Dodaj przycisk "Dodaj spółkę do grupy" w pustym stanie
-- Dodaj integrację z `AddCapitalGroupMemberModal`
-- Dodaj toolbar z opcją szybkiego dodawania
+| Plik | Cel |
+|------|-----|
+| `src/pages/PolicyPipeline.tsx` | Główna strona zarządzania ofertowaniem |
+| `src/components/pipeline/PolicyPipelineDashboard.tsx` | Dashboard z podsumowaniem i lejkiem |
+| `src/components/pipeline/PolicyTimelineView.tsx` | Lewy panel - timeline wszystkich polis |
+| `src/components/pipeline/PolicyFunnelView.tsx` | Lejek sprzedażowy z etapami |
+| `src/components/pipeline/PolicyFinancialReports.tsx` | Raporty finansowe (zakładka) |
+| `src/components/pipeline/PolicyKPICards.tsx` | Karty KPI dla dashboardu |
+| `src/components/pipeline/OurPoliciesReport.tsx` | Raport "Naszych polis" |
+| `src/components/pipeline/index.ts` | Eksporty modułu |
+| `src/hooks/useAllPolicies.ts` | Hook pobierający polisy wszystkich firm |
 
-### 2. Rozszerzenie modala dodawania o wybór z bazy CRM
+### Pliki do modyfikacji
 
-Zmodyfikuj `AddCapitalGroupMemberModal.tsx`:
-- Dodaj opcję wyszukiwania i wyboru istniejącej firmy z bazy
-- Automatyczne wypełnianie pól (NIP, KRS, przychody) z wybranej firmy
-- Automatyczne linkowanie (`member_company_id`)
-
-### 3. Rozbudowa toolbara struktury
-
-Zmodyfikuj `StructureToolbar.tsx`:
-- Dodaj przycisk "Dodaj podmiot" obok istniejących narzędzi
+| Plik | Zmiana |
+|------|--------|
+| `src/components/layout/AppSidebar.tsx` | Dodanie nawigacji "Ofertowanie" |
+| `src/App.tsx` | Nowa trasa `/pipeline` |
+| `src/components/renewal/AddPolicyModal.tsx` | Auto-obliczanie daty końcowej +1 rok |
+| `src/components/renewal/types.ts` | Dodanie pola `is_our_policy` |
 
 ---
 
-## Szczegóły Implementacji
+## Zmiany w Bazie Danych
 
-### Plik 1: `src/components/structure/StructureVisualization.tsx`
+### Migracja: Rozszerzenie tabeli `insurance_policies`
 
-**Zmiany:**
-```typescript
-// Dodaj importy
-import { useState } from 'react';
-import { Plus, Network, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { AddCapitalGroupMemberModal } from '@/components/company/AddCapitalGroupMemberModal';
+```sql
+-- Dodaj pole do rozróżnienia "naszych" polis od "obcych"
+ALTER TABLE public.insurance_policies
+ADD COLUMN is_our_policy BOOLEAN DEFAULT false;
 
-// Dodaj state w komponencie
-const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+-- Dodaj pole workflow status dla lejka
+ALTER TABLE public.insurance_policies
+ADD COLUMN workflow_status TEXT DEFAULT 'backlog' 
+CHECK (workflow_status IN ('backlog', 'preparation', 'finalization', 'completed', 'lost'));
 
-// Zmień pusty stan na:
-if (members.length === 0) {
-  return (
-    <div className="flex flex-col items-center justify-center h-96 text-center">
-      <Network className="h-12 w-12 text-muted-foreground mb-4" />
-      <h3 className="text-lg font-medium text-foreground mb-2">
-        Brak struktury grupy kapitałowej
-      </h3>
-      <p className="text-sm text-muted-foreground max-w-md mb-4">
-        Dodaj spółki zależne, aby zobaczyć wizualizację struktury holdingowej.
-      </p>
-      <Button onClick={() => setIsAddModalOpen(true)}>
-        <Plus className="h-4 w-4 mr-2" />
-        Dodaj spółkę do grupy
-      </Button>
-      
-      <AddCapitalGroupMemberModal
-        open={isAddModalOpen}
-        onOpenChange={setIsAddModalOpen}
-        parentCompanyId={company.id}
-      />
-    </div>
-  );
-}
+-- Dodaj datę przejęcia do finalizacji
+ALTER TABLE public.insurance_policies
+ADD COLUMN moved_to_finalization_at TIMESTAMPTZ;
 
-// Dodaj modal również do głównego widoku z grafem:
-return (
-  <div className="h-[600px] w-full border rounded-lg overflow-hidden bg-background relative">
-    <StructureCanvas ... />
-    
-    <AddCapitalGroupMemberModal
-      open={isAddModalOpen}
-      onOpenChange={setIsAddModalOpen}
-      parentCompanyId={company.id}
-    />
-  </div>
-);
+-- Dodaj datę zamknięcia
+ALTER TABLE public.insurance_policies
+ADD COLUMN closed_at TIMESTAMPTZ;
+
+-- Indeks dla szybkich raportów
+CREATE INDEX idx_insurance_policies_workflow ON public.insurance_policies(tenant_id, workflow_status, end_date);
+CREATE INDEX idx_insurance_policies_our ON public.insurance_policies(tenant_id, is_our_policy);
 ```
 
-### Plik 2: `src/components/company/AddCapitalGroupMemberModal.tsx`
+---
 
-**Zmiany - dodaj wyszukiwanie firm z CRM:**
+## Logika Automatycznych Obliczeń
+
+### 1. Auto-obliczanie dat (AddPolicyModal)
 
 ```typescript
-// Dodaj import
-import { useCompaniesList } from '@/hooks/useCompanies';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+// Przy zmianie daty początkowej - auto +1 rok
+const handleStartDateChange = (startDate: string) => {
+  const start = new Date(startDate);
+  const end = addYears(start, 1);
+  setFormData(prev => ({
+    ...prev,
+    start_date: startDate,
+    end_date: format(end, 'yyyy-MM-dd'),
+  }));
+};
+```
 
-// Dodaj w komponencie:
-const { data: companies = [] } = useCompaniesList();
-const [selectedCompany, setSelectedCompany] = useState<{id: string; name: string} | null>(null);
-const [mode, setMode] = useState<'search' | 'manual'>('search');
+### 2. Okresy akcji (120 dni przed końcem)
 
-// Struktura UI:
-<DialogContent className="max-w-lg">
-  <DialogHeader>
-    <DialogTitle>Dodaj spółkę do grupy kapitałowej</DialogTitle>
-  </DialogHeader>
+```typescript
+// Automatyczne wykrywanie fazy:
+const getPolicyPhase = (policy: InsurancePolicy): PolicyPhase => {
+  const today = new Date();
+  const endDate = new Date(policy.end_date);
+  const daysLeft = differenceInDays(endDate, today);
   
-  <Tabs value={mode} onValueChange={(v) => setMode(v as 'search' | 'manual')}>
-    <TabsList className="grid w-full grid-cols-2">
-      <TabsTrigger value="search">Wybierz z bazy</TabsTrigger>
-      <TabsTrigger value="manual">Dodaj ręcznie</TabsTrigger>
-    </TabsList>
-    
-    <TabsContent value="search">
-      <Command>
-        <CommandInput placeholder="Szukaj firmy w CRM..." />
-        <CommandList>
-          <CommandEmpty>Nie znaleziono firmy</CommandEmpty>
-          <CommandGroup>
-            {companies.map((company) => (
-              <CommandItem
-                key={company.id}
-                onSelect={() => {
-                  setSelectedCompany(company);
-                  // Auto-fill form fields from company data
-                }}
-              >
-                {company.name}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </Command>
-    </TabsContent>
-    
-    <TabsContent value="manual">
-      {/* Existing form */}
-    </TabsContent>
-  </Tabs>
-</DialogContent>
+  if (daysLeft < 0) return 'expired';
+  if (daysLeft <= 30) return 'finalization'; // 30 dni - finalizacja
+  if (daysLeft <= 120) return 'preparation'; // 90 dni + 30 = 120 dni - przygotowanie
+  return 'active'; // Normalne pokrycie
+};
 ```
 
-### Plik 3: `src/components/structure/StructureToolbar.tsx`
+---
 
-**Zmiany - dodaj przycisk dodawania:**
+## Layout UI
 
-```typescript
-// Dodaj prop
-interface StructureToolbarProps {
-  // ...existing props
-  onAddEntity?: () => void;
-}
+### Główny widok Pipeline
 
-// W komponencie dodaj przycisk:
-{onAddEntity && (
-  <Button onClick={onAddEntity} size="sm" className="gap-1.5">
-    <Plus className="h-4 w-4" />
-    Dodaj podmiot
-  </Button>
-)}
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  OFERTOWANIE                                                  [Filtry] [Export] │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  [Dashboard]  [Timeline]  [Raporty Finansowe]                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │  KPI CARDS                                                                │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     │ │
+│  │  │ Do zrobienia │ │ Przygotowanie│ │ Finalizacja  │ │ Nasze polisy │     │ │
+│  │  │     23       │ │      8       │ │      3       │ │     45       │     │ │
+│  │  │ +5 vs m-1    │ │ W tym m-cu   │ │ Pilne!       │ │ 2.4M PLN     │     │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘     │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                 │
+│  ┌────────────────────────────────┐ ┌────────────────────────────────────────┐ │
+│  │  TIMELINE (lewy panel)         │ │  LEJEK SPRZEDAŻOWY                     │ │
+│  │                                │ │                                        │ │
+│  │  STY  LUT  MAR  KWI  MAJ  CZE │ │  ┌────────────────────────────────┐   │ │
+│  │  ─────────────────────────────│ │  │ BACKLOG (Do zrobienia) - 23    │   │ │
+│  │  Majątek:    ▓▓▓▓ (3)         │ │  │ ┌──────────────────────────┐   │   │ │
+│  │  Flota:      ▓▓ (2)           │ │  │ │ ABC Corp - Majątek       │   │   │ │
+│  │  OC:         ▓▓▓▓▓ (5)        │ │  │ │ wygasa: 15.03.2026       │   │   │ │
+│  │  D&O:        ▓▓ (2)           │ │  │ └──────────────────────────┘   │   │ │
+│  │  Cyber:      ▓ (1)            │ │  └────────────────────────────────┘   │ │
+│  │                                │ │                                        │ │
+│  │  Podsumowanie wg miesiąca:    │ │  ┌────────────────────────────────┐   │ │
+│  │  • Luty: 4 polisy (320k PLN)  │ │  │ PRZYGOTOWANIE - 8              │   │ │
+│  │  • Marzec: 6 polis (540k PLN) │ │  │ ☑ Aktualizacja danych          │   │ │
+│  │  • Kwiecień: 3 polisy         │ │  │ ☐ Przetarg rynkowy             │   │ │
+│  │                                │ │  └────────────────────────────────┘   │ │
+│  │                                │ │                                        │ │
+│  │                                │ │  ┌────────────────────────────────┐   │ │
+│  │                                │ │  │ FINALIZACJA - 3        🔴      │   │ │
+│  │                                │ │  │ ☑ Negocjacje zakończone        │   │ │
+│  │                                │ │  │ ☐ Zgoda Zarządu                │   │ │
+│  │                                │ │  └────────────────────────────────┘   │ │
+│  └────────────────────────────────┘ └────────────────────────────────────────┘ │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Plik 4: `src/components/structure/StructureCanvas.tsx`
+### Zakładka "Raporty Finansowe"
 
-**Zmiany - przekaż callback do toolbara:**
-
-```typescript
-interface StructureCanvasProps {
-  // ...existing props
-  onAddEntity?: () => void;
-}
-
-// Przekaż do StructureToolbar:
-<StructureToolbar
-  // ...existing props
-  onAddEntity={props.onAddEntity}
-/>
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  RAPORTY FINANSOWE                                            [2026 ▼] [Export]│
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │  NASZE POLISY (is_our_policy = true)                                      │ │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐│ │
+│  │  │ Cel roczny: 5 000 000 PLN składki                      [Ustaw cel]  ││ │
+│  │  │ ═══════════════════════════════════════════════░░░░░░░░░░░░░░░░░░░░ ││ │
+│  │  │ Realizacja: 2 400 000 PLN (48%)                                     ││ │
+│  │  └──────────────────────────────────────────────────────────────────────┘│ │
+│  │                                                                           │ │
+│  │  Sprzedaż wg typu polisy:                                                │ │
+│  │  ┌────────────────┬──────────────┬─────────────┬───────────────────────┐ │ │
+│  │  │ Typ            │ Liczba polis │ Składka PLN │ % portfela            │ │ │
+│  │  ├────────────────┼──────────────┼─────────────┼───────────────────────┤ │ │
+│  │  │ Majątek        │ 12           │ 1 200 000   │ ▓▓▓▓▓▓▓▓░░ 50%       │ │ │
+│  │  │ Flota          │ 8            │ 600 000     │ ▓▓▓▓▓░░░░░ 25%       │ │ │
+│  │  │ OC             │ 15           │ 400 000     │ ▓▓▓░░░░░░░ 17%       │ │ │
+│  │  │ Inne           │ 10           │ 200 000     │ ▓░░░░░░░░░ 8%        │ │ │
+│  │  └────────────────┴──────────────┴─────────────┴───────────────────────┘ │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │  OBCE POLISY (potencjał do przejęcia)                                    │ │
+│  │                                                                           │ │
+│  │  Łączna składka obcych polis: 8 500 000 PLN                              │ │
+│  │  Liczba klientów z obcymi polisami: 34                                   │ │
+│  │                                                                           │ │
+│  │  Polisy wygasające w najbliższych 120 dniach:                            │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐  │ │
+│  │  │ Firma              │ Typ      │ Składka   │ Wygasa    │ Dni │ Akcja│  │ │
+│  │  ├────────────────────┼──────────┼───────────┼───────────┼─────┼──────┤  │ │
+│  │  │ XYZ Manufacturing  │ Majątek  │ 450 000   │ 28.02.26  │ 28  │ [📋]│  │ │
+│  │  │ ABC Logistics      │ Flota    │ 120 000   │ 15.03.26  │ 43  │ [📋]│  │ │
+│  │  └────────────────────┴──────────┴───────────┴───────────┴─────┴──────┘  │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Plik 5: `src/hooks/useCapitalGroupMembers.ts`
+---
 
-**Rozszerzenie - dodaj funkcję linkowania z firmą:**
+## Struktura Komponentów
+
+### 1. Hook: useAllPolicies
 
 ```typescript
-export function useAddCapitalGroupMemberFromCompany() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async ({ 
-      parentCompanyId, 
-      companyId, 
-      relationshipType, 
-      ownershipPercent 
-    }: { 
-      parentCompanyId: string; 
-      companyId: string; 
-      relationshipType: 'subsidiary' | 'affiliate' | 'parent' | 'branch';
-      ownershipPercent?: number;
-    }) => {
-      // Pobierz dane firmy
-      const { data: company, error: companyError } = await supabase
-        .from('companies')
-        .select('name, nip, krs, regon, revenue_amount, revenue_year')
-        .eq('id', companyId)
-        .single();
-      
-      if (companyError) throw companyError;
-      
-      // Pobierz tenant_id
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: director } = await supabase
-        .from('directors')
-        .select('tenant_id')
-        .eq('user_id', user!.id)
-        .single();
-      
-      // Wstaw członka grupy z linkiem do firmy
+export function useAllPolicies() {
+  const { director } = useAuth();
+  const tenantId = director?.tenant_id;
+
+  const { data: policies, isLoading } = useQuery({
+    queryKey: ['all-policies', tenantId],
+    queryFn: async () => {
       const { data, error } = await supabase
-        .from('capital_group_members')
-        .insert({
-          tenant_id: director!.tenant_id,
-          parent_company_id: parentCompanyId,
-          member_company_id: companyId,
-          external_name: company.name,
-          external_nip: company.nip,
-          external_krs: company.krs,
-          external_regon: company.regon,
-          relationship_type: relationshipType,
-          ownership_percent: ownershipPercent,
-          revenue_amount: company.revenue_amount,
-          revenue_year: company.revenue_year,
-          data_source: 'crm_link'
-        })
-        .select()
-        .single();
-      
+        .from('insurance_policies')
+        .select(`
+          *,
+          company:companies(id, name, short_name, logo_url)
+        `)
+        .eq('tenant_id', tenantId)
+        .order('end_date', { ascending: true });
+
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['capital-group-members', variables.parentCompanyId] });
-      toast.success('Powiązano firmę z grupą kapitałową');
-    },
-    onError: (error: Error) => {
-      toast.error(`Błąd: ${error.message}`);
-    }
+    enabled: !!tenantId,
   });
+
+  // Computed stats
+  const stats = useMemo(() => {
+    if (!policies) return null;
+    
+    const today = new Date();
+    
+    // Grupowanie wg fazy
+    const backlog: PolicyWithCompany[] = [];
+    const preparation: PolicyWithCompany[] = [];
+    const finalization: PolicyWithCompany[] = [];
+    
+    policies.forEach(p => {
+      const daysLeft = differenceInDays(new Date(p.end_date), today);
+      if (daysLeft <= 30) finalization.push(p);
+      else if (daysLeft <= 120) preparation.push(p);
+      else backlog.push(p);
+    });
+    
+    // Nasze vs obce
+    const ourPolicies = policies.filter(p => p.is_our_policy);
+    const foreignPolicies = policies.filter(p => !p.is_our_policy);
+    
+    // Składki
+    const ourPremium = ourPolicies.reduce((sum, p) => sum + (p.premium || 0), 0);
+    const foreignPremium = foreignPolicies.reduce((sum, p) => sum + (p.premium || 0), 0);
+    
+    return {
+      backlog,
+      preparation,
+      finalization,
+      ourPolicies,
+      foreignPolicies,
+      ourPremium,
+      foreignPremium,
+      byType: groupByType(policies),
+      byMonth: groupByExpiryMonth(policies),
+    };
+  }, [policies]);
+
+  return { policies, stats, isLoading, ... };
+}
+```
+
+### 2. PolicyTimelineView (lewy panel)
+
+```typescript
+interface PolicyTimelineViewProps {
+  policies: PolicyWithCompany[];
+}
+
+export function PolicyTimelineView({ policies }: PolicyTimelineViewProps) {
+  // Grupowanie polis wg miesiąca wygaśnięcia
+  const byMonth = useMemo(() => {
+    const grouped = new Map<string, PolicyWithCompany[]>();
+    
+    policies.forEach(p => {
+      const month = format(new Date(p.end_date), 'yyyy-MM');
+      if (!grouped.has(month)) grouped.set(month, []);
+      grouped.get(month)!.push(p);
+    });
+    
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b));
+  }, [policies]);
+
+  // Grupowanie wg typu polisy
+  const byType = useMemo(() => 
+    Object.entries(
+      policies.reduce((acc, p) => {
+        acc[p.policy_type] = (acc[p.policy_type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    ),
+    [policies]
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Mini timeline z barami */}
+      <div className="space-y-2">
+        {byType.map(([type, count]) => (
+          <div key={type} className="flex items-center gap-2">
+            <span className="w-20 text-sm">{POLICY_TYPE_LABELS[type]}</span>
+            <div 
+              className="h-6 rounded" 
+              style={{ 
+                width: `${(count / policies.length) * 100}%`,
+                backgroundColor: POLICY_TYPE_COLORS[type]
+              }}
+            />
+            <span className="text-sm text-muted-foreground">({count})</span>
+          </div>
+        ))}
+      </div>
+      
+      {/* Lista wg miesięcy */}
+      <div className="space-y-3">
+        {byMonth.map(([month, monthPolicies]) => (
+          <Card key={month}>
+            <CardHeader className="py-2">
+              <CardTitle className="text-sm">
+                {format(new Date(month), 'LLLL yyyy', { locale: pl })}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2">
+              <p className="text-lg font-bold">
+                {monthPolicies.length} polis
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {formatCurrency(monthPolicies.reduce((s, p) => s + (p.premium || 0), 0))} PLN
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### 3. PolicyFunnelView (lejek)
+
+```typescript
+export function PolicyFunnelView({ stats }: { stats: PipelineStats }) {
+  const stages = [
+    { 
+      id: 'backlog', 
+      label: 'Do zrobienia', 
+      count: stats.backlog.length,
+      color: 'bg-slate-100',
+      icon: Clock,
+    },
+    { 
+      id: 'preparation', 
+      label: 'Przygotowanie (90 dni)', 
+      count: stats.preparation.length,
+      color: 'bg-emerald-50',
+      icon: FileEdit,
+    },
+    { 
+      id: 'finalization', 
+      label: 'Finalizacja (30 dni)', 
+      count: stats.finalization.length,
+      color: 'bg-red-50',
+      icon: AlertTriangle,
+      urgent: true,
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {stages.map(stage => (
+        <Card key={stage.id} className={stage.color}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <stage.icon className="h-4 w-4" />
+                {stage.label}
+              </CardTitle>
+              <Badge variant={stage.urgent ? 'destructive' : 'secondary'}>
+                {stage.count}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-48">
+              {stats[stage.id].map(policy => (
+                <PolicyFunnelCard 
+                  key={policy.id} 
+                  policy={policy}
+                  showChecklist={stage.id !== 'backlog'}
+                />
+              ))}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 }
 ```
 
 ---
 
-## Podsumowanie Zmian w Plikach
+## Logika Biznesowa
+
+### Workflow Status Transitions
+
+```typescript
+// Automatyczna aktualizacja statusu workflow na podstawie daty
+async function updatePolicyWorkflowStatus(policyId: string) {
+  const { data: policy } = await supabase
+    .from('insurance_policies')
+    .select('end_date, workflow_status')
+    .eq('id', policyId)
+    .single();
+    
+  const daysLeft = differenceInDays(new Date(policy.end_date), new Date());
+  let newStatus = policy.workflow_status;
+  
+  // Auto-promote based on time
+  if (daysLeft <= 30 && policy.workflow_status === 'preparation') {
+    newStatus = 'finalization';
+  } else if (daysLeft <= 120 && policy.workflow_status === 'backlog') {
+    newStatus = 'preparation';
+  }
+  
+  if (newStatus !== policy.workflow_status) {
+    await supabase
+      .from('insurance_policies')
+      .update({ 
+        workflow_status: newStatus,
+        ...(newStatus === 'finalization' ? { moved_to_finalization_at: new Date() } : {})
+      })
+      .eq('id', policyId);
+  }
+}
+```
+
+### Oznaczanie "Naszej Polisy"
+
+```typescript
+// W PolicyCard lub w modalu edycji
+const toggleOurPolicy = useMutation({
+  mutationFn: async ({ policyId, isOurs }: { policyId: string; isOurs: boolean }) => {
+    const { error } = await supabase
+      .from('insurance_policies')
+      .update({ is_our_policy: isOurs })
+      .eq('id', policyId);
+    
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['all-policies'] });
+    toast.success(isOurs ? 'Oznaczono jako nasza polisa' : 'Oznaczono jako obca polisa');
+  },
+});
+```
+
+---
+
+## Modyfikacja AddPolicyModal
+
+### Auto-obliczanie daty końcowej
+
+```typescript
+// W handleStartDateChange:
+const handleStartDateChange = (startDate: string) => {
+  const start = new Date(startDate);
+  const end = addYears(start, 1);
+  
+  setFormData(prev => ({
+    ...prev,
+    start_date: startDate,
+    end_date: format(end, 'yyyy-MM-dd'),
+  }));
+};
+
+// Dodaj checkbox "Nasza polisa" w formularzu:
+<div className="flex items-center space-x-2">
+  <Checkbox 
+    id="is_our_policy"
+    checked={formData.is_our_policy}
+    onCheckedChange={(checked) => 
+      setFormData(prev => ({ ...prev, is_our_policy: !!checked }))
+    }
+  />
+  <Label htmlFor="is_our_policy" className="text-sm font-medium">
+    Nasza polisa (obsługujemy jako broker)
+  </Label>
+</div>
+```
+
+---
+
+## Nawigacja
+
+### Dodanie do AppSidebar
+
+```typescript
+// W mainNavigationItems:
+{ title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+```
+
+### Nowa trasa w App.tsx
+
+```typescript
+<Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
+```
+
+---
+
+## Podsumowanie Plików
 
 | Plik | Typ | Opis |
 |------|-----|------|
-| `src/components/structure/StructureVisualization.tsx` | Modyfikacja | Dodanie przycisku "Dodaj spółkę" i modala |
-| `src/components/structure/StructureToolbar.tsx` | Modyfikacja | Przycisk "Dodaj podmiot" w toolbarze |
-| `src/components/structure/StructureCanvas.tsx` | Modyfikacja | Przekazanie callback do toolbara |
-| `src/components/company/AddCapitalGroupMemberModal.tsx` | Modyfikacja | Dodanie zakładki "Wybierz z bazy" z wyszukiwarką firm CRM |
-| `src/hooks/useCapitalGroupMembers.ts` | Modyfikacja | Nowa funkcja `useAddCapitalGroupMemberFromCompany` |
+| **Baza danych** |
+| Migracja SQL | NOWY | Kolumny `is_our_policy`, `workflow_status` |
+| **Strony** |
+| `src/pages/PolicyPipeline.tsx` | NOWY | Główna strona modułu |
+| **Komponenty** |
+| `src/components/pipeline/PolicyPipelineDashboard.tsx` | NOWY | Dashboard z zakładkami |
+| `src/components/pipeline/PolicyTimelineView.tsx` | NOWY | Lewy panel - timeline |
+| `src/components/pipeline/PolicyFunnelView.tsx` | NOWY | Lejek sprzedażowy |
+| `src/components/pipeline/PolicyFinancialReports.tsx` | NOWY | Raporty finansowe |
+| `src/components/pipeline/PolicyKPICards.tsx` | NOWY | Karty KPI |
+| `src/components/pipeline/OurPoliciesReport.tsx` | NOWY | Raport naszych polis |
+| `src/components/pipeline/PolicyFunnelCard.tsx` | NOWY | Karta polisy w lejku |
+| `src/components/pipeline/index.ts` | NOWY | Eksporty |
+| **Hooks** |
+| `src/hooks/useAllPolicies.ts` | NOWY | Pobieranie wszystkich polis |
+| **Modyfikacje** |
+| `src/components/renewal/AddPolicyModal.tsx` | MOD | Auto +1 rok, checkbox "nasza polisa" |
+| `src/components/renewal/types.ts` | MOD | Nowe pola w interfejsie |
+| `src/components/layout/AppSidebar.tsx` | MOD | Link do /pipeline |
+| `src/App.tsx` | MOD | Nowa trasa |
 
 ---
 
-## Przepływ Użytkownika (Po Zmianach)
+## Przepływ Użytkownika
 
-1. Użytkownik wchodzi w kontakt → przełącza na "FIRMA" → zakładka "Struktura"
-2. Widzi pusty stan z przyciskiem "Dodaj spółkę do grupy"
-3. Klika przycisk → otwiera się modal z dwoma zakładkami:
-   - **Wybierz z bazy**: wyszukiwarka firm CRM z autouzupełnieniem
-   - **Dodaj ręcznie**: formularz do wprowadzenia danych spółki zewnętrznej
-4. Po dodaniu spółki graf React Flow automatycznie się odświeża
-5. Użytkownik widzi strukturę z węzłami spółki matki i zależnych
-6. Może kliknąć węzeł aby zobaczyć szczegóły w sidebarze
-7. Jeśli spółka jest zlinkowana z CRM, może przejść do jej profilu
+1. **Dodawanie polisy** → Użytkownik wybiera datę początkową, system automatycznie ustawia koniec +1 rok
+2. **Polisy trafiają do lejka** → System automatycznie przypisuje fazę na podstawie dni do wygaśnięcia
+3. **Backlog (>120 dni)** → Polisy daleko od wygaśnięcia - tylko monitoring
+4. **Przygotowanie (30-120 dni)** → 90 dni na audyt, zebranie danych, przetarg
+5. **Finalizacja (<30 dni)** → Ostatnie negocjacje, zgoda zarządu
+6. **Oznaczenie "nasza polisa"** → Polisa trafia do osobnego raportu sprzedaży
+7. **Raporty finansowe** → Agregacja składek, cele roczne, porównanie nasze/obce
 
 ---
 
-## Wizualizacja Przepływu
+## Kluczowe Funkcjonalności
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  FIRMA: SGU Brokers                                            │
-├────────────────────────────────────────────────────────────────┤
-│  [Źródła] [Struktura✓] [Ubezpieczenia] [Ekspozycja] [DNA OC]  │
-└────────────────────────────────────────────────────────────────┘
-                              ↓
-┌────────────────────────────────────────────────────────────────┐
-│  [+ Dodaj podmiot]  [Auto-Layout]  [Export PNG]  [Zoom]       │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│                    ┌─────────────┐                             │
-│                    │   👑        │                             │
-│                    │ Spółka      │                             │
-│                    │ Matka       │                             │
-│                    │ SGU Brokers │                             │
-│                    └──────┬──────┘                             │
-│                           │                                    │
-│           ┌───────────────┼───────────────┐                    │
-│           │               │               │                    │
-│     ┌─────┴─────┐   ┌─────┴─────┐   ┌─────┴─────┐             │
-│     │ Spółka    │   │ Spółka    │   │ Oddział   │             │
-│     │ Zależna 1 │   │ Zależna 2 │   │ Wrocław   │             │
-│     │ 100%      │   │ 51%       │   │           │             │
-│     │ [W bazie] │   │           │   │           │             │
-│     └───────────┘   └───────────┘   └───────────┘             │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-```
+### Timeline (lewy panel):
+- Wizualizacja wszystkich polis na osi czasu
+- Grupowanie wg typu polisy (kolorowe bary)
+- Podsumowanie wg miesiąca wygaśnięcia
+- Szybki podgląd ile polis i jaka składka w danym okresie
 
----
+### Lejek sprzedażowy:
+- 3 etapy: Backlog → Przygotowanie → Finalizacja
+- Karty polis z checklistą (te same 4 punkty co w harmonogramie)
+- Alerty dla polis krytycznych
+- Możliwość ręcznego przesuwania między etapami
 
-## Szczegóły Techniczne
-
-### Rozszerzony Modal z Zakładkami
-
-```
-┌───────────────────────────────────────────────────────────────┐
-│  Dodaj spółkę do grupy kapitałowej                      [X]  │
-├───────────────────────────────────────────────────────────────┤
-│  [Wybierz z bazy]  [Dodaj ręcznie]                           │
-├───────────────────────────────────────────────────────────────┤
-│                                                               │
-│  🔍 Szukaj firmy w CRM...                                    │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ ABC Transport Sp. z o.o.                                │ │
-│  │ XYZ Logistics S.A.                                      │ │
-│  │ Fabryka Mebli Sp.j.                                    │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                                                               │
-│  Typ powiązania *         Udział procentowy                  │
-│  [Spółka zależna  ▼]      [      %]                          │
-│                                                               │
-│                              [Anuluj]  [Dodaj spółkę]        │
-└───────────────────────────────────────────────────────────────┘
-```
+### Raporty finansowe:
+- **Nasze polisy**: Cel roczny, realizacja, sprzedaż wg typu
+- **Obce polisy**: Potencjał do przejęcia, lista wygasających
+- Eksport do PDF/Excel
 
