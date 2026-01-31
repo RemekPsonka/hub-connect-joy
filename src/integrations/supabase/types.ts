@@ -1980,6 +1980,78 @@ export type Database = {
         }
         Relationships: []
       }
+      insurance_policies: {
+        Row: {
+          broker_name: string | null
+          company_id: string
+          created_at: string | null
+          end_date: string
+          id: string
+          insurer_name: string | null
+          notes: string | null
+          policy_name: string
+          policy_number: string | null
+          policy_type: string
+          premium: number | null
+          renewal_checklist: Json | null
+          start_date: string
+          sum_insured: number | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          broker_name?: string | null
+          company_id: string
+          created_at?: string | null
+          end_date: string
+          id?: string
+          insurer_name?: string | null
+          notes?: string | null
+          policy_name: string
+          policy_number?: string | null
+          policy_type: string
+          premium?: number | null
+          renewal_checklist?: Json | null
+          start_date: string
+          sum_insured?: number | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          broker_name?: string | null
+          company_id?: string
+          created_at?: string | null
+          end_date?: string
+          id?: string
+          insurer_name?: string | null
+          notes?: string | null
+          policy_name?: string
+          policy_number?: string | null
+          policy_type?: string
+          premium?: number | null
+          renewal_checklist?: Json | null
+          start_date?: string
+          sum_insured?: number | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_policies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_policies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insurance_risk_assessments: {
         Row: {
           ai_analiza_kontekstu: string | null
