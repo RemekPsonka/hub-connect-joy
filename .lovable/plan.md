@@ -1,161 +1,62 @@
 
 
-## Plan: Naprawa dodawania przedstawicieli/ambasadorów
+## Plan: Naprawa błędu zapętlania przy zapisie konsultacji
 
-### Problem
-Dodawanie przedstawiciela/ambasadora nie działa z powodu:
-1. Niezgodność nazw parametrów między hookiem a edge function (`full_name` vs `fullName`)
-2. Błędne mapowanie odpowiedzi (`userData.user_id` vs `user.id`)
-3. Brak dedykowanej edge function dla przedstawicieli (próbuje użyć `create-tenant-user` która tworzy dyrektorów)
-4. Brak wyświetlania tymczasowego hasła po utworzeniu konta
+### Zidentyfikowany problem
 
----
+W pliku `src/components/consultations/ConsultationQuestionnaire.tsx`:
 
-## Rozwiązanie
-
-### 1. Nowa edge function `create-representative`
-Wzorowana na `create-assistant`, ale dedykowana dla przedstawicieli:
-
-```text
-supabase/functions/create-representative/index.ts
-
-Funkcjonalność:
-- Przyjmuje: email, fullName, roleType, tenantId, parentDirectorId
-- Generuje tymczasowe hasło (10 znaków)
-- Tworzy konto w auth.users
-- Tworzy wpis w sales_representatives
-- Zwraca: success, representative, tempPassword
-```
-
-### 2. Aktualizacja `useRepresentatives.ts`
-
-```text
-Zmiany:
-- Wywołanie nowej edge function create-representative
-- Usunięcie pola password z interfejsu CreateRepresentativeInput
-- Zwracanie tempPassword z mutacji
-```
-
-### 3. Przebudowa `AddRepresentativeModal.tsx`
-
-```text
-Wzorowane na AddAssistantModal:
-- Formularz bez pola hasła (generowane automatycznie)
-- Po utworzeniu: wyświetlenie kartki z tymczasowym hasłem
-- Przycisk kopiowania hasła
-- Opcja wydruku kartki z danymi logowania
-```
+1. **Linia 96**: Pole `next_meeting_date` jest inicjalizowane jako pusty string `''`
+2. **Linie 166-174**: useEffect z debounce 1500ms automatycznie wywołuje `saveFormData`
+3. **Linie 142-163**: `saveFormData` wysyła pusty string `""` do bazy danych
+4. PostgreSQL odrzuca pusty string dla kolumny typu `date` z błędem: `invalid input syntax for type date: ""`
+5. Błąd jest logowany, toast wyświetlany, ale `formData` się nie zmienia
+6. Po 1500ms auto-save próbuje ponownie → **nieskończona pętla błędów**
 
 ---
 
-## Szczegóły techniczne
+### Rozwiązanie
 
-### A. Edge Function: `supabase/functions/create-representative/index.ts`
+#### Plik: `src/components/consultations/ConsultationQuestionnaire.tsx`
+
+**Zmiana w funkcji `saveFormData` (linie 142-163)**
+
+Przed wysłaniem danych do bazy, zamienić puste stringi na `null` dla pól typu `date`:
 
 ```typescript
-// Struktura wzorowana na create-assistant
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-serve(async (req) => {
-  // 1. Autoryzacja - sprawdzenie czy dyrektor/admin
-  // 2. Walidacja danych wejściowych
-  // 3. Generowanie hasła tymczasowego
-  // 4. Utworzenie użytkownika w auth.users
-  // 5. Utworzenie wpisu w sales_representatives
-  // 6. Zwrot danych wraz z tempPassword
+// Obecny kod (linia 145-151):
+await upsertQuestionnaire.mutateAsync({
+  consultationId: consultation.id,
+  data: {
+    ...data,
+    group_engagement_rating: data.group_engagement_rating,
+  },
 });
 
-function generatePassword(): string {
-  // Generowanie bezpiecznego hasła 10-znakowego
-}
-```
-
-### B. Hook: `src/hooks/useRepresentatives.ts`
-
-```typescript
-// Przed:
-export interface CreateRepresentativeInput {
-  full_name: string;
-  email: string;
-  role_type: 'sales_rep' | 'ambassador';
-  password: string;  // <- USUNĄĆ
-}
-
-// Po:
-export interface CreateRepresentativeInput {
-  full_name: string;
-  email: string;
-  role_type: 'sales_rep' | 'ambassador';
-}
-
-// Mutacja zwraca tempPassword
-const result = await supabase.functions.invoke('create-representative', {
-  body: {
-    email: input.email,
-    fullName: input.full_name,
-    roleType: input.role_type,
-    tenantId: director.tenant_id,
-    parentDirectorId: director.id,
-  }
+// Nowy kod:
+await upsertQuestionnaire.mutateAsync({
+  consultationId: consultation.id,
+  data: {
+    ...data,
+    // Zamień puste stringi na null dla pól daty - PostgreSQL nie akceptuje ""
+    next_meeting_date: data.next_meeting_date || null,
+    group_engagement_rating: data.group_engagement_rating,
+  },
 });
-
-return {
-  representative: result.data.representative,
-  tempPassword: result.data.tempPassword
-};
-```
-
-### C. Modal: `src/components/representatives/AddRepresentativeModal.tsx`
-
-```text
-Stan po utworzeniu:
-+---------------------------------------------------------------+
-| ✅ Przedstawiciel został utworzony!                           |
-+---------------------------------------------------------------+
-|                                                               |
-| Przekaż poniższe dane logowania przedstawicielowi:           |
-|                                                               |
-| 📧 Email: jan.kowalski@firma.pl                               |
-| 🔑 Hasło tymczasowe:                                          |
-|    ┌─────────────────────────────────────────┐               |
-|    │ Xk7#mPq2@N                              │ [📋 Kopiuj]    |
-|    └─────────────────────────────────────────┘               |
-|                                                               |
-| ⚠️  Przedstawiciel powinien zmienić hasło po pierwszym        |
-|    logowaniu.                                                 |
-|                                                               |
-| [🖨️ Drukuj instrukcję]                 [Zamknij]              |
-+---------------------------------------------------------------+
-```
-
-### D. Kartka do wydruku (opcjonalnie)
-
-```text
-Funkcja drukowania kartki z danymi:
-- Logo/nazwa firmy
-- Dane logowania (email, hasło)
-- URL do logowania
-- Instrukcja pierwszego logowania
-- Przypomnienie o zmianie hasła
 ```
 
 ---
 
-## Pliki do utworzenia/modyfikacji
+### Podsumowanie zmian
 
-| Plik | Akcja | Opis |
-|------|-------|------|
-| `supabase/functions/create-representative/index.ts` | Nowy | Edge function tworzenia przedstawiciela |
-| `src/hooks/useRepresentatives.ts` | Modyfikacja | Nowe wywołanie edge function, usunięcie password |
-| `src/components/representatives/AddRepresentativeModal.tsx` | Modyfikacja | Nowy UI z hasłem tymczasowym |
+| Plik | Zmiana |
+|------|--------|
+| `src/components/consultations/ConsultationQuestionnaire.tsx` | Sanityzacja pustego stringa `next_meeting_date` na `null` przed zapisem |
 
----
+### Oczekiwany rezultat
 
-## Kolejność implementacji
-
-1. **Faza 1**: Utworzenie edge function `create-representative`
-2. **Faza 2**: Aktualizacja `useRepresentatives.ts` - wywołanie nowej funkcji
-3. **Faza 3**: Przebudowa `AddRepresentativeModal.tsx` - nowy UI wzorowany na asystencie
-4. **Faza 4**: Testowanie end-to-end
+1. Błąd zapętlenia zostanie naprawiony
+2. Auto-save będzie działać poprawnie
+3. Toast "Nie udało się zapisać danych" przestanie się pojawiać w pętli
+4. Konsultacja z Adamem Osoba pojawi się poprawnie na dashboardzie (cache się odświeży po pomyślnym zapisie)
 
