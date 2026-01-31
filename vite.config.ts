@@ -19,6 +19,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    include: ['sigma', '@react-sigma/core', 'graphology', 'graphology-layout-forceatlas2', '@dagrejs/dagre', '@dagrejs/graphlib'],
+    include: ['sigma', '@react-sigma/core', 'graphology', 'graphology-layout-forceatlas2', 'dagre'],
   },
 }));
