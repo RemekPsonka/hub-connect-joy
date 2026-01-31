@@ -12,7 +12,8 @@ import {
   MapPin, 
   Briefcase,
   AlertTriangle,
-  Shield
+  Shield,
+  GitBranch
 } from 'lucide-react';
 import { SourcesTabContent } from './SourcesTabContent';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -27,6 +28,7 @@ import { ClientsProjectsSection } from './sections/ClientsProjectsSection';
 import { FallbackDataSection } from './sections/FallbackDataSection';
 import { useCompanyPipeline } from '@/hooks/useCompanyPipeline';
 import { InsurancePanel } from '@/components/insurance';
+import { StructureVisualization } from '@/components/structure';
 import type { Company } from './CompanyPipelineController';
 import type { CompanyAnalysis } from './types';
 
@@ -65,6 +67,7 @@ export function CompanyFlatTabs({
   // Show ALL tabs when analysis is complete - individual sections handle empty states
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
+    { id: 'structure', label: 'Struktura', icon: GitBranch, always: true },
     { id: 'insurance', label: 'Ubezpieczenia', icon: Shield, always: true },
     { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
     { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasAnalysis },
@@ -116,6 +119,18 @@ export function CompanyFlatTabs({
           company={company} 
           contactEmail={contactEmail}
           pipeline={pipeline}
+        />
+      </TabsContent>
+
+      <TabsContent value="structure" className="mt-0">
+        <StructureVisualization 
+          company={{
+            id: company.id,
+            name: company.name,
+            nip: company.nip,
+            krs: company.krs,
+            logo_url: company.logo_url,
+          }} 
         />
       </TabsContent>
 
