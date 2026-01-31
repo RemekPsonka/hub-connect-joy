@@ -1980,6 +1980,71 @@ export type Database = {
         }
         Relationships: []
       }
+      insurance_risk_assessments: {
+        Row: {
+          ai_analiza_kontekstu: string | null
+          ai_brief_brokerski: string | null
+          ai_podpowiedzi: Json | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          ryzyka_specyficzne_branzowe: Json | null
+          ryzyko_flota: Json | null
+          ryzyko_majatkowe: Json | null
+          ryzyko_oc: Json | null
+          ryzyko_pracownicy: Json | null
+          ryzyko_specjalistyczne: Json | null
+          tenant_id: string
+          typy_dzialalnosci: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          ai_analiza_kontekstu?: string | null
+          ai_brief_brokerski?: string | null
+          ai_podpowiedzi?: Json | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          ryzyka_specyficzne_branzowe?: Json | null
+          ryzyko_flota?: Json | null
+          ryzyko_majatkowe?: Json | null
+          ryzyko_oc?: Json | null
+          ryzyko_pracownicy?: Json | null
+          ryzyko_specjalistyczne?: Json | null
+          tenant_id: string
+          typy_dzialalnosci?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          ai_analiza_kontekstu?: string | null
+          ai_brief_brokerski?: string | null
+          ai_podpowiedzi?: Json | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          ryzyka_specyficzne_branzowe?: Json | null
+          ryzyko_flota?: Json | null
+          ryzyko_majatkowe?: Json | null
+          ryzyko_oc?: Json | null
+          ryzyko_pracownicy?: Json | null
+          ryzyko_specjalistyczne?: Json | null
+          tenant_id?: string
+          typy_dzialalnosci?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_risk_assessments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       linkedin_network_contacts: {
         Row: {
           company: string | null
