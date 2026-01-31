@@ -1,578 +1,215 @@
 
+## Plan: Wdrożenie Google OAuth, Polityki Silnych Haseł i Audyt Bezpieczeństwa
 
-## Plan: Moduł "Financial Exposure & Liability DNA" (DNA Ekspozycji Finansowej i Odpowiedzialności)
+### Podsumowanie
 
-### Cel
-Narzędzie analityczne do rozbicia struktury przychodów klienta na kategorie istotne dla oceny ryzyka odpowiedzialności cywilnej (OC ogólna, OC produktowa, OC zawodowa). Moduł umożliwia szybką wizualizację podziału terytorialnego i aktywności podczas spotkań z klientem.
+Ten plan obejmuje trzy główne obszary:
+1. **Uruchomienie logowania Google** (wymaga konfiguracji w Cloud Dashboard)
+2. **Polityka silnych haseł** z wymuszeniem zmiany co 30 dni
+3. **Audyt bezpieczeństwa** i naprawa wykrytych podatności
 
 ---
 
-## Architektura
+## 1. Logowanie Google
 
-### Nowe pliki do utworzenia
+### Obecny stan
+Kod logowania Google już istnieje w aplikacji (`signInWithGoogle` w `AuthContext.tsx`), ale używa starej metody `supabase.auth.signInWithOAuth()`. Dla Lovable Cloud należy użyć zarządzanego Google OAuth.
 
-| Plik | Cel |
-|------|-----|
-| `src/components/liability/types.ts` | Typy dla struktury przychodów i ekspozycji OC |
-| `src/components/liability/LiabilityDNAPanel.tsx` | Główny kontener modułu (dashboard) |
-| `src/components/liability/RevenueInput.tsx` | "Big Number" - input całkowitych przychodów z selektorem waluty |
-| `src/components/liability/TerritorialSplit.tsx` | Sekcja podziału terytorialnego z wykresem donut |
-| `src/components/liability/ActivityRiskProfile.tsx` | Siatka toggleów typu działalności |
-| `src/components/liability/SpecialExposureCards.tsx` | Karty Yes/No dla specjalnych ekspozycji |
-| `src/components/liability/LiabilityLimitRecommender.tsx` | Wynik AI - rekomendacja limitu OC |
-| `src/components/liability/TerritorialSlider.tsx` | Suwak procentowy z walidacją (suma = 100%) |
-| `src/components/liability/index.ts` | Eksporty modułu |
-| `src/hooks/useLiabilityDNA.ts` | Hook do zarządzania danymi |
+### Wymagane kroki
 
-### Pliki do modyfikacji
+#### 1.1 Konfiguracja w Cloud Dashboard
+Lovable Cloud automatycznie zarządza Google OAuth - nie potrzebujesz własnych kluczy API. Wystarczy włączyć Google jako metodę logowania:
+
+<lov-actions>
+<lov-open-backend>Otwórz Cloud Dashboard</lov-open-backend>
+</lov-actions>
+
+W Cloud Dashboard:
+- Przejdź do **Users** → **Authentication Settings**
+- Włącz **Google** jako metodę logowania
+- (Opcjonalnie) Dodaj własne OAuth credentials dla brandingu
+
+#### 1.2 Aktualizacja kodu autoryzacji
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/company/CompanyFlatTabs.tsx` | Dodanie zakładki "DNA OC" z ikoną Scale |
+| Nowy: `src/integrations/lovable/index.ts` | Zostanie wygenerowany automatycznie przez narzędzie konfiguracji |
+| `src/contexts/AuthContext.tsx` | Zmiana `supabase.auth.signInWithOAuth()` na `lovable.auth.signInWithOAuth()` |
+| `src/pages/Login.tsx` | Bez zmian w UI (przycisk już istnieje) |
+| `src/pages/Signup.tsx` | Bez zmian w UI (przycisk już istnieje) |
 
 ---
 
-## Model danych
+## 2. Polityka Silnych Haseł z Wymuszeniem Zmiany co 30 Dni
 
-### Nowa tabela: `liability_exposure_profiles`
+### 2.1 Nowa tabela: `user_password_policies`
 
 ```sql
-CREATE TABLE public.liability_exposure_profiles (
+CREATE TABLE public.user_password_policies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
-  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  
-  -- Total Revenue
-  total_annual_revenue NUMERIC DEFAULT 0,
-  currency TEXT NOT NULL DEFAULT 'PLN' CHECK (currency IN ('PLN', 'EUR', 'USD')),
-  
-  -- Territorial Split (percentages, must sum to 100)
-  territory_poland_pct NUMERIC DEFAULT 100,
-  territory_eu_oecd_pct NUMERIC DEFAULT 0,
-  territory_usa_canada_pct NUMERIC DEFAULT 0,
-  territory_rest_world_pct NUMERIC DEFAULT 0,
-  
-  -- Activity Risk Profile (multi-select)
-  activity_manufacturing BOOLEAN DEFAULT false,
-  activity_services BOOLEAN DEFAULT false,
-  activity_installation BOOLEAN DEFAULT false,
-  activity_trading BOOLEAN DEFAULT false,
-  
-  -- Conditional: Services split
-  services_advisory_pct NUMERIC,  -- vs manual work (100 - advisory = manual)
-  
-  -- Special Exposures
-  exposure_aviation_auto_rail_offshore BOOLEAN DEFAULT false,
-  exposure_ecommerce BOOLEAN DEFAULT false,
-  b2b_vs_b2c_pct NUMERIC DEFAULT 50, -- 0 = full B2C, 100 = full B2B
-  
-  -- AI Recommendation
-  ai_suggested_limit_eur NUMERIC,
-  ai_recommendation_reason TEXT,
-  ai_generated_at TIMESTAMPTZ,
-  
-  -- Metadata
-  notes TEXT,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  password_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  password_expiry_days INTEGER NOT NULL DEFAULT 30,
+  is_google_user BOOLEAN DEFAULT false,
+  force_password_change BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT unique_user_password_policy UNIQUE (user_id)
 );
 
--- Indexes
-CREATE INDEX idx_liability_exposure_company ON public.liability_exposure_profiles(company_id);
-CREATE INDEX idx_liability_exposure_tenant ON public.liability_exposure_profiles(tenant_id);
-
 -- RLS
-ALTER TABLE public.liability_exposure_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_password_policies ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "liability_exposure_tenant_access"
-  ON public.liability_exposure_profiles
+CREATE POLICY "Users can read own policy"
+  ON public.user_password_policies
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own policy"
+  ON public.user_password_policies
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+```
+
+### 2.2 Walidacja silnych haseł (frontend)
+
+Aktualizacja schematów Zod w `Signup.tsx` i `PasswordChangeForm.tsx`:
+
+```typescript
+const strongPasswordSchema = z.string()
+  .min(12, 'Hasło musi mieć co najmniej 12 znaków')
+  .regex(/[A-Z]/, 'Hasło musi zawierać co najmniej jedną wielką literę')
+  .regex(/[a-z]/, 'Hasło musi zawierać co najmniej jedną małą literę')
+  .regex(/[0-9]/, 'Hasło musi zawierać co najmniej jedną cyfrę')
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Hasło musi zawierać co najmniej jeden znak specjalny');
+```
+
+### 2.3 Komponent wymuszenia zmiany hasła
+
+Nowy plik: `src/components/auth/ForcePasswordChange.tsx`
+- Modal wyświetlany po zalogowaniu gdy hasło wygasło
+- Blokuje dostęp do aplikacji dopóki hasło nie zostanie zmienione
+
+### 2.4 Hook sprawdzający politykę hasła
+
+Nowy plik: `src/hooks/usePasswordPolicy.ts`
+- Sprawdza czy hasło wygasło (> 30 dni)
+- Pomija użytkowników Google (identyfikowani po `app_metadata.provider`)
+- Ustawia `force_password_change = true` gdy hasło wygasło
+
+### 2.5 Modyfikacja AuthContext
+
+- Dodanie sprawdzenia polityki hasła po zalogowaniu
+- Wyświetlenie modala wymuszenia zmiany hasła
+
+---
+
+## 3. Audyt Bezpieczeństwa - Wykryte Problemy i Naprawy
+
+### KRYTYCZNE (Error Level)
+
+#### 3.1 Edge Function bez autoryzacji: `ai-chat-router`
+
+**Problem:** Funkcja `ai-chat-router/index.ts` nie sprawdza autoryzacji - każdy może ją wywołać.
+
+**Naprawa:**
+```typescript
+// Dodać na początku funkcji:
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+
+const authResult = await verifyAuth(req, supabase);
+if (isAuthError(authResult)) {
+  return unauthorizedResponse(authResult, corsHeaders);
+}
+```
+
+### OSTRZEŻENIA (Warning Level)
+
+#### 3.2 Wyłączona ochrona przed wyciekami haseł
+
+**Problem:** Supabase wykrywa wycieki haseł (Have I Been Pwned), ale ta funkcja jest wyłączona.
+
+**Naprawa:** Włączyć w Cloud Dashboard:
+- Users → Authentication Settings → Password Security
+- Włączyć "Leaked Password Protection"
+
+#### 3.3 Rozszerzenia w schemacie `public`
+
+**Problem:** Rozszerzenia PostgreSQL (uuid-ossp, pg_trgm, etc.) są zainstalowane w schemacie `public` co może prowadzić do konfliktów.
+
+**Naprawa:** To wymaga migracji rozszerzeń do dedykowanego schematu `extensions`. Jest to zmiana niskopriorytetowa i może być wykonana później.
+
+#### 3.4 Tabela `search_synonyms` z publicznym dostępem
+
+**Problem:** Synonimy wyszukiwania są dostępne publicznie i każdy dyrektor może je modyfikować.
+
+**Naprawa:**
+```sql
+-- Usuń politykę publicznego odczytu
+DROP POLICY IF EXISTS "Public read access" ON public.search_synonyms;
+
+-- Dodaj politykę dla zalogowanych użytkowników
+CREATE POLICY "Authenticated read access" ON public.search_synonyms
+  FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+-- Ogranicz zapis do superadminów
+DROP POLICY IF EXISTS "Directors can manage synonyms" ON public.search_synonyms;
+CREATE POLICY "Superadmins can manage synonyms" ON public.search_synonyms
   FOR ALL
-  USING (
-    auth.uid() IS NOT NULL AND 
-    tenant_id = get_current_tenant_id()
-  )
-  WITH CHECK (
-    auth.uid() IS NOT NULL AND 
-    tenant_id = get_current_tenant_id()
-  );
+  USING (is_superadmin());
+```
 
--- Trigger updated_at
-CREATE TRIGGER update_liability_exposure_updated_at
-  BEFORE UPDATE ON public.liability_exposure_profiles
-  FOR EACH ROW
-  EXECUTE FUNCTION public.update_updated_at_column();
+#### 3.5 Funkcja `get_current_tenant_id` może zwrócić NULL
+
+**Problem:** Gdy `get_current_tenant_id()` zwraca NULL dla niezalogowanego użytkownika, niektóre funkcje mogą wyciekać dane.
+
+**Naprawa:** Dodać explicit check w funkcjach SECURITY DEFINER:
+```sql
+IF auth.uid() IS NULL THEN
+  RETURN NULL; -- lub RAISE EXCEPTION
+END IF;
 ```
 
 ---
 
-## Struktura typów
+## 4. Podsumowanie Plików do Modyfikacji
 
-```typescript
-// src/components/liability/types.ts
-
-export type Currency = 'PLN' | 'EUR' | 'USD';
-
-export const CURRENCY_LABELS: Record<Currency, string> = {
-  PLN: 'PLN',
-  EUR: 'EUR', 
-  USD: 'USD',
-};
-
-export const CURRENCY_SYMBOLS: Record<Currency, string> = {
-  PLN: 'zł',
-  EUR: '€',
-  USD: '$',
-};
-
-export interface TerritorialSplit {
-  poland_pct: number;
-  eu_oecd_pct: number;
-  usa_canada_pct: number;
-  rest_world_pct: number;
-}
-
-export interface ActivityProfile {
-  manufacturing: boolean;    // High Product Risk
-  services: boolean;         // Prof. Indemnity Risk
-  installation: boolean;     // General Liability Risk
-  trading: boolean;          // Trading / Distribution
-}
-
-export interface SpecialExposures {
-  aviation_auto_rail_offshore: boolean;
-  ecommerce: boolean;
-  b2b_vs_b2c_pct: number; // 0 = B2C, 100 = B2B
-}
-
-export interface LiabilityExposureProfile {
-  id: string;
-  company_id: string;
-  tenant_id: string;
-  
-  // Revenue
-  total_annual_revenue: number;
-  currency: Currency;
-  
-  // Territorial
-  territorial_split: TerritorialSplit;
-  
-  // Activity
-  activity_profile: ActivityProfile;
-  services_advisory_pct?: number;
-  
-  // Special exposures
-  special_exposures: SpecialExposures;
-  
-  // AI recommendation
-  ai_suggested_limit_eur?: number;
-  ai_recommendation_reason?: string;
-  ai_generated_at?: string;
-  
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Risk Alerts based on inputs
-export interface LiabilityRiskAlert {
-  id: string;
-  type: 'critical' | 'warning' | 'info';
-  message: string;
-  trigger: string;
-}
-
-// Donut chart data
-export interface TerritoryChartData {
-  name: string;
-  value: number;
-  color: string;
-  isDanger?: boolean;
-}
-```
+| Plik | Typ | Opis |
+|------|-----|------|
+| **Baza danych** |
+| Migracja SQL | NOWY | Tabela `user_password_policies` |
+| Migracja SQL | NOWY | Naprawa RLS dla `search_synonyms` |
+| **Frontend** |
+| `src/integrations/lovable/index.ts` | NOWY | Wygenerowany przez narzędzie |
+| `src/contexts/AuthContext.tsx` | Modyfikacja | Użycie `lovable.auth.signInWithOAuth()`, sprawdzenie polityki hasła |
+| `src/pages/Signup.tsx` | Modyfikacja | Silniejsza walidacja hasła |
+| `src/components/settings/PasswordChangeForm.tsx` | Modyfikacja | Silniejsza walidacja hasła, aktualizacja `password_changed_at` |
+| `src/hooks/usePasswordPolicy.ts` | NOWY | Hook sprawdzający wygaśnięcie hasła |
+| `src/components/auth/ForcePasswordChange.tsx` | NOWY | Modal wymuszenia zmiany hasła |
+| **Edge Functions** |
+| `supabase/functions/ai-chat-router/index.ts` | Modyfikacja | Dodanie autoryzacji |
 
 ---
 
-## Layout interfejsu
+## 5. Lista Kontrolna przed Publikacją
 
-### Dashboard Style Layout
+Po wdrożeniu zmian wykonaj następujące sprawdzenia:
 
-```text
-+-----------------------------------------------------------------------------------+
-|  DNA EKSPOZYCJI FINANSOWEJ I ODPOWIEDZIALNOŚCI                      [Zapisz]     |
-+-----------------------------------------------------------------------------------+
-|                                                                                    |
-|  ┌─────────────────────────────────────────────────────────────────────────────┐  |
-|  │  1. CAŁKOWITY PRZYCHÓD ROCZNY                                               │  |
-|  │  ┌─────────────────────────────────────────────┐ ┌───────────┐              │  |
-|  │  │ 125 000 000                                 │ │ PLN  ▼   │              │  |
-|  │  └─────────────────────────────────────────────┘ └───────────┘              │  |
-|  │  = 125M PLN (wyświetlone jako "Big Number")                                 │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
-|                                                                                    |
-|  ┌─────────────────────────────────────────────────────────────────────────────┐  |
-|  │  2. PODZIAŁ TERYTORIALNY                                                    │  |
-|  │                                                                              │  |
-|  │  ┌────────────────────┐  ┌──────────────────────────────────────────────┐   │  |
-|  │  │                    │  │  Polska/Kraj     [═══════════════] 70%      │   │  |
-|  │  │    DONUT CHART     │  │                  = 87,5M PLN                │   │  |
-|  │  │                    │  │                                              │   │  |
-|  │  │   [Polska: 70%]    │  │  UE / OECD       [═══════░░░░░░░] 20%      │   │  |
-|  │  │   [UE: 20%]        │  │                  = 25M PLN                  │   │  |
-|  │  │   [USA: 5%] ⚠️     │  │                                              │   │  |
-|  │  │   [Reszta: 5%]     │  │  🔴 USA/Kanada  [██░░░░░░░░░░░░] 5%        │   │  |
-|  │  │                    │  │                  = 6,25M PLN  ← DANGER!     │   │  |
-|  │  │                    │  │                                              │   │  |
-|  │  └────────────────────┘  │  Reszta świata   [░░░░░░░░░░░░░░] 5%       │   │  |
-|  │                          │                  = 6,25M PLN                │   │  |
-|  │                          └──────────────────────────────────────────────┘   │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
-|                                                                                    |
-|  ┌─────────────────────────────────────────────────────────────────────────────┐  |
-|  │  3. PROFIL RYZYKA DZIAŁALNOŚCI                                              │  |
-|  │  "Czy przychody pochodzą z...?"                                             │  |
-|  │                                                                              │  |
-|  │  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐ ┌────────────────┐│  |
-|  │  │ ☑ Produkcja   │ │ ☑ Usługi/      │ │ ☐ Instalacje/  │ │ ☐ Handel/      ││  |
-|  │  │   (Ryzyko     │ │   Doradztwo    │ │   Prace ręczne │ │   Dystrybucja  ││  |
-|  │  │   Produktowe) │ │   (OC Zawod.)  │ │   (OC Ogólna)  │ │                ││  |
-|  │  └────────────────┘ └────────────────┘ └────────────────┘ └────────────────┘│  |
-|  │                                                                              │  |
-|  │  [WARUNKOWE: Jeśli Usługi wybrane]                                          │  |
-|  │  Procent doradztwa vs prace manualne: [════════════░░░] 60%                 │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
-|                                                                                    |
-|  ┌─────────────────────────────────────────────────────────────────────────────┐  |
-|  │  4. SPECJALNE PUNKTY EKSPOZYCJI                                             │  |
-|  │                                                                              │  |
-|  │  ┌─────────────────────────┐  ┌─────────────────────────┐                   │  |
-|  │  │ Lotnictwo / Automotive  │  │ Sprzedaż online         │                   │  |
-|  │  │ / Kolej / Offshore?     │  │ (e-Commerce)?           │                   │  |
-|  │  │                         │  │                         │                   │  |
-|  │  │  [TAK]  [NIE✓]          │  │  [TAK✓]  [NIE]          │                   │  |
-|  │  │                         │  │  ⚠️ Ryzyko Cyber/RODO  │                   │  |
-|  │  └─────────────────────────┘  └─────────────────────────┘                   │  |
-|  │                                                                              │  |
-|  │  B2B vs B2C:                                                                │  |
-|  │  B2C [═══════════════════════════════════░░░░░░░░░░░░░░░░░░░░░] B2B        │  |
-|  │       0%                     50%                              100%          │  |
-|  │       ← Klienci indywidualni          Klienci biznesowi →                  │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
-|                                                                                    |
-|  ┌─────────────────────────────────────────────────────────────────────────────┐  |
-|  │  5. REKOMENDACJA LIMITU AI                                        [🔄 AI]   │  |
-|  │                                                                              │  |
-|  │  ┌─────────────────────────────────────────────────────────────────────┐    │  |
-|  │  │  SUGEROWANA SUMA GWARANCYJNA:                                      │    │  |
-|  │  │                                                                     │    │  |
-|  │  │  💰 5 000 000 EUR                                                   │    │  |
-|  │  │                                                                     │    │  |
-|  │  │  Uzasadnienie:                                                     │    │  |
-|  │  │  • 5% ekspozycji na USA wymaga wyższych limitów                    │    │  |
-|  │  │  • Działalność produkcyjna generuje ryzyko produktowe              │    │  |
-|  │  │  • e-Commerce wymaga dodatkowego ubezpieczenia cyber              │    │  |
-|  │  └─────────────────────────────────────────────────────────────────────┘    │  |
-|  └─────────────────────────────────────────────────────────────────────────────┘  |
-+-----------------------------------------------------------------------------------+
-```
+- [ ] Google OAuth działa poprawnie (zaloguj się przez Google)
+- [ ] Rejestracja wymaga silnego hasła (12+ znaków, wielkie/małe litery, cyfry, znaki specjalne)
+- [ ] Użytkownicy Google nie są proszeni o zmianę hasła
+- [ ] Użytkownicy z hasłem starszym niż 30 dni widzą wymuszenie zmiany
+- [ ] Edge function `ai-chat-router` odrzuca niezautoryzowane żądania
+- [ ] Leaked Password Protection jest włączona w Cloud Dashboard
+- [ ] Tabela `search_synonyms` nie jest publicznie dostępna
 
 ---
 
-## Komponenty wizualne
+## 6. Dodatkowe Rekomendacje (Opcjonalne)
 
-### 1. RevenueInput (Big Number)
-
-Duży input z:
-- Formatowaniem walutowym (separatory tysięcy)
-- Selector waluty (PLN/EUR/USD)
-- Wyświetlanie sformatowanej wartości pod inputem (np. "125M PLN")
-
-```typescript
-interface RevenueInputProps {
-  value: number;
-  currency: Currency;
-  onChange: (value: number) => void;
-  onCurrencyChange: (currency: Currency) => void;
-}
-```
-
-### 2. TerritorialSplit (Donut + Sliders)
-
-Wykres donut z recharts + 4 suwaki procentowe:
-- **Polska/Kraj** - zielony
-- **UE/OECD** - niebieski
-- **USA/Kanada** - CZERWONY (critical) - kolor zmienia się gdy > 0%
-- **Reszta świata** - szary
-
-Walidacja: suma musi = 100% (auto-normalizacja ostatniego suwaka)
-
-```typescript
-interface TerritorialSplitProps {
-  split: TerritorialSplit;
-  totalRevenue: number;
-  currency: Currency;
-  onChange: (split: TerritorialSplit) => void;
-}
-```
-
-### 3. ActivityRiskProfile (Toggle Grid)
-
-Siatka 2x2 toggleów z ikonami i opisami ryzyka:
-- Manufacturing → OC Produktowe
-- Services → OC Zawodowe (warunkowy slider advisory/manual)
-- Installation → OC Ogólna
-- Trading → Trading
-
-```typescript
-interface ActivityRiskProfileProps {
-  profile: ActivityProfile;
-  servicesAdvisoryPct?: number;
-  onChange: (profile: ActivityProfile) => void;
-  onServicesAdvisoryChange: (pct: number) => void;
-}
-```
-
-### 4. SpecialExposureCards (Yes/No Cards)
-
-Karty z przełącznikami Tak/Nie:
-- **Aviation/Auto/Rail/Offshore** → Alert "High Severity"
-- **e-Commerce** → Alert "Cyber Risk & Privacy"
-- **B2B vs B2C** → Slider 0-100%
-
-### 5. LiabilityLimitRecommender (AI Output)
-
-Sekcja z:
-- Przycisk "Wygeneruj rekomendację AI"
-- Wyświetlenie sugerowanego limitu (duża liczba)
-- Uzasadnienie w punktach
-
----
-
-## Logika alertów ryzyka
-
-```typescript
-function generateRiskAlerts(profile: LiabilityExposureProfile): LiabilityRiskAlert[] {
-  const alerts: LiabilityRiskAlert[] = [];
-  
-  // USA/Canada exposure
-  if (profile.territorial_split.usa_canada_pct > 0) {
-    alerts.push({
-      id: 'usa-exposure',
-      type: 'critical',
-      message: `Ekspozycja na USA/Kanadę (${profile.territorial_split.usa_canada_pct}%) wymaga rozszerzonego zakresu OC i wyższych limitów`,
-      trigger: 'territory_usa > 0%'
-    });
-  }
-  
-  // Aviation/Auto/Rail/Offshore
-  if (profile.special_exposures.aviation_auto_rail_offshore) {
-    alerts.push({
-      id: 'high-severity',
-      type: 'critical',
-      message: 'Branże wysokiego ryzyka (lotnictwo/automotive/kolej/offshore) - wymagana specjalistyczna polisa',
-      trigger: 'aviation_auto_rail_offshore = true'
-    });
-  }
-  
-  // e-Commerce
-  if (profile.special_exposures.ecommerce) {
-    alerts.push({
-      id: 'cyber-privacy',
-      type: 'warning',
-      message: 'Sprzedaż online generuje ryzyko Cyber i RODO - rozważ ubezpieczenie Cyber',
-      trigger: 'ecommerce = true'
-    });
-  }
-  
-  // Manufacturing + export
-  if (profile.activity_profile.manufacturing && 
-      (profile.territorial_split.eu_oecd_pct > 20 || profile.territorial_split.usa_canada_pct > 0)) {
-    alerts.push({
-      id: 'product-export',
-      type: 'warning', 
-      message: 'Produkcja z eksportem wymaga OC produktowego z rozszerzonym zakresem terytorialnym',
-      trigger: 'manufacturing + export'
-    });
-  }
-  
-  return alerts;
-}
-```
-
----
-
-## Algorytm rekomendacji limitu (AI lub reguły)
-
-```typescript
-function calculateSuggestedLimit(profile: LiabilityExposureProfile): number {
-  let baseLimit = 1_000_000; // 1M EUR base
-  
-  // Revenue factor
-  const revenueFactor = Math.log10(profile.total_annual_revenue / 1_000_000 + 1);
-  baseLimit *= (1 + revenueFactor * 0.5);
-  
-  // USA/Canada multiplier (critical)
-  if (profile.territorial_split.usa_canada_pct > 0) {
-    const usaMultiplier = 1 + (profile.territorial_split.usa_canada_pct / 100) * 3;
-    baseLimit *= usaMultiplier;
-  }
-  
-  // High-risk industries
-  if (profile.special_exposures.aviation_auto_rail_offshore) {
-    baseLimit *= 2.5;
-  }
-  
-  // Manufacturing
-  if (profile.activity_profile.manufacturing) {
-    baseLimit *= 1.5;
-  }
-  
-  // e-Commerce
-  if (profile.special_exposures.ecommerce) {
-    baseLimit *= 1.2;
-  }
-  
-  // Round to nice numbers
-  return roundToNiceNumber(baseLimit);
-}
-```
-
----
-
-## Hook: useLiabilityDNA
-
-```typescript
-export function useLiabilityDNA(companyId: string) {
-  const queryClient = useQueryClient();
-  const { director, assistant } = useAuth();
-  const tenantId = director?.tenant_id || assistant?.tenant_id;
-
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['liability-dna', companyId],
-    queryFn: async () => { /* fetch from liability_exposure_profiles */ },
-    enabled: !!companyId && !!tenantId,
-  });
-
-  const saveProfile = useMutation({ /* upsert */ });
-  
-  const generateAIRecommendation = useMutation({
-    mutationFn: async () => {
-      // Call edge function or calculate locally
-      const suggestedLimit = calculateSuggestedLimit(profile);
-      const reason = generateRecommendationReason(profile);
-      
-      // Save to DB
-      await supabase
-        .from('liability_exposure_profiles')
-        .update({
-          ai_suggested_limit_eur: suggestedLimit,
-          ai_recommendation_reason: reason,
-          ai_generated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id);
-      
-      return { suggestedLimit, reason };
-    },
-  });
-
-  // Computed: Risk alerts
-  const riskAlerts = useMemo(() => 
-    profile ? generateRiskAlerts(profile) : [],
-    [profile]
-  );
-
-  return {
-    profile,
-    isLoading,
-    saveProfile,
-    generateAIRecommendation,
-    riskAlerts,
-  };
-}
-```
-
----
-
-## Integracja z CompanyFlatTabs
-
-Dodanie zakładki "DNA OC" po "Ekspozycja":
-
-```typescript
-// Import
-import { Scale } from 'lucide-react';
-import { LiabilityDNAPanel } from '@/components/liability';
-
-// W tablicy tabs:
-{ id: 'liability-dna', label: 'DNA OC', icon: Scale, always: true },
-
-// TabsContent:
-<TabsContent value="liability-dna" className="mt-0">
-  <LiabilityDNAPanel companyId={company.id} />
-</TabsContent>
-```
-
----
-
-## Paleta kolorów
-
-```typescript
-const TERRITORY_COLORS = {
-  poland: '#22C55E',      // emerald-500 (safe)
-  eu_oecd: '#3B82F6',     // blue-500 (normal)
-  usa_canada: '#EF4444',  // red-500 (DANGER)
-  rest_world: '#6B7280',  // gray-500 (neutral)
-};
-
-// USA slider turns red when > 0%
-const getUSASliderStyle = (pct: number) => 
-  pct > 0 
-    ? 'bg-red-500 border-red-600' 
-    : 'bg-gray-200 border-gray-300';
-```
-
----
-
-## Podsumowanie zmian w plikach
-
-| Plik | Typ zmiany | Opis |
-|------|------------|------|
-| `src/components/liability/types.ts` | **NOWY** | Typy dla ekspozycji finansowej |
-| `src/components/liability/LiabilityDNAPanel.tsx` | **NOWY** | Główny kontener dashboard |
-| `src/components/liability/RevenueInput.tsx` | **NOWY** | Big Number input + currency |
-| `src/components/liability/TerritorialSplit.tsx` | **NOWY** | Donut chart + sliders |
-| `src/components/liability/TerritorialSlider.tsx` | **NOWY** | Suwak procentowy z walidacją |
-| `src/components/liability/ActivityRiskProfile.tsx` | **NOWY** | Siatka toggleów działalności |
-| `src/components/liability/SpecialExposureCards.tsx` | **NOWY** | Karty Yes/No ekspozycji |
-| `src/components/liability/LiabilityLimitRecommender.tsx` | **NOWY** | Sekcja rekomendacji AI |
-| `src/components/liability/index.ts` | **NOWY** | Eksporty modułu |
-| `src/hooks/useLiabilityDNA.ts` | **NOWY** | Hook CRUD + alertów |
-| `src/components/company/CompanyFlatTabs.tsx` | Modyfikacja | Zakładka "DNA OC" |
-
-### Migracja SQL
-
-Utworzenie tabeli `liability_exposure_profiles` z RLS.
-
----
-
-## Przepływ użytkownika
-
-1. Użytkownik wchodzi do widoku firmy -> zakładka **"DNA OC"**
-2. Wprowadza całkowity przychód roczny w "Big Number" input
-3. Ustawia podział terytorialny suwakami (wykres donut aktualizuje się na żywo)
-4. System automatycznie podświetla suwak USA/Kanada na czerwono gdy > 0%
-5. Wybiera typy działalności z siatki toggleów
-6. Odpowiada na pytania specjalnych ekspozycji (Yes/No)
-7. Klika "Wygeneruj rekomendację AI"
-8. System wyświetla sugerowany limit OC z uzasadnieniem
-9. Alerty ryzyka pojawiają się dynamicznie na podstawie wyborów
-
----
-
-## Estetyka
-
-- Styl finansowego dashboardu z dużymi liczbami
-- Wykresy donut dla wizualizacji podziałów procentowych
-- Wysoki kontrast dla pola USA/Kanada (czerwony = niebezpieczeństwo)
-- Stonowane kolory zgodne z preferencjami użytkownika
-- Progress bary i suwaki dla intuicyjnej interakcji
-- Karty z cieniami dla sekcji specjalnych ekspozycji
-
+1. **Włącz MFA jako obowiązkowe** dla kont administratorów
+2. **Rate limiting** na endpoint logowania (już częściowo obecny)
+3. **Logowanie audytu** zmian haseł i logowań
+4. **Automatyczne wylogowanie** po 30 minutach nieaktywności
+5. **CAPTCHA** przy rejestracji (zapobieganie botom)
