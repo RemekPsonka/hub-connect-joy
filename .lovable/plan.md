@@ -1,26 +1,16 @@
 
 
-## Plan: Moduł Wizualizacji Struktury Korporacyjnej
+## Plan: Moduł Harmonogramu Strategii Odnowień (Renewal Strategy Timeline)
 
 ### Cel
-Stworzenie interaktywnego modułu wizualizacji struktury holdingowej opartego na **React Flow** (@xyflow/react), służącego brokerom ubezpieczeniowym do audytu pokrycia ubezpieczeniowego wszystkich podmiotów w grupie kapitałowej.
+Stworzenie modułu wizualizacji typu Gantt Chart do zarządzania złożonym harmonogramem odnawiania korporacyjnych polis ubezpieczeniowych, nie tylko datami wygaśnięcia, ale całym cyklem życia polisy.
 
 ---
 
 ## Architektura
 
-### Nowa zależność
-
-```json
-"@xyflow/react": "^12.3.0",
-"@dagrejs/dagre": "^1.1.4"
-```
-
-React Flow został wybrany zamiast rozszerzania istniejącego Sigma.js, ponieważ:
-- Lepsze wsparcie dla niestandardowych węzłów (karty z danymi)
-- Wbudowane funkcje drag & drop
-- Łatwiejsza integracja z panelem właściwości
-- Algorytm dagre dla hierarchicznego układu (spółka matka → zależne)
+### Biblioteki
+Moduł wykorzysta istniejącą bibliotekę **recharts** (już zainstalowaną) do stworzenia niestandardowego wykresu Gantt. Nie wymaga dodatkowych zależności.
 
 ---
 
@@ -28,283 +18,364 @@ React Flow został wybrany zamiast rozszerzania istniejącego Sigma.js, poniewa�
 
 | Plik | Cel |
 |------|-----|
-| `src/components/structure/StructureVisualization.tsx` | Główny komponent z pełnoekranowym canvas |
-| `src/components/structure/StructureCanvas.tsx` | React Flow container z logiką grafu |
-| `src/components/structure/nodes/ParentCompanyNode.tsx` | Węzeł spółki matki (Crown icon) |
-| `src/components/structure/nodes/SubsidiaryNode.tsx` | Węzeł spółki zależnej |
-| `src/components/structure/nodes/AssetLocationNode.tsx` | Węzeł aktywa/lokalizacji |
-| `src/components/structure/PropertiesSidebar.tsx` | Panel boczny z właściwościami węzła |
-| `src/components/structure/StructureToolbar.tsx` | Pasek narzędzi (Auto-Layout, Coverage Overlay) |
-| `src/components/structure/hooks/useStructureLayout.ts` | Hook do automatycznego układu dagre |
-| `src/components/structure/types.ts` | Typy dla węzłów i krawędzi |
+| `src/components/renewal/types.ts` | Typy dla polis i harmonogramu |
+| `src/components/renewal/RenewalTimeline.tsx` | Główny komponent wizualizacji |
+| `src/components/renewal/TimelineRow.tsx` | Pojedynczy wiersz (track) polisy |
+| `src/components/renewal/PolicyBar.tsx` | Pasek reprezentujący aktywne pokrycie |
+| `src/components/renewal/TimelineHeader.tsx` | Nagłówek z osią czasu (miesiące/kwartały) |
+| `src/components/renewal/TimelineTooltip.tsx` | Tooltip z checklistą i szczegółami |
+| `src/components/renewal/TimelineToolbar.tsx` | Pasek narzędzi (filtry, Critical Path, tryb ciemny) |
+| `src/components/renewal/index.ts` | Eksporty modułu |
+| `src/hooks/useInsurancePolicies.ts` | Hook do pobierania i zarządzania polisami |
 
 ### Pliki do modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/company/CompanyFlatTabs.tsx` | Dodanie zakładki "Struktura" z ikoną Network |
-| `package.json` | Dodanie zależności @xyflow/react i @dagrejs/dagre |
+| `src/components/company/CompanyFlatTabs.tsx` | Dodanie zakładki "Harmonogram" z ikoną CalendarClock |
+
+---
+
+## Model danych
+
+### Nowa tabela: `insurance_policies`
+
+```sql
+CREATE TABLE insurance_policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  
+  -- Podstawowe dane polisy
+  policy_type TEXT NOT NULL CHECK (policy_type IN ('property', 'fleet', 'do', 'cyber', 'liability', 'life', 'health', 'other')),
+  policy_number TEXT,
+  policy_name TEXT NOT NULL,
+  insurer_name TEXT,
+  broker_name TEXT,
+  
+  -- Daty
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  
+  -- Status checklisty odnowienia
+  renewal_checklist JSONB DEFAULT '{
+    "data_update_requested": false,
+    "market_tender_done": false,
+    "negotiation_completed": false,
+    "board_approval_obtained": false
+  }'::jsonb,
+  
+  -- Dodatkowe informacje
+  sum_insured NUMERIC,
+  premium NUMERIC,
+  notes TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indeksy
+CREATE INDEX idx_insurance_policies_company ON insurance_policies(company_id);
+CREATE INDEX idx_insurance_policies_end_date ON insurance_policies(end_date);
+
+-- RLS
+ALTER TABLE insurance_policies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Tenant access for insurance_policies"
+  ON insurance_policies
+  FOR ALL
+  USING (tenant_id = (SELECT tenant_id FROM directors WHERE user_id = auth.uid()));
+```
+
+---
+
+## Struktura typów
+
+```typescript
+// src/components/renewal/types.ts
+
+export type PolicyType = 'property' | 'fleet' | 'do' | 'cyber' | 'liability' | 'life' | 'health' | 'other';
+
+export const POLICY_TYPE_LABELS: Record<PolicyType, string> = {
+  property: 'Majątek',
+  fleet: 'Flota',
+  do: 'D&O',
+  cyber: 'Cyber',
+  liability: 'OC',
+  life: 'Życie',
+  health: 'Zdrowie',
+  other: 'Inne',
+};
+
+export const POLICY_TYPE_COLORS: Record<PolicyType, string> = {
+  property: '#3B82F6',   // blue
+  fleet: '#10B981',      // emerald
+  do: '#8B5CF6',         // violet
+  cyber: '#F59E0B',      // amber
+  liability: '#EF4444',  // red
+  life: '#06B6D4',       // cyan
+  health: '#EC4899',     // pink
+  other: '#6B7280',      // gray
+};
+
+export interface RenewalChecklist {
+  data_update_requested: boolean;
+  market_tender_done: boolean;
+  negotiation_completed: boolean;
+  board_approval_obtained: boolean;
+}
+
+export interface InsurancePolicy {
+  id: string;
+  company_id: string;
+  tenant_id: string;
+  policy_type: PolicyType;
+  policy_number?: string;
+  policy_name: string;
+  insurer_name?: string;
+  broker_name?: string;
+  start_date: string;
+  end_date: string;
+  renewal_checklist: RenewalChecklist;
+  sum_insured?: number;
+  premium?: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineConfig {
+  startDate: Date;
+  endDate: Date;
+  dangerZoneDays: number;       // 30 dni
+  actionPhaseDays: number;      // 90 dni
+  showCriticalPath: boolean;
+  darkMode: boolean;
+}
+```
 
 ---
 
 ## Layout interfejsu
 
-### Układ główny (Pełnoekranowy)
+### Układ główny
 
 ```text
 +-----------------------------------------------------------------------------------+
 |  [Toolbar]                                                                         |
-|  +Auto-Layout+  +Pokrycie polisą: [Toggle]+  +Zoom In/Out+  +Eksportuj PNG+       |
+|  +Dodaj polisę+  | Widok: [Kwartały ▼] | [✓] Critical Path | [☾] Tryb ciemny     |
++-----------------------------------------------------------------------------------+
+|  LEGENDA:  [■ Aktywna polisa]  [■ Faza działań (90 dni)]  [■ Strefa zagrożenia]  |
 +-----------------------------------------------------------------------------------+
 |                                                                                    |
-|                        CANVAS (Drag & Drop)                                        |
-|                                                                                    |
-|                           +--------------------+                                   |
-|                           |  👑 SPÓŁKA MATKA   |                                   |
-|                           |  Holding XYZ S.A.  |                                   |
-|                           |  ● Ubezpieczona    |                                   |
-|                           +--------------------+                                   |
-|                                    |                                               |
-|                  +----------------+----------------+                               |
-|                  |                                 |                               |
-|       +-------------------+             +-------------------+                      |
-|       |  Spółka Zależna A |             |  Spółka Zależna B |                      |
-|       |  Produkcja Sp.z.o.|             |  Logistyka Sp.z.o.|                      |
-|       |  ● Ubezpieczona   |             |  ⚠ LUKA           |                      |
-|       +-------------------+             +-------------------+                      |
-|                  |                               |                                 |
-|       +-------------------+            +-------------------+                       |
-|       |  🏭 Fabryka A     |            |  🏢 Magazyn B     |                       |
-|       |  ul. Przemysłowa  |            |  ul. Logistyczna  |                       |
-|       |  ● Ubezpieczona   |            |  ⚠ NIEZNANE       |                       |
-|       +-------------------+            +-------------------+                       |
-|                                                                                    |
-|                                                            +---------------------+ |
-|                                                            |  WŁAŚCIWOŚCI        | |
-|                                                            |                     | |
-|                                                            |  Nazwa: Spółka A    | |
-|                                                            |  NIP: 123-456-78-90 | |
-|                                                            |  Przychód: 50 mln   | |
-|                                                            |  Broker: ABC Broker | |
-|                                                            |                     | |
-|                                                            |  Status: ● LUKA     | |
-|                                                            +---------------------+ |
+|  POLISY     |  STY  |  LUT  |  MAR  |  KWI  |  MAJ  |  CZE  |  LIP  |  SIE  |    |
+|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
+|  Majątek    |  [██████████████████POLISA████████████████]      |                  |
+|             |                                    ↑ Action Phase ↑ Danger Zone    |
+|             |                               [======ZIELONY======][CZERW]          |
+|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
+|  Flota      |       [███████████████████POLISA██████████████████████]             |
+|             |                                                [====][XXX]          |
+|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
+|  D&O        |  [████POLISA████]  ← PRZETERMINOWANA (Critical Path podświetlone)   |
+|             |                                                                      |
+|-------------|-------|-------|-------|-------|-------|-------|-------|-------|    |
+|  Cyber      |              [██████████████POLISA████████████████]                 |
+|             |                                          [======][XXX]              |
 +-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## Typy węzłów
+## Komponenty wizualne
 
-### 1. Węzeł Spółki Matki (ParentCompanyNode)
-
-```typescript
-interface ParentCompanyNodeData {
-  label: string;
-  nip?: string;
-  krs?: string;
-  revenue?: number;
-  insuranceStatus: 'insured' | 'gap' | 'unknown' | 'pending';
-  broker?: string;
-}
-```
-
-- **Stylizacja**: Większy rozmiar, tło navy/indigo, ikona Crown (👑)
-- **Pozycja**: Zawsze na górze hierarchii
-
-### 2. Węzeł Spółki Zależnej (SubsidiaryNode)
-
-```typescript
-interface SubsidiaryNodeData {
-  label: string;
-  role: 'subsidiary' | 'affiliate' | 'branch';
-  ownershipPercent?: number;
-  nip?: string;
-  krs?: string;
-  revenue?: number;
-  insuranceStatus: 'insured' | 'gap' | 'unknown' | 'pending';
-  broker?: string;
-  linkedCompanyId?: string; // jeśli powiązana z firmą w bazie
-}
-```
-
-- **Stylizacja**: Średni rozmiar, ramka kolorowa wg statusu
-- **Ikona**: GitBranch dla subsidiary, Link2 dla affiliate
-
-### 3. Węzeł Aktywa/Lokalizacji (AssetLocationNode)
-
-```typescript
-interface AssetLocationNodeData {
-  label: string;
-  type: 'factory' | 'warehouse' | 'office' | 'land' | 'other';
-  address?: string;
-  insuranceStatus: 'insured' | 'gap' | 'unknown' | 'pending';
-  sumInsured?: number;
-}
-```
-
-- **Stylizacja**: Mniejszy rozmiar, ikony wg typu (Factory, Warehouse, Building)
-- **Pozycja**: Pod powiązaną spółką
-
----
-
-## Wskaźniki statusu ubezpieczenia (Sygnalizacja świetlna)
-
-```typescript
-type InsuranceStatus = 'insured' | 'gap' | 'unknown' | 'pending';
-
-const STATUS_COLORS = {
-  insured: '#3B82F6',   // Niebieski - W pełni ubezpieczone
-  gap: '#EF4444',       // Czerwony - Nieubezpieczone / LUKA
-  pending: '#F59E0B',   // Żółty - Oczekuje na pokrycie
-  unknown: '#6B7280',   // Szary - Nieznany status
-};
-
-const STATUS_LABELS = {
-  insured: 'Ubezpieczone',
-  gap: 'LUKA',
-  pending: 'Oczekuje',
-  unknown: 'Nieznane',
-};
-```
-
----
-
-## Panel właściwości (PropertiesSidebar)
-
-Otwiera się po kliknięciu węzła:
+### 1. Pasek Polisy (PolicyBar)
 
 ```text
-+---------------------------+
-|  WŁAŚCIWOŚCI PODMIOTU     |
-+---------------------------+
-|  Nazwa:                   |
-|  [Spółka Zależna A]       |
-|                           |
-|  NIP: 123-456-78-90       |
-|  KRS: 0000123456          |
-|                           |
-|  Przychody:               |
-|  50 000 000 PLN (2024)    |
-|                           |
-|  Udział w grupie:         |
-|  100%                     |
-|                           |
-|  Aktualny broker:         |
-|  ABC Insurance Broker     |
-|                           |
-+---------------------------+
-|  STATUS UBEZPIECZENIA     |
-+---------------------------+
-|  [●] Ubezpieczone         |
-|  [ ] LUKA                 |
-|  [ ] Oczekuje             |
-|  [ ] Nieznane             |
-+---------------------------+
-|  [Przejdź do firmy]       |
-|  [Edytuj dane]            |
-+---------------------------+
++--------------------------------------------------------------------------------+
+|  [████████████████████ AKTYWNA POLISA (niebieski) ████████████████████████████]|
+|                                        |← 90 dni →|← 30 →|                      |
+|                                        [ZIELONY    ][CZERW ]                    |
+|                                        Action Phase Danger                      |
++--------------------------------------------------------------------------------+
+```
+
+- **Polisa aktywna** (niebieski/kolor typu): Główny pasek reprezentujący okres pokrycia
+- **Faza działań** (zielony nakładka): 90 dni przed wygaśnięciem - "Okno Przetargu i Negocjacji"
+- **Strefa zagrożenia** (czerwony gradient): Ostatnie 30 dni przed wygaśnięciem
+
+### 2. Interaktywny Tooltip
+
+Po najechaniu na "Fazę działań":
+
+```text
++--------------------------------+
+|  FAZA DZIAŁAŃ (90 DNI)         |
+|  Okno Przetargu i Negocjacji   |
++--------------------------------+
+|  Checklist:                    |
+|  [✓] Aktualizacja danych       |
+|  [ ] Przetarg rynkowy          |
+|  [ ] Negocjacje                |
+|  [✓] Zgoda Zarządu             |
++--------------------------------+
+|  Pozostało: 45 dni             |
+|  Data wygaśnięcia: 2026-04-15  |
++--------------------------------+
+```
+
+### 3. Widok "Critical Path"
+
+Toggle który podświetla polisy wymagające natychmiastowej uwagi:
+- Polisy w "Strefie zagrożenia" (< 30 dni) bez kompletnej checklisty
+- Polisy przeterminowane (end_date < today)
+- Polisy w "Fazie działań" bez rozpoczętych kroków
+
+---
+
+## Paleta kolorów
+
+### Tryb jasny
+```typescript
+const LIGHT_THEME = {
+  policyBar: '#3B82F6',           // niebieski
+  actionPhase: '#22C55E',         // zielony
+  dangerZone: 'linear-gradient(to right, #FEE2E2, #EF4444)', // gradient czerwony
+  criticalHighlight: '#FCD34D',   // żółty (highlight)
+  gridLine: '#E5E7EB',
+  text: '#374151',
+  background: '#FFFFFF',
+};
+```
+
+### Tryb ciemny
+```typescript
+const DARK_THEME = {
+  policyBar: '#60A5FA',           // jasnoniebieski
+  actionPhase: '#4ADE80',         // jasnozielony
+  dangerZone: 'linear-gradient(to right, #7F1D1D, #DC2626)',
+  criticalHighlight: '#FBBF24',
+  gridLine: '#374151',
+  text: '#F3F4F6',
+  background: '#111827',
+};
 ```
 
 ---
 
-## Funkcje kluczowe
+## Funkcjonalności
 
-### 1. Auto-Layout (Przycisk)
+### 1. Dodawanie/Edycja polisy
 
-Używa algorytmu **dagre** do organizacji węzłów w czytelne drzewo hierarchiczne:
+Modal z formularzem:
+- Typ polisy (select)
+- Nazwa polisy
+- Numer polisy (opcjonalnie)
+- Ubezpieczyciel
+- Broker
+- Data rozpoczęcia / zakończenia
+- Suma ubezpieczenia
+- Składka
+- Notatki
+
+### 2. Zarządzanie checklistą
+
+Kliknięcie w "Fazę działań" otwiera edytowalną checklistę:
+- Checkbox: Aktualizacja danych klienta
+- Checkbox: Przetarg rynkowy
+- Checkbox: Negocjacje zakończone
+- Checkbox: Zgoda Zarządu uzyskana
+
+### 3. Widoki czasowe
+
+Select do przełączania widoku osi X:
+- **Miesiące**: Widok szczegółowy (domyślny)
+- **Kwartały**: Widok strategiczny
+- **Półrocza**: Widok planowania rocznego
+
+### 4. Eksport
+
+- **PDF**: Wizualizacja harmonogramu do prezentacji
+- **Raport**: Lista polis z datami i statusami
+
+---
+
+## Hook: useInsurancePolicies
 
 ```typescript
-import dagre from '@dagrejs/dagre';
+export function useInsurancePolicies(companyId: string) {
+  const queryClient = useQueryClient();
+  const { director } = useAuth();
+  const tenantId = director?.tenant_id;
 
-function getLayoutedElements(nodes, edges, direction = 'TB') {
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 100 });
-  
-  nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { 
-      width: node.type === 'parent' ? 220 : 180, 
-      height: node.type === 'asset' ? 80 : 100 
+  const { data: policies, isLoading } = useQuery({
+    queryKey: ['insurance-policies', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('insurance_policies')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('end_date', { ascending: true });
+      
+      if (error) throw error;
+      return data as InsurancePolicy[];
+    },
+    enabled: !!companyId && !!tenantId,
+  });
+
+  const createPolicy = useMutation({ /* ... */ });
+  const updatePolicy = useMutation({ /* ... */ });
+  const updateChecklist = useMutation({ /* ... */ });
+  const deletePolicy = useMutation({ /* ... */ });
+
+  // Computed properties
+  const criticalPolicies = useMemo(() => {
+    if (!policies) return [];
+    const today = new Date();
+    return policies.filter(p => {
+      const endDate = new Date(p.end_date);
+      const daysLeft = differenceInDays(endDate, today);
+      const checklist = p.renewal_checklist;
+      
+      // Critical if:
+      // 1. Expired
+      // 2. In danger zone without complete checklist
+      // 3. In action phase with no started items
+      return daysLeft < 0 || 
+        (daysLeft <= 30 && !isChecklistComplete(checklist)) ||
+        (daysLeft <= 90 && !hasChecklistStarted(checklist));
     });
-  });
-  
-  edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
-  });
-  
-  dagre.layout(dagreGraph);
-  
-  return nodes.map((node) => {
-    const position = dagreGraph.node(node.id);
-    return { ...node, position: { x: position.x, y: position.y } };
-  });
-}
-```
+  }, [policies]);
 
-### 2. Coverage Overlay (Nakładka polisowa)
-
-Toggle który wizualnie grupuje węzły objęte tą samą polisą zbiorczą:
-
-```typescript
-interface PolicyGroup {
-  policyNumber: string;
-  policyName: string;
-  nodeIds: string[];
-  color: string;
-}
-```
-
-Po włączeniu rysuje półprzezroczyste okręgi/prostokąty wokół węzłów z tej samej polisy.
-
-### 3. Eksport PNG
-
-Umożliwia pobranie wizualizacji jako obrazu PNG do prezentacji/raportów.
-
----
-
-## Integracja z danymi
-
-### Źródła danych
-
-1. **capital_group_members** - Relacje spółka matka → zależne
-2. **insurance_risk_assessments** - Status ubezpieczenia firmy
-3. **companies** - Dane podstawowe firm (NIP, KRS, przychody)
-
-### Hook do pobierania danych struktury
-
-```typescript
-function useStructureData(companyId: string) {
-  // Pobierz członków grupy kapitałowej
-  const { data: members } = useCapitalGroupMembers(companyId);
-  
-  // Pobierz status ubezpieczeniowy dla każdego członka
-  // ...
-  
-  // Konwertuj na węzły i krawędzie React Flow
-  const nodes = convertToNodes(members, insuranceStatuses);
-  const edges = convertToEdges(members);
-  
-  return { nodes, edges };
+  return {
+    policies,
+    isLoading,
+    createPolicy,
+    updatePolicy,
+    updateChecklist,
+    deletePolicy,
+    criticalPolicies,
+  };
 }
 ```
 
 ---
 
-## Schemat bazy danych
+## Integracja z istniejącymi komponentami
 
-Opcjonalne rozszerzenie tabeli `capital_group_members` o pole statusu ubezpieczenia:
+### Modyfikacja CompanyFlatTabs
 
-```sql
-ALTER TABLE capital_group_members
-ADD COLUMN insurance_status TEXT DEFAULT 'unknown' 
-  CHECK (insurance_status IN ('insured', 'gap', 'pending', 'unknown'));
+Dodanie zakładki "Harmonogram" między "Ubezpieczenia" a "Profil AI":
 
-ALTER TABLE capital_group_members
-ADD COLUMN broker_name TEXT;
+```typescript
+// W tablicy tabs dodaj:
+{ id: 'timeline', label: 'Harmonogram', icon: CalendarClock, always: true },
+```
 
-ALTER TABLE capital_group_members
-ADD COLUMN master_policy_id TEXT;
+```tsx
+<TabsContent value="timeline" className="mt-0">
+  <RenewalTimeline companyId={company.id} />
+</TabsContent>
 ```
 
 ---
@@ -313,44 +384,41 @@ ADD COLUMN master_policy_id TEXT;
 
 | Plik | Typ zmiany | Opis |
 |------|------------|------|
-| `package.json` | Modyfikacja | Dodanie @xyflow/react, @dagrejs/dagre |
-| `src/components/structure/types.ts` | **NOWY** | Typy dla węzłów i krawędzi |
-| `src/components/structure/StructureVisualization.tsx` | **NOWY** | Główny komponent pełnoekranowy |
-| `src/components/structure/StructureCanvas.tsx` | **NOWY** | React Flow container |
-| `src/components/structure/nodes/ParentCompanyNode.tsx` | **NOWY** | Custom node - spółka matka |
-| `src/components/structure/nodes/SubsidiaryNode.tsx` | **NOWY** | Custom node - spółka zależna |
-| `src/components/structure/nodes/AssetLocationNode.tsx` | **NOWY** | Custom node - lokalizacja |
-| `src/components/structure/PropertiesSidebar.tsx` | **NOWY** | Panel właściwości węzła |
-| `src/components/structure/StructureToolbar.tsx` | **NOWY** | Pasek narzędzi |
-| `src/components/structure/hooks/useStructureLayout.ts` | **NOWY** | Hook auto-layout dagre |
-| `src/components/structure/hooks/useStructureData.ts` | **NOWY** | Hook pobierania danych |
-| `src/components/company/CompanyFlatTabs.tsx` | Modyfikacja | Dodanie zakładki "Struktura" |
+| `src/components/renewal/types.ts` | **NOWY** | Typy dla polis i harmonogramu |
+| `src/components/renewal/RenewalTimeline.tsx` | **NOWY** | Główny komponent Gantt chart |
+| `src/components/renewal/TimelineRow.tsx` | **NOWY** | Wiersz dla typu polisy |
+| `src/components/renewal/PolicyBar.tsx` | **NOWY** | Pasek wizualizacji polisy |
+| `src/components/renewal/TimelineHeader.tsx` | **NOWY** | Nagłówek z osią czasu |
+| `src/components/renewal/TimelineTooltip.tsx` | **NOWY** | Tooltip z checklistą |
+| `src/components/renewal/TimelineToolbar.tsx` | **NOWY** | Pasek narzędzi |
+| `src/components/renewal/AddPolicyModal.tsx` | **NOWY** | Modal dodawania polisy |
+| `src/components/renewal/index.ts` | **NOWY** | Eksporty modułu |
+| `src/hooks/useInsurancePolicies.ts` | **NOWY** | Hook zarządzania polisami |
+| `src/components/company/CompanyFlatTabs.tsx` | Modyfikacja | Zakładka "Harmonogram" |
+
+### Migracja SQL
+
+Utworzenie tabeli `insurance_policies` z RLS.
 
 ---
 
 ## Przepływ użytkownika
 
-1. Użytkownik wchodzi do widoku firmy → zakładka **"Struktura"**
-2. Widzi interaktywny canvas z węzłami (spółka główna + zależne)
-3. Węzły są kolorowane wg statusu ubezpieczenia (niebieski/czerwony/żółty/szary)
-4. Może przeciągać węzły lub kliknąć **"Auto-Layout"** dla czytelnego układu
-5. Kliknięcie węzła otwiera **panel właściwości** z danymi podmiotu
-6. Może włączyć **"Pokrycie polisą"** żeby zobaczyć grupowanie wg polis zbiorczych
-7. Może wyeksportować wizualizację do PNG dla raportu
+1. Użytkownik wchodzi do widoku firmy → zakładka **"Harmonogram"**
+2. Widzi wizualizację Gantt z aktualnymi polisami firmy
+3. Może dodać nową polisę przyciskiem "Dodaj polisę"
+4. Najeżdżając na "Fazę działań" widzi tooltip z checklistą
+5. Kliknięcie checkboxa aktualizuje status (zapis do bazy)
+6. Toggle "Critical Path" podświetla polisy wymagające uwagi
+7. Przełącznik trybu ciemnego dla wysokiego kontrastu
 
 ---
 
-## Paleta kolorów
+## Estetyka
 
-- **Spółka matka**: `bg-indigo-100 border-indigo-500` + Crown icon (amber)
-- **Spółka zależna**: `bg-blue-50 border-blue-400`
-- **Oddział**: `bg-green-50 border-green-400`
-- **Stowarzyszona**: `bg-slate-50 border-slate-400`
-- **Lokalizacja**: `bg-amber-50 border-amber-400`
-
-**Statusy:**
-- Ubezpieczone: `#3B82F6` (niebieski)
-- LUKA: `#EF4444` (czerwony) + animowany puls
-- Oczekuje: `#F59E0B` (żółty)
-- Nieznane: `#6B7280` (szary)
+- Czysta, profesjonalna estetyka dashboardu
+- Minimalistyczny UI zgodny z preferencjami użytkownika
+- Przyciemnione, stonowane kolory (bez intensywnego niebieskiego jako głównego)
+- Wysoki kontrast w trybie ciemnym dla lepszej czytelności
+- Animowane przejścia dla lepszego UX
 
