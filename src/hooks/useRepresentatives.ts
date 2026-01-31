@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,7 +20,16 @@ export interface CreateRepresentativeInput {
   full_name: string;
   email: string;
   role_type: 'sales_rep' | 'ambassador';
-  password: string;
+}
+
+export interface CreateRepresentativeResult {
+  representative: {
+    id: string;
+    email: string;
+    fullName: string;
+    roleType: string;
+  };
+  tempPassword: string;
 }
 
 export interface UpdateRepresentativeInput {
@@ -34,7 +42,6 @@ export interface UpdateRepresentativeInput {
 export function useRepresentatives() {
   const { director } = useAuth();
   const queryClient = useQueryClient();
-  const [isCreating, setIsCreating] = useState(false);
 
   const { data: representatives, isLoading, error } = useQuery({
     queryKey: ['sales-representatives', director?.tenant_id],
@@ -51,54 +58,33 @@ export function useRepresentatives() {
   });
 
   const createRepresentative = useMutation({
-    mutationFn: async (input: CreateRepresentativeInput) => {
+    mutationFn: async (input: CreateRepresentativeInput): Promise<CreateRepresentativeResult> => {
       if (!director?.tenant_id || !director?.id) {
         throw new Error('Brak danych dyrektora');
       }
 
-      setIsCreating(true);
+      const { data, error } = await supabase.functions.invoke('create-representative', {
+        body: {
+          email: input.email,
+          fullName: input.full_name,
+          roleType: input.role_type,
+          tenantId: director.tenant_id,
+          parentDirectorId: director.id,
+        }
+      });
 
-      try {
-        // 1. Create user account via edge function
-        const { data: userData, error: userError } = await supabase.functions.invoke('create-tenant-user', {
-          body: {
-            email: input.email,
-            password: input.password,
-            full_name: input.full_name,
-            role: 'sales_rep',
-            tenant_id: director.tenant_id,
-          }
-        });
-
-        if (userError) throw userError;
-
-        // 2. Create sales_representatives record
-        const { data, error } = await supabase
-          .from('sales_representatives')
-          .insert({
-            user_id: userData.user_id,
-            parent_director_id: director.id,
-            tenant_id: director.tenant_id,
-            full_name: input.full_name,
-            email: input.email,
-            role_type: input.role_type,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
-      } finally {
-        setIsCreating(false);
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      return data as CreateRepresentativeResult;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-representatives'] });
       toast.success('Przedstawiciel został dodany');
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       console.error('Error creating representative:', error);
-      toast.error('Nie udało się dodać przedstawiciela');
+      toast.error(`Nie udało się dodać przedstawiciela: ${error.message}`);
     },
   });
 
@@ -148,7 +134,7 @@ export function useRepresentatives() {
     representatives,
     isLoading,
     error,
-    isCreating,
+    isCreating: createRepresentative.isPending,
     createRepresentative,
     updateRepresentative,
     deleteRepresentative,
