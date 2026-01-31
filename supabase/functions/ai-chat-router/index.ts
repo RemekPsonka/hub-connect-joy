@@ -1,8 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface ClassifyRequest {
@@ -21,6 +23,17 @@ serve(async (req) => {
   }
 
   try {
+    // Create Supabase client for auth verification
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify authentication
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+
     const { query } = await req.json() as ClassifyRequest;
 
     if (!query || typeof query !== 'string') {

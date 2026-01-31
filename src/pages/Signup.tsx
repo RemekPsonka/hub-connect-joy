@@ -9,13 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Network } from 'lucide-react';
+import { Loader2, Network, Eye, EyeOff } from 'lucide-react';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
+import { strongPasswordSchema, PASSWORD_REQUIREMENTS } from '@/utils/passwordValidation';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Imię i nazwisko musi mieć co najmniej 2 znaki').max(100, 'Imię i nazwisko jest za długie'),
   email: z.string().email('Nieprawidłowy adres email').max(255, 'Email jest za długi'),
-  password: z.string().min(8, 'Hasło musi mieć co najmniej 8 znaków'),
+  password: strongPasswordSchema,
 });
 
 type SignupFormData = z.infer<typeof signupSchema>;
@@ -25,6 +26,8 @@ export default function Signup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordValue, setPasswordValue] = useState('');
 
   const {
     register,
@@ -46,6 +49,15 @@ export default function Signup() {
     return <Navigate to="/" replace />;
   }
 
+  const checkRequirements = (password: string) => {
+    return PASSWORD_REQUIREMENTS.map((req) => ({
+      ...req,
+      met: req.regex.test(password),
+    }));
+  };
+
+  const requirements = checkRequirements(passwordValue);
+
   const onSubmit = async (data: SignupFormData) => {
     setIsSubmitting(true);
     setError(null);
@@ -56,7 +68,7 @@ export default function Signup() {
       if (error.message.includes('User already registered')) {
         setError('Użytkownik z tym adresem email już istnieje');
       } else if (error.message.includes('Password')) {
-        setError('Hasło jest za słabe. Użyj silniejszego hasła.');
+        setError('Hasło jest za słabe. Sprawdź wymagania poniżej.');
       } else {
         setError('Wystąpił błąd podczas rejestracji. Spróbuj ponownie.');
       }
@@ -124,16 +136,57 @@ export default function Signup() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Hasło</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Minimum 8 znaków"
-                {...register('password')}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Silne hasło (min. 12 znaków)"
+                  {...register('password', {
+                    onChange: (e) => setPasswordValue(e.target.value),
+                  })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
               {errors.password && (
                 <p className="text-sm text-destructive">{errors.password.message}</p>
               )}
             </div>
+
+            {/* Password requirements checklist */}
+            {passwordValue.length > 0 && (
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Wymagania hasła:</p>
+                <ul className="space-y-1">
+                  {requirements.map((req) => (
+                    <li
+                      key={req.id}
+                      className={`text-sm flex items-center gap-2 ${
+                        req.met ? 'text-emerald-600' : 'text-muted-foreground'
+                      }`}
+                    >
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${
+                        req.met ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {req.met ? '✓' : '○'}
+                      </span>
+                      {req.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading}>

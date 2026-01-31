@@ -3610,6 +3610,39 @@ export type Database = {
           },
         ]
       }
+      user_password_policies: {
+        Row: {
+          created_at: string | null
+          force_password_change: boolean | null
+          id: string
+          is_oauth_user: boolean | null
+          password_changed_at: string
+          password_expiry_days: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          force_password_change?: boolean | null
+          id?: string
+          is_oauth_user?: boolean | null
+          password_changed_at?: string
+          password_expiry_days?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          force_password_change?: boolean | null
+          id?: string
+          is_oauth_user?: boolean | null
+          password_changed_at?: string
+          password_expiry_days?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
