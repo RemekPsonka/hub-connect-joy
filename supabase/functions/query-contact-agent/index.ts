@@ -141,16 +141,34 @@ ${services.slice(0, 5).map((s: any) => `- ${s.name || s}`).join('\n') || 'brak'}
       }
     }
 
+    const relationshipStrength = contact?.relationship_strength || 5;
+    const relationshipContext = relationshipStrength <= 3 
+      ? `\n⚠️ UWAGA: Słaba relacja (${relationshipStrength}/10)! W odpowiedziach:
+- Sugeruj sposoby na budowanie zaufania
+- Proponuj tematy "ludzkie" (hobby, rodzina, wspólne zainteresowania)
+- Unikaj nachalnych propozycji sprzedażowych
+- Proponuj nieformalne spotkania`
+      : relationshipStrength >= 7 
+        ? `\n✓ Silna relacja (${relationshipStrength}/10) - możesz:
+- Proponować konkretne działania biznesowe
+- Być bezpośredni w komunikacji
+- Sugerować ambitniejsze cele współpracy
+- Prosić o polecenia i referencje`
+        : `\nŚrednia relacja (${relationshipStrength}/10) - zbalansowane podejście:
+- Mieszaj tematy osobiste z biznesowymi
+- Buduj dalej relację, ale możesz proponować współpracę`;
+
     const prompt = `Jesteś Contact Agent dla kontaktu: ${contact?.full_name}.
 
 ## DANE KONTAKTU
 - Firma: ${company?.name || contact?.company || 'nieznana'}
 - Stanowisko: ${contact?.position || 'nieznane'}
-- Siła relacji: ${contact?.relationship_strength}/10
+- Siła relacji: ${relationshipStrength}/10
 - Notatki: ${contact?.notes || 'Brak'}
 - Pain points: ${(profile.pain_points || []).join(', ') || 'nieznane'}
 - Cele: ${(profile.goals || []).join(', ') || 'nieznane'}
 - Kontekst firmy: ${(profile as any).company_context || 'nieznany'}
+${relationshipContext}
 ${companyContext}
 
 ## POTRZEBY KONTAKTU (${needs?.length || 0})

@@ -38,6 +38,7 @@ export interface SectionABasic {
   // Kontekst spotkania (B)
   podpowiedzi_brief?: string;
   status_relacji?: 'nowy' | 'polecony' | 'powracajacy' | 'znajomy' | 'klient';
+  sila_relacji?: number;  // 1-10
   rozważa_aplikacje_cc?: 'tak' | 'nie' | 'nie_wiem';
   firma_nieznana?: boolean;
 }

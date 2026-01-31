@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Slider } from '@/components/ui/slider';
 import { User, Building } from 'lucide-react';
 import type { SectionABasic } from '../types';
 
@@ -193,7 +194,7 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Status relacji - WYMAGANE */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -215,6 +216,26 @@ export function SectionABasicComponent({ data, contactName, companyName, onChang
                   <SelectItem value="klient">Klient</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Siła relacji - slider 1-10 */}
+            <div className="space-y-2">
+              <Label className="flex items-center justify-between">
+                <span>Siła relacji</span>
+                <span className="text-sm font-medium text-primary">{data.sila_relacji || 5}/10</span>
+              </Label>
+              <Slider
+                value={[data.sila_relacji || 5]}
+                onValueChange={([value]) => updateField('sila_relacji', value)}
+                min={1}
+                max={10}
+                step={1}
+                className="py-2"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Słaba</span>
+                <span>Silna</span>
+              </div>
             </div>
 
             {/* Rozważa aplikację do CC */}
