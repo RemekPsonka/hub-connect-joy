@@ -190,3 +190,72 @@ export function useLinkMemberToCompany() {
     }
   });
 }
+
+export function useAddCapitalGroupMemberFromCompany() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      parentCompanyId, 
+      companyId, 
+      relationshipType, 
+      ownershipPercent 
+    }: { 
+      parentCompanyId: string; 
+      companyId: string; 
+      relationshipType: 'subsidiary' | 'affiliate' | 'parent' | 'branch';
+      ownershipPercent?: number;
+    }) => {
+      // Get company data
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('name, nip, krs, regon, revenue_amount, revenue_year')
+        .eq('id', companyId)
+        .single();
+      
+      if (companyError) throw companyError;
+      
+      // Get tenant_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Nie jesteś zalogowany');
+      
+      const { data: director } = await supabase
+        .from('directors')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!director) throw new Error('Nie znaleziono dyrektora');
+      
+      // Insert member with link to company
+      const { data, error } = await supabase
+        .from('capital_group_members')
+        .insert({
+          tenant_id: director.tenant_id,
+          parent_company_id: parentCompanyId,
+          member_company_id: companyId,
+          external_name: company.name,
+          external_nip: company.nip,
+          external_krs: company.krs,
+          external_regon: company.regon,
+          relationship_type: relationshipType,
+          ownership_percent: ownershipPercent || null,
+          revenue_amount: company.revenue_amount,
+          revenue_year: company.revenue_year,
+          data_source: 'crm_link'
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['capital-group-members', variables.parentCompanyId] });
+      toast.success('Powiązano firmę z grupą kapitałową');
+    },
+    onError: (error: Error) => {
+      toast.error(`Błąd: ${error.message}`);
+    }
+  });
+}

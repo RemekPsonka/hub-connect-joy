@@ -32,12 +32,14 @@ interface StructureCanvasInnerProps {
   initialNodes: any[];
   initialEdges: any[];
   onStatusChange?: (nodeId: string, status: InsuranceStatus) => void;
+  onAddEntity?: () => void;
 }
 
 function StructureCanvasInner({ 
   initialNodes, 
   initialEdges,
   onStatusChange,
+  onAddEntity,
 }: StructureCanvasInnerProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -134,6 +136,7 @@ function StructureCanvasInner({
         onZoomOut={() => zoomOut()}
         coverageOverlay={coverageOverlay}
         onCoverageOverlayChange={setCoverageOverlay}
+        onAddEntity={onAddEntity}
       />
 
       <div className="flex-1 relative" ref={reactFlowWrapper}>
@@ -193,6 +196,7 @@ interface StructureCanvasProps {
   initialNodes: any[];
   initialEdges: any[];
   onStatusChange?: (nodeId: string, status: InsuranceStatus) => void;
+  onAddEntity?: () => void;
 }
 
 export function StructureCanvas(props: StructureCanvasProps) {
