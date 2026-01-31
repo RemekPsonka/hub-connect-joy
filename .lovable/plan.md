@@ -1,174 +1,261 @@
 
-## Plan: Dodanie polisy bezpośrednio z panelu Domen Ryzyka
+
+## Plan: Edycja i usuwanie polis w harmonogramie
 
 ### Cel
-Umożliwić użytkownikowi dodanie polisy bezpośrednio z panelu analizy ryzyka (np. przy domenie "Majątek i Przerwy w Działalności"). Gdy status jest "Ubezpieczone", pojawi się przycisk "Dodaj polisę" z uproszczonym formularzem zawierającym: datę początkową, sumę ubezpieczenia i szacowaną składkę. Po zapisie polisa trafia do harmonogramu, gdzie można uzupełnić pozostałe szczegóły.
+Dodać możliwość edycji danych polisy oraz jej usunięcia bezpośrednio z widoku harmonogramu (Renewal Timeline). Akcje będą dostępne po kliknięciu na pasek polisy lub w tooltipie.
 
 ---
 
-### Architektura rozwiązania
+## Architektura rozwiązania
 
-Obecnie komponenty domen (PropertyDomain, LiabilityDomain, itd.) otrzymują tylko `data`, `onChange` i `operationalTypes`. Aby dodać polisę, potrzebujemy dostępu do `companyId` oraz funkcji tworzenia polisy.
-
-**Podejście**: Stworzyć nowy komponent `QuickAddPolicyButton` wyświetlany wewnątrz każdej domeny, gdy status = "ubezpieczone". Komponent będzie zawierał uproszczony modal inline lub popover.
+Obecnie `TimelineTooltip` wyświetla tylko checklistę i informacje o polisie. Trzeba rozszerzyć tooltip o przyciski "Edytuj" i "Usuń", a także stworzyć modal do edycji polisy (podobny do `AddPolicyModal`, ale z wczytanymi danymi).
 
 ---
 
-### Zmiany w plikach
+## Zmiany w plikach
 
 | Plik | Typ | Opis |
 |------|-----|------|
-| `src/components/insurance/QuickAddPolicyButton.tsx` | NOWY | Przycisk z popoverem/dialogiem do szybkiego dodania polisy |
-| `src/components/insurance/types.ts` | MOD | Rozszerzenie `DomainProps` o `companyId` i `onAddPolicy` |
-| `src/components/insurance/domains/PropertyDomain.tsx` | MOD | Dodanie przycisku przy statusie "ubezpieczone" |
-| `src/components/insurance/domains/LiabilityDomain.tsx` | MOD | Analogicznie |
-| `src/components/insurance/domains/FleetDomain.tsx` | MOD | Analogicznie |
-| `src/components/insurance/domains/SpecialtyDomain.tsx` | MOD | Dla każdego produktu (Cyber, D&O, CAR/EAR) |
-| `src/components/insurance/domains/EmployeesDomain.tsx` | MOD | Dla produktów życie/zdrowie/podróże |
-| `src/components/insurance/domains/FinancialDomain.tsx` | MOD | Dla gwarancji, trade credit, etc. |
-| `src/components/insurance/RiskDomainAccordion.tsx` | MOD | Przekazanie `companyId` i `onAddPolicy` do domen |
-| `src/components/insurance/RiskMatrixPanel.tsx` | MOD | Dodanie propsa `companyId` i `onAddPolicy` |
-| `src/components/insurance/InsurancePanel.tsx` | MOD | Integracja z `useInsurancePolicies` i przekazanie funkcji tworzenia |
+| `src/components/renewal/EditPolicyModal.tsx` | NOWY | Modal do edycji polisy z wszystkimi polami |
+| `src/components/renewal/TimelineTooltip.tsx` | MOD | Dodanie przycisków "Edytuj" i "Usuń" |
+| `src/components/renewal/PolicyBar.tsx` | MOD | Przekazanie callbacków `onEdit` i `onDelete` |
+| `src/components/renewal/TimelineRow.tsx` | MOD | Przekazanie callbacków do `PolicyBar` |
+| `src/components/renewal/RenewalTimeline.tsx` | MOD | Integracja z `updatePolicy`, `deletePolicy` i obsługa modali |
+| `src/components/renewal/index.ts` | MOD | Eksport nowego komponentu |
 
 ---
 
-### Nowy komponent: `QuickAddPolicyButton.tsx`
+## Nowy komponent: `EditPolicyModal.tsx`
 
-Uproszczony formularz w popoverze:
+Modal do edycji polisy z formularzem analogicznym do `AddPolicyModal`, ale z wczytanymi danymi:
 
 ```
-┌─────────────────────────────────────────────┐
-│  Dodaj polisę do harmonogramu               │
-├─────────────────────────────────────────────┤
-│  Data rozpoczęcia *   [01.02.2026     ]     │
-│  (koniec: auto +1 rok)                      │
-│                                             │
-│  Suma ubezpieczenia   [45 000 000  ] PLN    │
-│                                             │
-│  Składka szacowana    [    120 000 ] PLN    │
-│                                             │
-│  ☐ Nasza polisa (obsługujemy)               │
-│                                             │
-│            [Anuluj]  [Dodaj do harmonogramu]│
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Edytuj polisę                                              │
+├─────────────────────────────────────────────────────────────┤
+│  Typ polisy *          [Flota ▼]                            │
+│  Numer polisy          [POL-2026-001        ]               │
+│                                                             │
+│  Nazwa polisy *        [UG flota                ]           │
+│                                                             │
+│  Ubezpieczyciel        [PZU SA              ]               │
+│  Broker                [                    ]               │
+│                                                             │
+│  Data rozpoczęcia *    [01.02.2026]                         │
+│  Data zakończenia *    [01.02.2027]                         │
+│                                                             │
+│  Suma ubezpieczenia    [5 000 000] PLN                      │
+│  Składka               [   45 000] PLN                      │
+│                                                             │
+│  ☑ Nasza polisa (obsługujemy jako broker)                  │
+│                                                             │
+│  Notatki:              [________________________]           │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │  🗑️ Usuń polisę                              [Usuń]   ││
+│  └────────────────────────────────────────────────────────┘│
+│                                                             │
+│                      [Anuluj]  [Zapisz zmiany]              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Logika:**
-- Typ polisy automatycznie mapowany z domeny (np. PropertyDomain → `property`)
-- Nazwa polisy generowana automatycznie (np. "Majątek - Auto")
-- Data końcowa = data początkowa + 1 rok
-- Po zapisie toast z linkiem "Otwórz harmonogram" → `/companies/{id}?tab=harmonogram`
-
 ---
 
-### Mapowanie domen → typy polis
+## Modyfikacja `TimelineTooltip.tsx`
 
-| Domena | PolicyType |
-|--------|------------|
-| PropertyDomain (majątek) | `property` |
-| LiabilityDomain (OC) | `liability` |
-| FleetDomain (flota) | `fleet` |
-| SpecialtyDomain - Cyber | `cyber` |
-| SpecialtyDomain - D&O | `do` |
-| SpecialtyDomain - CAR/EAR | `other` |
-| EmployeesDomain - Życie | `life` |
-| EmployeesDomain - Zdrowie | `health` |
-| EmployeesDomain - Podróże | `other` |
-| FinancialDomain - Gwarancje | `other` |
-| FinancialDomain - Trade Credit | `other` |
-
----
-
-### Rozszerzenie interfejsu DomainProps
+Dodanie przycisków akcji na dole tooltipa:
 
 ```typescript
-export interface DomainProps<T> {
-  data: T;
-  onChange: (data: T) => void;
-  operationalTypes: TypDzialnosci[];
-  // Nowe pola dla szybkiego dodawania polis
-  companyId?: string;
-  onAddPolicy?: (data: {
-    policy_type: string;
-    policy_name: string;
-    start_date: string;
-    end_date: string;
-    sum_insured?: number;
-    premium?: number;
-    is_our_policy?: boolean;
-  }) => void;
+interface TimelineTooltipProps {
+  policy: InsurancePolicy;
+  onChecklistChange: (key: keyof RenewalChecklist, value: boolean) => void;
+  onEdit?: () => void;    // NOWE
+  onDelete?: () => void;  // NOWE
 }
+
+// W komponencie - dodać sekcję na końcu:
+<div className="border-t pt-2 mt-2 flex gap-2">
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="flex-1 text-xs"
+    onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
+  >
+    <Pencil className="h-3 w-3 mr-1" />
+    Edytuj
+  </Button>
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="text-xs text-destructive hover:bg-destructive/10"
+    onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+  >
+    <Trash2 className="h-3 w-3" />
+  </Button>
+</div>
 ```
 
 ---
 
-### Przykład integracji w PropertyDomain
+## Modyfikacja `PolicyBar.tsx`
+
+Dodanie callbacków:
 
 ```typescript
-export function PropertyDomain({ data, onChange, operationalTypes, companyId, onAddPolicy }: DomainProps<RyzykoMajatkowe>) {
-  // ... istniejący kod
-  
-  return (
-    <div className="space-y-4">
-      {/* Status toggle */}
-      <InsuranceStatusToggle ... />
-      
-      {/* Quick Add Policy - widoczne gdy ubezpieczone */}
-      {data.status === 'ubezpieczone' && companyId && onAddPolicy && (
-        <QuickAddPolicyButton
-          policyType="property"
-          defaultPolicyName="Ubezpieczenie majątkowe"
-          defaultSumInsured={data.suma_ubezp_majatek}
-          onAdd={onAddPolicy}
-        />
-      )}
-      
-      {/* Reszta formularza */}
-      {data.status !== 'nie_dotyczy' && (
-        <div className="grid ...">
-          ...
-        </div>
-      )}
-    </div>
-  );
+interface PolicyBarProps {
+  policy: InsurancePolicy;
+  // ... istniejące
+  onEdit: (policy: InsurancePolicy) => void;    // NOWE
+  onDelete: (policyId: string) => void;         // NOWE
 }
+
+// W TimelineTooltip:
+<TimelineTooltip
+  policy={policy}
+  onChecklistChange={(key, value) => onChecklistChange(policy.id, key, value)}
+  onEdit={() => onEdit(policy)}
+  onDelete={() => onDelete(policy.id)}
+/>
 ```
 
 ---
 
-### Przepływ danych
+## Modyfikacja `TimelineRow.tsx`
 
-1. `InsurancePanel` tworzy instancję `useInsurancePolicies(company.id)` → dostaje `createPolicy`
-2. `InsurancePanel` przekazuje do `RiskMatrixPanel`:
-   - `companyId={company.id}`
-   - `onAddPolicy={createPolicy.mutate}`
-3. `RiskMatrixPanel` przekazuje do `RiskDomainAccordion`
-4. `RiskDomainAccordion` przekazuje do każdej domeny
-5. Domeny renderują `QuickAddPolicyButton` gdy status = "ubezpieczone"
+Przekazanie callbacków:
+
+```typescript
+interface TimelineRowProps {
+  // ... istniejące
+  onEditPolicy: (policy: InsurancePolicy) => void;
+  onDeletePolicy: (policyId: string) => void;
+}
+
+// W mapowaniu PolicyBar:
+<PolicyBar
+  key={policy.id}
+  policy={policy}
+  // ... istniejące
+  onEdit={onEditPolicy}
+  onDelete={onDeletePolicy}
+/>
+```
 
 ---
 
-### Podsumowanie zmian
+## Modyfikacja `RenewalTimeline.tsx`
+
+Integracja z hookiem i obsługa modali:
+
+```typescript
+const {
+  policies,
+  isLoading,
+  createPolicy,
+  updatePolicy,    // DODANE
+  deletePolicy,    // DODANE
+  updateChecklist,
+  criticalPolicies,
+} = useInsurancePolicies(companyId);
+
+const [editModalOpen, setEditModalOpen] = useState(false);
+const [policyToEdit, setPolicyToEdit] = useState<InsurancePolicy | null>(null);
+const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
+
+// Handlery
+const handleEditPolicy = useCallback((policy: InsurancePolicy) => {
+  setPolicyToEdit(policy);
+  setEditModalOpen(true);
+}, []);
+
+const handleUpdatePolicy = useCallback((data: UpdatePolicyInput) => {
+  updatePolicy.mutate(data, {
+    onSuccess: () => setEditModalOpen(false),
+  });
+}, [updatePolicy]);
+
+const handleDeletePolicy = useCallback((policyId: string) => {
+  setPolicyToDelete(policyId);
+  setDeleteConfirmOpen(true);
+}, []);
+
+const confirmDelete = useCallback(() => {
+  if (policyToDelete) {
+    deletePolicy.mutate(policyToDelete, {
+      onSuccess: () => {
+        setDeleteConfirmOpen(false);
+        setPolicyToDelete(null);
+      },
+    });
+  }
+}, [policyToDelete, deletePolicy]);
+
+// W TimelineRow:
+<TimelineRow
+  // ... istniejące
+  onEditPolicy={handleEditPolicy}
+  onDeletePolicy={handleDeletePolicy}
+/>
+
+// Nowe modale:
+<EditPolicyModal
+  open={editModalOpen}
+  onOpenChange={setEditModalOpen}
+  policy={policyToEdit}
+  onSubmit={handleUpdatePolicy}
+  isLoading={updatePolicy.isPending}
+/>
+
+<AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Usunąć polisę?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Ta operacja jest nieodwracalna. Polisa zostanie trwale usunięta z harmonogramu.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+      <AlertDialogAction onClick={confirmDelete} className="bg-destructive">
+        Usuń polisę
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+```
+
+---
+
+## Przepływ użytkownika
+
+1. **Kliknięcie na pasek polisy** → pojawia się tooltip z checklistą
+2. **Przycisk "Edytuj"** → otwiera modal edycji z wczytanymi danymi
+3. **Edycja pól** → zmiana typu, nazwy, dat, sumy, składki, notatek
+4. **Zapisz** → wywołuje `updatePolicy.mutate()` → odświeżenie timeline
+5. **Przycisk "Usuń"** → otwiera dialog potwierdzenia
+6. **Potwierdzenie** → wywołuje `deletePolicy.mutate()` → polisa znika z harmonogramu
+
+---
+
+## Podsumowanie zmian
 
 | Plik | Zmiany |
 |------|--------|
-| `QuickAddPolicyButton.tsx` | Nowy komponent z Popover + formularzem |
-| `types.ts` | Rozszerzenie `DomainProps` o `companyId`, `onAddPolicy` |
-| `PropertyDomain.tsx` | Import + render `QuickAddPolicyButton` |
-| `LiabilityDomain.tsx` | Jak wyżej |
-| `FleetDomain.tsx` | Jak wyżej |
-| `SpecialtyDomain.tsx` | 3x QuickAddPolicyButton (Cyber, D&O, CAR/EAR) |
-| `EmployeesDomain.tsx` | 3x QuickAddPolicyButton (Życie, Zdrowie, Podróże) |
-| `FinancialDomain.tsx` | 4x QuickAddPolicyButton (Gwarancje, Celne, Trade Credit, Ochrona) |
-| `RiskDomainAccordion.tsx` | Props `companyId`, `onAddPolicy` |
-| `RiskMatrixPanel.tsx` | Props `companyId`, `onAddPolicy` |
-| `InsurancePanel.tsx` | Integracja z `useInsurancePolicies`, przekazanie funkcji |
+| `EditPolicyModal.tsx` | Nowy modal z formularzem edycji |
+| `TimelineTooltip.tsx` | Przyciski "Edytuj" i "Usuń" na dole tooltipa |
+| `PolicyBar.tsx` | Nowe propsy `onEdit`, `onDelete` |
+| `TimelineRow.tsx` | Przekazanie callbacków do PolicyBar |
+| `RenewalTimeline.tsx` | Stan dla modali, handlery, integracja z hookiem |
+| `index.ts` | Eksport EditPolicyModal |
 
 ---
 
-### Korzyści
+## Korzyści
 
-1. **Szybsze workflow** - dodanie polisy bez wychodzenia z analizy ryzyka
-2. **Spójność danych** - suma ubezpieczenia z formularza ryzyka automatycznie przepisana do polisy
-3. **Mniej kliknięć** - nie trzeba osobno otwierać harmonogramu
-4. **Automatyczne nazewnictwo** - polisa od razu ma sensowną nazwę i typ
+1. **Szybka edycja** - poprawka danych bez wychodzenia z harmonogramu
+2. **Bezpieczne usuwanie** - dialog potwierdzenia zapobiega przypadkowemu usunięciu
+3. **Pełna funkcjonalność CRUD** - tworzenie, odczyt, aktualizacja, usuwanie polis
+4. **Spójne UX** - podobny wygląd modali jak przy dodawaniu polisy
+
