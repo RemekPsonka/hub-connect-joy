@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Shield,
   GitBranch,
-  CalendarClock
+  CalendarClock,
+  MapPinned
 } from 'lucide-react';
 import { SourcesTabContent } from './SourcesTabContent';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -31,6 +32,7 @@ import { useCompanyPipeline } from '@/hooks/useCompanyPipeline';
 import { InsurancePanel } from '@/components/insurance';
 import { StructureVisualization } from '@/components/structure';
 import { RenewalTimeline } from '@/components/renewal';
+import { ExposureManager } from '@/components/exposure';
 import type { Company } from './CompanyPipelineController';
 import type { CompanyAnalysis } from './types';
 
@@ -71,6 +73,7 @@ export function CompanyFlatTabs({
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
     { id: 'structure', label: 'Struktura', icon: GitBranch, always: true },
     { id: 'insurance', label: 'Ubezpieczenia', icon: Shield, always: true },
+    { id: 'exposure', label: 'Ekspozycja', icon: MapPinned, always: true },
     { id: 'timeline', label: 'Harmonogram', icon: CalendarClock, always: true },
     { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
     { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasAnalysis },
@@ -139,6 +142,10 @@ export function CompanyFlatTabs({
 
       <TabsContent value="insurance" className="mt-0">
         <InsurancePanel company={company} />
+      </TabsContent>
+
+      <TabsContent value="exposure" className="mt-0">
+        <ExposureManager companyId={company.id} />
       </TabsContent>
 
       <TabsContent value="timeline" className="mt-0">
