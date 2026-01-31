@@ -1,5 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { CalendarDays } from 'lucide-react';
 import { OperationalDNAGrid } from './OperationalDNAGrid';
 import { RiskDomainAccordion } from './RiskDomainAccordion';
 import type {
@@ -15,6 +18,8 @@ interface RiskMatrixPanelProps {
   companyName: string;
   industry?: string | null;
   revenue?: number | null;
+  meetingDate?: string;
+  onMeetingDateChange?: (date: string) => void;
   operationalTypes: TypDzialnosci[];
   onOperationalTypesChange: (types: TypDzialnosci[]) => void;
   majatek: RyzykoMajatkowe;
@@ -46,6 +51,8 @@ export function RiskMatrixPanel({
   companyName,
   industry,
   revenue,
+  meetingDate,
+  onMeetingDateChange,
   operationalTypes,
   onOperationalTypesChange,
   majatek,
@@ -63,15 +70,30 @@ export function RiskMatrixPanel({
     <ScrollArea className="h-full">
       <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           <h2 className="text-xl font-semibold">{companyName}</h2>
-          <div className="flex flex-wrap gap-2">
-            {industry && (
-              <Badge variant="secondary">{industry}</Badge>
-            )}
-            {revenue && revenue > 0 && (
-              <Badge variant="outline">{formatRevenue(revenue)}</Badge>
-            )}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap gap-2">
+              {industry && (
+                <Badge variant="secondary">{industry}</Badge>
+              )}
+              {revenue && revenue > 0 && (
+                <Badge variant="outline">{formatRevenue(revenue)}</Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="meeting-date" className="text-sm text-muted-foreground whitespace-nowrap">
+                Data spotkania:
+              </Label>
+              <Input
+                id="meeting-date"
+                type="date"
+                value={meetingDate || ''}
+                onChange={(e) => onMeetingDateChange?.(e.target.value)}
+                className="w-40 h-8"
+              />
+            </div>
           </div>
         </div>
 
