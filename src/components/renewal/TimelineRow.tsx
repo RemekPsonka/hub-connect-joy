@@ -11,6 +11,8 @@ interface TimelineRowProps {
   criticalPolicyIds: Set<string>;
   showCriticalPath: boolean;
   onChecklistChange: (policyId: string, key: keyof RenewalChecklist, value: boolean) => void;
+  onEditPolicy: (policy: InsurancePolicy) => void;
+  onDeletePolicy: (policyId: string) => void;
 }
 
 export function TimelineRow({
@@ -23,6 +25,8 @@ export function TimelineRow({
   criticalPolicyIds,
   showCriticalPath,
   onChecklistChange,
+  onEditPolicy,
+  onDeletePolicy,
 }: TimelineRowProps) {
   const filteredPolicies = policies.filter(p => p.policy_type === policyType);
 
@@ -68,6 +72,8 @@ export function TimelineRow({
             isCritical={criticalPolicyIds.has(policy.id)}
             showCriticalPath={showCriticalPath}
             onChecklistChange={onChecklistChange}
+            onEdit={onEditPolicy}
+            onDelete={onDeletePolicy}
           />
         ))}
       </div>

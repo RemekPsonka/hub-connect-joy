@@ -6,4 +6,5 @@ export { TimelineRow } from './TimelineRow';
 export { PolicyBar } from './PolicyBar';
 export { TimelineTooltip } from './TimelineTooltip';
 export { AddPolicyModal } from './AddPolicyModal';
+export { EditPolicyModal } from './EditPolicyModal';
 export * from './types';
