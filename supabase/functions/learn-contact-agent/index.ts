@@ -223,7 +223,7 @@ Przeanalizuj WSZYSTKIE dostępne dane o OSOBIE oraz jej FIRMIE i stwórz skonden
 - Notatki: ${contact.notes || 'Brak'}
 - AI Profile Summary: ${contact.profile_summary || 'Brak'}
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
-- Siła relacji: ${contact.relationship_strength || 'nieznana'}/10
+- Siła relacji: ${contact.relationship_strength || 5}/10 ${(contact.relationship_strength || 5) <= 3 ? '(słaba - wymaga budowania zaufania)' : (contact.relationship_strength || 5) >= 7 ? '(silna - można działać biznesowo)' : '(średnia)'}
 - Grupa: ${contact.primary_group?.name || 'brak'}
 ${companyContext}
 

@@ -89,6 +89,15 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
                 </Badge>
               )}
             </div>
+
+            {/* Relationship strength - directly under name */}
+            {viewMode === 'person' && (
+              <RelationshipStrengthBar 
+                value={contact.relationship_strength || 5} 
+                className="w-28" 
+                showLabel 
+              />
+            )}
             
             {/* Position */}
             {contact.position && (
@@ -238,17 +247,9 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
         </div>
       </div>
 
-      {/* SEKCJA 2: Wskaźniki relacji - tylko dla widoku OSOBA */}
+      {/* SEKCJA 2: Ostatni kontakt - tylko dla widoku OSOBA */}
       {viewMode === 'person' && (
         <div className="flex flex-wrap items-center gap-6 text-sm border-t border-b border-border/50 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Siła relacji:</span>
-            <RelationshipStrengthBar 
-              value={contact.relationship_strength || 5} 
-              className="w-20" 
-              showLabel 
-            />
-          </div>
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Ostatni kontakt:</span>
             <span className="font-medium">{formatLastContact(contact.last_contact_date)}</span>

@@ -169,10 +169,34 @@ ${JSON.stringify(financialData).substring(0, 400)}`;
 - Firma: ${company?.name || contact.company || 'nieznana'}
 - Branża: ${company?.industry || 'nieznana'}
 - Miasto: ${contact.city || 'nieznane'}
+- Siła relacji: ${contact.relationship_strength || 5}/10 ${(contact.relationship_strength || 5) <= 3 ? '⚠️ SŁABA RELACJA - priorytet: BUDOWANIE ZAUFANIA' : (contact.relationship_strength || 5) >= 7 ? '✓ SILNA RELACJA - można przejść do konkretu biznesowego' : ''}
 - Notatki: ${contact.notes || 'Brak'}
 - AI Profile Summary: ${contact.profile_summary || 'Brak'}
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
 ${companyContext}
+
+## INSTRUKCJE DOT. SIŁY RELACJI
+${(contact.relationship_strength || 5) <= 3 ? `
+⚠️ SŁABA RELACJA (${contact.relationship_strength || 5}/10):
+- Agent powinien położyć DUŻY nacisk na budowanie relacji i zaufania
+- Szukaj wspólnych zainteresowań (hobby, sport, rodzina)
+- Zadawaj pytania osobiste (ale nie natarczywe)
+- Unikaj twardych tematów sprzedażowych
+- Proponuj spotkania nieformalne
+- DO: poznaj człowieka zanim przejdziesz do biznesu
+- DON'T: nie naciskaj na decyzje biznesowe
+` : (contact.relationship_strength || 5) >= 7 ? `
+✓ SILNA RELACJA (${contact.relationship_strength || 5}/10):
+- Można przejść od razu do konkretów biznesowych
+- Proponuj ambitne cele i projekty
+- Bądź bezpośredni w komunikacji
+- Możesz prosić o polecenia i referencje
+` : `
+ŚREDNIA RELACJA (${contact.relationship_strength || 5}/10):
+- Zbalansowane podejście - budowanie relacji + lekkie tematy biznesowe
+- Mieszaj tematy osobiste z biznesowymi
+- Sprawdzaj czy jest otwarty na konkretne propozycje
+`}
 
 ## POTRZEBY KONTAKTU: ${needsStr}
 ## OFERTY KONTAKTU: ${offersStr}
