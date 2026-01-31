@@ -70,3 +70,15 @@ export const CHECKLIST_LABELS: Record<keyof RenewalChecklist, string> = {
   negotiation_completed: 'Negocjacje zakończone',
   board_approval_obtained: 'Zgoda Zarządu',
 };
+
+// Default commission rates per policy type (%)
+export const DEFAULT_COMMISSION_RATES: Record<PolicyType, number> = {
+  property: 18,
+  fleet: 8,
+  do: 25,
+  cyber: 20,
+  liability: 12,
+  life: 15,
+  health: 10,
+  other: 15,
+};

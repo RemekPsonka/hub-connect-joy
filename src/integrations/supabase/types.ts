@@ -2057,11 +2057,16 @@ export type Database = {
       }
       insurance_policies: {
         Row: {
+          actual_commission: number | null
+          actual_premium: number | null
           broker_name: string | null
           closed_at: string | null
+          commission_rate: number | null
           company_id: string
           created_at: string | null
           end_date: string
+          forecasted_commission: number | null
+          forecasted_premium: number | null
           id: string
           insurer_name: string | null
           is_our_policy: boolean | null
@@ -2071,6 +2076,7 @@ export type Database = {
           policy_number: string | null
           policy_type: string
           premium: number | null
+          product_id: string | null
           renewal_checklist: Json | null
           start_date: string
           sum_insured: number | null
@@ -2079,11 +2085,16 @@ export type Database = {
           workflow_status: string | null
         }
         Insert: {
+          actual_commission?: number | null
+          actual_premium?: number | null
           broker_name?: string | null
           closed_at?: string | null
+          commission_rate?: number | null
           company_id: string
           created_at?: string | null
           end_date: string
+          forecasted_commission?: number | null
+          forecasted_premium?: number | null
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
@@ -2093,6 +2104,7 @@ export type Database = {
           policy_number?: string | null
           policy_type: string
           premium?: number | null
+          product_id?: string | null
           renewal_checklist?: Json | null
           start_date: string
           sum_insured?: number | null
@@ -2101,11 +2113,16 @@ export type Database = {
           workflow_status?: string | null
         }
         Update: {
+          actual_commission?: number | null
+          actual_premium?: number | null
           broker_name?: string | null
           closed_at?: string | null
+          commission_rate?: number | null
           company_id?: string
           created_at?: string | null
           end_date?: string
+          forecasted_commission?: number | null
+          forecasted_premium?: number | null
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
@@ -2115,6 +2132,7 @@ export type Database = {
           policy_number?: string | null
           policy_type?: string
           premium?: number | null
+          product_id?: string | null
           renewal_checklist?: Json | null
           start_date?: string
           sum_insured?: number | null
@@ -2131,7 +2149,58 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "insurance_policies_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "insurance_policies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_products: {
+        Row: {
+          category: string
+          code: string
+          created_at: string | null
+          default_commission_rate: number | null
+          id: string
+          is_active: boolean | null
+          name: string
+          subcategory: string | null
+          tenant_id: string
+        }
+        Insert: {
+          category: string
+          code: string
+          created_at?: string | null
+          default_commission_rate?: number | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          subcategory?: string | null
+          tenant_id: string
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string | null
+          default_commission_rate?: number | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          subcategory?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_products_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2959,6 +3028,148 @@ export type Database = {
           },
           {
             foreignKeyName: "ownership_stakes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_kpi_targets: {
+        Row: {
+          created_at: string | null
+          id: string
+          month: number | null
+          notes: string | null
+          target_commission: number | null
+          target_commission_rate: number | null
+          target_premium: number
+          tenant_id: string
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          month?: number | null
+          notes?: string | null
+          target_commission?: number | null
+          target_commission_rate?: number | null
+          target_premium?: number
+          tenant_id: string
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          month?: number | null
+          notes?: string | null
+          target_commission?: number | null
+          target_commission_rate?: number | null
+          target_premium?: number
+          tenant_id?: string
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_kpi_targets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_production_records: {
+        Row: {
+          actual_commission: number | null
+          actual_premium: number | null
+          commission_rate: number | null
+          company_id: string | null
+          created_at: string | null
+          forecasted_commission: number | null
+          forecasted_premium: number | null
+          id: string
+          invoice_date: string | null
+          notes: string | null
+          payment_date: string | null
+          policy_id: string | null
+          product_category: string | null
+          product_id: string | null
+          production_month: number
+          production_year: number
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          actual_commission?: number | null
+          actual_premium?: number | null
+          commission_rate?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          forecasted_commission?: number | null
+          forecasted_premium?: number | null
+          id?: string
+          invoice_date?: string | null
+          notes?: string | null
+          payment_date?: string | null
+          policy_id?: string | null
+          product_category?: string | null
+          product_id?: string | null
+          production_month: number
+          production_year: number
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          actual_commission?: number | null
+          actual_premium?: number | null
+          commission_rate?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          forecasted_commission?: number | null
+          forecasted_premium?: number | null
+          id?: string
+          invoice_date?: string | null
+          notes?: string | null
+          payment_date?: string | null
+          policy_id?: string | null
+          product_category?: string | null
+          product_id?: string | null
+          production_month?: number
+          production_year?: number
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_production_records_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_production_records_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_production_records_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_production_records_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
