@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import dagre from '@dagrejs/dagre';
+import dagre from 'dagre';
 
 interface LayoutOptions {
   direction?: 'TB' | 'BT' | 'LR' | 'RL';
