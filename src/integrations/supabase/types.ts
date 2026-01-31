@@ -2192,6 +2192,92 @@ export type Database = {
           },
         ]
       }
+      liability_exposure_profiles: {
+        Row: {
+          activity_installation: boolean | null
+          activity_manufacturing: boolean | null
+          activity_services: boolean | null
+          activity_trading: boolean | null
+          ai_generated_at: string | null
+          ai_recommendation_reason: string | null
+          ai_suggested_limit_eur: number | null
+          b2b_vs_b2c_pct: number | null
+          company_id: string
+          created_at: string | null
+          currency: string
+          exposure_aviation_auto_rail_offshore: boolean | null
+          exposure_ecommerce: boolean | null
+          id: string
+          notes: string | null
+          services_advisory_pct: number | null
+          tenant_id: string
+          territory_eu_oecd_pct: number | null
+          territory_poland_pct: number | null
+          territory_rest_world_pct: number | null
+          territory_usa_canada_pct: number | null
+          total_annual_revenue: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          activity_installation?: boolean | null
+          activity_manufacturing?: boolean | null
+          activity_services?: boolean | null
+          activity_trading?: boolean | null
+          ai_generated_at?: string | null
+          ai_recommendation_reason?: string | null
+          ai_suggested_limit_eur?: number | null
+          b2b_vs_b2c_pct?: number | null
+          company_id: string
+          created_at?: string | null
+          currency?: string
+          exposure_aviation_auto_rail_offshore?: boolean | null
+          exposure_ecommerce?: boolean | null
+          id?: string
+          notes?: string | null
+          services_advisory_pct?: number | null
+          tenant_id: string
+          territory_eu_oecd_pct?: number | null
+          territory_poland_pct?: number | null
+          territory_rest_world_pct?: number | null
+          territory_usa_canada_pct?: number | null
+          total_annual_revenue?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          activity_installation?: boolean | null
+          activity_manufacturing?: boolean | null
+          activity_services?: boolean | null
+          activity_trading?: boolean | null
+          ai_generated_at?: string | null
+          ai_recommendation_reason?: string | null
+          ai_suggested_limit_eur?: number | null
+          b2b_vs_b2c_pct?: number | null
+          company_id?: string
+          created_at?: string | null
+          currency?: string
+          exposure_aviation_auto_rail_offshore?: boolean | null
+          exposure_ecommerce?: boolean | null
+          id?: string
+          notes?: string | null
+          services_advisory_pct?: number | null
+          tenant_id?: string
+          territory_eu_oecd_pct?: number | null
+          territory_poland_pct?: number | null
+          territory_rest_world_pct?: number | null
+          territory_usa_canada_pct?: number | null
+          total_annual_revenue?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "liability_exposure_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       linkedin_network_contacts: {
         Row: {
           company: string | null
