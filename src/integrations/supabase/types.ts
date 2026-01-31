@@ -2774,6 +2774,65 @@ export type Database = {
           },
         ]
       }
+      task_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          is_kpi: boolean | null
+          kpi_target: number | null
+          name: string
+          sort_order: number | null
+          tenant_id: string
+          updated_at: string | null
+          visibility_type: string | null
+          workflow_steps: Json | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_kpi?: boolean | null
+          kpi_target?: number | null
+          name: string
+          sort_order?: number | null
+          tenant_id: string
+          updated_at?: string | null
+          visibility_type?: string | null
+          workflow_steps?: Json | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_kpi?: boolean | null
+          kpi_target?: number | null
+          name?: string
+          sort_order?: number | null
+          tenant_id?: string
+          updated_at?: string | null
+          visibility_type?: string | null
+          workflow_steps?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_contacts: {
         Row: {
           contact_id: string
@@ -2807,49 +2866,150 @@ export type Database = {
           },
         ]
       }
+      task_workflow_history: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          id: string
+          notes: string | null
+          step_id: string
+          task_id: string
+          tenant_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          id?: string
+          notes?: string | null
+          step_id: string
+          task_id: string
+          tenant_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          id?: string
+          notes?: string | null
+          step_id?: string
+          task_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_workflow_history_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_workflow_history_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_workflow_history_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
+          assigned_to: string | null
+          category_id: string | null
           consultation_id: string | null
           created_at: string | null
           description: string | null
           due_date: string | null
           id: string
+          owner_id: string | null
           priority: string | null
+          snoozed_until: string | null
+          source_task_id: string | null
           status: string | null
           task_type: string | null
           tenant_id: string
           title: string
+          visibility: string | null
+          workflow_step: string | null
         }
         Insert: {
+          assigned_to?: string | null
+          category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
+          owner_id?: string | null
           priority?: string | null
+          snoozed_until?: string | null
+          source_task_id?: string | null
           status?: string | null
           task_type?: string | null
           tenant_id: string
           title: string
+          visibility?: string | null
+          workflow_step?: string | null
         }
         Update: {
+          assigned_to?: string | null
+          category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
+          owner_id?: string | null
           priority?: string | null
+          snoozed_until?: string | null
+          source_task_id?: string | null
           status?: string | null
           task_type?: string | null
           tenant_id?: string
           title?: string
+          visibility?: string | null
+          workflow_step?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "task_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_consultation_id_fkey"
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_task_id_fkey"
+            columns: ["source_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {
@@ -3142,6 +3302,7 @@ export type Database = {
       }
       get_assistant_group_ids: { Args: { _user_id: string }; Returns: string[] }
       get_assistant_tenant_id: { Args: { _user_id: string }; Returns: string }
+      get_current_director_id: { Args: never; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
