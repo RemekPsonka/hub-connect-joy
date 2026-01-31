@@ -15,7 +15,8 @@ import {
   Shield,
   GitBranch,
   CalendarClock,
-  MapPinned
+  MapPinned,
+  Scale
 } from 'lucide-react';
 import { SourcesTabContent } from './SourcesTabContent';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -32,6 +33,7 @@ import { useCompanyPipeline } from '@/hooks/useCompanyPipeline';
 import { InsurancePanel } from '@/components/insurance';
 import { StructureVisualization } from '@/components/structure';
 import { RenewalTimeline } from '@/components/renewal';
+import { LiabilityDNAPanel } from '@/components/liability';
 import { ExposureManager } from '@/components/exposure';
 import type { Company } from './CompanyPipelineController';
 import type { CompanyAnalysis } from './types';
@@ -74,6 +76,7 @@ export function CompanyFlatTabs({
     { id: 'structure', label: 'Struktura', icon: GitBranch, always: true },
     { id: 'insurance', label: 'Ubezpieczenia', icon: Shield, always: true },
     { id: 'exposure', label: 'Ekspozycja', icon: MapPinned, always: true },
+    { id: 'liability-dna', label: 'DNA OC', icon: Scale, always: true },
     { id: 'timeline', label: 'Harmonogram', icon: CalendarClock, always: true },
     { id: 'profile', label: 'Profil AI', icon: Building, always: hasAnalysis },
     { id: 'financials', label: 'Finanse', icon: DollarSign, always: hasAnalysis },
@@ -146,6 +149,10 @@ export function CompanyFlatTabs({
 
       <TabsContent value="exposure" className="mt-0">
         <ExposureManager companyId={company.id} />
+      </TabsContent>
+
+      <TabsContent value="liability-dna" className="mt-0">
+        <LiabilityDNAPanel companyId={company.id} />
       </TabsContent>
 
       <TabsContent value="timeline" className="mt-0">
