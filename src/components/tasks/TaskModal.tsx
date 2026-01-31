@@ -21,10 +21,13 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, User, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCreateTask, useCreateCrossTask, useUpdateTask } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
+import { useTaskCategories, type TaskCategory } from '@/hooks/useTaskCategories';
+import { useDirectors } from '@/hooks/useDirectors';
+import { useCurrentDirector } from '@/hooks/useDirectors';
 import { toast } from 'sonner';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 
@@ -61,13 +64,26 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
   const [priority, setPriority] = useState('medium');
   const [status, setStatus] = useState('pending');
   const [dueDate, setDueDate] = useState<Date | undefined>();
-
-  // ConnectionContactSelect handles its own data fetching with search
+  
+  // New fields for categories and assignment
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [assignedTo, setAssignedTo] = useState<string>('');
+  const [visibility, setVisibility] = useState<'private' | 'team'>('private');
+  
+  const { data: categories = [] } = useTaskCategories();
+  const { data: directors = [] } = useDirectors();
+  const { data: currentDirector } = useCurrentDirector();
+  
   const createTask = useCreateTask();
   const createCrossTask = useCreateCrossTask();
   const updateTask = useUpdateTask();
 
   const isEditing = !!task;
+  
+  // Get selected category
+  const selectedCategory = categories.find(c => c.id === categoryId);
+  const showVisibilityChoice = selectedCategory?.visibility_type === 'shared';
+  const isTeamCategory = selectedCategory?.visibility_type === 'team';
 
   useEffect(() => {
     if (task) {
@@ -77,6 +93,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setPriority(task.priority || 'medium');
       setStatus(task.status || 'pending');
       setDueDate(task.due_date ? new Date(task.due_date) : undefined);
+      setCategoryId(task.category_id || '');
+      setAssignedTo(task.assigned_to || '');
+      setVisibility((task.visibility as 'private' | 'team') || 'private');
 
       // Set contacts for existing task
       if (task.task_type === 'cross' && task.cross_tasks?.[0]) {
@@ -99,6 +118,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setPriority(initialData.priority || 'medium');
       setStatus('pending');
       setDueDate(undefined);
+      setCategoryId('');
+      setAssignedTo('');
+      setVisibility('private');
       // Set contactId for standard tasks
       if (initialData.taskType !== 'cross' && initialData.contactAId) {
         setContactId(initialData.contactAId);
@@ -116,8 +138,22 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setPriority('medium');
       setStatus('pending');
       setDueDate(undefined);
+      setCategoryId('');
+      setAssignedTo('');
+      setVisibility('private');
     }
   }, [task, preselectedContactId, initialData, open]);
+
+  // Update visibility when category changes
+  useEffect(() => {
+    if (selectedCategory) {
+      if (selectedCategory.visibility_type === 'team') {
+        setVisibility('team');
+      } else if (selectedCategory.visibility_type === 'individual') {
+        setVisibility('private');
+      }
+    }
+  }, [selectedCategory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,6 +183,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
           priority,
           status,
           due_date: dueDate?.toISOString().split('T')[0],
+          category_id: categoryId || null,
+          assigned_to: assignedTo || null,
+          visibility: visibility,
         });
         toast.success('Zadanie zaktualizowane');
       } else if (taskType === 'cross') {
@@ -177,6 +216,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
             due_date: dueDate?.toISOString().split('T')[0],
           },
           contactId: contactId || undefined,
+          categoryId: categoryId || undefined,
+          assignedTo: assignedTo || undefined,
+          visibility: isTeamCategory ? 'team' : visibility,
         });
         toast.success('Zadanie utworzone');
         
@@ -194,6 +236,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
   };
 
   const isLoading = createTask.isPending || createCrossTask.isPending || updateTask.isPending;
+  const otherDirectors = directors.filter(d => d.id !== currentDirector?.id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -228,6 +271,87 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
               rows={3}
             />
           </div>
+
+          {/* Category Selection - NEW */}
+          {!isEditing && categories.length > 0 && (
+            <div className="space-y-2">
+              <Label>Kategoria</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz kategorię (opcjonalne)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Brak kategorii</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: cat.color }}
+                        />
+                        {cat.name}
+                        {cat.visibility_type === 'team' && (
+                          <Users className="h-3 w-3 text-muted-foreground ml-1" />
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedCategory?.workflow_steps?.steps?.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Ta kategoria ma {selectedCategory.workflow_steps.steps.length} kroków workflow
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Visibility Choice - only for shared categories */}
+          {!isEditing && showVisibilityChoice && (
+            <div className="space-y-2">
+              <Label>Widoczność</Label>
+              <RadioGroup
+                value={visibility}
+                onValueChange={(v) => setVisibility(v as 'private' | 'team')}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="private" id="vis-private" />
+                  <Label htmlFor="vis-private" className="cursor-pointer flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    Prywatne
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="team" id="vis-team" />
+                  <Label htmlFor="vis-team" className="cursor-pointer flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    Zespołowe
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
+
+          {/* Assignment - NEW */}
+          {!isEditing && otherDirectors.length > 0 && (
+            <div className="space-y-2">
+              <Label>Przypisz do</Label>
+              <Select value={assignedTo} onValueChange={setAssignedTo}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Ja (domyślnie)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Ja ({currentDirector?.full_name})</SelectItem>
+                  {otherDirectors.map((dir) => (
+                    <SelectItem key={dir.id} value={dir.id}>
+                      {dir.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Task Type - only for new tasks */}
           {!isEditing && (

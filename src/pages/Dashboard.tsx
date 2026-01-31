@@ -13,6 +13,9 @@ import { NetworkOverview } from '@/components/dashboard/NetworkOverview';
 import { MeetingsOverview } from '@/components/dashboard/MeetingsOverview';
 import { ContactsToRenew } from '@/components/dashboard/ContactsToRenew';
 import { AnalyticsOverview } from '@/components/dashboard/AnalyticsOverview';
+import { KPITasksWidget } from '@/components/dashboard/KPITasksWidget';
+import { MyTasksWidget } from '@/components/dashboard/MyTasksWidget';
+import { TeamTasksWidget } from '@/components/dashboard/TeamTasksWidget';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -159,6 +162,13 @@ export default function Dashboard() {
           
           {/* Contacts to renew - full width alert */}
           <ContactsToRenew />
+          
+          {/* Task widgets - KPI, My Tasks, Team Tasks */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <KPITasksWidget />
+            <MyTasksWidget />
+            <TeamTasksWidget />
+          </div>
           
           {/* Main grid - 2x2 for main widgets */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -359,11 +359,43 @@ FOR SELECT USING (
 
 ## Kolejność implementacji
 
-1. **Faza 1 (baza):** Migracja SQL - nowe kolumny i tabele
-2. **Faza 2 (kategorie):** Hook + panel admina kategorii
-3. **Faza 3 (task modal):** Rozszerzenie modalu o kategorie i przypisanie
-4. **Faza 4 (workflow):** Komponent postępu workflow + historia
-5. **Faza 5 (dashboard):** Nowe widgety zadań na dashboardzie
-6. **Faza 6 (odroczenie):** Funkcja snooze + ping reminder
-7. **Faza 7 (delegacja):** Przekazywanie zadań + notyfikacje
+1. ✅ **Faza 1 (baza):** Migracja SQL - nowe kolumny i tabele
+2. ✅ **Faza 2 (kategorie):** Hook + panel admina kategorii
+3. ✅ **Faza 3 (task modal):** Rozszerzenie modalu o kategorie i przypisanie
+4. ⏳ **Faza 4 (workflow):** Komponent postępu workflow + historia
+5. ✅ **Faza 5 (dashboard):** Nowe widgety zadań na dashboardzie (KPI, Moje, Zespołowe)
+6. ⏳ **Faza 6 (odroczenie):** Funkcja snooze + ping reminder
+7. ⏳ **Faza 7 (delegacja):** Przekazywanie zadań + notyfikacje
+
+---
+
+## Wykonane zmiany (31.01.2026)
+
+### Baza danych:
+- Rozszerzono tabelę `tasks` o: `owner_id`, `assigned_to`, `visibility`, `category_id`, `workflow_step`, `snoozed_until`, `source_task_id`
+- Utworzono tabelę `task_categories` z workflow_steps (JSONB)
+- Utworzono tabelę `task_workflow_history`
+- Dodano RLS z logiką widoczności (private/team/public)
+- Dodano funkcję helper `get_current_director_id()`
+
+### Nowe pliki:
+- `src/hooks/useTaskCategories.ts` - CRUD dla kategorii
+- `src/hooks/useDirectors.ts` - pobieranie dyrektorów
+- `src/components/settings/TaskCategoriesManager.tsx` - panel zarządzania
+- `src/components/settings/TaskCategoryModal.tsx` - modal dodawania/edycji
+- `src/components/dashboard/KPITasksWidget.tsx` - widget KPI
+- `src/components/dashboard/MyTasksWidget.tsx` - widget prywatnych zadań
+- `src/components/dashboard/TeamTasksWidget.tsx` - widget zespołowych
+
+### Zmodyfikowane pliki:
+- `src/hooks/useTasks.ts` - rozszerzono o filtry visibility, categoryId, ownerId, assignedTo, excludeSnoozed
+- `src/components/tasks/TaskModal.tsx` - dodano wybór kategorii, przypisanie, widoczność
+- `src/pages/Dashboard.tsx` - dodano widgety zadań
+- `src/pages/Settings.tsx` - nowa zakładka "Kategorie zadań"
+
+### Do zrobienia:
+- Komponent workflow progress w szczegółach zadania
+- Modal snooze (odroczenie zadania)
+- Modal delegacji (przekazanie zadania)
+- Filtrowanie na stronie /tasks po kategoriach i widoczności
 

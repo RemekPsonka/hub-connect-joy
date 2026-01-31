@@ -18,6 +18,12 @@ export interface TasksFilters {
   contactId?: string;
   sortBy?: 'created_at' | 'due_date' | 'priority';
   sortDirection?: 'asc' | 'desc';
+  // New filters for visibility and categories
+  visibility?: 'all' | 'private' | 'team' | 'public';
+  categoryId?: string;
+  ownerId?: string;
+  assignedTo?: string;
+  excludeSnoozed?: boolean;
 }
 
 export interface TaskWithDetails extends Task {
@@ -129,7 +135,10 @@ export function useTasks(filters: TasksFilters = {}) {
             intro_made_at,
             contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
             contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)
-        )
+          ),
+          task_categories(id, name, color, icon, visibility_type, workflow_steps),
+          owner:directors!tasks_owner_id_fkey(id, full_name),
+          assignee:directors!tasks_assigned_to_fkey(id, full_name)
         `);
 
       // Apply sorting - priority requires client-side sorting
@@ -160,6 +169,22 @@ export function useTasks(filters: TasksFilters = {}) {
       }
       if (filters.search) {
         query = query.ilike('title', `%${filters.search}%`);
+      }
+      // New filters
+      if (filters.visibility && filters.visibility !== 'all') {
+        query = query.eq('visibility', filters.visibility);
+      }
+      if (filters.categoryId) {
+        query = query.eq('category_id', filters.categoryId);
+      }
+      if (filters.ownerId) {
+        query = query.eq('owner_id', filters.ownerId);
+      }
+      if (filters.assignedTo) {
+        query = query.eq('assigned_to', filters.assignedTo);
+      }
+      if (filters.excludeSnoozed) {
+        query = query.or('snoozed_until.is.null,snoozed_until.lte.' + new Date().toISOString().split('T')[0]);
       }
 
       const { data, error } = await query;
@@ -373,24 +398,47 @@ export function useCreateTask() {
     mutationFn: async (input: {
       task: Omit<TaskInsert, 'tenant_id'>;
       contactId?: string;
+      categoryId?: string;
+      assignedTo?: string;
+      visibility?: 'private' | 'team' | 'public';
     }) => {
-      // Get tenant_id from director
+      // Get tenant_id and director_id
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data: director, error: directorError } = await supabase
         .from('directors')
-        .select('tenant_id')
+        .select('id, tenant_id')
         .eq('user_id', user.id)
         .single();
 
       if (directorError) throw directorError;
+
+      // Determine visibility based on category if not explicitly set
+      let visibility = input.visibility || 'private';
+      if (input.categoryId && !input.visibility) {
+        const { data: category } = await supabase
+          .from('task_categories')
+          .select('visibility_type, workflow_steps')
+          .eq('id', input.categoryId)
+          .single();
+        
+        if (category?.visibility_type === 'team') {
+          visibility = 'team';
+        } else if (category?.visibility_type === 'individual') {
+          visibility = 'private';
+        }
+      }
 
       const { data: task, error: taskError } = await supabase
         .from('tasks')
         .insert({
           ...input.task,
           tenant_id: director.tenant_id,
+          owner_id: director.id,
+          assigned_to: input.assignedTo || null,
+          category_id: input.categoryId || null,
+          visibility,
         })
         .select()
         .single();
