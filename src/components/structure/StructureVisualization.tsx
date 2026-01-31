@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
-import { Loader2, Network } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Loader2, Network, Plus } from 'lucide-react';
 import { useCapitalGroupMembers } from '@/hooks/useCapitalGroupMembers';
 import { StructureCanvas } from './StructureCanvas';
 import { useStructureData } from './hooks/useStructureData';
 import { useStructureLayout } from './hooks/useStructureLayout';
+import { AddCapitalGroupMemberModal } from '@/components/company/AddCapitalGroupMemberModal';
+import { Button } from '@/components/ui/button';
 import type { InsuranceStatus } from './types';
 
 interface Company {
@@ -21,6 +23,7 @@ interface StructureVisualizationProps {
 }
 
 export function StructureVisualization({ company }: StructureVisualizationProps) {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const { data: members = [], isLoading } = useCapitalGroupMembers(company.id);
   const { getLayoutedElements } = useStructureLayout();
 
@@ -62,9 +65,19 @@ export function StructureVisualization({ company }: StructureVisualizationProps)
         <h3 className="text-lg font-medium text-foreground mb-2">
           Brak struktury grupy kapitałowej
         </h3>
-        <p className="text-sm text-muted-foreground max-w-md">
-          Dodaj spółki zależne w zakładce "Grupa kapitałowa", aby zobaczyć wizualizację struktury holdingowej.
+        <p className="text-sm text-muted-foreground max-w-md mb-4">
+          Dodaj spółki zależne, aby zobaczyć wizualizację struktury holdingowej.
         </p>
+        <Button onClick={() => setIsAddModalOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Dodaj spółkę do grupy
+        </Button>
+        
+        <AddCapitalGroupMemberModal
+          open={isAddModalOpen}
+          onOpenChange={setIsAddModalOpen}
+          parentCompanyId={company.id}
+        />
       </div>
     );
   }
@@ -74,6 +87,13 @@ export function StructureVisualization({ company }: StructureVisualizationProps)
       <StructureCanvas
         initialNodes={layoutedNodes}
         initialEdges={layoutedEdges}
+        onAddEntity={() => setIsAddModalOpen(true)}
+      />
+      
+      <AddCapitalGroupMemberModal
+        open={isAddModalOpen}
+        onOpenChange={setIsAddModalOpen}
+        parentCompanyId={company.id}
       />
     </div>
   );

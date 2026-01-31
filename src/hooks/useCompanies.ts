@@ -165,6 +165,41 @@ export function useCompaniesList() {
   });
 }
 
+// Hook to get companies for capital group modal (excludes parent company)
+export function useCompaniesForCapitalGroup(parentCompanyId: string | undefined) {
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useQuery({
+    queryKey: ['companies_for_capital_group', tenantId, parentCompanyId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      let query = supabase
+        .from('companies')
+        .select('id, name, nip, krs, revenue_amount, revenue_year')
+        .eq('tenant_id', tenantId)
+        .order('name');
+      
+      // Exclude the parent company itself
+      if (parentCompanyId) {
+        query = query.neq('id', parentCompanyId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as { 
+        id: string; 
+        name: string; 
+        nip: string | null;
+        krs: string | null;
+        revenue_amount: number | null;
+        revenue_year: number | null;
+      }[];
+    },
+    enabled: !!tenantId,
+  });
+}
+
 // Hook to get companies with revenue data for ownership modal
 export function useCompaniesWithRevenue() {
   const { director, assistant } = useAuth();

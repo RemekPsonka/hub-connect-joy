@@ -1,4 +1,4 @@
-import { LayoutGrid, Download, ZoomIn, ZoomOut, Layers } from 'lucide-react';
+import { LayoutGrid, Download, ZoomIn, ZoomOut, Layers, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ interface StructureToolbarProps {
   onZoomOut: () => void;
   coverageOverlay: boolean;
   onCoverageOverlayChange: (enabled: boolean) => void;
+  onAddEntity?: () => void;
 }
 
 export function StructureToolbar({
@@ -19,10 +20,20 @@ export function StructureToolbar({
   onZoomOut,
   coverageOverlay,
   onCoverageOverlayChange,
+  onAddEntity,
 }: StructureToolbarProps) {
   return (
     <div className="flex items-center justify-between p-3 border-b bg-muted/30">
       <div className="flex items-center gap-2">
+        {onAddEntity && (
+          <Button onClick={onAddEntity} size="sm" className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Dodaj podmiot
+          </Button>
+        )}
+
+        {onAddEntity && <div className="h-6 w-px bg-border mx-2" />}
+
         <Button variant="outline" size="sm" onClick={onAutoLayout}>
           <LayoutGrid className="h-4 w-4 mr-2" />
           Auto-Layout
