@@ -1,307 +1,161 @@
 
-## Plan: Rozbudowa Dashboardu i Systemu Zarządzania Relacjami
 
-### Podsumowanie zmian
-Plan obejmuje:
-1. **Reorganizację Dashboard** - nowy układ priorytetów
-2. **Rozbudowę systemu siły relacji** - kategorie odświeżania wg typu kontaktu
-3. **Nową rolę "Przedstawiciele/Ambasadorzy"** - ograniczony dostęp do kontaktów z workflow przekazywania
+## Plan: Naprawa dodawania przedstawicieli/ambasadorów
 
----
-
-## Część 1: Reorganizacja Dashboard
-
-### Obecny układ (do zmiany)
-```text
-[Odkrycie Dnia - full width]          ← PRZENIEŚ NA DÓŁ
-[Kontakty do odnowienia]              ← PRZENIEŚ NA DÓŁ
-[KPI | Moje | Zespołowe]
-[Konsultacje | Spotkania | Dopasowania | Sieć]
-[Analityka sieci]
-[Priorytety | AI | Alerty]
-```
-
-### Nowy układ
-```text
-+---------------------------------------------------------------+
-| STATYSTYKI (bez zmian)                                        |
-+---------------------------------------------------------------+
-| SZYBKIE AKCJE (bez zmian)                                     |
-+---------------------------------------------------------------+
-
-+---------------------------------------------------------------+
-| 📋 ZADANIA                                                    |
-+---------------------------------------------------------------+
-| [KPI Tasks]    [Moje zadania]    [Zadania zespołowe]          |
-+---------------------------------------------------------------+
-
-+---------------------------------------------------------------+
-| 📊 KONSULTACJE I SPOTKANIA                                    |
-+---------------------------------------------------------------+
-| [Nadchodzące konsultacje] | [Przegląd spotkań grupowych]      |
-| [Dopasowania AI]          | [Przegląd sieci]                  |
-+---------------------------------------------------------------+
-
-+---------------------------------------------------------------+
-| 📈 ANALITYKA SIECI KONTAKTÓW                 ← ZMIANA NAZWY   |
-+---------------------------------------------------------------+
-| (pełna szerokość)                                              |
-+---------------------------------------------------------------+
-
-+---------------------------------------------------------------+
-| 🎯 ZARZĄDZANIE RELACJAMI                                      |
-+---------------------------------------------------------------+
-| [Priorytety dnia] | [Rekomendacje AI] | [Alerty relacji]      |
-+---------------------------------------------------------------+
-
-+---------------------------------------------------------------+
-| ⬇ DÓŁ STRONY - MNIEJ PILNE                                   |
-+---------------------------------------------------------------+
-| [🌟 Odkrycie Dnia]        | [📞 Kontakty do odnowienia]       |
-| (pół szerokości)          | (pół szerokości)                  |
-+---------------------------------------------------------------+
-```
-
-### Plik: `src/pages/Dashboard.tsx`
-Zmiany kolejności widgetów:
-- Przeniesienie `<DailySerendipity />` na koniec
-- Przeniesienie `<ContactsToRenew />` na koniec
-- Umieszczenie obu obok siebie w grid 2 kolumn
-
-### Plik: `src/components/dashboard/AnalyticsOverview.tsx`
-Zmiana tytułu:
-- "Analityka sieci" → "Analityka sieci kontaktów"
+### Problem
+Dodawanie przedstawiciela/ambasadora nie działa z powodu:
+1. Niezgodność nazw parametrów między hookiem a edge function (`full_name` vs `fullName`)
+2. Błędne mapowanie odpowiedzi (`userData.user_id` vs `user.id`)
+3. Brak dedykowanej edge function dla przedstawicieli (próbuje użyć `create-tenant-user` która tworzy dyrektorów)
+4. Brak wyświetlania tymczasowego hasła po utworzeniu konta
 
 ---
 
-## Część 2: Rozbudowa Systemu Siły Relacji
+## Rozwiązanie
 
-### A. Rozszerzenie tabeli `contact_groups` o politykę odświeżania
-
-```sql
-ALTER TABLE public.contact_groups 
-ADD COLUMN refresh_policy text DEFAULT 'quarterly' 
-  CHECK (refresh_policy IN ('monthly', 'quarterly', 'biannual', 'annual', 'never')),
-ADD COLUMN refresh_days integer DEFAULT 90,
-ADD COLUMN include_in_health_stats boolean DEFAULT true;
-```
-
-| Polityka | Dni | Opis |
-|----------|-----|------|
-| monthly | 30 | Bliscy znajomi, klienci premium |
-| quarterly | 90 | Klienci, członkowie CC |
-| biannual | 180 | B2B średni poziom |
-| annual | 365 | Kontakty okazjonalne |
-| never | NULL | Pomijane w statystykach (np. kontakty z telefonu) |
-
-### B. Konfiguracja grup w panelu admina
-
-**Nowy komponent**: `src/components/settings/GroupRefreshPolicyEditor.tsx`
+### 1. Nowa edge function `create-representative`
+Wzorowana na `create-assistant`, ale dedykowana dla przedstawicieli:
 
 ```text
-+---------------------------------------------------------------+
-| GRUPY KONTAKTÓW - POLITYKA ODŚWIEŻANIA              [Zapisz]  |
-+---------------------------------------------------------------+
-| Grupa                        | Częstotliwość  | W statyst.    |
-+---------------------------------------------------------------+
-| 🟡 Członek CC Remek          | [Kwartalnie ▼] | [✓]          |
-| 🔵 Członek CC Katowice       | [Kwartalnie ▼] | [✓]          |
-| 🔴 Baza kontaktów biznesowych| [Pomijaj    ▼] | [○]          |
-| 🟣 Kontakty biznesowe Remka  | [Rocznie    ▼] | [✓]          |
-| ⚪ Inne                       | [Pomijaj    ▼] | [○]          |
-+---------------------------------------------------------------+
+supabase/functions/create-representative/index.ts
+
+Funkcjonalność:
+- Przyjmuje: email, fullName, roleType, tenantId, parentDirectorId
+- Generuje tymczasowe hasło (10 znaków)
+- Tworzy konto w auth.users
+- Tworzy wpis w sales_representatives
+- Zwraca: success, representative, tempPassword
 ```
 
-### C. Aktualizacja `useAnalytics.ts` - Network Health
-
-Zmiana logiki `calculateNetworkHealth`:
-1. Pobierz grupy kontaktów z ich `refresh_days`
-2. Dla każdego kontaktu sprawdź jego `primary_group_id`
-3. Porównaj `days_since_contact` z `refresh_days` grupy
-4. Pomiń kontakty z grup gdzie `include_in_health_stats = false`
+### 2. Aktualizacja `useRepresentatives.ts`
 
 ```text
-Logika:
-- Zdrowy: days_since_contact < refresh_days grupy
-- Ostrzeżenie: days_since_contact >= refresh_days && < refresh_days * 1.5
-- Krytyczny: days_since_contact >= refresh_days * 1.5
+Zmiany:
+- Wywołanie nowej edge function create-representative
+- Usunięcie pola password z interfejsu CreateRepresentativeInput
+- Zwracanie tempPassword z mutacji
 ```
 
-### D. Aktualizacja `useRelationshipHealth.ts`
+### 3. Przebudowa `AddRepresentativeModal.tsx`
 
-Podobna zmiana - uwzględnienie polityki grupy przy obliczaniu alertów.
-
-### E. Aktualizacja `ContactsToRenew.tsx`
-
-Filtrowanie kontaktów na podstawie polityki grupy, nie stałych 60 dni.
+```text
+Wzorowane na AddAssistantModal:
+- Formularz bez pola hasła (generowane automatycznie)
+- Po utworzeniu: wyświetlenie kartki z tymczasowym hasłem
+- Przycisk kopiowania hasła
+- Opcja wydruku kartki z danymi logowania
+```
 
 ---
 
-## Część 3: Nowa Rola - Przedstawiciele Handlowi / Ambasadorzy
+## Szczegóły techniczne
 
-### A. Nowa tabela `sales_representatives`
+### A. Edge Function: `supabase/functions/create-representative/index.ts`
 
-```sql
-CREATE TABLE public.sales_representatives (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  parent_director_id uuid REFERENCES public.directors(id) NOT NULL,
-  tenant_id uuid NOT NULL,
-  full_name text NOT NULL,
-  email text NOT NULL,
-  role_type text DEFAULT 'sales_rep' CHECK (role_type IN ('sales_rep', 'ambassador')),
-  is_active boolean DEFAULT true,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(email, tenant_id)
-);
+```typescript
+// Struktura wzorowana na create-assistant
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+serve(async (req) => {
+  // 1. Autoryzacja - sprawdzenie czy dyrektor/admin
+  // 2. Walidacja danych wejściowych
+  // 3. Generowanie hasła tymczasowego
+  // 4. Utworzenie użytkownika w auth.users
+  // 5. Utworzenie wpisu w sales_representatives
+  // 6. Zwrot danych wraz z tempPassword
+});
+
+function generatePassword(): string {
+  // Generowanie bezpiecznego hasła 10-znakowego
+}
 ```
 
-### B. Tabela przypisania kontaktów do przedstawicieli
+### B. Hook: `src/hooks/useRepresentatives.ts`
 
-```sql
-CREATE TABLE public.representative_contacts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  representative_id uuid REFERENCES public.sales_representatives(id) ON DELETE CASCADE NOT NULL,
-  contact_id uuid REFERENCES public.contacts(id) ON DELETE CASCADE NOT NULL,
-  assigned_by uuid REFERENCES public.directors(id) NOT NULL,
-  assigned_at timestamptz DEFAULT now(),
-  status text DEFAULT 'active' CHECK (status IN ('active', 'expired', 'reclaimed', 'completed')),
-  deadline_days integer DEFAULT 14,
-  deadline_at date,
-  extended_count integer DEFAULT 0,
-  notes text,
-  UNIQUE(representative_id, contact_id)
-);
+```typescript
+// Przed:
+export interface CreateRepresentativeInput {
+  full_name: string;
+  email: string;
+  role_type: 'sales_rep' | 'ambassador';
+  password: string;  // <- USUNĄĆ
+}
+
+// Po:
+export interface CreateRepresentativeInput {
+  full_name: string;
+  email: string;
+  role_type: 'sales_rep' | 'ambassador';
+}
+
+// Mutacja zwraca tempPassword
+const result = await supabase.functions.invoke('create-representative', {
+  body: {
+    email: input.email,
+    fullName: input.full_name,
+    roleType: input.role_type,
+    tenantId: director.tenant_id,
+    parentDirectorId: director.id,
+  }
+});
+
+return {
+  representative: result.data.representative,
+  tempPassword: result.data.tempPassword
+};
 ```
 
-### C. Widok przedstawiciela - ograniczony dostęp
-
-Przedstawiciel widzi:
-- ✓ Dane podstawowe kontaktu (imię, firma, email, telefon)
-- ✓ Analizę AI firmy (jeśli istnieje)
-- ✓ Swoje własne notatki i konsultacje
-- ✗ Notatki dyrektora
-- ✗ Konsultacje dyrektora
-- ✗ Historię aktywności
-
-### D. RLS Policies
-
-```sql
--- Przedstawiciele widzą tylko przypisane kontakty
-CREATE POLICY "Sales reps see assigned contacts" ON public.contacts
-FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM representative_contacts rc
-    JOIN sales_representatives sr ON sr.id = rc.representative_id
-    WHERE rc.contact_id = contacts.id
-    AND sr.user_id = auth.uid()
-    AND rc.status = 'active'
-  )
-);
-
--- Ukryj notatki dyrektora dla przedstawicieli
-CREATE POLICY "Sales reps cannot see director notes" ON public.consultations
-FOR SELECT USING (
-  -- Dyrektor widzi wszystko
-  EXISTS (SELECT 1 FROM directors WHERE user_id = auth.uid() AND tenant_id = consultations.tenant_id)
-  OR
-  -- Przedstawiciel widzi tylko swoje
-  (director_id = (SELECT d.id FROM directors d 
-                  JOIN sales_representatives sr ON sr.parent_director_id = d.id 
-                  WHERE sr.user_id = auth.uid()))
-);
-```
-
-### E. Workflow przekazywania kontaktu
+### C. Modal: `src/components/representatives/AddRepresentativeModal.tsx`
 
 ```text
-DYREKTOR                          PRZEDSTAWICIEL
-    |                                    |
-    | 1. Przekazuje kontakt              |
-    |─────────────────────────────────────>
-    |    (tworzy task + deadline 14 dni) |
-    |                                    |
-    |                              2. Umawia spotkanie
-    |                                    |
-    | 3. Monitoring (follow-up task)     |
-    |<─────────────────────────────────────
-    |                                    |
-    | 4a. Jeśli nie umówił:              |
-    |     - Przedłuż deadline            |
-    |     - LUB Odbieram kontakt         |
-    |                                    |
-    | 4b. Jeśli umówił:                  |
-    |     - Status: "W trakcie"          |
-    |     - Nowy task: "Spotkanie"       |
-    |                                    |
-    | 5. Po spotkaniu:                   |
-    |     - Nowy task: "Follow-up"       |
-    |     - Notatki ze spotkania         |
-    |                                    |
-    | 6. Zamknięcie:                     |
-    |     - "Podjęcie współpracy"        |
-    |     - LUB "Odrzucone"              |
+Stan po utworzeniu:
++---------------------------------------------------------------+
+| ✅ Przedstawiciel został utworzony!                           |
++---------------------------------------------------------------+
+|                                                               |
+| Przekaż poniższe dane logowania przedstawicielowi:           |
+|                                                               |
+| 📧 Email: jan.kowalski@firma.pl                               |
+| 🔑 Hasło tymczasowe:                                          |
+|    ┌─────────────────────────────────────────┐               |
+|    │ Xk7#mPq2@N                              │ [📋 Kopiuj]    |
+|    └─────────────────────────────────────────┘               |
+|                                                               |
+| ⚠️  Przedstawiciel powinien zmienić hasło po pierwszym        |
+|    logowaniu.                                                 |
+|                                                               |
+| [🖨️ Drukuj instrukcję]                 [Zamknij]              |
++---------------------------------------------------------------+
 ```
 
-### F. Nowe komponenty
+### D. Kartka do wydruku (opcjonalnie)
 
-| Plik | Opis |
-|------|------|
-| `src/pages/Representatives.tsx` | Panel zarządzania przedstawicielami |
-| `src/components/representatives/RepresentativesList.tsx` | Lista przedstawicieli |
-| `src/components/representatives/AddRepresentativeModal.tsx` | Dodawanie przedstawiciela |
-| `src/components/representatives/AssignContactModal.tsx` | Przekazywanie kontaktu |
-| `src/components/representatives/RepContactsTable.tsx` | Tabela przekazanych kontaktów |
-| `src/hooks/useRepresentatives.ts` | Hook CRUD |
-| `src/hooks/useRepresentativeContacts.ts` | Hook dla przypisań |
-
-### G. Widok przedstawiciela
-
-Przedstawiciel logując się widzi:
-- Uproszczony dashboard
-- Lista przypisanych kontaktów
-- Własne zadania
-- Brak dostępu do: Sieci, Analityki, Spotkań grupowych, Dopasowań AI
+```text
+Funkcja drukowania kartki z danymi:
+- Logo/nazwa firmy
+- Dane logowania (email, hasło)
+- URL do logowania
+- Instrukcja pierwszego logowania
+- Przypomnienie o zmianie hasła
+```
 
 ---
 
-## Część 4: Podsumowanie plików
+## Pliki do utworzenia/modyfikacji
 
-### Nowe pliki
-| Plik | Opis |
-|------|------|
-| `src/components/settings/GroupRefreshPolicyEditor.tsx` | Edytor polityki odświeżania |
-| `src/pages/Representatives.tsx` | Strona zarządzania |
-| `src/components/representatives/*.tsx` | 5 komponentów |
-| `src/hooks/useRepresentatives.ts` | Hook CRUD |
-| `src/hooks/useRepresentativeContacts.ts` | Hook przypisań |
-
-### Modyfikowane pliki
-| Plik | Zmiany |
-|------|--------|
-| `src/pages/Dashboard.tsx` | Nowy układ widgetów |
-| `src/components/dashboard/AnalyticsOverview.tsx` | Zmiana tytułu |
-| `src/components/dashboard/ContactsToRenew.tsx` | Logika polityki grupy |
-| `src/hooks/useAnalytics.ts` | Network health z polityką |
-| `src/hooks/useRelationshipHealth.ts` | Alerty z polityką |
-| `src/pages/Settings.tsx` | Nowa zakładka "Polityka relacji" |
-| `src/App.tsx` | Nowa ścieżka /representatives |
-| `src/components/layout/AppSidebar.tsx` | Link do przedstawicieli |
-
-### Migracje SQL
-1. Rozszerzenie `contact_groups` o politykę odświeżania
-2. Nowa tabela `sales_representatives`
-3. Nowa tabela `representative_contacts`
-4. RLS policies dla ograniczonego dostępu
+| Plik | Akcja | Opis |
+|------|-------|------|
+| `supabase/functions/create-representative/index.ts` | Nowy | Edge function tworzenia przedstawiciela |
+| `src/hooks/useRepresentatives.ts` | Modyfikacja | Nowe wywołanie edge function, usunięcie password |
+| `src/components/representatives/AddRepresentativeModal.tsx` | Modyfikacja | Nowy UI z hasłem tymczasowym |
 
 ---
 
 ## Kolejność implementacji
 
-1. **Faza 1**: Reorganizacja Dashboard (layout + zmiana nazwy)
-2. **Faza 2**: Polityka odświeżania dla grup (SQL + UI admina)
-3. **Faza 3**: Aktualizacja logiki Network Health
-4. **Faza 4**: Tabele dla przedstawicieli (SQL + RLS)
-5. **Faza 5**: Hook i komponenty przedstawicieli
-6. **Faza 6**: Workflow przekazywania kontaktu
-7. **Faza 7**: Widok uproszczony dla przedstawiciela
+1. **Faza 1**: Utworzenie edge function `create-representative`
+2. **Faza 2**: Aktualizacja `useRepresentatives.ts` - wywołanie nowej funkcji
+3. **Faza 3**: Przebudowa `AddRepresentativeModal.tsx` - nowy UI wzorowany na asystencie
+4. **Faza 4**: Testowanie end-to-end
+
