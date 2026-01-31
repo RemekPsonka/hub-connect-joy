@@ -9,11 +9,17 @@ export function TimelineLegend({ darkMode }: TimelineLegendProps) {
       color: darkMode ? 'bg-blue-400' : 'bg-blue-500' 
     },
     { 
-      label: 'Faza działań (90 dni)', 
+      label: 'Faza narastania (T-4)', 
+      gradient: darkMode 
+        ? 'bg-gradient-to-r from-transparent to-green-400'
+        : 'bg-gradient-to-r from-transparent to-green-600'
+    },
+    { 
+      label: 'Przygotowanie (T-3)', 
       color: darkMode ? 'bg-green-400' : 'bg-green-600' 
     },
     { 
-      label: 'Strefa zagrożenia (30 dni)', 
+      label: 'Zagrożenie (T-1)', 
       gradient: darkMode 
         ? 'bg-gradient-to-r from-red-900 to-red-600'
         : 'bg-gradient-to-r from-red-100 to-red-500'
