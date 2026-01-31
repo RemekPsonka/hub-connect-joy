@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent } from '@/components/ui/card';
-import { useBusinessInterview, useSaveBusinessInterview, validateBIForAI } from '@/hooks/useBusinessInterview';
+import { useBusinessInterview, useSaveBusinessInterview, useProcessBIWithAI, validateBIForAI } from '@/hooks/useBusinessInterview';
 import { BIActionBar } from './BIActionBar';
 import {
   SectionABasic,
@@ -28,6 +28,7 @@ interface BITabProps {
 export function BITab({ contactId, contactName }: BITabProps) {
   const { data: biData, isLoading } = useBusinessInterview(contactId);
   const saveMutation = useSaveBusinessInterview();
+  const processBI = useProcessBIWithAI();
   const [formData, setFormData] = useState<Partial<BusinessInterview>>({});
   const [isProcessingAI, setIsProcessingAI] = useState(false);
 
@@ -94,10 +95,18 @@ export function BITab({ contactId, contactName }: BITabProps) {
   };
 
   const handleProcessAI = async () => {
+    if (!biData?.id) {
+      toast.error('Najpierw zapisz dane BI');
+      return;
+    }
+    
     setIsProcessingAI(true);
     try {
-      // TODO: Call process-bi-ai edge function
-      toast.info('Przetwarzanie AI zostanie dodane wkrótce');
+      await processBI.mutateAsync({ biId: biData.id });
+      toast.success('AI przeanalizowało dane BI');
+    } catch (error) {
+      console.error('AI processing error:', error);
+      toast.error('Błąd przetwarzania AI');
     } finally {
       setIsProcessingAI(false);
     }
