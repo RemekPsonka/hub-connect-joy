@@ -17,6 +17,8 @@ interface PolicyBarProps {
   isCritical: boolean;
   showCriticalPath: boolean;
   onChecklistChange: (policyId: string, key: keyof RenewalChecklist, value: boolean) => void;
+  onEdit: (policy: InsurancePolicy) => void;
+  onDelete: (policyId: string) => void;
 }
 
 const DANGER_ZONE_DAYS = 30;
@@ -30,6 +32,8 @@ export function PolicyBar({
   isCritical,
   showCriticalPath,
   onChecklistChange,
+  onEdit,
+  onDelete,
 }: PolicyBarProps) {
   const calculations = useMemo(() => {
     const policyStart = new Date(policy.start_date);
@@ -159,6 +163,8 @@ export function PolicyBar({
           <TimelineTooltip
             policy={policy}
             onChecklistChange={(key, value) => onChecklistChange(policy.id, key, value)}
+            onEdit={() => onEdit(policy)}
+            onDelete={() => onDelete(policy.id)}
           />
         </TooltipContent>
       </Tooltip>

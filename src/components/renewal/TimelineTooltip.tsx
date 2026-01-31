@@ -1,14 +1,18 @@
 import { format, differenceInDays } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import { Pencil, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CHECKLIST_LABELS, type RenewalChecklist, type InsurancePolicy } from './types';
 
 interface TimelineTooltipProps {
   policy: InsurancePolicy;
   onChecklistChange: (key: keyof RenewalChecklist, value: boolean) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export function TimelineTooltip({ policy, onChecklistChange }: TimelineTooltipProps) {
+export function TimelineTooltip({ policy, onChecklistChange, onEdit, onDelete }: TimelineTooltipProps) {
   const endDate = new Date(policy.end_date);
   const today = new Date();
   const daysLeft = differenceInDays(endDate, today);
@@ -73,6 +77,33 @@ export function TimelineTooltip({ policy, onChecklistChange }: TimelineTooltipPr
           </div>
         )}
       </div>
+
+      {/* Action buttons */}
+      {(onEdit || onDelete) && (
+        <div className="border-t pt-2 mt-2 flex gap-2">
+          {onEdit && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1 text-xs h-7"
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            >
+              <Pencil className="h-3 w-3 mr-1" />
+              Edytuj
+            </Button>
+          )}
+          {onDelete && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="text-xs h-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -7,11 +7,23 @@ import { TimelineHeader, getTimelinePeriods } from './TimelineHeader';
 import { TimelineLegend } from './TimelineLegend';
 import { TimelineRow } from './TimelineRow';
 import { AddPolicyModal } from './AddPolicyModal';
+import { EditPolicyModal } from './EditPolicyModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   POLICY_TYPE_LABELS, 
   type TimeViewMode, 
   type PolicyType,
-  type RenewalChecklist 
+  type RenewalChecklist,
+  type InsurancePolicy,
 } from './types';
 
 interface RenewalTimelineProps {
@@ -24,10 +36,17 @@ export function RenewalTimeline({ companyId }: RenewalTimelineProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [policyToEdit, setPolicyToEdit] = useState<InsurancePolicy | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
+
   const {
     policies,
     isLoading,
     createPolicy,
+    updatePolicy,
+    deletePolicy,
     updateChecklist,
     criticalPolicies,
   } = useInsurancePolicies(companyId);
@@ -90,6 +109,36 @@ export function RenewalTimeline({ companyId }: RenewalTimelineProps) {
     });
   }, [createPolicy]);
 
+  const handleEditPolicy = useCallback((policy: InsurancePolicy) => {
+    setPolicyToEdit(policy);
+    setEditModalOpen(true);
+  }, []);
+
+  const handleUpdatePolicy = useCallback((data: Parameters<typeof updatePolicy.mutate>[0]) => {
+    updatePolicy.mutate(data, {
+      onSuccess: () => {
+        setEditModalOpen(false);
+        setPolicyToEdit(null);
+      },
+    });
+  }, [updatePolicy]);
+
+  const handleDeletePolicy = useCallback((policyId: string) => {
+    setPolicyToDelete(policyId);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (policyToDelete) {
+      deletePolicy.mutate(policyToDelete, {
+        onSuccess: () => {
+          setDeleteConfirmOpen(false);
+          setPolicyToDelete(null);
+        },
+      });
+    }
+  }, [policyToDelete, deletePolicy]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -147,6 +196,8 @@ export function RenewalTimeline({ companyId }: RenewalTimelineProps) {
                 periodCount={periods.length}
                 darkMode={darkMode}
                 criticalPolicyIds={criticalPolicyIds}
+                onEditPolicy={handleEditPolicy}
+                onDeletePolicy={handleDeletePolicy}
                 showCriticalPath={showCriticalPath}
                 onChecklistChange={handleChecklistChange}
               />
@@ -162,6 +213,35 @@ export function RenewalTimeline({ companyId }: RenewalTimelineProps) {
         onSubmit={handleAddPolicy}
         isLoading={createPolicy.isPending}
       />
+
+      <EditPolicyModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        policy={policyToEdit}
+        onSubmit={handleUpdatePolicy}
+        isLoading={updatePolicy.isPending}
+      />
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć polisę?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ta operacja jest nieodwracalna. Polisa zostanie trwale usunięta z harmonogramu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletePolicy.isPending}
+            >
+              {deletePolicy.isPending ? 'Usuwanie...' : 'Usuń polisę'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
