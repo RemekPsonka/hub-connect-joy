@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.analyze-insurance-risk]
 verify_jwt = false
+
+[functions.remek-chat]
+verify_jwt = false

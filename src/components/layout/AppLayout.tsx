@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { SemanticSearchModal } from '@/components/search/SemanticSearchModal';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ReportBugButton } from '@/components/bugs/ReportBugButton';
+import { RemekChatWidget } from '@/components/remek/RemekChatWidget';
 
 export function AppLayout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -71,6 +72,7 @@ export function AppLayout() {
         onOpenChange={setIsSearchOpen} 
       />
       
+      <RemekChatWidget />
       <ReportBugButton />
     </SidebarProvider>
   );
