@@ -924,6 +924,7 @@ export type Database = {
           meeting_date: string | null
           meeting_type: string
           sort_order: number | null
+          updated_at: string | null
         }
         Insert: {
           cc_group?: string | null
@@ -938,6 +939,7 @@ export type Database = {
           meeting_date?: string | null
           meeting_type: string
           sort_order?: number | null
+          updated_at?: string | null
         }
         Update: {
           cc_group?: string | null
@@ -952,6 +954,7 @@ export type Database = {
           meeting_date?: string | null
           meeting_type?: string
           sort_order?: number | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1176,6 +1179,7 @@ export type Database = {
           scheduled_at: string
           status: string | null
           tenant_id: string
+          updated_at: string | null
         }
         Insert: {
           agenda?: string | null
@@ -1193,6 +1197,7 @@ export type Database = {
           scheduled_at: string
           status?: string | null
           tenant_id: string
+          updated_at?: string | null
         }
         Update: {
           agenda?: string | null
@@ -1210,6 +1215,7 @@ export type Database = {
           scheduled_at?: string
           status?: string | null
           tenant_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -2184,6 +2190,7 @@ export type Database = {
           name: string
           subcategory: string | null
           tenant_id: string
+          updated_at: string | null
         }
         Insert: {
           category: string
@@ -2195,6 +2202,7 @@ export type Database = {
           name: string
           subcategory?: string | null
           tenant_id: string
+          updated_at?: string | null
         }
         Update: {
           category?: string
@@ -2206,6 +2214,7 @@ export type Database = {
           name?: string
           subcategory?: string | null
           tenant_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -2689,6 +2698,7 @@ export type Database = {
           status: string | null
           tenant_id: string
           title: string
+          updated_at: string | null
         }
         Insert: {
           category_path?: unknown
@@ -2703,6 +2713,7 @@ export type Database = {
           status?: string | null
           tenant_id: string
           title: string
+          updated_at?: string | null
         }
         Update: {
           category_path?: unknown
@@ -2717,6 +2728,7 @@ export type Database = {
           status?: string | null
           tenant_id?: string
           title?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -2871,6 +2883,7 @@ export type Database = {
           status: string | null
           tenant_id: string
           title: string
+          updated_at: string | null
         }
         Insert: {
           category_path?: unknown
@@ -2884,6 +2897,7 @@ export type Database = {
           status?: string | null
           tenant_id: string
           title: string
+          updated_at?: string | null
         }
         Update: {
           category_path?: unknown
@@ -2897,6 +2911,7 @@ export type Database = {
           status?: string | null
           tenant_id?: string
           title?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -2926,6 +2941,7 @@ export type Database = {
           notes: string | null
           outcome: string | null
           recommendation_id: string | null
+          updated_at: string | null
           was_recommended: boolean | null
         }
         Insert: {
@@ -2938,6 +2954,7 @@ export type Database = {
           notes?: string | null
           outcome?: string | null
           recommendation_id?: string | null
+          updated_at?: string | null
           was_recommended?: boolean | null
         }
         Update: {
@@ -2950,6 +2967,7 @@ export type Database = {
           notes?: string | null
           outcome?: string | null
           recommendation_id?: string | null
+          updated_at?: string | null
           was_recommended?: boolean | null
         }
         Relationships: [
@@ -2995,6 +3013,7 @@ export type Database = {
           revenue_share: number | null
           role: string | null
           tenant_id: string
+          updated_at: string | null
         }
         Insert: {
           added_by?: string | null
@@ -3007,6 +3026,7 @@ export type Database = {
           revenue_share?: number | null
           role?: string | null
           tenant_id: string
+          updated_at?: string | null
         }
         Update: {
           added_by?: string | null
@@ -3019,6 +3039,7 @@ export type Database = {
           revenue_share?: number | null
           role?: string | null
           tenant_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -3712,6 +3733,7 @@ export type Database = {
           task_type: string | null
           tenant_id: string
           title: string
+          updated_at: string | null
           visibility: string | null
           workflow_step: string | null
         }
@@ -3731,6 +3753,7 @@ export type Database = {
           task_type?: string | null
           tenant_id: string
           title: string
+          updated_at?: string | null
           visibility?: string | null
           workflow_step?: string | null
         }
@@ -3750,6 +3773,7 @@ export type Database = {
           task_type?: string | null
           tenant_id?: string
           title?: string
+          updated_at?: string | null
           visibility?: string | null
           workflow_step?: string | null
         }
@@ -3842,6 +3866,7 @@ export type Database = {
           top_results: Json | null
           total_agents_available: number | null
           total_duration_ms: number | null
+          updated_at: string | null
         }
         Insert: {
           agents_responded?: number | null
@@ -3862,6 +3887,7 @@ export type Database = {
           top_results?: Json | null
           total_agents_available?: number | null
           total_duration_ms?: number | null
+          updated_at?: string | null
         }
         Update: {
           agents_responded?: number | null
@@ -3882,6 +3908,7 @@ export type Database = {
           top_results?: Json | null
           total_agents_available?: number | null
           total_duration_ms?: number | null
+          updated_at?: string | null
         }
         Relationships: [
           {
