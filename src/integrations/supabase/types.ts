@@ -380,6 +380,8 @@ export type Database = {
           id: string
           page_url: string | null
           priority: string | null
+          remek_conversation_snapshot: Json | null
+          remek_session_id: string | null
           reporter_name: string | null
           reporter_user_id: string | null
           resolution_notes: string | null
@@ -389,6 +391,7 @@ export type Database = {
           tenant_id: string
           title: string
           updated_at: string | null
+          user_context: Json | null
         }
         Insert: {
           context_data?: Json | null
@@ -397,6 +400,8 @@ export type Database = {
           id?: string
           page_url?: string | null
           priority?: string | null
+          remek_conversation_snapshot?: Json | null
+          remek_session_id?: string | null
           reporter_name?: string | null
           reporter_user_id?: string | null
           resolution_notes?: string | null
@@ -406,6 +411,7 @@ export type Database = {
           tenant_id: string
           title: string
           updated_at?: string | null
+          user_context?: Json | null
         }
         Update: {
           context_data?: Json | null
@@ -414,6 +420,8 @@ export type Database = {
           id?: string
           page_url?: string | null
           priority?: string | null
+          remek_conversation_snapshot?: Json | null
+          remek_session_id?: string | null
           reporter_name?: string | null
           reporter_user_id?: string | null
           resolution_notes?: string | null
@@ -423,6 +431,7 @@ export type Database = {
           tenant_id?: string
           title?: string
           updated_at?: string | null
+          user_context?: Json | null
         }
         Relationships: []
       }
@@ -3208,6 +3217,123 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: true
             referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      remek_conversations: {
+        Row: {
+          assistant_id: string | null
+          context: Json | null
+          created_at: string | null
+          director_id: string | null
+          helpful_rating: number | null
+          id: string
+          message: string
+          role: string
+          session_id: string
+          tenant_id: string
+        }
+        Insert: {
+          assistant_id?: string | null
+          context?: Json | null
+          created_at?: string | null
+          director_id?: string | null
+          helpful_rating?: number | null
+          id?: string
+          message: string
+          role: string
+          session_id?: string
+          tenant_id: string
+        }
+        Update: {
+          assistant_id?: string | null
+          context?: Json | null
+          created_at?: string | null
+          director_id?: string | null
+          helpful_rating?: number | null
+          id?: string
+          message?: string
+          role?: string
+          session_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "remek_conversations_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "remek_conversations_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "remek_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      remek_knowledge_base: {
+        Row: {
+          category: string
+          content: string
+          created_at: string | null
+          fts: unknown
+          id: string
+          is_global: boolean | null
+          keywords: string[] | null
+          module: string | null
+          related_articles: string[] | null
+          sort_order: number | null
+          tenant_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string | null
+          fts?: unknown
+          id?: string
+          is_global?: boolean | null
+          keywords?: string[] | null
+          module?: string | null
+          related_articles?: string[] | null
+          sort_order?: number | null
+          tenant_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string | null
+          fts?: unknown
+          id?: string
+          is_global?: boolean | null
+          keywords?: string[] | null
+          module?: string | null
+          related_articles?: string[] | null
+          sort_order?: number | null
+          tenant_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "remek_knowledge_base_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
