@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MessageCircleQuestion, X, Send, RotateCcw, Bug, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useRemekChat } from '@/hooks/useRemekChat';
@@ -42,10 +42,7 @@ export function RemekChatWidget() {
   // Scroll to bottom when messages change
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages, isOpen]);
 
@@ -145,7 +142,7 @@ export function RemekChatWidget() {
           </div>
 
           {/* Messages area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1 h-[450px] overflow-y-auto">
+          <div ref={scrollAreaRef} className="flex-1 overflow-y-auto" style={{ maxHeight: '450px' }}>
             <div className="p-4 space-y-4">
               {/* Welcome message (only if no messages) */}
               {!hasMessages && !isLoadingHistory && (
@@ -276,7 +273,7 @@ export function RemekChatWidget() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Quick actions */}
           <div className="px-4 py-2 border-t flex gap-2 flex-wrap">
