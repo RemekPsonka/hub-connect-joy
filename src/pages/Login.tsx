@@ -203,10 +203,7 @@ export default function Login() {
             </Button>
 
             <p className="text-sm text-muted-foreground text-center">
-              Nie masz konta?{' '}
-              <Link to="/signup" className="text-primary hover:underline font-medium">
-                Zarejestruj się
-              </Link>
+              Aby uzyskać konto, skontaktuj się z administratorem.
             </p>
           </CardFooter>
         </form>
