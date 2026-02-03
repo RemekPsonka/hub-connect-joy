@@ -1,74 +1,141 @@
 
 
-# Plan naprawy scrollowania w oknie AI Remek
+# Plan: Etap 1.1 — Triggery updated_at (Opcja B)
 
-## Zidentyfikowany problem
+## Zakres zmian
 
-Radix UI ScrollArea wymaga poprawnej struktury wysokości:
-- **Root** (`ScrollAreaPrimitive.Root`) - musi mieć stałą wysokość
-- **Viewport** - dziedziczy wysokość z Root
+Utworzę jedną migrację SQL, która:
 
-Obecny kod ma problem:
-```tsx
-<ScrollArea className="flex-1 h-[450px] overflow-y-auto">
-```
-
-`flex-1` sprawia, że element rozciąga się w kontenerze flexbox, ale `h-[450px]` jest nadpisywane. Dodatkowo `overflow-y-auto` na Root nie działa, bo scrollowanie obsługuje Viewport.
+1. **Doda kolumnę `updated_at`** do 9 tabel, które jej nie mają
+2. **Doda trigger `set_updated_at`** do wszystkich 11 tabel
 
 ---
 
-## Rozwiązanie
+## Szczegóły techniczne
 
-Zamiast używać Radix ScrollArea, użyjemy prostego `div` z natywnym scrollowaniem CSS. To rozwiąże problem i będzie działać poprawnie:
+### Migracja SQL
 
-### Zmiana w kodzie
+```sql
+-- =====================================================
+-- CZĘŚĆ 1: Dodanie kolumny updated_at do 9 tabel
+-- =====================================================
 
-**Linia 148 - przed:**
-```tsx
-<ScrollArea ref={scrollAreaRef} className="flex-1 h-[450px] overflow-y-auto">
+ALTER TABLE consultations 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE consultation_meetings 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE insurance_products 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE needs 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE offers 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE one_on_one_meetings 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE ownership_stakes 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE tasks 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE turbo_agent_sessions 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- =====================================================
+-- CZĘŚĆ 2: Dodanie triggerów do wszystkich 11 tabel
+-- =====================================================
+
+DROP TRIGGER IF EXISTS set_updated_at ON contacts;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON contacts
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON consultations;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON consultations
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON consultation_meetings;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON consultation_meetings
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON group_meetings;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON group_meetings
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON insurance_products;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON insurance_products
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON needs;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON needs
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON offers;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON offers
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON one_on_one_meetings;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON one_on_one_meetings
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON ownership_stakes;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON ownership_stakes
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON tasks;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON tasks
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_updated_at ON turbo_agent_sessions;
+CREATE TRIGGER set_updated_at 
+BEFORE UPDATE ON turbo_agent_sessions
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 ```
-
-**Po:**
-```tsx
-<div 
-  ref={scrollAreaRef} 
-  className="flex-1 overflow-y-auto"
-  style={{ maxHeight: '450px' }}
->
-```
-
-### Zmiana w scroll-to-bottom (linie 43-49)
-
-**Przed:**
-```tsx
-const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-if (scrollContainer) {
-  scrollContainer.scrollTop = scrollContainer.scrollHeight;
-}
-```
-
-**Po:**
-```tsx
-scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-```
-
-### Usunięcie niepotrzebnego importu
-
-Usunięcie `ScrollArea` z importów (linia 6), ponieważ nie będzie już używany w tym komponencie.
 
 ---
 
-## Dlaczego to zadziała
+## Podsumowanie zmian
 
-1. **Natywne scrollowanie CSS** - `overflow-y: auto` + `max-height` to sprawdzony pattern
-2. **Bezpośredni ref** - nie trzeba szukać Radix Viewport
-3. **Prostsze rozwiązanie** - mniej warstw abstrakcji = mniej potencjalnych błędów
+| Element | Ilość |
+|---------|-------|
+| Nowe kolumny `updated_at` | 9 |
+| Nowe triggery `set_updated_at` | 11 |
+| Zmiany w kodzie frontend | 0 |
+| Zmiany w Edge Functions | 0 |
 
 ---
 
-## Pliki do modyfikacji
+## Test po wdrożeniu
 
-| Plik | Zmiana |
-|------|--------|
-| `src/components/remek/RemekChatWidget.tsx` | Zamiana ScrollArea na div z overflow-y-auto |
+Po zatwierdzeniu migracji uruchom w Cloud View > Run SQL:
+
+```sql
+SELECT trigger_name, event_object_table 
+FROM information_schema.triggers 
+WHERE trigger_name = 'set_updated_at'
+ORDER BY event_object_table;
+```
+
+**Oczekiwany wynik:** 11 wierszy (po jednym dla każdej tabeli).
+
+---
+
+## Ryzyko
+
+**Niskie** — migracja jest idempotentna (można uruchomić wielokrotnie bez błędu) i nie zmienia istniejących danych ani kodu aplikacji.
 
