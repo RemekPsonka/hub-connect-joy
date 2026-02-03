@@ -1,102 +1,74 @@
 
-# Plan naprawy okna AI Remek
 
-## Zidentyfikowane problemy
+# Plan naprawy scrollowania w oknie AI Remek
 
-Na podstawie screenshota i kodu widać:
+## Zidentyfikowany problem
 
-1. **Brak scrollowania** — okno ma stałą wysokość `h-80` (320px), ale ScrollArea nie działa poprawnie
-2. **Za wąskie okno** — obecna szerokość to `w-96` (384px)
-3. **Brak aktywnych linków** — ReactMarkdown nie renderuje linków jako klikalne elementy z nawigacją
+Radix UI ScrollArea wymaga poprawnej struktury wysokości:
+- **Root** (`ScrollAreaPrimitive.Root`) - musi mieć stałą wysokość
+- **Viewport** - dziedziczy wysokość z Root
+
+Obecny kod ma problem:
+```tsx
+<ScrollArea className="flex-1 h-[450px] overflow-y-auto">
+```
+
+`flex-1` sprawia, że element rozciąga się w kontenerze flexbox, ale `h-[450px]` jest nadpisywane. Dodatkowo `overflow-y-auto` na Root nie działa, bo scrollowanie obsługuje Viewport.
 
 ---
 
-## Planowane zmiany
+## Rozwiązanie
 
-### 1. Poszerzenie okna o ~30%
+Zamiast używać Radix ScrollArea, użyjemy prostego `div` z natywnym scrollowaniem CSS. To rozwiąże problem i będzie działać poprawnie:
 
-```
-Obecna szerokość: w-96 (384px)
-Nowa szerokość:   w-[500px] (~30% więcej)
-```
+### Zmiana w kodzie
 
-### 2. Zwiększenie wysokości obszaru wiadomości
-
-```
-Obecna wysokość: h-80 (320px)  
-Nowa wysokość:   h-[450px] (lepszy scroll)
+**Linia 148 - przed:**
+```tsx
+<ScrollArea ref={scrollAreaRef} className="flex-1 h-[450px] overflow-y-auto">
 ```
 
-### 3. Naprawienie ScrollArea
+**Po:**
+```tsx
+<div 
+  ref={scrollAreaRef} 
+  className="flex-1 overflow-y-auto"
+  style={{ maxHeight: '450px' }}
+>
+```
 
-- Dodanie `overflow-y-auto` jako fallback
-- Upewnienie się, że viewport ma poprawną wysokość
+### Zmiana w scroll-to-bottom (linie 43-49)
 
-### 4. Aktywne linki w tekście
-
-Dodanie do ReactMarkdown komponentu `a` (link), który:
-- Rozpoznaje linki wewnętrzne (np. `/contacts`, `/companies`)
-- Używa `useNavigate()` do nawigacji bez przeładowania strony
-- **NIE zamyka okna czatu** po kliknięciu
-- Linki zewnętrzne otwiera w nowej karcie
-
-```typescript
-a: ({ href, children }) => {
-  const navigate = useNavigate();
-  
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (href?.startsWith('/')) {
-      // Nawigacja wewnętrzna - bez zamykania okna
-      navigate(href);
-    } else if (href) {
-      // Link zewnętrzny - nowa karta
-      window.open(href, '_blank');
-    }
-  };
-  
-  return (
-    <a 
-      href={href} 
-      onClick={handleClick}
-      className="text-primary underline hover:text-primary/80 cursor-pointer"
-    >
-      {children}
-    </a>
-  );
+**Przed:**
+```tsx
+const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+if (scrollContainer) {
+  scrollContainer.scrollTop = scrollContainer.scrollHeight;
 }
 ```
 
-### 5. Mapowanie słów kluczowych na linki
+**Po:**
+```tsx
+scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+```
 
-AI Remek będzie mógł używać markdown linków w odpowiedziach:
-- `[Kontakty](/contacts)` → klikalne "Kontakty" 
-- `[Ubezpieczenia](/pipeline)` → klikalne "Ubezpieczenia"
-- `[Ustawienia](/settings)` → klikalne "Ustawienia"
+### Usunięcie niepotrzebnego importu
 
----
-
-## Plik do modyfikacji
-
-`src/components/remek/RemekChatWidget.tsx`
+Usunięcie `ScrollArea` z importów (linia 6), ponieważ nie będzie już używany w tym komponencie.
 
 ---
 
-## Zmiany w kodzie
+## Dlaczego to zadziała
 
-| Element | Przed | Po |
-|---------|-------|-----|
-| Szerokość panelu | `w-96` | `w-[500px]` |
-| Wysokość ScrollArea | `h-80` | `h-[450px]` |
-| Linki w markdown | brak | aktywne z nawigacją |
-| Import | — | `+ useNavigate` |
+1. **Natywne scrollowanie CSS** - `overflow-y: auto` + `max-height` to sprawdzony pattern
+2. **Bezpośredni ref** - nie trzeba szukać Radix Viewport
+3. **Prostsze rozwiązanie** - mniej warstw abstrakcji = mniej potencjalnych błędów
 
 ---
 
-## Zachowanie po zmianach
+## Pliki do modyfikacji
 
-1. ✅ Okno szersze o ~30% (500px vs 384px)
-2. ✅ Obszar wiadomości wyższy i scrollowalny
-3. ✅ Kliknięcie w link np. "Kontakty" → nawigacja do `/contacts`
-4. ✅ Okno AI pozostaje otwarte po kliknięciu w link
-5. ✅ Zamknięcie tylko przez X w headerze
+| Plik | Zmiana |
+|------|--------|
+| `src/components/remek/RemekChatWidget.tsx` | Zamiana ScrollArea na div z overflow-y-auto |
+
