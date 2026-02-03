@@ -638,14 +638,18 @@ PEŁNA NAZWA FIRMY - użyj nazwy znalezionej w Perplexity jeśli jest dłuższa/
 
     // Safely parse response body
     let aiData: any;
+    let responseText = "";
     try {
-      const responseText = await aiResponse.text();
+      responseText = await aiResponse.text();
+      console.log("AI response length:", responseText?.length || 0);
+      
       if (!responseText || responseText.trim() === '') {
         throw new Error("Empty response from AI Gateway");
       }
       aiData = JSON.parse(responseText);
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
+      console.error("Response text (first 500 chars):", responseText?.substring(0, 500));
       throw new Error(`AI response parse error: ${parseError instanceof Error ? parseError.message : 'Unknown'}`);
     }
     
@@ -653,24 +657,80 @@ PEŁNA NAZWA FIRMY - użyj nazwy znalezionej w Perplexity jeśli jest dłuższa/
     let profileSummary = "";
     let companyData: any = null;
 
+    console.log("AI response structure:", {
+      hasChoices: !!aiData.choices,
+      choicesLength: aiData.choices?.length,
+      hasMessage: !!aiData.choices?.[0]?.message,
+      hasToolCalls: !!aiData.choices?.[0]?.message?.tool_calls,
+      toolCallsLength: aiData.choices?.[0]?.message?.tool_calls?.length,
+      hasContent: !!aiData.choices?.[0]?.message?.content,
+      finishReason: aiData.choices?.[0]?.finish_reason
+    });
+
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (toolCall?.function?.arguments) {
       try {
-        const args = JSON.parse(toolCall.function.arguments);
+        // Handle potentially truncated JSON from tool calls
+        let argsStr = toolCall.function.arguments;
+        console.log("Tool call arguments length:", argsStr?.length);
+        
+        // Try to repair truncated JSON if needed
+        if (argsStr && !argsStr.endsWith('}')) {
+          console.log("Attempting to repair truncated JSON...");
+          // Count open braces and brackets
+          const openBraces = (argsStr.match(/{/g) || []).length;
+          const closeBraces = (argsStr.match(/}/g) || []).length;
+          const openBrackets = (argsStr.match(/\[/g) || []).length;
+          const closeBrackets = (argsStr.match(/\]/g) || []).length;
+          
+          // Add missing closing characters
+          argsStr += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
+          argsStr += '}'.repeat(Math.max(0, openBraces - closeBraces));
+          
+          // If still not ending with }, try to find last complete property
+          if (!argsStr.endsWith('}')) {
+            const lastQuoteIdx = argsStr.lastIndexOf('"');
+            if (lastQuoteIdx > 0) {
+              argsStr = argsStr.substring(0, lastQuoteIdx + 1) + '"}';
+            }
+          }
+        }
+        
+        const args = JSON.parse(argsStr);
         profileSummary = args.person_profile || "";
         companyData = args.company_data || null;
         console.log("Parsed AI response - profile length:", profileSummary.length, "company data:", !!companyData);
       } catch (e) {
         console.error("Failed to parse tool call arguments:", e);
+        console.error("Arguments (first 500 chars):", toolCall.function.arguments?.substring(0, 500));
         // Fallback to regular content
         profileSummary = aiData.choices?.[0]?.message?.content?.trim() || "";
       }
     } else {
-      // Fallback if no tool call
+      // Fallback if no tool call - use content directly
+      console.log("No tool call found, using content fallback");
       profileSummary = aiData.choices?.[0]?.message?.content?.trim() || "";
     }
 
-    if (!profileSummary) throw new Error("No profile summary generated");
+    // If still no profile, log detailed info and create a minimal fallback
+    if (!profileSummary) {
+      console.error("No profile generated. Full AI response:", JSON.stringify(aiData, null, 2).substring(0, 2000));
+      
+      // Create a minimal fallback profile
+      profileSummary = `## 👤 ${contact.full_name}
+
+📭 **Profil w trakcie generowania** - nie udało się wygenerować pełnego profilu AI.
+
+### Podstawowe dane z systemu:
+${contact.position ? `- **Stanowisko:** ${contact.position}` : ''}
+${contact.company ? `- **Firma:** ${contact.company}` : ''}
+${contact.email ? `- **Email:** ${contact.email}` : ''}
+${contact.city ? `- **Miasto:** ${contact.city}` : ''}
+
+*Spróbuj ponownie wygenerować profil za chwilę.*`;
+      
+      console.log("Using fallback profile, length:", profileSummary.length);
+    }
 
     // ============= STEP 6: Create/Update company if we have data =============
     if (companyData && companyData.name && !companyId) {
