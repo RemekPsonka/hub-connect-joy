@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Network } from 'lucide-react';
+import { Loader2, Network, ShieldAlert } from 'lucide-react';
 import { MFAVerification } from '@/components/auth/MFAVerification';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
+import { useLoginRateLimiter } from '@/hooks/useLoginRateLimiter';
 
 const loginSchema = z.object({
   email: z.string().email('Nieprawidłowy adres email'),
@@ -25,6 +26,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isLocked, attemptsRemaining, formatRemainingTime, recordFailedAttempt, recordSuccess } = useLoginRateLimiter();
 
   const {
     register,
@@ -61,23 +63,35 @@ export default function Login() {
   }
 
   const onSubmit = async (data: LoginFormData) => {
+    // Check rate limit before attempting login
+    if (isLocked) {
+      setError(`Konto tymczasowo zablokowane. Spróbuj za ${formatRemainingTime()}`);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     const result = await signIn(data.email, data.password);
 
     if (result.error) {
-      if (result.error.message.includes('Invalid login credentials')) {
-        setError('Nieprawidłowy email lub hasło');
+      const { locked, attemptsRemaining: remaining } = recordFailedAttempt(data.email);
+      
+      if (locked) {
+        setError(`Zbyt wiele nieudanych prób. Konto zablokowane na 15 minut.`);
+      } else if (result.error.message.includes('Invalid login credentials')) {
+        setError(`Nieprawidłowy email lub hasło. Pozostało prób: ${remaining}`);
       } else {
         setError('Wystąpił błąd podczas logowania. Spróbuj ponownie.');
       }
       setIsSubmitting(false);
     } else if (result.needsMFA) {
       // MFA flow will be handled by mfaState change
+      recordSuccess();
       setIsSubmitting(false);
     } else {
       // Login successful without MFA
+      recordSuccess();
       setIsSubmitting(false);
     }
   };
@@ -111,7 +125,16 @@ export default function Login() {
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            {error && (
+            {isLocked && (
+              <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+                <ShieldAlert className="h-4 w-4" />
+                <AlertDescription className="ml-2">
+                  Konto tymczasowo zablokowane z powodu zbyt wielu nieudanych prób logowania. 
+                  Spróbuj ponownie za <strong>{formatRemainingTime()}</strong>.
+                </AlertDescription>
+              </Alert>
+            )}
+            {error && !isLocked && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
@@ -141,9 +164,9 @@ export default function Login() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleLoading || isLocked}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Zaloguj się
+              {isLocked ? `Zablokowane (${formatRemainingTime()})` : 'Zaloguj się'}
             </Button>
             
             <div className="relative w-full">
