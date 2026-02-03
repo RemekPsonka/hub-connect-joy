@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MessageCircleQuestion, X, Send, RotateCcw, Bug, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ const QUICK_ACTIONS = [
 ];
 
 export function RemekChatWidget() {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,7 @@ export function RemekChatWidget() {
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-40 right-6 z-50 w-96 max-w-[calc(100vw-3rem)] bg-background border rounded-lg shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed bottom-40 right-6 z-50 w-[500px] max-w-[calc(100vw-3rem)] bg-background border rounded-lg shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-200">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-muted/50">
             <div className="flex items-center gap-2">
@@ -143,7 +145,7 @@ export function RemekChatWidget() {
           </div>
 
           {/* Messages area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1 h-80">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 h-[450px] overflow-y-auto">
             <div className="p-4 space-y-4">
               {/* Welcome message (only if no messages) */}
               {!hasMessages && !isLoadingHistory && (
@@ -199,6 +201,25 @@ export function RemekChatWidget() {
                             strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                             h2: ({ children }) => <h2 className="font-semibold text-base mt-3 mb-2">{children}</h2>,
                             h3: ({ children }) => <h3 className="font-semibold text-sm mt-2 mb-1">{children}</h3>,
+                            a: ({ href, children }) => {
+                              const handleClick = (e: React.MouseEvent) => {
+                                e.preventDefault();
+                                if (href?.startsWith('/')) {
+                                  navigate(href);
+                                } else if (href) {
+                                  window.open(href, '_blank', 'noopener,noreferrer');
+                                }
+                              };
+                              return (
+                                <a 
+                                  href={href} 
+                                  onClick={handleClick}
+                                  className="text-primary underline hover:text-primary/80 cursor-pointer"
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                           }}
                         >
                           {msg.message}
