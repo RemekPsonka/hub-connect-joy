@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Pages - static imports
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
@@ -63,7 +63,7 @@ const App = () => (
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+            
             <Route path="/forgot-password" element={<ForgotPassword />} />
             
             {/* Protected routes */}
