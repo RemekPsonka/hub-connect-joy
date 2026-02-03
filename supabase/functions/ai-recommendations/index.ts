@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,31 +39,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get authorization header to identify user
-    const authHeader = req.headers.get("Authorization");
-    let tenantId: string | null = null;
-
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user } } = await supabase.auth.getUser(token);
-      
-      if (user) {
-        const { data: director } = await supabase
-          .from("directors")
-          .select("tenant_id")
-          .eq("user_id", user.id)
-          .single();
-        
-        tenantId = director?.tenant_id ?? null;
-      }
+    // Verify authorization using centralized auth
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
     }
 
-    if (!tenantId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", recommendations: [] }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const tenantId = authResult.tenantId;
+    console.log(`[ai-recommendations] Authorized user: ${authResult.user.id}, tenant: ${tenantId}`);
 
     // Fetch closed recommendations to filter them out
     const { data: closedRecs } = await supabase

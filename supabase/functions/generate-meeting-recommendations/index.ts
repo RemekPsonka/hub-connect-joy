@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,18 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify authorization
+    const authResult = await verifyAuth(req, supabase);
+    if (isAuthError(authResult)) {
+      return unauthorizedResponse(authResult, corsHeaders);
+    }
+
+    console.log(`[generate-meeting-recommendations] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
+
     const { meetingId, forContactIds } = await req.json();
     
     if (!meetingId || !forContactIds || forContactIds.length === 0) {
@@ -21,8 +34,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     
     if (!lovableApiKey) {
@@ -31,8 +42,6 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get all participants with their profiles
     const { data: participants, error: participantsError } = await supabase
