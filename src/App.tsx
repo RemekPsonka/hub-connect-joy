@@ -9,34 +9,34 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 
-// Pages - static imports
+// Static imports (login page - fast loading)
 import Login from "./pages/Login";
 
-import ForgotPassword from "./pages/ForgotPassword";
-import Dashboard from "./pages/Dashboard";
-import Contacts from "./pages/Contacts";
-import ContactDetail from "./pages/ContactDetail";
-import Consultations from "./pages/Consultations";
-import ConsultationDetail from "./pages/ConsultationDetail";
-import Meetings from "./pages/Meetings";
-import MeetingDetail from "./pages/MeetingDetail";
-import Matches from "./pages/Matches";
-import Tasks from "./pages/Tasks";
-import AIChat from "./pages/AIChat";
-import Settings from "./pages/Settings";
-import Search from "./pages/Search";
-import Notifications from "./pages/Notifications";
-import Analytics from "./pages/Analytics";
-import Owner from "./pages/Owner";
-import Superadmin from "./pages/Superadmin";
-import NotFound from "./pages/NotFound";
-import CompanyDetail from "./pages/CompanyDetail";
-import BugReports from "./pages/BugReports";
-import Representatives from "./pages/Representatives";
-import PolicyPipeline from "./pages/PolicyPipeline";
-
-// Lazy load Network page to isolate sigma library issues
+// Lazy-loaded pages
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const ContactDetail = lazy(() => import("./pages/ContactDetail"));
+const Consultations = lazy(() => import("./pages/Consultations"));
+const ConsultationDetail = lazy(() => import("./pages/ConsultationDetail"));
+const Meetings = lazy(() => import("./pages/Meetings"));
+const MeetingDetail = lazy(() => import("./pages/MeetingDetail"));
+const Matches = lazy(() => import("./pages/Matches"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const AIChat = lazy(() => import("./pages/AIChat"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Search = lazy(() => import("./pages/Search"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Owner = lazy(() => import("./pages/Owner"));
+const Superadmin = lazy(() => import("./pages/Superadmin"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const CompanyDetail = lazy(() => import("./pages/CompanyDetail"));
+const BugReports = lazy(() => import("./pages/BugReports"));
+const Representatives = lazy(() => import("./pages/Representatives"));
+const PolicyPipeline = lazy(() => import("./pages/PolicyPipeline"));
 const Network = lazy(() => import("./pages/Network"));
 
 const NetworkFallback = () => (
@@ -60,52 +60,54 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            
-            {/* Protected routes */}
-            <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
-              {/* Director-only routes */}
-              <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
-              <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
-              <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
-              <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
-              <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
-              <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
-              <Route 
-                path="/network" 
-                element={
-                  <DirectorGuard>
-                    <Suspense fallback={<NetworkFallback />}>
-                      <Network />
-                    </Suspense>
-                  </DirectorGuard>
-                } 
-              />
-              <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
-              <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
-              <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
-              <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
-              <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
-              <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
-              <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
-              <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
-              <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
-              <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<Login />} />
               
-              {/* Routes accessible by both directors and assistants */}
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/contacts/:id" element={<ContactDetail />} />
-              <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
-              <Route path="/settings" element={<Settings />} />
-            </Route>
-            
-            {/* Catch-all */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              
+              {/* Protected routes */}
+              <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
+                {/* Director-only routes */}
+                <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
+                <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
+                <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
+                <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
+                <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
+                <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
+                <Route 
+                  path="/network" 
+                  element={
+                    <DirectorGuard>
+                      <Suspense fallback={<NetworkFallback />}>
+                        <Network />
+                      </Suspense>
+                    </DirectorGuard>
+                  } 
+                />
+                <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
+                <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
+                <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
+                <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
+                <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
+                <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
+                <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
+                <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
+                <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
+                <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
+                
+                {/* Routes accessible by both directors and assistants */}
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/contacts/:id" element={<ContactDetail />} />
+                <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
+              
+              {/* Catch-all */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
