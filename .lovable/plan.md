@@ -1,145 +1,136 @@
 
-# Plan: Lazy Loading dla stron aplikacji
+# Plan: Optymalizacja cache React Query
 
 ## Cel
-Zaimplementować lazy loading dla wszystkich stron aplikacji (oprócz Login) w celu zmniejszenia początkowego rozmiaru bundle'a i przyspieszenia ładowania aplikacji.
+Dodanie `staleTime` do hooków danych aby zmniejszyć liczbę niepotrzebnych refetchów przy nawigacji między stronami.
 
 ---
 
-## Zakres zmian
+## Analiza obecnego stanu
 
-### 1. Nowy komponent: `src/components/PageLoadingFallback.tsx`
+| Hook | Plik | Obecny staleTime |
+|------|------|------------------|
+| `useContacts` | `useContacts.ts` | brak (0) |
+| `useContact` | `useContacts.ts` | brak (0) |
+| `useContactGroups` | `useContacts.ts` | brak (0) |
+| `useContactGroups` | `useContactGroups.ts` | brak (0) |
+| `useCompaniesWithContacts` | `useCompanies.ts` | brak (0) |
+| `useCompaniesList` | `useCompanies.ts` | brak (0) |
+| `useTasks` | `useTasks.ts` | brak (0) |
+| `useAnalytics` | `useAnalytics.ts` | N/A (useEffect) |
 
-Prosty komponent fallback wyświetlany podczas ładowania lazy-loaded stron:
-
-```typescript
-import { Loader2 } from 'lucide-react';
-
-export const PageLoadingFallback = () => (
-  <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    <p className="text-sm text-muted-foreground">Ładowanie...</p>
-  </div>
-);
-```
-
-### 2. Modyfikacja `src/App.tsx`
-
-#### A. Zamiana importów statycznych na lazy()
-
-| Strona | Przed | Po |
-|--------|-------|-----|
-| Dashboard | `import Dashboard from "./pages/Dashboard"` | `const Dashboard = lazy(() => import("./pages/Dashboard"))` |
-| Contacts | `import Contacts from "./pages/Contacts"` | `const Contacts = lazy(() => import("./pages/Contacts"))` |
-| ContactDetail | `import ContactDetail from "./pages/ContactDetail"` | `const ContactDetail = lazy(() => import("./pages/ContactDetail"))` |
-| ... | ... | ... |
-
-**Strony do konwersji (21 stron):**
-- ForgotPassword
-- Dashboard
-- Contacts, ContactDetail
-- Consultations, ConsultationDetail
-- Meetings, MeetingDetail
-- Matches
-- Tasks
-- AIChat
-- Settings
-- Search
-- Notifications
-- Analytics
-- Owner
-- Superadmin
-- CompanyDetail
-- BugReports
-- Representatives
-- PolicyPipeline
-- NotFound
-
-**Pozostają statyczne (1 strona):**
-- Login (pierwsza strona którą widzi użytkownik)
-
-**Już lazy-loaded:**
-- Network (ma już własny NetworkFallback)
-
-#### B. Owrapowanie Routes w Suspense
-
-Najprostsze rozwiązanie - jeden Suspense wokół całego bloku Routes:
-
-```tsx
-<Suspense fallback={<PageLoadingFallback />}>
-  <Routes>
-    {/* wszystkie route'y */}
-  </Routes>
-</Suspense>
-```
-
-To zadziała dla wszystkich lazy-loaded stron oprócz Network, który ma własny specjalny fallback (z Skeleton).
+**Uwaga:** `useAnalytics` używa `useState` + `useEffect` zamiast `useQuery`, więc nie można dodać `staleTime`. To wymaga refaktoryzacji która jest poza zakresem tego zadania.
 
 ---
 
-## Szczegóły techniczne
+## Planowane zmiany
 
-### Import w App.tsx
+### 1. `src/hooks/useContacts.ts`
+
+| Hook | staleTime | Uzasadnienie |
+|------|-----------|--------------|
+| `useContacts` | 30s | Lista kontaktów - często przeglądana |
+| `useContact` | 30s | Szczegóły kontaktu |
+| `useContactGroups` | 5 min | Grupy rzadko się zmieniają |
+| `useContactStats` | 30s | Statystyki kontaktu |
+| `useContactConsultations` | 30s | Historia konsultacji |
+| `useContactTasks` | 15s | Zadania kontaktu |
+| `useContactNeeds` | 30s | Potrzeby kontaktu |
+| `useContactOffers` | 30s | Oferty kontaktu |
+| `useContactActivityLog` | 30s | Log aktywności |
+
+### 2. `src/hooks/useContactGroups.ts`
+
+| Hook | staleTime |
+|------|-----------|
+| `useContactGroups` | 5 min |
+
+### 3. `src/hooks/useCompanies.ts`
+
+| Hook | staleTime | Uzasadnienie |
+|------|-----------|--------------|
+| `useCompaniesWithContacts` | 60s | Lista firm z kontaktami |
+| `useCompaniesList` | 60s | Lista firm do filtrów |
+| `useCompaniesForCapitalGroup` | 60s | Firmy dla grup kapitałowych |
+| `useCompaniesWithRevenue` | 60s | Firmy z przychodami |
+| `useCompanyContacts` | 30s | Kontakty firmy |
+| `useCompany` | 60s | Szczegóły firmy |
+
+### 4. `src/hooks/useTasks.ts`
+
+| Hook | staleTime | Uzasadnienie |
+|------|-----------|--------------|
+| `useTasks` | 15s | Zadania - częste aktualizacje |
+| `useTask` | 15s | Szczegóły zadania |
+| `useContactTasksWithCross` | 15s | Zadania kontaktu |
+| `usePendingTasksCount` | 15s | Licznik w nawigacji |
+
+---
+
+## Stałe czasowe
 
 ```typescript
-// Statyczne importy (strona logowania - szybkie ładowanie)
-import Login from "./pages/Login";
-
-// Lazy-loaded pages
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Contacts = lazy(() => import("./pages/Contacts"));
-const ContactDetail = lazy(() => import("./pages/ContactDetail"));
-const Consultations = lazy(() => import("./pages/Consultations"));
-const ConsultationDetail = lazy(() => import("./pages/ConsultationDetail"));
-const Meetings = lazy(() => import("./pages/Meetings"));
-const MeetingDetail = lazy(() => import("./pages/MeetingDetail"));
-const Matches = lazy(() => import("./pages/Matches"));
-const Tasks = lazy(() => import("./pages/Tasks"));
-const AIChat = lazy(() => import("./pages/AIChat"));
-const Settings = lazy(() => import("./pages/Settings"));
-const Search = lazy(() => import("./pages/Search"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const Analytics = lazy(() => import("./pages/Analytics"));
-const Owner = lazy(() => import("./pages/Owner"));
-const Superadmin = lazy(() => import("./pages/Superadmin"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-const CompanyDetail = lazy(() => import("./pages/CompanyDetail"));
-const BugReports = lazy(() => import("./pages/BugReports"));
-const Representatives = lazy(() => import("./pages/Representatives"));
-const PolicyPipeline = lazy(() => import("./pages/PolicyPipeline"));
-const Network = lazy(() => import("./pages/Network"));
+// W każdym pliku dodamy komentarz z wyjaśnieniem
+const STALE_TIME = {
+  CONTACTS: 30 * 1000,        // 30 sekund
+  COMPANIES: 60 * 1000,       // 60 sekund
+  TASKS: 15 * 1000,           // 15 sekund
+  GROUPS: 5 * 60 * 1000,      // 5 minut
+};
 ```
-
-### Struktura Suspense
-
-Network zachowuje własny Suspense z NetworkFallback (lepszy UX dla tej strony).
-Reszta używa globalnego PageLoadingFallback.
 
 ---
 
 ## Pliki do modyfikacji
 
-| # | Plik | Akcja |
-|---|------|-------|
-| 1 | `src/components/PageLoadingFallback.tsx` | Utworzenie nowego pliku |
-| 2 | `src/App.tsx` | Zamiana importów na lazy(), dodanie Suspense |
+| # | Plik | Liczba hooków |
+|---|------|---------------|
+| 1 | `src/hooks/useContacts.ts` | 9 hooków |
+| 2 | `src/hooks/useContactGroups.ts` | 1 hook |
+| 3 | `src/hooks/useCompanies.ts` | 6 hooków |
+| 4 | `src/hooks/useTasks.ts` | 4 hooki |
 
 ---
 
 ## Co pozostaje bez zmian
 
-- Login - statyczny import (pierwsza strona)
-- Logika AuthGuard i DirectorGuard
-- Edge Functions
-- Baza danych
-- Pozostałe komponenty
+| Element | Powód |
+|---------|-------|
+| `useSemanticSearch` | Wyszukiwanie musi być zawsze aktualne |
+| `useAIChat` | Czat AI musi być fresh |
+| `useAnalytics` | Używa useEffect, nie useQuery |
+| Wszystkie `useMutation` | Mutacje nie mają staleTime |
+| `invalidateQueries` | Zachowujemy wymuszanie refetch po mutacjach |
 
 ---
 
-## Korzyści
+## Przykład zmiany
 
-- **Mniejszy initial bundle** - strony ładowane na żądanie
-- **Szybszy Time to First Paint** - tylko Login w początkowym bundle
-- **Lepszy UX** - użytkownik widzi loading indicator zamiast białego ekranu
-- **Code splitting** - Vite automatycznie tworzy osobne chunki dla każdej strony
+```typescript
+// PRZED:
+return useQuery({
+  queryKey: ['contacts', ...],
+  queryFn: async () => { ... },
+  enabled: !!tenantId,
+});
+
+// PO:
+return useQuery({
+  queryKey: ['contacts', ...],
+  queryFn: async () => { ... },
+  enabled: !!tenantId,
+  staleTime: 30 * 1000, // 30 sekund
+});
+```
+
+---
+
+## Podsumowanie
+
+| Metryka | Wartość |
+|---------|---------|
+| Pliki do modyfikacji | **4** |
+| Hooki z dodanym staleTime | **20** |
+| Edge Functions | bez zmian |
+| Baza danych | bez zmian |
+| Komponenty | bez zmian |
