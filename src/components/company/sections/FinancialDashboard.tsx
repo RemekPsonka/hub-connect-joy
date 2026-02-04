@@ -32,7 +32,7 @@ import {
   ComposedChart
 } from 'recharts';
 import type { CompanyAnalysis, FinancialStatement, RevenueHistory } from '../types';
-import { safeNumber } from '../utils';
+import { safeNumber } from '@/lib/utils';
 
 interface FinancialDashboardProps {
   data: CompanyAnalysis;

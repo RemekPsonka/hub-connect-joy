@@ -3,13 +3,11 @@ import { Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateContact, type ContactWithDetails } from '@/hooks/useContacts';
+import { normalizeNotes } from '@/lib/utils';
 
 interface ContactNotesTabProps {
   contact: ContactWithDetails;
 }
-
-// Normalizacja null/undefined → "" dla poprawnego porównania
-const normalizeNotes = (value: string | null | undefined): string => value || '';
 
 export function ContactNotesTab({ contact }: ContactNotesTabProps) {
   const [notes, setNotes] = useState(normalizeNotes(contact.notes));

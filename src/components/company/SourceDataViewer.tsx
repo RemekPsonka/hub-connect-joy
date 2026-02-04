@@ -40,8 +40,8 @@ interface SourceDataViewerProps {
   isRefreshing?: boolean;
 }
 
-// Helper to safely extract string from potentially nested KRS objects
-const safeString = (value: any): string | null => {
+// Helper to extract KRS-specific fields that may return null (different from central safeString)
+const extractKrsField = (value: any): string | null => {
   if (typeof value === 'string') return value;
   if (typeof value === 'object' && value !== null) {
     return value?.sposobReprezentacji || value?.opis || value?.nazwa || null;
@@ -128,7 +128,7 @@ export function SourceDataViewer({ data, company, onRefresh, isRefreshing }: Sou
   const pkdMainDescription = data?.pkd_main_description || null;
   const branches = data?.branches || [];
   const dates = data?.dates || {};
-  const representationRules = safeString(data?.representation_rules);
+  const representationRules = extractKrsField(data?.representation_rules);
   const correspondenceAddress = data?.correspondence_address;
   const correspondenceCity = data?.correspondence_city;
   const correspondencePostalCode = data?.correspondence_postal_code;
