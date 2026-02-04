@@ -1,136 +1,140 @@
 
-# Plan: Optymalizacja cache React Query
+# Plan: Naprawienie nawigacji dla wyników wyszukiwania need/offer
 
-## Cel
-Dodanie `staleTime` do hooków danych aby zmniejszyć liczbę niepotrzebnych refetchów przy nawigacji między stronami.
+## Podsumowanie
 
----
-
-## Analiza obecnego stanu
-
-| Hook | Plik | Obecny staleTime |
-|------|------|------------------|
-| `useContacts` | `useContacts.ts` | brak (0) |
-| `useContact` | `useContacts.ts` | brak (0) |
-| `useContactGroups` | `useContacts.ts` | brak (0) |
-| `useContactGroups` | `useContactGroups.ts` | brak (0) |
-| `useCompaniesWithContacts` | `useCompanies.ts` | brak (0) |
-| `useCompaniesList` | `useCompanies.ts` | brak (0) |
-| `useTasks` | `useTasks.ts` | brak (0) |
-| `useAnalytics` | `useAnalytics.ts` | N/A (useEffect) |
-
-**Uwaga:** `useAnalytics` używa `useState` + `useEffect` zamiast `useQuery`, więc nie można dodać `staleTime`. To wymaga refaktoryzacji która jest poza zakresem tego zadania.
+Naprawić nawigację po kliknięciu na wynik typu "need" lub "offer" w wyszukiwarce, tak aby przenosiła do strony kontaktu z automatycznie otwartą odpowiednią zakładką.
 
 ---
 
-## Planowane zmiany
+## Zakres zmian
 
-### 1. `src/hooks/useContacts.ts`
+### 1. Modyfikacja `src/pages/Search.tsx`
 
-| Hook | staleTime | Uzasadnienie |
-|------|-----------|--------------|
-| `useContacts` | 30s | Lista kontaktów - często przeglądana |
-| `useContact` | 30s | Szczegóły kontaktu |
-| `useContactGroups` | 5 min | Grupy rzadko się zmieniają |
-| `useContactStats` | 30s | Statystyki kontaktu |
-| `useContactConsultations` | 30s | Historia konsultacji |
-| `useContactTasks` | 15s | Zadania kontaktu |
-| `useContactNeeds` | 30s | Potrzeby kontaktu |
-| `useContactOffers` | 30s | Oferty kontaktu |
-| `useContactActivityLog` | 30s | Log aktywności |
-
-### 2. `src/hooks/useContactGroups.ts`
-
-| Hook | staleTime |
-|------|-----------|
-| `useContactGroups` | 5 min |
-
-### 3. `src/hooks/useCompanies.ts`
-
-| Hook | staleTime | Uzasadnienie |
-|------|-----------|--------------|
-| `useCompaniesWithContacts` | 60s | Lista firm z kontaktami |
-| `useCompaniesList` | 60s | Lista firm do filtrów |
-| `useCompaniesForCapitalGroup` | 60s | Firmy dla grup kapitałowych |
-| `useCompaniesWithRevenue` | 60s | Firmy z przychodami |
-| `useCompanyContacts` | 30s | Kontakty firmy |
-| `useCompany` | 60s | Szczegóły firmy |
-
-### 4. `src/hooks/useTasks.ts`
-
-| Hook | staleTime | Uzasadnienie |
-|------|-----------|--------------|
-| `useTasks` | 15s | Zadania - częste aktualizacje |
-| `useTask` | 15s | Szczegóły zadania |
-| `useContactTasksWithCross` | 15s | Zadania kontaktu |
-| `usePendingTasksCount` | 15s | Licznik w nawigacji |
-
----
-
-## Stałe czasowe
+**Zmiana w funkcji `handleResultClick`** (linia 74-84):
 
 ```typescript
-// W każdym pliku dodamy komentarz z wyjaśnieniem
-const STALE_TIME = {
-  CONTACTS: 30 * 1000,        // 30 sekund
-  COMPANIES: 60 * 1000,       // 60 sekund
-  TASKS: 15 * 1000,           // 15 sekund
-  GROUPS: 5 * 60 * 1000,      // 5 minut
+// PRZED:
+const handleResultClick = (result: SearchResult) => {
+  switch (result.type) {
+    case 'contact':
+      navigate(`/contacts/${result.id}`);
+      break;
+    case 'need':
+    case 'offer':
+      // TODO: Navigate to specific need/offer
+      break;
+  }
+};
+
+// PO:
+const handleResultClick = (result: SearchResult) => {
+  switch (result.type) {
+    case 'contact':
+      navigate(`/contacts/${result.id}`);
+      break;
+    case 'need':
+      if (result.contactId) {
+        navigate(`/contacts/${result.contactId}?tab=needs-offers`);
+      }
+      break;
+    case 'offer':
+      if (result.contactId) {
+        navigate(`/contacts/${result.contactId}?tab=needs-offers`);
+      }
+      break;
+  }
 };
 ```
+
+**Uwaga**: Zakładka w ContactDetail nazywa się `needs-offers` (linia 107), nie osobne `needs` i `offers`.
+
+---
+
+### 2. Modyfikacja `src/pages/ContactDetail.tsx`
+
+**Dodanie importu `useSearchParams`**:
+
+```typescript
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+```
+
+**Dodanie odczytu parametru `tab` z URL**:
+
+```typescript
+const [searchParams] = useSearchParams();
+const tabFromUrl = searchParams.get('tab');
+```
+
+**Zmiana `defaultValue` w `Tabs`**:
+
+```typescript
+// PRZED:
+<Tabs defaultValue={isAssistant ? "agent" : "overview"} className="w-full">
+
+// PO:
+const getDefaultTab = () => {
+  // Jeśli jest parametr ?tab w URL, użyj go
+  if (tabFromUrl && !isAssistant) {
+    // Walidacja - sprawdź czy to dozwolona zakładka
+    const validTabs = ['overview', 'bi', 'agent', 'ownership', 
+                       'needs-offers', 'consultations', 'history', 'tasks', 'notes'];
+    if (validTabs.includes(tabFromUrl)) {
+      return tabFromUrl;
+    }
+  }
+  // Domyślnie: agent dla asystentów, overview dla dyrektorów
+  return isAssistant ? "agent" : "overview";
+};
+
+<Tabs defaultValue={getDefaultTab()} className="w-full">
+```
+
+---
+
+## Mapowanie zakładek
+
+| Typ wyniku | Parametr URL | Zakładka |
+|------------|--------------|----------|
+| `need` | `?tab=needs-offers` | "Potrzeby i Oferty" |
+| `offer` | `?tab=needs-offers` | "Potrzeby i Oferty" |
+
+Obie nawigują do tej samej zakładki `needs-offers`, ponieważ potrzeby i oferty są wyświetlane razem w jednej zakładce (`ContactNeedsOffersTab`).
 
 ---
 
 ## Pliki do modyfikacji
 
-| # | Plik | Liczba hooków |
-|---|------|---------------|
-| 1 | `src/hooks/useContacts.ts` | 9 hooków |
-| 2 | `src/hooks/useContactGroups.ts` | 1 hook |
-| 3 | `src/hooks/useCompanies.ts` | 6 hooków |
-| 4 | `src/hooks/useTasks.ts` | 4 hooki |
+| # | Plik | Opis zmiany |
+|---|------|-------------|
+| 1 | `src/pages/Search.tsx` | Dodanie nawigacji dla `need` i `offer` |
+| 2 | `src/pages/ContactDetail.tsx` | Odczyt parametru `?tab` z URL i automatyczne przełączenie zakładki |
 
 ---
 
 ## Co pozostaje bez zmian
 
-| Element | Powód |
-|---------|-------|
-| `useSemanticSearch` | Wyszukiwanie musi być zawsze aktualne |
-| `useAIChat` | Czat AI musi być fresh |
-| `useAnalytics` | Używa useEffect, nie useQuery |
-| Wszystkie `useMutation` | Mutacje nie mają staleTime |
-| `invalidateQueries` | Zachowujemy wymuszanie refetch po mutacjach |
+- Logika wyszukiwania (`useSemanticSearch`)
+- Scoring i sortowanie wyników
+- Edge Functions
+- Baza danych
+- Pozostałe komponenty
 
 ---
 
-## Przykład zmiany
+## Szczegóły techniczne
 
+### Struktura SearchResult
+
+Hook `useSemanticSearch` już zwraca `contactId` dla wyników typu `need` i `offer`:
 ```typescript
-// PRZED:
-return useQuery({
-  queryKey: ['contacts', ...],
-  queryFn: async () => { ... },
-  enabled: !!tenantId,
-});
-
-// PO:
-return useQuery({
-  queryKey: ['contacts', ...],
-  queryFn: async () => { ... },
-  enabled: !!tenantId,
-  staleTime: 30 * 1000, // 30 sekund
-});
+contactId: item.contact_id || (item.type === 'contact' ? item.id : undefined)
 ```
 
----
+### Walidacja zakładki
 
-## Podsumowanie
+Dodajemy walidację parametru `tab` aby zapobiec błędom gdy ktoś wpisze nieprawidłową wartość w URL.
 
-| Metryka | Wartość |
-|---------|---------|
-| Pliki do modyfikacji | **4** |
-| Hooki z dodanym staleTime | **20** |
-| Edge Functions | bez zmian |
-| Baza danych | bez zmian |
-| Komponenty | bez zmian |
+### Obsługa asystentów
+
+Asystenci mają ograniczony widok (tylko zakładka "Agent AI"), więc dla nich ignorujemy parametr `?tab` z URL.
