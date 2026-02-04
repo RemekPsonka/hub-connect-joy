@@ -90,6 +90,7 @@ export function useContacts(filters: ContactsFilters = {}) {
       return { data: data as ContactWithGroup[], count: count || 0 };
     },
     enabled: !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -128,6 +129,7 @@ export function useContact(id: string | undefined) {
       return data as ContactWithDetails;
     },
     enabled: !!id && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -158,6 +160,7 @@ export function useContactGroups() {
       return data as ContactGroup[];
     },
     enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000, // 5 minut
   });
 }
 
@@ -354,6 +357,7 @@ export function useContactStats(contactId: string | undefined) {
       };
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -377,6 +381,7 @@ export function useContactConsultations(contactId: string | undefined) {
       return data;
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -399,6 +404,7 @@ export function useContactTasks(contactId: string | undefined) {
       return data;
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 15 * 1000, // 15 sekund
   });
 }
 
@@ -422,6 +428,7 @@ export function useContactNeeds(contactId: string | undefined) {
       return data;
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -445,6 +452,7 @@ export function useContactOffers(contactId: string | undefined) {
       return data;
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -520,5 +528,6 @@ export function useContactActivityLog(contactId: string | undefined) {
       return data as ContactActivityLog[];
     },
     enabled: !!contactId && !!tenantId,
+    staleTime: 30 * 1000, // 30 sekund
   });
 }

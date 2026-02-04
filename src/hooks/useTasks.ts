@@ -214,6 +214,7 @@ export function useTasks(filters: TasksFilters = {}) {
       
       return result;
     },
+    staleTime: 15 * 1000, // 15 sekund
   });
 }
 
@@ -256,6 +257,7 @@ export function useTask(id: string | undefined) {
       return data as TaskWithDetails;
     },
     enabled: !!id,
+    staleTime: 15 * 1000, // 15 sekund
   });
 }
 
@@ -371,6 +373,7 @@ export function useContactTasksWithCross(contactId: string | undefined) {
       );
     },
     enabled: !!contactId,
+    staleTime: 15 * 1000, // 15 sekund
   });
 }
 
@@ -387,6 +390,7 @@ export function usePendingTasksCount() {
       if (error) throw error;
       return count || 0;
     },
+    staleTime: 15 * 1000, // 15 sekund
   });
 }
 

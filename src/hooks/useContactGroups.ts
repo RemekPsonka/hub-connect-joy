@@ -27,6 +27,7 @@ export function useContactGroups() {
       return data as ContactGroup[];
     },
     enabled: !!director?.tenant_id,
+    staleTime: 5 * 60 * 1000, // 5 minut
   });
 }
 
