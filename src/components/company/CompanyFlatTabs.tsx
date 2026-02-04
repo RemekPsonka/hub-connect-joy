@@ -64,12 +64,6 @@ export function CompanyFlatTabs({
     company.company_analysis_status === 'completed';
   const fallbackUsed = aiAnalysis?.fallback_used;
 
-  // Debug logging
-  console.log('[CompanyFlatTabs] company:', company.name);
-  console.log('[CompanyFlatTabs] status:', company.company_analysis_status);
-  console.log('[CompanyFlatTabs] ai_analysis keys:', aiAnalysis ? Object.keys(aiAnalysis).length : 0);
-  console.log('[CompanyFlatTabs] hasAnalysis:', hasAnalysis);
-
   // Show ALL tabs when analysis is complete - individual sections handle empty states
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
