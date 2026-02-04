@@ -4,14 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateConsultation } from '@/hooks/useConsultations';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeNotes } from '@/lib/utils';
 
 interface ConsultationNotesSectionProps {
   consultationId: string;
   notes: string | null;
 }
-
-// Normalizacja null/undefined → "" dla poprawnego porównania
-const normalizeNotes = (value: string | null | undefined): string => value || '';
 
 export function ConsultationNotesSection({ consultationId, notes }: ConsultationNotesSectionProps) {
   const [value, setValue] = useState(normalizeNotes(notes));

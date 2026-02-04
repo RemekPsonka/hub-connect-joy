@@ -2,7 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Users, Building, Heart, ExternalLink } from 'lucide-react';
 import type { SectionProps, ManagementPerson } from '../types';
-import { safeString } from '../utils';
+import { safeString } from '@/lib/utils';
 
 export function ManagementSection({ data }: SectionProps) {
   const management = data.management || [];

@@ -2,7 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, Target, Lightbulb, Zap } from 'lucide-react';
 import type { SectionProps } from '../types';
-import { safeString, safeArray } from '../utils';
+import { safeString, safeArray } from '@/lib/utils';
 
 export function BusinessModelSection({ data }: SectionProps) {
   const competitiveAdvantages = Array.isArray(data.competitive_advantages) 

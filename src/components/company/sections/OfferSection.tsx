@@ -2,7 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Gift, Award, CheckCircle } from 'lucide-react';
 import type { SectionProps } from '../types';
-import { safeArray, safeAwardArray } from '../utils';
+import { safeArray, safeAwardArray } from '@/lib/utils';
 
 export function OfferSection({ data }: SectionProps) {
   // Use safe parsers for arrays that may be strings or objects

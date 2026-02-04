@@ -2,7 +2,7 @@ import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { Building, Calendar, Tag } from 'lucide-react';
 import type { SectionProps } from '../types';
-import { safeString, safeArray } from '../utils';
+import { safeString, safeArray } from '@/lib/utils';
 
 export function BasicInfoSection({ data }: SectionProps) {
   // Use safeArray to handle string, array of strings, or array of objects
