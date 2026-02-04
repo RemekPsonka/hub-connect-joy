@@ -1,114 +1,108 @@
 
-# Plan: Centralizacja funkcji do czyszczenia stringów
+# Plan: Usunięcie console.log() z kodu produkcyjnego
 
-## Cel
-Przenieść wszystkie funkcje `safeString`, `safeArray`, `safeNumber`, `safeAwardArray` oraz `normalizeNotes` do centralnego pliku `src/lib/utils.ts` i zaktualizować importy we wszystkich plikach.
+## Podsumowanie
+
+Znaleziono **9 wywołań console.log()** w **3 plikach** w katalogu `src/`. Wszystkie są czystymi logami debug i zostaną usunięte.
 
 ---
 
-## Zakres zmian
+## Znalezione console.log()
 
-### 1. Rozszerzenie `src/lib/utils.ts`
+| # | Plik | Linia | Zawartość |
+|---|------|-------|-----------|
+| 1 | `CompanyFlatTabs.tsx` | 68 | `console.log('[CompanyFlatTabs] company:', company.name)` |
+| 2 | `CompanyFlatTabs.tsx` | 69 | `console.log('[CompanyFlatTabs] status:', company.company_analysis_status)` |
+| 3 | `CompanyFlatTabs.tsx` | 70 | `console.log('[CompanyFlatTabs] ai_analysis keys:', ...)` |
+| 4 | `CompanyFlatTabs.tsx` | 71 | `console.log('[CompanyFlatTabs] hasAnalysis:', hasAnalysis)` |
+| 5 | `useSemanticSearch.ts` | 74 | `console.log('Generating query embedding for hybrid search...')` |
+| 6 | `useSemanticSearch.ts` | 82 | `console.log('Query embedding generated successfully')` |
+| 7 | `useSemanticSearch.ts` | 97 | `console.log('Starting ... search for:', query)` |
+| 8 | `useSemanticSearch.ts` | 130 | `console.log('Hybrid search found ... results')` |
+| 9 | `useEmbeddings.ts` | 65 | `console.log('Embedding generated for ...')` |
 
-Dodanie wszystkich funkcji z `src/components/company/utils.ts` + nowej funkcji `normalizeNotes`:
+---
 
-| Funkcja | Opis |
-|---------|------|
-| `safeString` | Uniwersalna wersja obsługująca null, tablice i obiekty |
-| `safeArray` | Konwersja do tablicy stringów |
-| `safeNumber` | Konwersja do liczby z obsługą polskiego formatowania |
-| `safeAwardArray` | Specjalna obsługa nagród/certyfikatów |
-| `normalizeNotes` | Normalizacja null/undefined do pustego stringa |
+## Akcje
 
-### 2. Aktualizacja importów
+### Plik 1: `src/components/company/CompanyFlatTabs.tsx`
 
-| Plik | Zmiana |
-|------|--------|
-| `src/components/company/utils.ts` | Usunięcie pliku (pełna zawartość przeniesiona) |
-| `src/components/company/SourceDataViewer.tsx` | Usunięcie lokalnej `safeString`, import z `@/lib/utils` |
-| `src/components/company/sections/BasicInfoSection.tsx` | Zmiana importu na `@/lib/utils` |
-| `src/components/company/sections/ManagementSection.tsx` | Zmiana importu na `@/lib/utils` |
-| `src/components/company/sections/OfferSection.tsx` | Zmiana importu na `@/lib/utils` |
-| `src/components/company/sections/FinancialDashboard.tsx` | Zmiana importu na `@/lib/utils` |
-| `src/components/contacts/ContactNotesTab.tsx` | Usunięcie lokalnej `normalizeNotes`, import z `@/lib/utils` |
-| `src/components/consultations/ConsultationNotesSection.tsx` | Usunięcie lokalnej `normalizeNotes`, import z `@/lib/utils` |
-
-### 3. Specjalny przypadek: SourceDataViewer.tsx
-
-Lokalna wersja `safeString` w tym pliku ma inne zachowanie (zwraca `null` zamiast `""`). 
-
-**Rozwiązanie:** Utworzenie lokalnej funkcji `extractKrsField` która używa centralnej `safeString` jako fallback:
+**Usunięcie linii 67-71** (komentarz + 4 console.log):
 
 ```typescript
-// Specjalna ekstrakcja dla KRS - sprawdza klucze specyficzne dla KRS
-const extractKrsField = (value: any): string | null => {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'object' && value !== null) {
-    return value?.sposobReprezentacji || value?.opis || value?.nazwa || null;
-  }
-  return null;
-};
+// PRZED (linie 67-72):
+  // Debug logging
+  console.log('[CompanyFlatTabs] company:', company.name);
+  console.log('[CompanyFlatTabs] status:', company.company_analysis_status);
+  console.log('[CompanyFlatTabs] ai_analysis keys:', aiAnalysis ? Object.keys(aiAnalysis).length : 0);
+  console.log('[CompanyFlatTabs] hasAnalysis:', hasAnalysis);
+
+  // Show ALL tabs...
+
+// PO:
+  // Show ALL tabs...
 ```
+
+### Plik 2: `src/hooks/useSemanticSearch.ts`
+
+**Usunięcie 4 linii** (74, 82, 97, 130):
+
+```typescript
+// Linia 74 - USUŃ:
+console.log('Generating query embedding for hybrid search...');
+
+// Linia 82 - USUŃ:
+console.log('Query embedding generated successfully');
+
+// Linia 97 - USUŃ:
+console.log(`Starting ${queryEmbedding ? 'hybrid' : 'FTS'} search for:`, query);
+
+// Linia 130 - USUŃ:
+console.log(`Hybrid search found ${searchResults.length} results`);
+```
+
+### Plik 3: `src/hooks/useEmbeddings.ts`
+
+**Usunięcie linii 65**:
+
+```typescript
+// PRZED:
+    } else {
+      console.log(`Embedding generated for ${type}:${id}`);
+      if (toastId) {
+
+// PO:
+    } else {
+      if (toastId) {
+```
+
+---
+
+## Co zostaje bez zmian
+
+| Typ | Przykłady | Powód |
+|-----|-----------|-------|
+| `console.error()` | `useSemanticSearch.ts:111`, `useSemanticSearch.ts:134` | Logowanie prawdziwych błędów |
+| `console.warn()` | `useSemanticSearch.ts:85`, `useSemanticSearch.ts:89` | Ostrzeżenia (fallback do FTS) |
+| Edge Functions | `supabase/functions/*` | Pomocne w debugowaniu backendu |
+
+---
+
+## Podsumowanie zmian
+
+| Metryka | Wartość |
+|---------|---------|
+| Usunięte console.log() | **9** |
+| Zmodyfikowane pliki | **3** |
+| Zamienione na console.error() | **0** (żaden log nie dotyczył błędów) |
 
 ---
 
 ## Szczegóły techniczne
 
-### Nowy plik `src/lib/utils.ts`:
+Żaden z usuniętych logów nie zawierał informacji o błędach - wszystkie były czystymi logami debug:
+- CompanyFlatTabs: logowanie stanu komponentu
+- useSemanticSearch: logowanie postępu wyszukiwania
+- useEmbeddings: logowanie sukcesu generowania embeddingu
 
-```typescript
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-/**
- * Safely converts values that might be objects from KRS API to strings
- */
-export const safeString = (value: unknown): string => {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return '';
-  // ... (pełna implementacja z company/utils.ts)
-};
-
-export const safeArray = (value: unknown): string[] => { ... };
-export const safeNumber = (value: unknown): number | undefined => { ... };
-export const safeAwardArray = (value: unknown): string[] => { ... };
-
-/**
- * Normalizes null/undefined to empty string for form comparisons
- */
-export const normalizeNotes = (value: string | null | undefined): string => value || '';
-```
-
----
-
-## Pliki do modyfikacji
-
-| # | Plik | Akcja |
-|---|------|-------|
-| 1 | `src/lib/utils.ts` | Dodanie funkcji |
-| 2 | `src/components/company/utils.ts` | Usunięcie |
-| 3 | `src/components/company/SourceDataViewer.tsx` | Usunięcie lokalnej funkcji, rename do `extractKrsField` |
-| 4 | `src/components/company/sections/BasicInfoSection.tsx` | Zmiana importu |
-| 5 | `src/components/company/sections/ManagementSection.tsx` | Zmiana importu |
-| 6 | `src/components/company/sections/OfferSection.tsx` | Zmiana importu |
-| 7 | `src/components/company/sections/FinancialDashboard.tsx` | Zmiana importu |
-| 8 | `src/components/contacts/ContactNotesTab.tsx` | Usunięcie lokalnej funkcji, import z utils |
-| 9 | `src/components/consultations/ConsultationNotesSection.tsx` | Usunięcie lokalnej funkcji, import z utils |
-
----
-
-## Poza zakresem (zgodnie z instrukcją)
-
-- Edge Functions (`supabase/functions/`) - bez zmian
-- Baza danych - bez zmian
-- Funkcje `sanitizePolish` i `s()` w plikach eksportu PDF - pozostają lokalne (specyficzne dla PDF, używają jsPDF)
-
----
-
-## Ryzyko
-
-**Niskie** — zmiana dotyczy tylko organizacji kodu, bez zmiany logiki biznesowej.
+Logika biznesowa pozostaje bez zmian - usuwamy tylko wywołania `console.log()`.
