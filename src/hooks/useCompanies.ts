@@ -141,6 +141,7 @@ export function useCompaniesWithContacts(filters: CompaniesFilters) {
       return { data: result, count: count || 0 };
     },
     enabled: !!tenantId,
+    staleTime: 60 * 1000, // 60 sekund
   });
 }
 
@@ -162,6 +163,7 @@ export function useCompaniesList() {
       return data as { id: string; name: string }[];
     },
     enabled: !!tenantId,
+    staleTime: 60 * 1000, // 60 sekund
   });
 }
 
@@ -197,6 +199,7 @@ export function useCompaniesForCapitalGroup(parentCompanyId: string | undefined)
       }[];
     },
     enabled: !!tenantId,
+    staleTime: 60 * 1000, // 60 sekund
   });
 }
 
@@ -225,6 +228,7 @@ export function useCompaniesWithRevenue() {
       }[];
     },
     enabled: !!tenantId,
+    staleTime: 60 * 1000, // 60 sekund
   });
 }
 
@@ -310,6 +314,7 @@ export function useCompanyContacts(
       return Array.from(uniqueContacts.values());
     },
     enabled: !!director?.tenant_id && (!!companyId || !!emailDomain),
+    staleTime: 30 * 1000, // 30 sekund
   });
 }
 
@@ -376,6 +381,7 @@ export function useCompany(id: string | undefined) {
       return data as Company;
     },
     enabled: !!id,
+    staleTime: 60 * 1000, // 60 sekund
   });
 }
 
