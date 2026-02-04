@@ -77,8 +77,14 @@ export default function Search() {
         navigate(`/contacts/${result.id}`);
         break;
       case 'need':
+        if (result.contactId) {
+          navigate(`/contacts/${result.contactId}?tab=needs-offers`);
+        }
+        break;
       case 'offer':
-        // TODO: Navigate to specific need/offer
+        if (result.contactId) {
+          navigate(`/contacts/${result.contactId}?tab=needs-offers`);
+        }
         break;
     }
   };

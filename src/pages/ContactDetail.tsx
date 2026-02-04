@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, User, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,10 +35,23 @@ function hasBusinessEmailDomain(email: string | null | undefined): boolean {
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { director, isAssistant } = useAuth();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
+
+  const getDefaultTab = () => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && !isAssistant) {
+      const validTabs = ['overview', 'bi', 'agent', 'ownership', 
+                         'needs-offers', 'consultations', 'history', 'tasks', 'notes'];
+      if (validTabs.includes(tabFromUrl)) {
+        return tabFromUrl;
+      }
+    }
+    return isAssistant ? "agent" : "overview";
+  };
 
   if (isLoading) {
     return (
@@ -93,7 +106,7 @@ export default function ContactDetail() {
 
       {/* Content based on viewMode */}
       {viewMode === 'person' ? (
-        <Tabs defaultValue={isAssistant ? "agent" : "overview"} className="w-full">
+        <Tabs defaultValue={getDefaultTab()} className="w-full">
           {isAssistant ? (
             <TabsList>
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
