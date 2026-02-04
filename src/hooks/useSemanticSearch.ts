@@ -71,7 +71,6 @@ export function useSemanticSearch() {
       let queryEmbedding: string | null = null;
       
       if (useHybrid) {
-        console.log('Generating query embedding for hybrid search...');
         try {
           const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke('generate-embedding', {
             body: { text: query }
@@ -79,7 +78,6 @@ export function useSemanticSearch() {
           
           if (!embeddingError && embeddingData?.embedding) {
             queryEmbedding = embeddingData.embedding;
-            console.log('Query embedding generated successfully');
             setSearchMode('hybrid');
           } else {
             console.warn('Could not generate embedding, falling back to FTS only:', embeddingError);
@@ -94,8 +92,6 @@ export function useSemanticSearch() {
       }
       
       // Use hybrid search function
-      console.log(`Starting ${queryEmbedding ? 'hybrid' : 'FTS'} search for:`, query);
-      
       const { data, error: rpcError } = await supabase.rpc('search_all_hybrid', {
         p_query: query,
         p_query_embedding: queryEmbedding,
@@ -127,7 +123,6 @@ export function useSemanticSearch() {
         contactId: item.contact_id || (item.type === 'contact' ? item.id : undefined)
       }));
       
-      console.log(`Hybrid search found ${searchResults.length} results`);
       setResults(searchResults);
       return searchResults;
     } catch (e) {

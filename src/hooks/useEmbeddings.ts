@@ -62,7 +62,6 @@ export async function generateEmbeddingInBackground(type: EmbeddingType, id: str
         });
       }
     } else {
-      console.log(`Embedding generated for ${type}:${id}`);
       if (toastId) {
         toast.success('Zaindeksowano dla wyszukiwania AI', {
           id: toastId,
