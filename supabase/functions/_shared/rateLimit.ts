@@ -1,4 +1,4 @@
-import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0';
+import { Redis } from 'npm:@upstash/redis@1.28.0';
 
 interface RateLimitConfig {
   max: number;      // max requests
