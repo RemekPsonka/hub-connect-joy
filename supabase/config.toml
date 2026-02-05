@@ -1,133 +1,133 @@
 project_id = "smuaroosnsrqfjsbpxpa"
 
 [functions.generate-embedding]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-chat]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-chat-router]
-verify_jwt = false
+verify_jwt = true
 
 [functions.find-matches]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-meeting-recommendations]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-recommendations]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-daily-serendipity]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-analytics-insights]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ocr-business-card]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ocr-business-cards-batch]
-verify_jwt = false
+verify_jwt = true
 
 [functions.enrich-company-data]
-verify_jwt = false
+verify_jwt = true
 
 [functions.enrich-person-data]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-contact-profile]
-verify_jwt = false
+verify_jwt = true
 
 [functions.initialize-contact-agent]
-verify_jwt = false
+verify_jwt = true
 
 [functions.query-contact-agent]
-verify_jwt = false
+verify_jwt = true
 
 [functions.master-agent-query]
-verify_jwt = false
+verify_jwt = true
 
 [functions.agent-action]
-verify_jwt = false
+verify_jwt = true
 
 [functions.turbo-agent-query]
-verify_jwt = false
+verify_jwt = true
 
 [functions.bi-agent-interview]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-tenant-user]
-verify_jwt = false
+verify_jwt = true
 
 [functions.update-tenant-user]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-assistant]
-verify_jwt = false
+verify_jwt = true
 
 [functions.check-duplicate-contact]
-verify_jwt = false
+verify_jwt = true
 
 [functions.merge-contacts]
-verify_jwt = false
+verify_jwt = true
 
 [functions.parse-contacts-list]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-new-tenant]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-tenant]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analyze-linkedin-profile]
-verify_jwt = false
+verify_jwt = true
 
 [functions.parse-linkedin-network]
-verify_jwt = false
+verify_jwt = true
 
 [functions.scrape-company-logo]
-verify_jwt = false
+verify_jwt = true
 
 [functions.update-company-revenue]
-verify_jwt = false
+verify_jwt = true
 
 [functions.sync-contact-agents]
-verify_jwt = false
+verify_jwt = true
 
 [functions.verify-company-source]
-verify_jwt = false
+verify_jwt = true
 
 [functions.scan-company-website]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analyze-company-external]
-verify_jwt = false
+verify_jwt = true
 
 [functions.fetch-company-financials]
-verify_jwt = false
+verify_jwt = true
 
 [functions.synthesize-company-profile]
-verify_jwt = false
+verify_jwt = true
 
 [functions.batch-krs-sync]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-companies-from-emails]
-verify_jwt = false
+verify_jwt = true
 
 [functions.background-sync-runner]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-representative]
-verify_jwt = false
+verify_jwt = true
 
 [functions.process-bi-ai]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analyze-insurance-risk]
-verify_jwt = false
+verify_jwt = true
 
 [functions.remek-chat]
-verify_jwt = false
+verify_jwt = true
