@@ -46,37 +46,23 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        // Fetch contacts count
-        const { count: contactsCount } = await supabase
-          .from('contacts')
-          .select('*', { count: 'exact', head: true });
+        // Use RPC to get all dashboard stats in one query from materialized view
+        const { data: dashboardStats, error } = await supabase.rpc('get_dashboard_stats');
 
-        // Fetch today's consultations
-        const today = new Date().toISOString().split('T')[0];
-        const { count: meetingsCount } = await supabase
-          .from('consultations')
-          .select('*', { count: 'exact', head: true })
-          .gte('scheduled_at', `${today}T00:00:00`)
-          .lt('scheduled_at', `${today}T23:59:59`);
+        if (error) {
+          console.error('Error fetching dashboard stats:', error);
+          return;
+        }
 
-        // Fetch pending tasks
-        const { count: tasksCount } = await supabase
-          .from('tasks')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending');
-
-        // Fetch active needs
-        const { count: needsCount } = await supabase
-          .from('needs')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'active');
-
-        setStats({
-          contacts: contactsCount || 0,
-          todayMeetings: meetingsCount || 0,
-          pendingTasks: tasksCount || 0,
-          activeNeeds: needsCount || 0,
-        });
+        if (dashboardStats && dashboardStats.length > 0) {
+          const stats = dashboardStats[0];
+          setStats({
+            contacts: Number(stats.total_contacts) || 0,
+            todayMeetings: Number(stats.today_consultations) || 0,
+            pendingTasks: Number(stats.pending_tasks) || 0,
+            activeNeeds: Number(stats.active_needs) || 0,
+          });
+        }
       } catch (error) {
         console.error('Error fetching stats:', error);
       } finally {

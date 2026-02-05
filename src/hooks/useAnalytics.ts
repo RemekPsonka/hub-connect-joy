@@ -117,104 +117,79 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
 
       try {
         const { startDate, endDate } = getDateRange(dateRange);
-        const prevPeriod = getPreviousPeriodRange(dateRange, startDate, endDate);
         const startDateStr = startDate.toISOString();
         const endDateStr = endDate.toISOString();
-        const prevStartStr = prevPeriod.startDate.toISOString();
-        const prevEndStr = prevPeriod.endDate.toISOString();
 
-        // Fetch all data in parallel
+        // Fetch RPC stats + detailed data for charts in parallel
         const [
+          dashboardStatsResult,
           contactsResult,
-          prevContactsResult,
           needsResult,
-          offersResult,
           consultationsResult,
           tasksResult,
           matchesResult,
-          contactsWithGroupsResult,
-          groupsResult,
         ] = await Promise.all([
-          // Current period contacts
+          // Get aggregated stats from materialized view (replaces 4 queries)
+          supabase.rpc('get_dashboard_stats'),
+          // Current period contacts for timeline/industry charts
           supabase
             .from('contacts')
             .select('id, created_at, company')
             .eq('tenant_id', tenantId)
             .gte('created_at', startDateStr)
             .lte('created_at', endDateStr),
-          // Previous period contacts (for growth calculation)
-          supabase
-            .from('contacts')
-            .select('id')
-            .eq('tenant_id', tenantId)
-            .gte('created_at', prevStartStr)
-            .lte('created_at', prevEndStr),
-          // All needs
+          // All needs for categories chart
           supabase
             .from('needs')
             .select('id, created_at, status, title')
             .eq('tenant_id', tenantId),
-          // All offers
-          supabase
-            .from('offers')
-            .select('id, created_at, status, title')
-            .eq('tenant_id', tenantId),
-          // Consultations in period
+          // Consultations in period for timeline/outcomes
           supabase
             .from('consultations')
             .select('id, scheduled_at, status')
             .eq('tenant_id', tenantId)
             .gte('scheduled_at', startDateStr)
             .lte('scheduled_at', endDateStr),
-          // Tasks in period
+          // Tasks in period for timeline
           supabase
             .from('tasks')
             .select('id, created_at, status')
             .eq('tenant_id', tenantId)
             .gte('created_at', startDateStr)
             .lte('created_at', endDateStr),
-          // All matches
+          // All matches for success rate
           supabase
             .from('matches')
             .select('id, created_at, status')
             .eq('tenant_id', tenantId),
-          // Contacts with groups for health calculation
-          supabase
-            .from('contacts')
-            .select('id, last_contact_date, primary_group_id')
-            .eq('tenant_id', tenantId)
-            .eq('is_active', true),
-          // Contact groups with refresh policies
-          supabase
-            .from('contact_groups')
-            .select('id, refresh_days, include_in_health_stats')
-            .eq('tenant_id', tenantId),
         ]);
 
+        // Extract RPC stats (network health, contacts growth from MV)
+        const dashboardStats = dashboardStatsResult.data?.[0];
+        
         const contacts = contactsResult.data || [];
-        const prevContacts = prevContactsResult.data || [];
         const needs = needsResult.data || [];
-        const offers = offersResult.data || [];
         const consultations = consultationsResult.data || [];
         const tasks = tasksResult.data || [];
         const matches = matchesResult.data || [];
-        const contactsWithGroups = contactsWithGroupsResult.data || [];
-        const groups = groupsResult.data || [];
-
-        // Calculate metrics
-        const totalContacts = contacts.length;
-        const prevContactsCount = prevContacts.length;
-        const contactsGrowth = prevContactsCount > 0 
-          ? Math.round(((totalContacts - prevContactsCount) / prevContactsCount) * 100)
+        // Use MV stats for basic metrics, calculate details from fetched data
+        const totalContacts = Number(dashboardStats?.total_contacts) || contacts.length;
+        
+        // Calculate growth from MV data
+        const newContacts30d = Number(dashboardStats?.new_contacts_30d) || 0;
+        const prevContacts30d = Number(dashboardStats?.contacts_prev_30d) || 0;
+        const contactsGrowth = prevContacts30d > 0 
+          ? Math.round(((newContacts30d - prevContacts30d) / prevContacts30d) * 100)
           : 0;
 
-        const activeNeeds = needs.filter(n => n.status === 'active').length;
+        // Use MV for active counts, calculate rates from fetched data
+        const activeNeeds = Number(dashboardStats?.active_needs) || needs.filter(n => n.status === 'active').length;
         const fulfilledNeeds = needs.filter(n => n.status === 'fulfilled').length;
         const needsFulfillmentRate = needs.length > 0 
           ? Math.round((fulfilledNeeds / needs.length) * 100) 
           : 0;
 
-        const activeOffers = offers.filter(o => o.status === 'active').length;
+        const activeOffers = Number(dashboardStats?.active_offers) || 0;
 
         const totalMeetings = consultations.length;
         const weeks = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
@@ -225,7 +200,7 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
           ? Math.round((successfulMatches / matches.length) * 100)
           : 0;
 
-        // Generate activity timeline
+        // Generate activity timeline from detailed data
         const activityTimeline = generateTimeline(contacts, consultations, tasks, startDate, endDate, dateRange);
 
         // Group by industry (using company as proxy)
@@ -237,8 +212,20 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
         // Top categories from needs
         const topCategories = getTopCategories(needs);
 
-        // Network health - use group-specific refresh policies
-        const networkHealth = calculateNetworkHealthWithGroups(contactsWithGroups, groups);
+        // Network health from MV (no need for additional queries)
+        const healthyCount = Number(dashboardStats?.healthy_contacts) || 0;
+        const warningCount = Number(dashboardStats?.warning_contacts) || 0;
+        const criticalCount = Number(dashboardStats?.critical_contacts) || 0;
+        const healthTotal = healthyCount + warningCount + criticalCount || 1;
+        
+        const networkHealth: NetworkHealth = {
+          healthy: healthyCount,
+          healthyPercent: Math.round((healthyCount / healthTotal) * 100),
+          warning: warningCount,
+          warningPercent: Math.round((warningCount / healthTotal) * 100),
+          critical: criticalCount,
+          criticalPercent: Math.round((criticalCount / healthTotal) * 100),
+        };
 
         const analyticsData: AnalyticsData = {
           metrics: {
