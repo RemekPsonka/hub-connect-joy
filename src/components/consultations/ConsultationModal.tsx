@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ export function ConsultationModal({
   prefilledContactId,
 }: ConsultationModalProps) {
   const [contactOpen, setContactOpen] = useState(false);
+  const [contactSearch, setContactSearch] = useState('');
   const { toast } = useToast();
   const { director } = useAuth();
   const { data: contactsData } = useContacts({ pageSize: 100 });
@@ -178,6 +180,25 @@ export function ConsultationModal({
   const contacts = contactsData?.data || [];
   const selectedContact = contacts.find((c) => c.id === form.watch('contact_id'));
 
+  // Filter contacts based on search
+  const filteredContacts = contacts.filter(contact => {
+    if (!contactSearch) return true;
+    const query = contactSearch.toLowerCase();
+    return (
+      contact.full_name.toLowerCase().includes(query) ||
+      (contact.company?.toLowerCase().includes(query) ?? false)
+    );
+  });
+
+  // Virtualization
+  const contactListRef = useRef<HTMLDivElement>(null);
+  const contactVirtualizer = useVirtualizer({
+    count: filteredContacts.length,
+    getScrollElement: () => contactListRef.current,
+    estimateSize: () => 48,
+    overscan: 10,
+  });
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -213,37 +234,61 @@ export function ConsultationModal({
                       </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0">
-                      <Command>
-                        <CommandInput placeholder="Szukaj kontaktu..." />
+                      <Command shouldFilter={false}>
+                        <CommandInput 
+                          placeholder="Szukaj kontaktu..." 
+                          value={contactSearch}
+                          onValueChange={setContactSearch}
+                        />
                         <CommandList>
                           <CommandEmpty>Nie znaleziono kontaktów.</CommandEmpty>
-                          <CommandGroup>
-                            {contacts.map((contact) => (
-                              <CommandItem
-                                key={contact.id}
-                                value={contact.full_name}
-                                onSelect={() => {
-                                  field.onChange(contact.id);
-                                  setContactOpen(false);
+                          <div ref={contactListRef} className="max-h-[300px] overflow-auto">
+                            <CommandGroup>
+                              <div
+                                style={{
+                                  height: contactVirtualizer.getTotalSize(),
+                                  position: 'relative',
                                 }}
                               >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    field.value === contact.id ? 'opacity-100' : 'opacity-0'
-                                  )}
-                                />
-                                <div>
-                                  <div>{contact.full_name}</div>
-                                  {contact.company && (
-                                    <div className="text-xs text-muted-foreground">
-                                      {contact.company}
-                                    </div>
-                                  )}
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
+                                {contactVirtualizer.getVirtualItems().map((virtualRow) => {
+                                  const contact = filteredContacts[virtualRow.index];
+                                  return (
+                                    <CommandItem
+                                      key={contact.id}
+                                      value={contact.full_name}
+                                      onSelect={() => {
+                                        field.onChange(contact.id);
+                                        setContactOpen(false);
+                                        setContactSearch('');
+                                      }}
+                                      className="cursor-pointer absolute w-full"
+                                      style={{
+                                        top: 0,
+                                        left: 0,
+                                        height: 48,
+                                        transform: `translateY(${virtualRow.start}px)`,
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4',
+                                          field.value === contact.id ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      <div>
+                                        <div>{contact.full_name}</div>
+                                        {contact.company && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {contact.company}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </div>
+                            </CommandGroup>
+                          </div>
                         </CommandList>
                       </Command>
                     </PopoverContent>

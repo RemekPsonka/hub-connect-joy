@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRepresentativeContacts } from '@/hooks/useRepresentativeContacts';
 import { SalesRepresentative } from '@/hooks/useRepresentatives';
 import { useContacts } from '@/hooks/useContacts';
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/popover';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface AssignContactModalProps {
   isOpen: boolean;
@@ -58,8 +59,28 @@ export function AssignContactModal({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const selectedContact = contacts?.find(c => c.id === contactId);
+
+  // Filter contacts based on search
+  const filteredContacts = contacts.filter(contact => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      contact.full_name.toLowerCase().includes(query) ||
+      (contact.company?.toLowerCase().includes(query) ?? false)
+    );
+  });
+
+  // Virtualization
+  const listRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filteredContacts.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 48,
+    overscan: 10,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +101,7 @@ export function AssignContactModal({
       setRepresentativeId('');
       setDeadlineDays('14');
       setNotes('');
+      setSearchQuery('');
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -114,35 +136,59 @@ export function AssignContactModal({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0">
-                <Command>
-                  <CommandInput placeholder="Szukaj kontaktu..." />
+                <Command shouldFilter={false}>
+                  <CommandInput 
+                    placeholder="Szukaj kontaktu..." 
+                    value={searchQuery}
+                    onValueChange={setSearchQuery}
+                  />
                   <CommandList>
                     <CommandEmpty>Nie znaleziono kontaktów.</CommandEmpty>
-                    <CommandGroup>
-                      {contacts?.slice(0, 50).map((contact) => (
-                        <CommandItem
-                          key={contact.id}
-                          value={contact.full_name}
-                          onSelect={() => {
-                            setContactId(contact.id);
-                            setOpen(false);
+                    <div ref={listRef} className="max-h-[300px] overflow-auto">
+                      <CommandGroup>
+                        <div
+                          style={{
+                            height: virtualizer.getTotalSize(),
+                            position: 'relative',
                           }}
                         >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              contactId === contact.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div>
-                            <div>{contact.full_name}</div>
-                            {contact.company && (
-                              <div className="text-xs text-muted-foreground">{contact.company}</div>
-                            )}
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
+                          {virtualizer.getVirtualItems().map((virtualRow) => {
+                            const contact = filteredContacts[virtualRow.index];
+                            return (
+                              <CommandItem
+                                key={contact.id}
+                                value={contact.full_name}
+                                onSelect={() => {
+                                  setContactId(contact.id);
+                                  setOpen(false);
+                                  setSearchQuery('');
+                                }}
+                                className="cursor-pointer absolute w-full"
+                                style={{
+                                  top: 0,
+                                  left: 0,
+                                  height: 48,
+                                  transform: `translateY(${virtualRow.start}px)`,
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    contactId === contact.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div>
+                                  <div>{contact.full_name}</div>
+                                  {contact.company && (
+                                    <div className="text-xs text-muted-foreground">{contact.company}</div>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                        </div>
+                      </CommandGroup>
+                    </div>
                   </CommandList>
                 </Command>
               </PopoverContent>
