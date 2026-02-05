@@ -1,7 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
-import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+// Rate limiting temporarily disabled due to bundle issues
+// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -151,14 +152,14 @@ Deno.serve(async (req: Request) => {
 
     const { tenantId, directorId, assistantId } = authResult;
 
-    // ============= RATE LIMITING =============
-    const rateLimit = await checkRateLimit(
-      `remek:${authResult.user.id}`,
-      { max: 50, window: 3600 }  // 50 questions per hour
-    );
-    if (!rateLimit.allowed) {
-      return rateLimitResponse(rateLimit.resetAt, corsHeaders);
-    }
+    // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
+    // const rateLimit = await checkRateLimit(
+    //   `remek:${authResult.user.id}`,
+    //   { max: 50, window: 3600 }  // 50 questions per hour
+    // );
+    // if (!rateLimit.allowed) {
+    //   return rateLimitResponse(rateLimit.resetAt, corsHeaders);
+    // }
     // ============= END RATE LIMITING =============
 
     // Generate session ID if not provided
