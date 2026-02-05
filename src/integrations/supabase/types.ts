@@ -4056,7 +4056,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      mv_dashboard_stats: {
+        Row: {
+          active_contacts: number | null
+          active_needs: number | null
+          active_offers: number | null
+          completed_tasks: number | null
+          pending_tasks: number | null
+          tenant_id: string | null
+          total_companies: number | null
+          total_contacts: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_synonym: {
@@ -4141,6 +4161,18 @@ export type Database = {
       get_assistant_tenant_id: { Args: { _user_id: string }; Returns: string }
       get_current_director_id: { Args: never; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
+      get_dashboard_stats: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          active_contacts: number
+          active_needs: number
+          active_offers: number
+          completed_tasks: number
+          pending_tasks: number
+          total_companies: number
+          total_contacts: number
+        }[]
+      }
       get_sales_representative_id: {
         Args: { _user_id: string }
         Returns: string
@@ -4163,6 +4195,7 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      refresh_dashboard_stats: { Args: never; Returns: undefined }
       representative_can_access_contact: {
         Args: { _contact_id: string; _rep_id: string }
         Returns: boolean
