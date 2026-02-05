@@ -1,175 +1,241 @@
 
-# Plan: TypeScript Strict Mode - Naprawa Bledow Kompilacji
+# Plan: Zod Validation dla 5 Edge Functions
 
 ## Cel
-Naprawic bledy kompilacji TypeScript powstale po wlaczeniu strict mode w poprzednim kroku. Bledy dotycza 4 plikow komponentow i 2 hookow.
+Dodanie walidacji Zod do 5 najczesciej uzywanych edge functions dla bezpieczenstwa i lepszego error handlingu.
 
 ---
 
-## Zmiana 1: src/components/ErrorBoundary.tsx
+## Uwaga wstepna - Import Zod w Deno
 
-**Problem:** Typ `ErrorFallbackProps` nie jest kompatybilny z `FallbackProps` z react-error-boundary (error ma typ `unknown` zamiast `Error`)
-
-**Linia 7-10** - Zmiana interfejsu:
+W edge functions Deno, Zod importujemy bezposrednio z npm:
 
 ```typescript
-// USUNAC interfejs ErrorFallbackProps i uzyc FallbackProps z biblioteki
-import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from 'react-error-boundary';
+import { z } from "npm:zod@3.23.8";
 ```
 
-**Linia 12** - Zmiana komponentu:
-
-```typescript
-function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  // W renderze uzyc errorMessage zamiast error.message
-```
+Nie trzeba modyfikowac import_map.json ani instalowac Zod osobno.
 
 ---
 
-## Zmiana 2: src/pages/Network.tsx
+## Zmiana 1: generate-contact-profile/index.ts
 
-**Problem:** Ten sam problem z `FallbackProps` - lokalna funkcja `GraphErrorFallback` ma wlasny typ
-
-**Linia 26** - Zmiana typu:
-
+**Linia 1-3** - Dodac import Zod:
 ```typescript
-import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
-
-function GraphErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  // ...
+import { z } from "npm:zod@3.23.8";
 ```
 
----
-
-## Zmiana 3: src/components/company/sections/RegistryDataSection.tsx
-
-**Problem:** Parametry `source` i `note` w `.map()` maja implicit `any`
-
-**Linia 8** - Dodac poprawny typ dla `data`:
+**Linia 146-155** - Zastapic obecna walidacje Zod schema:
 
 ```typescript
-interface RegistryData {
-  nip?: string;
-  regon?: string;
-  krs?: string;
-  address?: string;
-  city?: string;
-  postal_code?: string;
-  sources?: string | string[];
-  analysis_notes?: string | string[];
-  data_source?: string;
-}
-
-interface RegistryDataSectionProps {
-  data: RegistryData;
-  dataSources?: DataSources;
-}
-```
-
-**Linia 155** - Dodac typ do map:
-
-```typescript
-{sources.slice(0, 10).map((source: string, i: number) => (
-```
-
-**Linia 178** - Dodac typ do map:
-
-```typescript
-{analysisNotes.map((note: string, i: number) => (
-```
-
----
-
-## Zmiana 4: src/components/insurance/RiskDomainAccordion.tsx
-
-**Problem:** `onAddPolicy` ma typ `QuickPolicyData` z `PolicyType`, ale `DomainProps` definiuje `policy_type` jako `string`
-
-**Rozwiazanie:** Zmodyfikowac typ w `DomainProps` lub uzyc type assertion
-
-**Zmiana w src/components/insurance/types.ts**, linia 189-197:
-
-```typescript
-import type { PolicyType } from '@/components/renewal/types';
-
-export interface DomainProps<T> {
-  data: T;
-  onChange: (data: T) => void;
-  operationalTypes: TypDzialnosci[];
-  companyId?: string;
-  onAddPolicy?: (data: {
-    policy_type: PolicyType;  // Zmiana z string na PolicyType
-    policy_name: string;
-    start_date: string;
-    end_date: string;
-    sum_insured?: number;
-    premium?: number;
-    is_our_policy?: boolean;
-  }) => void;
-}
-```
-
----
-
-## Zmiana 5: src/hooks/useBusinessInterview.ts
-
-**Problem:** Element has implicit 'any' type because expression can't index union type
-
-**Linia 233** - Naprawic indeksowanie:
-
-```typescript
-// PRZED:
-const items = (current[itemType] as any[]) || [];
-
-// PO:
-const currentData = current as Record<string, unknown>;
-const items = (currentData[itemType] as Array<{ id: string; [key: string]: unknown }>) || [];
-```
-
----
-
-## Zmiana 6: src/hooks/useConnections.ts
-
-**Problem:** `contact_a_id` moze byc `null` ale typ `Connection` wymaga `string`
-
-**Linia 166 i 181** - Dodac filtrowanie null:
-
-```typescript
-// Linia 166 - Filtrowac przed mapowaniem:
-const validConnections = (connections || []).filter(
-  (conn): conn is typeof conn & { contact_a_id: string; contact_b_id: string } =>
-    conn.contact_a_id !== null && conn.contact_b_id !== null
-);
-
-const otherContactIds = validConnections.map((conn) =>
-  conn.contact_a_id === contactId ? conn.contact_b_id : conn.contact_a_id
-);
-
-// Linia 181:
-return validConnections.map((conn) => {
-  // ...
+// Dodac przed serve():
+const requestSchema = z.object({
+  contact_id: z.string().uuid("contact_id musi byc poprawnym UUID"),
+  force_regenerate: z.boolean().optional(),
 });
+
+// W serve(), po CORS:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ 
+      error: "Invalid request", 
+      details: validation.error.format() 
+    }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { contact_id, force_regenerate } = validation.data;
+```
+
+---
+
+## Zmiana 2: ai-chat/index.ts
+
+**Linia 1-3** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Linia 26-57** - Dodac schema i walidacje:
+
+```typescript
+// Dodac przed serve():
+const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string().min(1).max(50000),
+});
+
+const requestSchema = z.object({
+  messages: z.array(chatMessageSchema).min(1, "At least one message required"),
+  context: z.object({
+    contactId: z.string().uuid().optional(),
+    meetingId: z.string().uuid().optional(),
+    includeContacts: z.boolean().optional(),
+    includeNeeds: z.boolean().optional(),
+    includeOffers: z.boolean().optional(),
+  }).optional(),
+});
+
+// W serve(), po auth check:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { messages, context } = validation.data;
+```
+
+---
+
+## Zmiana 3: parse-contacts-list/index.ts
+
+**Linia 1-3** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Linia 55-62** - Dodac schema z refinement:
+
+```typescript
+// Dodac przed serve():
+const requestSchema = z.object({
+  content: z.string().min(1, "Content is required").max(5_000_000, "Content too large (max 5MB)"),
+  contentType: z.enum(["csv", "xlsx", "pdf", "image", "text"]).optional().default("text"),
+  fileName: z.string().max(255).optional(),
+});
+
+// W serve(), po auth check:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { content, contentType, fileName } = validation.data;
+```
+
+---
+
+## Zmiana 4: remek-chat/index.ts
+
+**Linia 1-2** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Linia 106-115** - Zastapic interface RemekRequest schema Zod:
+
+```typescript
+// Zastapic interface RemekRequest:
+const requestSchema = z.object({
+  message: z.string().min(1, "Message is required").max(5000, "Message too long (max 5000 chars)"),
+  sessionId: z.string().uuid().optional(),
+  context: z.object({
+    module: z.string().max(100).optional(),
+    pageUrl: z.string().max(500).optional(),
+    contactId: z.string().uuid().optional(),
+    companyId: z.string().uuid().optional(),
+  }).optional(),
+});
+
+type RemekRequest = z.infer<typeof requestSchema>;
+
+// W serve(), po auth check (linia 135):
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { message, context, sessionId: rawSessionId } = validation.data;
+let sessionId = rawSessionId;
+```
+
+---
+
+## Zmiana 5: background-sync-runner/index.ts
+
+**Linia 1** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Linia 17-26** - Dodac schema i walidacje:
+
+```typescript
+// Dodac przed Deno.serve():
+const requestSchema = z.object({
+  job_id: z.string().uuid("job_id musi byc poprawnym UUID"),
+  tenant_id: z.string().uuid("tenant_id musi byc poprawnym UUID"),
+  batch_size: z.number().int().min(1).max(100).optional().default(10),
+  skip_errors: z.boolean().optional().default(true),
+});
+
+// W serve(), zamiast obecnej walidacji:
+const body = await req.json().catch(() => ({}));
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { job_id, tenant_id, batch_size, skip_errors } = validation.data;
 ```
 
 ---
 
 ## Podsumowanie zmian
 
-| Plik | Problem | Rozwiazanie |
-|------|---------|-------------|
-| `ErrorBoundary.tsx` | FallbackProps type mismatch | Uzyc typu z biblioteki + type guard dla error |
-| `Network.tsx` | FallbackProps type mismatch | Uzyc typu z biblioteki + type guard dla error |
-| `RegistryDataSection.tsx` | Implicit any w map() | Dodac typy do parametrow + interface dla data |
-| `RiskDomainAccordion.tsx` | PolicyType vs string | Zmienic DomainProps na PolicyType |
-| `useBusinessInterview.ts` | Cannot index union type | Type assertion z Record |
-| `useConnections.ts` | null vs string | Type guard filter |
+| Plik | Walidacja | Kluczowe pola |
+|------|-----------|---------------|
+| `generate-contact-profile` | UUID + optional boolean | `contact_id`, `force_regenerate` |
+| `ai-chat` | Array messages + context | `messages[]`, `context` |
+| `parse-contacts-list` | Content + enum contentType | `content`, `contentType`, `fileName` |
+| `remek-chat` | Message + optional context | `message`, `sessionId`, `context` |
+| `background-sync-runner` | UUID job + tenant | `job_id`, `tenant_id`, `batch_size` |
 
 ---
 
-## Wazne uwagi
+## Wazne zasady
 
-1. Wszystkie zmiany dotycza tylko typow - logika biznesowa pozostaje bez zmian
-2. Uzywamy type guards zamiast type assertions gdzie to mozliwe
-3. Import `FallbackProps` z react-error-boundary zapewnia kompatybilnosc
-4. Po tych zmianach kompilacja powinna przejsc bez bledow
+1. **Walidacja PRZED auth** - oszczedzamy zasoby (nie autoryzujemy blednych requestow)
+2. **400 Bad Request** - z pelnym Zod error format w `details`
+3. **safeParse** - nie rzuca wyjatku, zwraca `success: boolean`
+4. **Zod import** - `npm:zod@3.23.8` dziala natywnie w Deno
+5. **NIE zmieniamy logiki** - tylko dodajemy walidacje na wejsciu
+
+---
+
+## Testowanie
+
+Po wdrozeniu mozna testowac invalid payloads:
+
+```bash
+# Test invalid UUID
+curl -X POST https://xxx.supabase.co/functions/v1/generate-contact-profile \
+  -H "Authorization: Bearer XXX" \
+  -d '{"contact_id": "not-a-uuid"}'
+
+# Oczekiwana odpowiedz:
+# {"error":"Invalid request","details":{"contact_id":{"_errors":["contact_id musi byc poprawnym UUID"]}}}
+```
