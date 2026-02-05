@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, isAuthError, unauthorizedResponse, verifyResourceAccess, accessDeniedResponse } from "../_shared/auth.ts";
@@ -7,11 +8,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface EmbeddingRequest {
-  type?: "contact" | "need" | "offer";
-  id?: string;
-  text?: string; // For direct text embedding (query mode)
-}
+// Zod schema for request validation with conditional refinement
+const requestSchema = z.object({
+  type: z.enum(["contact", "need", "offer"]).optional(),
+  id: z.string().uuid("id musi byc poprawnym UUID").optional(),
+  text: z.string().min(3, "Tekst min. 3 znaki").max(10000, "Tekst max 10000 znakow").optional(),
+}).refine(
+  (data) => (data.text) || (data.type && data.id),
+  { message: "Podaj 'text' dla trybu query, lub 'type' i 'id' dla trybu entity" }
+);
+
+type EmbeddingRequest = z.infer<typeof requestSchema>;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,20 +47,24 @@ serve(async (req) => {
 
     console.log(`[generate-embedding] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    const { type, id, text: providedText } = await req.json() as EmbeddingRequest;
+    // Validate request body with Zod
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { type, id, text: providedText } = validation.data;
 
     // Query mode: just generate embedding for text and return it
     const isQueryMode = !type && !id && providedText;
     
     // Entity mode: generate and save embedding for an entity
     const isEntityMode = type && id;
-    
-    if (!isQueryMode && !isEntityMode) {
-      return new Response(
-        JSON.stringify({ error: "Provide either 'text' for query mode, or 'type' and 'id' for entity mode" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // In entity mode, verify the resource belongs to the user's tenant
     if (isEntityMode) {
