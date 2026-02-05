@@ -45,7 +45,14 @@ export const NotificationPreferences = () => {
         if (error) throw error;
 
         if (data) {
-          setPreferences(data);
+          setPreferences({
+            id: data.id,
+            consultation_reminders: data.consultation_reminders ?? true,
+            task_overdue: data.task_overdue ?? true,
+            new_matches: data.new_matches ?? true,
+            relationship_decay: data.relationship_decay ?? true,
+            daily_serendipity: data.daily_serendipity ?? true,
+          });
         }
       } catch (error) {
         console.error('Error fetching preferences:', error);

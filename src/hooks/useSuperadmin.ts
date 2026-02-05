@@ -105,10 +105,11 @@ export function useSuperadmin() {
       }
 
       // Combine the data
-      const tenantsWithOwners: Tenant[] = tenantsData.map(tenant => {
+      const tenantsWithOwners: Tenant[] = tenantsData.map((tenant) => {
         const owner = directorsData.find(d => d.tenant_id === tenant.id);
         return {
           ...tenant,
+          created_at: tenant.created_at ?? new Date().toISOString(),
           owner: owner ? {
             id: owner.id,
             full_name: owner.full_name,

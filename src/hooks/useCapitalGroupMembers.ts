@@ -48,7 +48,8 @@ export function useCapitalGroupMembers(companyId: string | undefined) {
       // Get linked companies separately
       const linkedCompanyIds = members
         .filter(m => m.member_company_id)
-        .map(m => m.member_company_id);
+        .map(m => m.member_company_id)
+        .filter((id): id is string => id !== null);
       
       let companiesMap: Record<string, { id: string; name: string; logo_url: string | null; revenue_amount: number | null; revenue_year: number | null }> = {};
       
@@ -104,7 +105,7 @@ export function useAddCapitalGroupMember() {
       if (!director) throw new Error('Nie znaleziono dyrektora');
       
       // Check if company with NIP/KRS exists in database
-      let member_company_id = null;
+      let member_company_id: string | null = null;
       if (input.external_nip || input.external_krs) {
         const query = supabase
           .from('companies')
@@ -118,7 +119,7 @@ export function useAddCapitalGroupMember() {
         }
         
         const { data: existingCompany } = await query.maybeSingle();
-        member_company_id = existingCompany?.id || null;
+        member_company_id = existingCompany?.id ?? null;
       }
       
       const { data, error } = await supabase

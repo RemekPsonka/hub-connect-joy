@@ -53,7 +53,7 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     ...(response.contacts_with_agents || []).map((c): UnifiedContact => ({
       contact_id: c.contact_id,
       contact_name: c.contact_name,
-      company: c.company,
+      company: c.company ?? undefined,
       semantic_score: c.semantic_score,
       hasAgent: true,
       justification: c.agent_answer || 'Dopasowanie semantyczne'
@@ -61,7 +61,7 @@ export function MasterAgentMessage({ response }: MasterAgentMessageProps) {
     ...(response.contacts_without_agents || []).map((c): UnifiedContact => ({
       contact_id: c.contact_id,
       contact_name: c.contact_name,
-      company: c.company,
+      company: c.company ?? undefined,
       semantic_score: c.semantic_score,
       hasAgent: false,
       justification: c.match_reason || 'Dopasowanie semantyczne'

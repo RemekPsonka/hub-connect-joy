@@ -170,10 +170,10 @@ export function BugFixSheet({
                       </a>
                     </div>
                   )}
-                  {contextData.screenWidth && contextData.screenHeight && (
+                  {typeof contextData.screenWidth === 'number' && typeof contextData.screenHeight === 'number' && (
                     <div className="col-span-2 flex items-center gap-2 text-muted-foreground">
                       <Monitor className="h-4 w-4" />
-                      {String(contextData.screenWidth)} × {String(contextData.screenHeight)}
+                      {contextData.screenWidth} × {contextData.screenHeight}
                     </div>
                   )}
                 </div>

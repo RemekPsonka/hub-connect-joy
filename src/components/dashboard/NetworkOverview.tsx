@@ -43,8 +43,12 @@ export function NetworkOverview() {
       // Policz połączenia dla każdego kontaktu
       const connectionCounts: Record<string, number> = {};
       connections?.forEach((conn) => {
-        connectionCounts[conn.contact_a_id] = (connectionCounts[conn.contact_a_id] || 0) + 1;
-        connectionCounts[conn.contact_b_id] = (connectionCounts[conn.contact_b_id] || 0) + 1;
+        if (conn.contact_a_id) {
+          connectionCounts[conn.contact_a_id] = (connectionCounts[conn.contact_a_id] || 0) + 1;
+        }
+        if (conn.contact_b_id) {
+          connectionCounts[conn.contact_b_id] = (connectionCounts[conn.contact_b_id] || 0) + 1;
+        }
       });
 
       // Znajdź top 5

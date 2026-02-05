@@ -603,7 +603,7 @@ export function useUpdateCrossTaskStatus() {
       const { error: taskError } = await supabase
         .from('tasks')
         .update({ status: newStatus })
-        .eq('id', crossTask.task_id);
+        .eq('id', crossTask.task_id!);
 
       if (taskError) throw taskError;
 

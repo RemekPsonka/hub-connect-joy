@@ -20,6 +20,7 @@ import { FindPathModal } from '@/components/network/FindPathModal';
 import { AddConnectionModal } from '@/components/network/AddConnectionModal';
 import { ConnectionLegend } from '@/components/network/ConnectionLegend';
 import { useConnections } from '@/hooks/useConnections';
+import type { Connection } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
 
 function GraphErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
@@ -81,9 +82,10 @@ export default function Network() {
   // Filter edges to only include those where both nodes are visible
   const filteredEdges = useMemo(() => {
     const nodeIds = new Set(filteredNodes.map((n) => n.id));
-    return edges.filter(
-      (edge) => nodeIds.has(edge.contact_a_id) && nodeIds.has(edge.contact_b_id)
-    );
+    return edges.filter((edge) => {
+      if (!edge.contact_a_id || !edge.contact_b_id) return false;
+      return nodeIds.has(edge.contact_a_id) && nodeIds.has(edge.contact_b_id);
+    });
   }, [edges, filteredNodes]);
 
   const selectedNode = useMemo(
@@ -244,7 +246,7 @@ export default function Network() {
           >
             <ConnectionGraph
               nodes={filteredNodes}
-              edges={filteredEdges}
+              edges={filteredEdges as Connection[]}
               selectedNodeId={selectedNodeId}
               highlightedPath={highlightedPath}
               onNodeClick={handleNodeClick}

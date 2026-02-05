@@ -121,7 +121,7 @@ export function CompanyHeaderCard({ company, ownerContactId }: CompanyHeaderCard
                 {company.revenue_amount && (
                   <span className="flex items-center gap-1">
                     <DollarSign className="h-4 w-4" />
-                    {formatRevenue(company.revenue_amount, company.revenue_currency)}
+                    {formatRevenue(company.revenue_amount, company.revenue_currency ?? null)}
                     {company.revenue_year && ` (${company.revenue_year})`}
                   </span>
                 )}

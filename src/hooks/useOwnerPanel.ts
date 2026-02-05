@@ -63,8 +63,9 @@ export function useOwnerPanel() {
       if (rolesError) throw rolesError;
       
       // Combine data
-      const usersWithRoles: TenantUser[] = (directors || []).map(d => ({
+      const usersWithRoles: TenantUser[] = (directors || []).map((d) => ({
         ...d,
+        created_at: d.created_at ?? new Date().toISOString(),
         roles: (roles || [])
           .filter(r => r.user_id === d.user_id)
           .map(r => r.role as AppRole)

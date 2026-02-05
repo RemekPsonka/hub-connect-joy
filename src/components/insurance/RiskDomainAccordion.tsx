@@ -53,7 +53,7 @@ function getStatusBadge(status: StatusUbezpieczenia) {
 }
 
 function getSpecialtyStatusSummary(data: RyzykoSpecjalistyczne) {
-  const gaps = [];
+  const gaps: string[] = [];
   if (data.cyber_status === 'luka') gaps.push('Cyber');
   if (data.do_status === 'luka') gaps.push('D&O');
   if (data.car_ear_status === 'luka') gaps.push('CAR/EAR');
@@ -62,7 +62,7 @@ function getSpecialtyStatusSummary(data: RyzykoSpecjalistyczne) {
     return <Badge variant="destructive" className="text-xs">LUKI: {gaps.join(', ')}</Badge>;
   }
   
-  const insured = [];
+  const insured: string[] = [];
   if (data.cyber_status === 'ubezpieczone') insured.push('Cyber');
   if (data.do_status === 'ubezpieczone') insured.push('D&O');
   if (data.car_ear_status === 'ubezpieczone') insured.push('CAR/EAR');
@@ -75,7 +75,7 @@ function getSpecialtyStatusSummary(data: RyzykoSpecjalistyczne) {
 }
 
 function getEmployeeStatusSummary(data: RyzykoPracownicy) {
-  const gaps = [];
+  const gaps: string[] = [];
   if (data.zycie_status === 'luka') gaps.push('Życie');
   if (data.zdrowie_status === 'luka') gaps.push('Zdrowie');
   if (data.podroze_status === 'luka') gaps.push('Podróże');
@@ -84,7 +84,7 @@ function getEmployeeStatusSummary(data: RyzykoPracownicy) {
     return <Badge variant="destructive" className="text-xs">LUKI: {gaps.join(', ')}</Badge>;
   }
   
-  const insured = [];
+  const insured: string[] = [];
   if (data.zycie_status === 'ubezpieczone') insured.push('Życie');
   if (data.zdrowie_status === 'ubezpieczone') insured.push('Zdrowie');
   if (data.podroze_status === 'ubezpieczone') insured.push('Podróże');
@@ -97,7 +97,7 @@ function getEmployeeStatusSummary(data: RyzykoPracownicy) {
 }
 
 function getFinancialStatusSummary(data: RyzykoFinansowe) {
-  const gaps = [];
+  const gaps: string[] = [];
   if (data.gwarancje_kontraktowe_status === 'luka') gaps.push('Gwarancje');
   if (data.gwarancje_celne_status === 'luka') gaps.push('Celne');
   if (data.kredyt_kupiecki_status === 'luka') gaps.push('Trade Credit');
@@ -107,7 +107,7 @@ function getFinancialStatusSummary(data: RyzykoFinansowe) {
     return <Badge variant="destructive" className="text-xs">LUKI: {gaps.join(', ')}</Badge>;
   }
   
-  const insured = [];
+  const insured: string[] = [];
   if (data.gwarancje_kontraktowe_status === 'ubezpieczone') insured.push('Gwarancje');
   if (data.gwarancje_celne_status === 'ubezpieczone') insured.push('Celne');
   if (data.kredyt_kupiecki_status === 'ubezpieczone') insured.push('Trade Credit');

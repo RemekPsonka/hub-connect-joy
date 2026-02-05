@@ -106,9 +106,9 @@ export function ContactHistoryTab({ contactId }: ContactHistoryTabProps) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`font-medium ${config.color}`}>{config.label}</span>
-                        {metadata?.migrated && (
+                        {metadata?.migrated ? (
                           <Badge variant="outline" className="text-xs">migracja</Badge>
-                        )}
+                        ) : null}
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {format(event.date, 'dd MMM yyyy, HH:mm', { locale: pl })}
@@ -117,11 +117,11 @@ export function ContactHistoryTab({ contactId }: ContactHistoryTabProps) {
                     {activity.description && (
                       <p className="text-sm text-muted-foreground mt-1">{activity.description}</p>
                     )}
-                    {metadata?.source && (
+                    {metadata?.source ? (
                       <p className="text-xs text-muted-foreground mt-1">
                         Źródło: {String(metadata.source)}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );

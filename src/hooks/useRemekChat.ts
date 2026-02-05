@@ -148,7 +148,7 @@ export function useRemekChat() {
         id: msg.id,
         role: msg.role as 'user' | 'assistant',
         message: msg.message,
-        createdAt: msg.created_at,
+        createdAt: msg.created_at ?? new Date().toISOString(),
         helpfulRating: msg.helpful_rating || undefined,
       }));
     },

@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user_id: data.user_id,
       full_name: data.full_name,
       email: data.email,
-      is_active: data.is_active,
+      is_active: data.is_active ?? true,
       allowed_group_ids: data.allowed_groups?.map((g: { group_id: string }) => g.group_id) || [],
     };
   };

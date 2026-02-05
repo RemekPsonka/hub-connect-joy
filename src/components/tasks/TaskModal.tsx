@@ -298,9 +298,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
                   ))}
                 </SelectContent>
               </Select>
-              {selectedCategory?.workflow_steps?.steps?.length > 0 && (
+              {selectedCategory?.workflow_steps?.steps && selectedCategory.workflow_steps.steps.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Ta kategoria ma {selectedCategory.workflow_steps.steps.length} kroków workflow
+                  Ta kategoria ma {selectedCategory?.workflow_steps?.steps?.length} kroków workflow
                 </p>
               )}
             </div>

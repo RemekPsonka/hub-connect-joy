@@ -252,7 +252,7 @@ export function GroupManagementModal({ isOpen, onClose }: GroupManagementModalPr
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(group)}
-                          disabled={group.is_system}
+                          disabled={group.is_system ?? false}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -260,7 +260,7 @@ export function GroupManagementModal({ isOpen, onClose }: GroupManagementModalPr
                           variant="ghost"
                           size="icon"
                           onClick={() => setDeleteConfirmGroup(group)}
-                          disabled={group.is_system}
+                          disabled={group.is_system ?? false}
                           className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />

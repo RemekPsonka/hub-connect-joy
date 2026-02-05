@@ -43,7 +43,12 @@ export function ExposureManager({ companyId }: ExposureManagerProps) {
   };
 
   const handleUpdateLocation = (locationId: string, updates: Partial<LocationExposure>) => {
-    updateLocation.mutate({ id: locationId, ...updates });
+    // Convert null values to undefined for UpdateLocationData compatibility
+    const cleanedUpdates: Record<string, unknown> = { id: locationId };
+    for (const [key, value] of Object.entries(updates)) {
+      cleanedUpdates[key] = value === null ? undefined : value;
+    }
+    updateLocation.mutate(cleanedUpdates as { id: string; [key: string]: unknown });
   };
 
   const handleDeleteLocation = (locationId: string) => {

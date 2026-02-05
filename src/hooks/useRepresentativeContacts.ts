@@ -70,7 +70,13 @@ export function useRepresentativeContacts(representativeId?: string) {
       const { data, error } = await query;
 
       if (error) throw error;
-      return data || [];
+      return (data || []).map((d) => ({
+        ...d,
+        assigned_at: d.assigned_at ?? new Date().toISOString(),
+        deadline_days: d.deadline_days ?? 14,
+        extended_count: d.extended_count ?? 0,
+        status: d.status ?? 'pending',
+      })) as RepresentativeContact[];
     },
     enabled: !!director?.tenant_id,
   });

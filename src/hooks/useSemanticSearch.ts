@@ -94,7 +94,7 @@ export function useSemanticSearch() {
       // Use hybrid search function
       const { data, error: rpcError } = await supabase.rpc('search_all_hybrid', {
         p_query: query,
-        p_query_embedding: queryEmbedding,
+        p_query_embedding: queryEmbedding as string,
         p_tenant_id: tenantId,
         p_types: types,
         p_fts_weight: 0.4,
@@ -113,7 +113,7 @@ export function useSemanticSearch() {
       const searchResults: SearchResult[] = (data || []).map((item: any) => ({
         id: item.id,
         type: item.type as 'contact' | 'need' | 'offer',
-        title: item.title || '',
+        title: (item.title as string | null) ?? '',
         subtitle: item.subtitle || undefined,
         description: item.description || undefined,
         similarity: item.combined_score || 0,
