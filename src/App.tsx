@@ -51,7 +51,16 @@ const NetworkFallback = () => (
   </div>
 );
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minut - dane CRM nie zmieniają się co sekundę
+      gcTime: 10 * 60 * 1000,   // 10 minut w cache przed garbage collection
+      retry: 1,                  // 1 retry przy błędzie (nie bombardujemy API)
+      refetchOnWindowFocus: false, // brak refetch przy powrocie do karty
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
