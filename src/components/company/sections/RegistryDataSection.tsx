@@ -1,11 +1,22 @@
 import { SectionCard, SectionBox } from '../SectionCard';
 import { Badge } from '@/components/ui/badge';
 import { FileText, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { SectionProps } from '../types';
 import type { DataSources } from '../types';
 
+interface RegistryData {
+  nip?: string;
+  regon?: string;
+  krs?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  sources?: string | string[];
+  analysis_notes?: string | string[];
+  data_source?: string;
+}
+
 interface RegistryDataSectionProps {
-  data: any;
+  data: RegistryData;
   dataSources?: DataSources;
 }
 
@@ -152,7 +163,7 @@ export function RegistryDataSection({ data, dataSources }: RegistryDataSectionPr
         {sources.length > 0 && (
           <SectionBox title="Źródła URL">
             <div className="space-y-1 max-h-32 overflow-y-auto">
-              {sources.slice(0, 10).map((source, i) => (
+              {sources.slice(0, 10).map((source: string, i: number) => (
                 <a 
                   key={i}
                   href={source.startsWith('http') ? source : undefined}
@@ -175,7 +186,7 @@ export function RegistryDataSection({ data, dataSources }: RegistryDataSectionPr
         {analysisNotes.length > 0 && (
           <SectionBox title="Uwagi o danych" icon={<AlertCircle className="h-3 w-3" />}>
             <ul className="space-y-1">
-              {analysisNotes.map((note, i) => (
+              {analysisNotes.map((note: string, i: number) => (
                 <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
                   <span>•</span>
                   {note}

@@ -1,15 +1,12 @@
-import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary';
+import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from 'react-error-boundary';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReactNode } from 'react';
 
-interface ErrorFallbackProps {
-  error: Error;
-  resetErrorBoundary: () => void;
-}
-
-function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps) {
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="max-w-md w-full">
@@ -28,7 +25,7 @@ function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps) {
               Szczegóły techniczne
             </summary>
             <pre className="mt-2 text-xs bg-muted p-3 rounded-md overflow-auto max-h-32">
-              {error.message}
+              {errorMessage}
             </pre>
           </details>
           <div className="flex gap-2">
