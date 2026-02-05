@@ -1,9 +1,18 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from "zod";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  job_id: z.string().uuid("job_id musi być poprawnym UUID"),
+  tenant_id: z.string().uuid("tenant_id musi być poprawnym UUID"),
+  batch_size: z.number().int().min(1).max(100).optional().default(10),
+  skip_errors: z.boolean().optional().default(true),
+});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,15 +24,18 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    // Zod validation
     const body = await req.json().catch(() => ({}));
-    const { job_id, tenant_id, batch_size = 10, skip_errors = true } = body;
+    const validation = requestSchema.safeParse(body);
 
-    if (!job_id || !tenant_id) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ error: 'job_id and tenant_id required' }),
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { job_id, tenant_id, batch_size, skip_errors } = validation.data;
 
     // Get current job status
     const { data: job, error: jobError } = await supabase

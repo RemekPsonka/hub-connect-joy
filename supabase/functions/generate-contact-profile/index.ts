@@ -1,11 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse, verifyResourceAccess, accessDeniedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  contact_id: z.string().uuid("contact_id musi być poprawnym UUID"),
+  force_regenerate: z.boolean().optional(),
+});
 
 // Extract company domain from email (excluding public domains)
 function extractDomainFromEmail(email: string | null): string | null {
@@ -149,11 +156,21 @@ serve(async (req) => {
   }
 
   try {
-    const { contact_id } = await req.json();
+    // Zod validation BEFORE auth check
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!contact_id) {
-      return new Response(JSON.stringify({ error: "contact_id is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Invalid request", 
+          details: validation.error.format() 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    const { contact_id, force_regenerate } = validation.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") || Deno.env.get("FIRECRAWL_API_KEY_1");

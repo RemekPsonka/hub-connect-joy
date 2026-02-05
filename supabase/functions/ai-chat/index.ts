@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -7,21 +8,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
+// Zod schemas for request validation
+const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string().min(1).max(50000),
+});
 
-interface ChatRequest {
-  messages: ChatMessage[];
-  context?: {
-    contactId?: string;
-    meetingId?: string;
-    includeContacts?: boolean;
-    includeNeeds?: boolean;
-    includeOffers?: boolean;
-  };
-}
+const requestSchema = z.object({
+  messages: z.array(chatMessageSchema).min(1, "At least one message required"),
+  context: z.object({
+    contactId: z.string().uuid().optional(),
+    meetingId: z.string().uuid().optional(),
+    includeContacts: z.boolean().optional(),
+    includeNeeds: z.boolean().optional(),
+    includeOffers: z.boolean().optional(),
+  }).optional(),
+});
+
+type ChatMessage = z.infer<typeof chatMessageSchema>;
+type ChatRequest = z.infer<typeof requestSchema>;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,14 +52,18 @@ serve(async (req) => {
     const tenantId = authResult.tenantId;
     console.log(`[ai-chat] Authorized user: ${authResult.user.id}, tenant: ${tenantId}`);
 
-    const { messages, context } = await req.json() as ChatRequest;
+    // Zod validation
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!messages || !Array.isArray(messages)) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ error: "Messages array is required" }),
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { messages, context } = validation.data;
 
     // Build context information
     let contextInfo = "";
