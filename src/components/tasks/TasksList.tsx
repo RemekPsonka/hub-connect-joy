@@ -1,3 +1,5 @@
+ import { useRef } from 'react';
+ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TaskTypeBadge } from './TaskTypeBadge';
@@ -11,6 +13,9 @@ import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useNavigate } from 'react-router-dom';
 import { calculateCrossTaskStatus, calculateCrossTaskProgress } from '@/utils/crossTaskStatus';
 
+ const CARD_HEIGHT = 140;
+ const CARD_GAP = 12;
+ 
 interface TasksListProps {
   tasks: TaskWithDetails[];
   onTaskClick: (task: TaskWithDetails) => void;
@@ -19,6 +24,14 @@ interface TasksListProps {
 
 export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps) {
   const navigate = useNavigate();
+ 
+   const parentRef = useRef<HTMLDivElement>(null);
+   const virtualizer = useVirtualizer({
+     count: tasks.length,
+     getScrollElement: () => parentRef.current,
+     estimateSize: () => CARD_HEIGHT + CARD_GAP,
+     overscan: 5,
+   });
 
   if (tasks.length === 0) {
     return (
@@ -33,8 +46,17 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
   }
 
   return (
-    <div className="space-y-3">
-      {tasks.map((task) => {
+   <div
+     ref={parentRef}
+     className="overflow-auto"
+     style={{ maxHeight: 'calc(100vh - 280px)' }}
+   >
+     <div
+       className="relative"
+       style={{ height: virtualizer.getTotalSize() }}
+     >
+       {virtualizer.getVirtualItems().map((virtualItem) => {
+         const task = tasks[virtualItem.index];
         const crossTask = task.cross_tasks?.[0];
         const isCrossTask = task.task_type === 'cross' && crossTask;
         
@@ -46,10 +68,13 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
 
         return (
           <Card
-            key={task.id}
-            className={`cursor-pointer hover:shadow-md transition-shadow ${
+             key={virtualItem.key}
+             className={`cursor-pointer hover:shadow-md transition-shadow absolute left-0 right-0 ${
               isCompleted ? 'opacity-60' : ''
             }`}
+             style={{
+               transform: `translateY(${virtualItem.start}px)`,
+             }}
             onClick={() => onTaskClick(task)}
           >
             <CardContent className="p-4">
@@ -163,6 +188,7 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
           </Card>
         );
       })}
+     </div>
     </div>
   );
 }
