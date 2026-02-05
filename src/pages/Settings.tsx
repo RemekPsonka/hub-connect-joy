@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield, Database, ListTodo } from 'lucide-react';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield, Database, ListTodo, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -19,6 +19,7 @@ import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
 import { BatchKRSSyncController } from '@/components/company/BatchKRSSyncController';
 import { TaskCategoriesManager } from '@/components/settings/TaskCategoriesManager';
 import { GroupRefreshPolicyEditor } from '@/components/settings/GroupRefreshPolicyEditor';
+import { DataExportSettings } from '@/components/settings/DataExportSettings';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -303,6 +304,10 @@ export default function Settings() {
           </TabsTrigger>
           <TabsTrigger value="bi">Business Intelligence</TabsTrigger>
           <TabsTrigger value="ai">AI & Embeddingi</TabsTrigger>
+          <TabsTrigger value="export">
+            <Download className="h-4 w-4 mr-1" />
+            Eksport danych
+          </TabsTrigger>
         </TabsList>
 
         {/* Tasks Categories Tab */}
@@ -621,6 +626,11 @@ export default function Settings() {
               </p>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Export Tab */}
+        <TabsContent value="export" className="space-y-6">
+          <DataExportSettings />
         </TabsContent>
       </Tabs>
 
