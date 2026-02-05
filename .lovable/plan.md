@@ -1,143 +1,191 @@
 
 
-# Plan: Hook useDashboardStats z React Query
+# Plan: Zakładka "Eksport danych" w Settings
 
 ## Cel
 
-Wyodrębnienie logiki pobierania statystyk dashboardu do dedykowanego hooka z React Query, co umożliwi automatyczne odświeżanie, cache'owanie i invalidację po mutacjach.
+Dodanie nowej zakładki "Eksport danych" w Settings umożliwiającej eksport surowych danych CRM do formatów Excel (XLSX) i JSON.
 
 ---
 
 ## Obecny stan
 
-### Już zaimplementowane
+### Istniejące elementy
 | Element | Status |
 |---------|--------|
-| `mv_dashboard_stats` (Materialized View) | Działa |
-| `get_dashboard_stats()` RPC | Działa |
-| Triggery automatycznego refresha MV | Aktywne na 5 tabelach |
+| `Settings.tsx` | 6 zakładek (general, tasks, security, krs, bi, ai) |
+| `exportReports.ts` | Eksport raportów analitycznych (PDF/Excel) - osobna funkcjonalność |
+| `xlsx` library | Zainstalowana w projekcie |
+| Obsługa ról | Asystenci widzą tylko formularz zmiany hasła i 2FA |
 
-### Do zmiany
-| Element | Problem |
-|---------|---------|
-| `Dashboard.tsx` | Używa `useEffect` + `useState` zamiast React Query |
-| Brak `useDashboardStats` | Hook nie istnieje |
-| Brak invalidacji cache | Mutacje nie odświeżają statystyk dashboardu |
+### Tabele do eksportu
+| Tabela | Bezpieczne kolumny |
+|--------|-------------------|
+| `contacts` | full_name, email, phone, company, position, city, tags, created_at, last_contact_date |
+| `companies` | name, nip, krs, city, industry, company_status, employee_count, revenue_amount, created_at |
+| `consultations` | scheduled_at, status, notes, ai_summary, duration_minutes, location |
+| `tasks` | title, description, status, priority, due_date, created_at |
+| `needs` | title, description, category, status, priority, created_at |
+| `offers` | title, description, category, status, created_at |
 
 ---
 
 ## Składniki implementacji
 
-### Krok 1: Nowy hook `src/hooks/useDashboardStats.ts`
+### Krok 1: Nowy komponent `src/components/settings/DataExportSettings.tsx`
 
 ```typescript
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Download, FileSpreadsheet, FileJson, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
-export interface DashboardStats {
-  total_contacts: number;
-  new_contacts_30d: number;
-  contacts_prev_30d: number;
-  today_consultations: number;
-  pending_tasks: number;
-  active_needs: number;
-  active_offers: number;
-  pending_matches: number;
-  upcoming_meetings: number;
-  healthy_contacts: number;
-  warning_contacts: number;
-  critical_contacts: number;
-  refreshed_at: string;
-}
-
-export function useDashboardStats() {
-  const { director } = useAuth();
-  const tenantId = director?.tenant_id;
-
-  return useQuery({
-    queryKey: ['dashboard-stats', tenantId],
-    queryFn: async (): Promise<DashboardStats | null> => {
-      const { data, error } = await supabase.rpc('get_dashboard_stats');
-      if (error) throw error;
-      return data?.[0] ?? null;
-    },
-    enabled: !!tenantId,
-    staleTime: 2 * 60 * 1000, // 2 min (MV refreshuje się triggerami)
-    refetchOnWindowFocus: true,
-  });
-}
+const EXPORT_ENTITIES = [
+  { 
+    key: 'contacts', 
+    label: 'Kontakty', 
+    table: 'contacts',
+    columns: ['full_name','email','phone','company','position','city','tags','created_at','last_contact_date']
+  },
+  { 
+    key: 'companies', 
+    label: 'Firmy', 
+    table: 'companies',
+    columns: ['name','nip','krs','city','industry','company_status','employee_count','revenue_amount','created_at']
+  },
+  { 
+    key: 'consultations', 
+    label: 'Konsultacje', 
+    table: 'consultations',
+    columns: ['scheduled_at','status','notes','ai_summary','duration_minutes','location']
+  },
+  { 
+    key: 'tasks', 
+    label: 'Zadania', 
+    table: 'tasks',
+    columns: ['title','description','status','priority','due_date','created_at']
+  },
+  { 
+    key: 'needs', 
+    label: 'Potrzeby', 
+    table: 'needs',
+    columns: ['title','description','category','status','priority','created_at']
+  },
+  { 
+    key: 'offers', 
+    label: 'Oferty', 
+    table: 'offers',
+    columns: ['title','description','category','status','created_at']
+  },
+];
 ```
 
-### Krok 2: Aktualizacja `Dashboard.tsx`
+**UI komponentu:**
+- Card z listą encji
+- Każda encja to wiersz z ikoną, nazwą i dwoma przyciskami (Excel, JSON)
+- Stan ładowania dla każdego przycisku osobno
+- Komunikaty sukcesu/błędu przez toast
 
-**Przed (useEffect + useState):**
+### Krok 2: Logika eksportu Excel
+
 ```typescript
-const [stats, setStats] = useState<Stats>({...});
-const [loading, setLoading] = useState(true);
-
-useEffect(() => {
-  async function fetchStats() {
-    const { data } = await supabase.rpc('get_dashboard_stats');
-    // ...
+async function exportToExcel(entity: typeof EXPORT_ENTITIES[0]) {
+  setExporting({ ...exporting, [entity.key + '_excel']: true });
+  
+  try {
+    const { data, error } = await supabase
+      .from(entity.table)
+      .select(entity.columns.join(','))
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    const ws = XLSX.utils.json_to_sheet(data || []);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, entity.label);
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `${entity.key}_export_${dateStr}.xlsx`);
+    
+    toast.success('Eksport zakończony', { 
+      description: `Pobrano ${data?.length || 0} rekordów` 
+    });
+  } catch (err) {
+    toast.error('Błąd eksportu', { description: String(err) });
+  } finally {
+    setExporting({ ...exporting, [entity.key + '_excel']: false });
   }
-  fetchStats();
-}, []);
+}
 ```
 
-**Po (useDashboardStats):**
+### Krok 3: Logika eksportu JSON
+
 ```typescript
-import { useDashboardStats } from '@/hooks/useDashboardStats';
-
-const { data: dashboardStats, isLoading } = useDashboardStats();
-
-// Computed values
-const stats = {
-  contacts: dashboardStats?.total_contacts ?? 0,
-  todayMeetings: dashboardStats?.today_consultations ?? 0,
-  pendingTasks: dashboardStats?.pending_tasks ?? 0,
-  activeNeeds: dashboardStats?.active_needs ?? 0,
-};
-const hasNoContacts = stats.contacts === 0;
+async function exportToJson(entity: typeof EXPORT_ENTITIES[0]) {
+  setExporting({ ...exporting, [entity.key + '_json']: true });
+  
+  try {
+    const { data, error } = await supabase
+      .from(entity.table)
+      .select(entity.columns.join(','))
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { 
+      type: 'application/json' 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.download = `${entity.key}_export_${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success('Eksport zakończony', { 
+      description: `Pobrano ${data?.length || 0} rekordów` 
+    });
+  } catch (err) {
+    toast.error('Błąd eksportu', { description: String(err) });
+  } finally {
+    setExporting({ ...exporting, [entity.key + '_json']: false });
+  }
+}
 ```
 
-### Krok 3: Invalidacja cache w hookach mutacyjnych
+### Krok 4: Integracja w Settings.tsx
 
-Dodanie invalidacji `['dashboard-stats']` w:
-
-| Hook | Plik | Linia (onSuccess) |
-|------|------|-------------------|
-| `useCreateContact` | `useContacts.ts` | ~194 |
-| `useUpdateContact` | `useContacts.ts` | ~225 |
-| `useDeleteContact` | `useContacts.ts` | ~264 |
-| `useBulkUpdateContacts` | `useContacts.ts` | ~289 |
-| `useBulkDeleteContacts` | `useContacts.ts` | ~315 |
-| `useCreateTask` | `useTasks.ts` | ~468 |
-| `useUpdateTask` | `useTasks.ts` | (do znalezienia) |
-| `useDeleteTask` | `useTasks.ts` | (do znalezienia) |
-
-Przykład zmiany:
 ```typescript
-onSuccess: () => {
-  queryClient.invalidateQueries({ queryKey: ['contacts'] });
-  queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }); // DODANE
-  toast.success('Kontakt został dodany');
-},
+// Import nowego komponentu
+import { DataExportSettings } from '@/components/settings/DataExportSettings';
+
+// W TabsList (po "AI & Embeddingi"):
+<TabsTrigger value="export">
+  <Download className="h-4 w-4 mr-1" />
+  Eksport danych
+</TabsTrigger>
+
+// Nowy TabsContent:
+<TabsContent value="export" className="space-y-6">
+  <DataExportSettings />
+</TabsContent>
 ```
 
 ---
 
-## Mapowanie danych MV → Dashboard
+## Bezpieczeństwo
 
-| Pole z RPC | Użycie w Dashboard |
-|------------|-------------------|
-| `total_contacts` | `stats.contacts` |
-| `today_consultations` | `stats.todayMeetings` |
-| `pending_tasks` | `stats.pendingTasks` |
-| `active_needs` | `stats.activeNeeds` |
-| `new_contacts_30d` | Wzrost kontaktów (opcjonalnie) |
-| `contacts_prev_30d` | Wzrost kontaktów (opcjonalnie) |
-| `refreshed_at` | Debug info (opcjonalnie) |
+| Zabezpieczenie | Implementacja |
+|----------------|---------------|
+| Tylko director | Zakładka nie pojawia się dla asystentów (isAssistant early return) |
+| RLS | Automatyczne filtrowanie po tenant_id |
+| Bez wrażliwych danych | Eksportowane tylko bezpieczne kolumny (brak password_hash, tokens, internal IDs) |
+| Brak embeddings | Kolumna profile_embedding wykluczony z eksportu |
 
 ---
 
@@ -145,42 +193,56 @@ onSuccess: () => {
 
 | Plik | Zmiana |
 |------|--------|
-| `src/hooks/useDashboardStats.ts` | NOWY - hook z React Query |
-| `src/pages/Dashboard.tsx` | Zamiana useEffect na useDashboardStats |
-| `src/hooks/useContacts.ts` | Dodanie invalidacji `['dashboard-stats']` (5 miejsc) |
-| `src/hooks/useTasks.ts` | Dodanie invalidacji `['dashboard-stats']` (3 miejsca) |
-| `src/hooks/useConsultations.ts` | Dodanie invalidacji (opcjonalnie) |
-| `src/hooks/useMatches.ts` | Dodanie invalidacji (opcjonalnie) |
+| `src/components/settings/DataExportSettings.tsx` | NOWY - komponent eksportu |
+| `src/pages/Settings.tsx` | Dodanie zakładki + import komponentu |
 
 ---
 
-## Korzyści
+## Struktura UI
 
-| Aspekt | Przed | Po |
-|--------|-------|-----|
-| Zarządzanie stanem | useState + useEffect | React Query |
-| Cache | Brak | 2 min staleTime |
-| Refetch po mutacji | Brak | Automatyczna invalidacja |
-| Loading state | Ręczny | `isLoading` z React Query |
-| Error handling | try/catch | `error` z React Query |
-| Refetch on focus | Brak | Automatyczny |
+```text
+┌─────────────────────────────────────────────────────────┐
+│ Card: Eksport danych CRM                                │
+├─────────────────────────────────────────────────────────┤
+│ Pobierz pełne dane z systemu w formacie Excel lub JSON │
+│                                                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ 👥 Kontakty                    [📊 Excel] [📄 JSON] │ │
+│ ├─────────────────────────────────────────────────────┤ │
+│ │ 🏢 Firmy                       [📊 Excel] [📄 JSON] │ │
+│ ├─────────────────────────────────────────────────────┤ │
+│ │ 📅 Konsultacje                 [📊 Excel] [📄 JSON] │ │
+│ ├─────────────────────────────────────────────────────┤ │
+│ │ ✓ Zadania                      [📊 Excel] [📄 JSON] │ │
+│ ├─────────────────────────────────────────────────────┤ │
+│ │ 💡 Potrzeby                    [📊 Excel] [📄 JSON] │ │
+│ ├─────────────────────────────────────────────────────┤ │
+│ │ 📦 Oferty                      [📊 Excel] [📄 JSON] │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│ ⚠️ Dane są filtrowane według Twojego konta.            │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Bez zmian
 
-- `useAnalytics.ts` - zachowany dla wykresów i AI Insights
-- `AnalyticsOverview`, `AIRecommendations` - bez zmian
-- Struktura bazy danych - bez zmian
-- Edge Functions - bez zmian
+| Element | Status |
+|---------|--------|
+| `src/utils/exportReports.ts` | Bez zmian (osobna funkcjonalność Analytics) |
+| Istniejące zakładki Settings | Bez zmian |
+| Edge Functions | Bez zmian |
+| Baza danych | Bez zmian |
 
 ---
 
 ## Testy weryfikacyjne
 
-1. Załaduj `/dashboard` - StatsCard pokazują poprawne liczby
-2. Dodaj kontakt - wróć na dashboard - licznik kontaktów wzrósł
-3. Utwórz zadanie - `pending_tasks` wzrósł
-4. Network tab - 1 request `rpc/get_dashboard_stats` zamiast wielu SELECT
-5. Przełącz zakładkę i wróć - dane się odświeżają (refetchOnWindowFocus)
+1. Otwórz `/settings` → zakładka "Eksport danych" widoczna
+2. Kliknij Excel przy Kontaktach → plik `.xlsx` się pobiera
+3. Otwórz plik Excel → dane poprawne, bez wrażliwych kolumn
+4. Kliknij JSON przy Firmach → plik `.json` z poprawnymi danymi
+5. Zaloguj się jako asystent → zakładka "Eksport" niewidoczna
+6. Network tab → zapytania filtrują po tenant (RLS)
 
