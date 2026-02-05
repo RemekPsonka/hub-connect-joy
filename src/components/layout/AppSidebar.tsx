@@ -11,6 +11,10 @@ import {
   Bug,
   UserCog,
   Briefcase,
+  CalendarCheck,
+  UsersRound,
+  Handshake,
+  BarChart3,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -30,14 +34,27 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 
-// Główna nawigacja - funkcje operacyjne
-const mainNavigationItems = [
+// CRM - główne funkcje operacyjne
+const crmNavigationItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+  { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },
+  { title: 'Spotkania', url: '/meetings', icon: UsersRound },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
-  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
+];
+
+// AI & Analiza
+const aiNavigationItems = [
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },
+  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake },
+  { title: 'Analityka', url: '/analytics', icon: BarChart3 },
+];
+
+// Sieć & Sprzedaż
+const networkNavigationItems = [
+  { title: 'Sieć kontaktów', url: '/network', icon: Network },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
 ];
 
 // Nawigacja dla asystenta - ograniczona
@@ -194,16 +211,75 @@ export function AppSidebar() {
       </SidebarHeader>
       
       <SidebarContent>
-        {/* Główna nawigacja */}
+        {/* CRM */}
         <SidebarGroup>
+          {!isCollapsed && (
+            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
+              CRM
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavigationItems.map((item) => (
+              {crmNavigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
                       end={item.url === '/'}
+                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
+                      activeClassName="bg-sidebar-accent text-primary font-medium"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* AI & Analiza */}
+        <SidebarGroup>
+          {!isCollapsed && (
+            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
+              AI & Analiza
+            </SidebarGroupLabel>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {aiNavigationItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <NavLink
+                      to={item.url}
+                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
+                      activeClassName="bg-sidebar-accent text-primary font-medium"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Sieć & Sprzedaż */}
+        <SidebarGroup>
+          {!isCollapsed && (
+            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
+              Sieć
+            </SidebarGroupLabel>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {networkNavigationItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
                       activeClassName="bg-sidebar-accent text-primary font-medium"
                     >
