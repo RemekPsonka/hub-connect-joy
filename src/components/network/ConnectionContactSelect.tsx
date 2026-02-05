@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface Contact {
   id: string;
@@ -74,6 +75,14 @@ export function ConnectionContactSelect({
 
   const selectedContact = contacts.find((c) => c.id === value);
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filteredContacts.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 48,
+    overscan: 10,
+  });
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -100,35 +109,53 @@ export function ConnectionContactSelect({
           />
           <CommandList>
             <CommandEmpty>Brak kontaktów</CommandEmpty>
-            <CommandGroup>
-              {filteredContacts.map((contact) => (
-                <CommandItem
-                  key={contact.id}
-                  value={contact.id}
-                  onSelect={() => {
-                    onChange(contact.id);
-                    setOpen(false);
-                    setSearch('');
+            <div ref={listRef} className="max-h-[300px] overflow-auto">
+              <CommandGroup>
+                <div
+                  style={{
+                    height: virtualizer.getTotalSize(),
+                    position: 'relative',
                   }}
-                  className="cursor-pointer"
                 >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      value === contact.id ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <div className="flex flex-col">
-                    <span>{contact.full_name}</span>
-                    {contact.company && (
-                      <span className="text-xs text-muted-foreground">
-                        {contact.company}
-                      </span>
-                    )}
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const contact = filteredContacts[virtualRow.index];
+                    return (
+                      <CommandItem
+                        key={contact.id}
+                        value={contact.id}
+                        onSelect={() => {
+                          onChange(contact.id);
+                          setOpen(false);
+                          setSearch('');
+                        }}
+                        className="cursor-pointer absolute w-full"
+                        style={{
+                          top: 0,
+                          left: 0,
+                          height: 48,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            'mr-2 h-4 w-4',
+                            value === contact.id ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                        <div className="flex flex-col">
+                          <span>{contact.full_name}</span>
+                          {contact.company && (
+                            <span className="text-xs text-muted-foreground">
+                              {contact.company}
+                            </span>
+                          )}
+                        </div>
+                      </CommandItem>
+                    );
+                  })}
+                </div>
+              </CommandGroup>
+            </div>
           </CommandList>
         </Command>
       </PopoverContent>

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2, Check, Building2, Search } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Dialog,
   DialogContent,
@@ -93,6 +94,15 @@ export function AddCapitalGroupMemberModal({
     (company.nip && company.nip.includes(searchQuery))
   );
 
+  // Virtualization
+  const companyListRef = useRef<HTMLDivElement>(null);
+  const companyVirtualizer = useVirtualizer({
+    count: filteredCompanies.length,
+    getScrollElement: () => companyListRef.current,
+    estimateSize: () => 56,
+    overscan: 10,
+  });
+
   const handleSelectCompany = (company: typeof companies[0]) => {
     setSelectedCompany({
       id: company.id,
@@ -170,7 +180,7 @@ export function AddCapitalGroupMemberModal({
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
-              <CommandList className="max-h-[200px]">
+              <CommandList>
                 {isLoadingCompanies ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -178,36 +188,54 @@ export function AddCapitalGroupMemberModal({
                 ) : (
                   <>
                     <CommandEmpty>Nie znaleziono firmy</CommandEmpty>
-                    <CommandGroup>
-                      {filteredCompanies.map((company) => (
-                        <CommandItem
-                          key={company.id}
-                          value={company.name}
-                          onSelect={() => handleSelectCompany(company)}
-                          className="cursor-pointer"
+                    <div ref={companyListRef} className="max-h-[200px] overflow-auto">
+                      <CommandGroup>
+                        <div
+                          style={{
+                            height: companyVirtualizer.getTotalSize(),
+                            position: 'relative',
+                          }}
                         >
-                          <div className="flex items-center gap-2 flex-1">
-                            <Check
-                              className={cn(
-                                "h-4 w-4",
-                                selectedCompany?.id === company.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex-1">
-                              <div className="font-medium">{company.name}</div>
-                              {company.nip && (
-                                <div className="text-xs text-muted-foreground">NIP: {company.nip}</div>
-                              )}
-                            </div>
-                            {company.revenue_amount && (
-                              <Badge variant="secondary" className="text-xs">
-                                {(company.revenue_amount / 1_000_000).toFixed(1)} mln PLN
-                              </Badge>
-                            )}
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
+                          {companyVirtualizer.getVirtualItems().map((virtualRow) => {
+                            const company = filteredCompanies[virtualRow.index];
+                            return (
+                              <CommandItem
+                                key={company.id}
+                                value={company.name}
+                                onSelect={() => handleSelectCompany(company)}
+                                className="cursor-pointer absolute w-full"
+                                style={{
+                                  top: 0,
+                                  left: 0,
+                                  height: 56,
+                                  transform: `translateY(${virtualRow.start}px)`,
+                                }}
+                              >
+                                <div className="flex items-center gap-2 flex-1">
+                                  <Check
+                                    className={cn(
+                                      "h-4 w-4",
+                                      selectedCompany?.id === company.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="font-medium">{company.name}</div>
+                                    {company.nip && (
+                                      <div className="text-xs text-muted-foreground">NIP: {company.nip}</div>
+                                    )}
+                                  </div>
+                                  {company.revenue_amount && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {(company.revenue_amount / 1_000_000).toFixed(1)} mln PLN
+                                    </Badge>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                        </div>
+                      </CommandGroup>
+                    </div>
                   </>
                 )}
               </CommandList>
