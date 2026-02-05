@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { RemekWidgetProvider } from "@/contexts/RemekWidgetContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -69,8 +70,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<PageLoadingFallback />}>
-            <Routes>
+          <RemekWidgetProvider>
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Routes>
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
               
@@ -116,7 +118,8 @@ const App = () => (
               {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </Suspense>
+            </Suspense>
+          </RemekWidgetProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

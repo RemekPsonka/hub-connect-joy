@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircleQuestion, X, Send, RotateCcw, Bug, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { MessageCircleQuestion, X, Send, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useRemekChat } from '@/hooks/useRemekChat';
+import { useRemekWidget } from '@/contexts/RemekWidgetContext';
 import { RemekBugReportModal } from './RemekBugReportModal';
 import ReactMarkdown from 'react-markdown';
 
@@ -18,7 +18,7 @@ const QUICK_ACTIONS = [
 
 export function RemekChatWidget() {
   const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, setIsOpen } = useRemekWidget();
   const [inputValue, setInputValue] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
