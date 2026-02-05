@@ -11,6 +11,7 @@ import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Static imports (login page - fast loading)
 import Login from "./pages/Login";
@@ -64,66 +65,70 @@ const queryClient = new QueryClient({
 });
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <RemekWidgetProvider>
-            <Suspense fallback={<PageLoadingFallback />}>
-              <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<Login />} />
-              
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              
-              {/* Protected routes */}
-              <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
-                {/* Director-only routes */}
-                <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
-                <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
-                <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
-                <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
-                <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
-                <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
-                <Route 
-                  path="/network" 
-                  element={
-                    <DirectorGuard>
-                      <Suspense fallback={<NetworkFallback />}>
-                        <Network />
-                      </Suspense>
-                    </DirectorGuard>
-                  } 
-                />
-                <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
-                <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
-                <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
-                <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
-                <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
-                <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
-                <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
-                <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
-                <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
-                <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
+  <ErrorBoundary onReset={() => window.location.reload()}>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <RemekWidgetProvider>
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<Login />} />
                 
-                {/* Routes accessible by both directors and assistants */}
-                <Route path="/contacts" element={<Contacts />} />
-                <Route path="/contacts/:id" element={<ContactDetail />} />
-                <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-              
-              {/* Catch-all */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            </Suspense>
-          </RemekWidgetProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                
+                {/* Protected routes */}
+                <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
+                  {/* Director-only routes */}
+                  <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
+                  <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
+                  <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
+                  <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
+                  <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
+                  <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
+                  <Route 
+                    path="/network" 
+                    element={
+                      <DirectorGuard>
+                        <ErrorBoundary>
+                          <Suspense fallback={<NetworkFallback />}>
+                            <Network />
+                          </Suspense>
+                        </ErrorBoundary>
+                      </DirectorGuard>
+                    } 
+                  />
+                  <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
+                  <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
+                  <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
+                  <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
+                  <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
+                  <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
+                  <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
+                  <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
+                  <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
+                  <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
+                  
+                  {/* Routes accessible by both directors and assistants */}
+                  <Route path="/contacts" element={<Contacts />} />
+                  <Route path="/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
+                
+                {/* Catch-all */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              </Suspense>
+            </RemekWidgetProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
