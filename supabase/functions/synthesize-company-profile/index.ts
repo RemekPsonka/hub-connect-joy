@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
 
 // Zod schema for request validation
 const requestSchema = z.object({
@@ -373,6 +374,17 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[synthesize-company-profile] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
+
+    // ============= RATE LIMITING =============
+    const rateLimit = await checkRateLimit(
+      `company-profile:${authResult.user.id}`,
+      { max: 15, window: 3600 }  // 15 syntheses per hour
+    );
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit.resetAt, corsHeaders);
+    }
+    // ============= END RATE LIMITING =============
+
     const lovableKey = Deno.env.get('LOVABLE_API_KEY');
 
     if (!lovableKey) {
