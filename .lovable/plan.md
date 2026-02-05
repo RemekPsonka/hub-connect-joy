@@ -1,55 +1,224 @@
 
-# Plan: Dodanie globalnego staleTime do React Query
+# Plan: TypeScript Strict Mode dla Core Files
 
 ## Cel
-Zredukować liczbę niepotrzebnych refetchy przez skonfigurowanie globalnych ustawień cache dla React Query.
+Wlaczenie strict mode dla katalogow `src/lib/` i `src/utils/` oraz naprawienie bledow kompilacji.
 
 ---
 
-## Zmiana: src/App.tsx
+## Zmiana 1: tsconfig.app.json
 
-**Plik:** `src/App.tsx` (linia 54)
+**Plik:** `tsconfig.app.json`
+
+Zmiana flag kompilacji:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true
+    // reszta bez zmian
+  }
+}
+```
+
+**Uwaga:** strict mode zostanie wlaczony globalnie, ale poprawki robimy tylko dla `src/lib/` i `src/utils/`. Bledy w innych katalogach beda widoczne, ale nie bedziemy ich naprawiac w tym sprincie.
+
+---
+
+## Zmiana 2: src/lib/utils.ts (linia 22)
+
+Zamiana `as any` na bezpieczne typowanie:
 
 **PRZED:**
 ```typescript
-const queryClient = new QueryClient();
+return (first as any).nazwa || (first as any).wartosc || (first as any).value || String(first);
 ```
 
 **PO:**
 ```typescript
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minut - dane CRM nie zmieniają się co sekundę
-      gcTime: 10 * 60 * 1000,   // 10 minut w cache przed garbage collection
-      retry: 1,                  // 1 retry przy błędzie (nie bombardujemy API)
-      refetchOnWindowFocus: false, // brak refetch przy powrocie do karty
-    },
-  },
-});
+const obj = first as Record<string, unknown>;
+return String(obj.nazwa ?? obj.wartosc ?? obj.value ?? first);
 ```
 
 ---
 
-## Uzasadnienie wartości
+## Zmiana 3: src/utils/exportAgentProfile.ts
 
-| Parametr | Wartość | Powód |
-|----------|---------|-------|
-| `staleTime` | 5 min | Dane CRM (kontakty, firmy, statystyki) nie zmieniają się co sekundę |
-| `gcTime` | 10 min | Cache trzymany dłużej - przy powrocie dane natychmiast dostępne |
-| `retry` | 1 | Jeden retry wystarczy, nie bombardujemy API przy stałym błędzie |
-| `refetchOnWindowFocus` | false | User nie chce refetch za każdym razem jak wraca do karty |
+### Linia 307, 357, 388, 418, 446
+Zamiana `(doc as any).lastAutoTable` na poprawny typ:
+
+**Dodac na poczatku pliku (po importach):**
+```typescript
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable: { finalY: number };
+}
+```
+
+**Zmienic tworzenie doc:**
+```typescript
+const doc = new jsPDF({...}) as jsPDFWithAutoTable;
+```
 
 ---
 
-## Hooki z własnymi ustawieniami (BEZ ZMIAN)
+## Zmiana 4: src/utils/exportCompanyAnalysis.ts
 
-Hooki które celowo nadpisują globalne ustawienia pozostają bez zmian - ich nadpisania są prawidłowe.
+### Linia 59 - formatMergers
+**PRZED:**
+```typescript
+function formatMergers(mergers: any): string {
+```
+
+**PO:**
+```typescript
+interface MergerRecord {
+  year?: number | string;
+  details?: string;
+  type?: string;
+}
+
+function formatMergers(mergers: string | string[] | MergerRecord[] | undefined): string {
+```
+
+### Linia 115 - parseProducts
+**PRZED:**
+```typescript
+function parseProducts(products: any): Array<{ name: string; description?: string }> {
+```
+
+**PO:**
+```typescript
+interface ProductRecord {
+  name?: string;
+  description?: string;
+}
+
+function parseProducts(products: string | string[] | ProductRecord[] | undefined): Array<{ name: string; description?: string }> {
+```
+
+### Linia 127 - parseManagement
+**PRZED:**
+```typescript
+function parseManagement(management: any): Array<{ name: string; position: string }> {
+```
+
+**PO:**
+```typescript
+interface ManagementRecord {
+  name?: string;
+  position?: string;
+  role?: string;
+}
+
+function parseManagement(management: string | string[] | ManagementRecord[] | undefined): Array<{ name: string; position: string }> {
+```
+
+### Linia 139 - parseCompetitors
+**PRZED:**
+```typescript
+function parseCompetitors(competitors: any): Array<{ name: string; strength?: string; weakness?: string }> {
+```
+
+**PO:**
+```typescript
+interface CompetitorRecord {
+  name?: string;
+  company_name?: string;
+  strength?: string;
+  strengths?: string;
+  weakness?: string;
+  weaknesses?: string;
+}
+
+function parseCompetitors(competitors: CompetitorRecord[] | undefined): Array<{ name: string; strength?: string; weakness?: string }> {
+```
+
+### Linia 154 - parseLocations
+**PRZED:**
+```typescript
+function parseLocations(locations: any): Array<{ type: string; city: string; address?: string }> {
+```
+
+**PO:**
+```typescript
+interface LocationRecord {
+  type?: string;
+  location_type?: string;
+  city?: string;
+  address?: string;
+}
+
+function parseLocations(locations: string[] | LocationRecord[] | undefined): Array<{ type: string; city: string; address?: string }> {
+```
+
+### Linia 169 - parseNews
+**PRZED:**
+```typescript
+function parseNews(news: any): Array<{ date?: string; title: string; summary?: string }> {
+```
+
+**PO:**
+```typescript
+interface NewsRecord {
+  date?: string;
+  published_at?: string;
+  title?: string;
+  headline?: string;
+  summary?: string;
+  description?: string;
+}
+
+function parseNews(news: string | string[] | NewsRecord[] | undefined): Array<{ date?: string; title: string; summary?: string }> {
+```
+
+### Linia 185 - parseTimeline
+**PRZED:**
+```typescript
+function parseTimeline(timeline: any): Array<{ year: string; event: string }> {
+```
+
+**PO:**
+```typescript
+interface TimelineRecord {
+  year?: number | string;
+  date?: string;
+  event?: string;
+  description?: string;
+  title?: string;
+}
+
+function parseTimeline(timeline: TimelineRecord[] | undefined): Array<{ year: string; event: string }> {
+```
 
 ---
 
-## Efekt
+## Pliki BEZ ZMIAN
 
-- Dashboard nie będzie robił wielokrotnych requestów przy każdym renderze
-- Dane będą "świeże" przez 5 minut
-- Poszczególne hooki mogą nadal nadpisywać te ustawienia gdy potrzebują
+Nastepujace pliki juz maja poprawne typowanie:
+- `src/utils/bugFixPrompt.ts`
+- `src/utils/crossTaskStatus.ts`
+- `src/utils/exportReports.ts`
+- `src/utils/passwordValidation.ts`
+- `src/utils/exportInsuranceBrief.ts`
+
+---
+
+## Podsumowanie zmian
+
+| Plik | Zmiana |
+|------|--------|
+| `tsconfig.app.json` | Wlaczenie `strict: true`, `noImplicitAny: true` |
+| `src/lib/utils.ts` | Zamiana `as any` na `Record<string, unknown>` |
+| `src/utils/exportAgentProfile.ts` | Dodanie interfejsu `jsPDFWithAutoTable` |
+| `src/utils/exportCompanyAnalysis.ts` | Zdefiniowanie 6 interfejsow dla funkcji parsujacych |
+
+---
+
+## Wazne uwagi
+
+1. Po wlaczeniu strict mode moga pojawic sie bledy w innych katalogach (components, hooks, pages) - to jest oczekiwane i bedzie naprawione w kolejnych sprintach
+2. Uzywamy `unknown` zamiast `any` gdzie to mozliwe
+3. Dla obiektow z zewnetrznych API (KRS, jsPDF) definiujemy wlasne interfejsy
+4. Kompilacja `src/lib/` i `src/utils/` musi przejsc bez bledow
