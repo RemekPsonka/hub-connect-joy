@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Loader2, Network, Plus } from 'lucide-react';
 import { useCapitalGroupMembers } from '@/hooks/useCapitalGroupMembers';
+import { useInsuranceRiskBatch } from '@/hooks/useInsuranceRiskBatch';
 import { StructureCanvas } from './StructureCanvas';
 import { useStructureData } from './hooks/useStructureData';
 import { useStructureLayout } from './hooks/useStructureLayout';
 import { AddCapitalGroupMemberModal } from '@/components/company/AddCapitalGroupMemberModal';
 import { Button } from '@/components/ui/button';
-import type { InsuranceStatus } from './types';
 
 interface Company {
   id: string;
@@ -27,11 +27,20 @@ export function StructureVisualization({ company }: StructureVisualizationProps)
   const { data: members = [], isLoading } = useCapitalGroupMembers(company.id);
   const { getLayoutedElements } = useStructureLayout();
 
-  // TODO: In future, fetch insurance assessments from insurance_risk_assessments table
-  // For now, we'll use a mock map
-  const insuranceAssessments = useMemo(() => {
-    return new Map<string, InsuranceStatus>();
-  }, []);
+  // Zbierz wszystkie company_id do pobrania
+  const companyIdsToFetch = useMemo(() => {
+    const ids: string[] = [company.id]; // spółka matka
+    members.forEach(member => {
+      if (member.member_company_id) {
+        ids.push(member.member_company_id);
+      }
+    });
+    return ids;
+  }, [company.id, members]);
+
+  // Pobierz dane ubezpieczeniowe dla wszystkich firm
+  const { data: insuranceAssessments = new Map(), isLoading: isLoadingInsurance } = 
+    useInsuranceRiskBatch(companyIdsToFetch);
 
   // Get initial nodes and edges from data
   const { nodes: dataNodes, edges: dataEdges } = useStructureData({
@@ -50,7 +59,7 @@ export function StructureVisualization({ company }: StructureVisualizationProps)
     });
   }, [dataNodes, dataEdges, getLayoutedElements]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingInsurance) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
