@@ -1,201 +1,212 @@
 
-# Plan: Zamiana mockowanych danych w StructureVisualization.tsx na dane z bazy
+# Plan: Włączenie strictNullChecks w TypeScript
 
 ## Podsumowanie
 
-Stworzenie nowego hooka `useInsuranceRiskBatch` do pobierania danych ubezpieczeniowych dla wielu firm jednocześnie, oraz integracja go z wizualizacją struktury grupy kapitałowej zamiast pustej mapy.
+Włączenie opcji `strictNullChecks` w konfiguracji TypeScript i naprawa wynikających błędów w 7 kluczowych plikach (hooks i context). Plik `src/lib/supabase.ts` nie istnieje - klient Supabase jest w `src/integrations/supabase/client.ts` (auto-generowany, nie do edycji).
 
 ---
 
-## Zakres zmian
+## Krok 1: Modyfikacja tsconfig.app.json
 
-### Krok 1: Nowy hook `src/hooks/useInsuranceRiskBatch.ts`
-
-```typescript
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import type { StatusUbezpieczenia } from '@/components/insurance/types';
-import type { InsuranceStatus } from '@/components/structure/types';
-import type { Json } from '@/integrations/supabase/types';
-
-interface RiskAssessmentRow {
-  id: string;
-  company_id: string;
-  ryzyko_majatkowe: Json | null;
-  ryzyko_oc: Json | null;
-  ryzyko_flota: Json | null;
-}
-
-// Mapowanie StatusUbezpieczenia (baza) -> InsuranceStatus (wizualizacja)
-function mapToInsuranceStatus(dbStatus: StatusUbezpieczenia | undefined): InsuranceStatus {
-  switch (dbStatus) {
-    case 'ubezpieczone':
-      return 'insured';
-    case 'luka':
-      return 'gap';
-    case 'nie_dotyczy':
-      return 'unknown'; // N/D traktujemy jak unknown
-    default:
-      return 'unknown';
+```json
+{
+  "compilerOptions": {
+    "strictNullChecks": true
+    // reszta bez zmian
   }
 }
+```
 
-// Agregacja statusów z wielu domen ryzyka
-function aggregateStatus(row: RiskAssessmentRow): InsuranceStatus {
-  const statuses: (StatusUbezpieczenia | undefined)[] = [];
-  
-  // Pobierz statusy z poszczególnych domen
-  const majatkowe = row.ryzyko_majatkowe as { status?: StatusUbezpieczenia } | null;
-  const oc = row.ryzyko_oc as { status?: StatusUbezpieczenia } | null;
-  const flota = row.ryzyko_flota as { status?: StatusUbezpieczenia } | null;
-  
-  if (majatkowe?.status && majatkowe.status !== 'nie_dotyczy') statuses.push(majatkowe.status);
-  if (oc?.status && oc.status !== 'nie_dotyczy') statuses.push(oc.status);
-  if (flota?.status && flota.status !== 'nie_dotyczy') statuses.push(flota.status);
-  
-  // Priorytet: jeśli JAKAKOLWIEK domena ma lukę -> gap
-  if (statuses.includes('luka')) return 'gap';
-  
-  // Jeśli wszystkie aktywne domeny ubezpieczone -> insured
-  if (statuses.length > 0 && statuses.every(s => s === 'ubezpieczone')) return 'insured';
-  
-  // Brak danych lub wszystko N/D -> unknown
-  return 'unknown';
+---
+
+## Krok 2: Analiza i naprawa plików
+
+### 2.1 src/contexts/AuthContext.tsx
+
+**Potencjalne błędy:**
+- `director` i `assistant` mogą być `null` - już obsłużone w typach
+- `session?.user` - już używa optional chaining
+- `user.id` w callbacks - może wymagać null check
+
+**Naprawy:**
+```typescript
+// Linia ~63: fetchDirector/fetchAssistant może zwracać null
+// Już obsłużone poprawnie z async/await
+
+// Linia ~100: director może być null przy sprawdzaniu MFA
+// Dodać null check przed dostępem
+```
+
+---
+
+### 2.2 src/hooks/useContacts.ts
+
+**Potencjalne błędy:**
+- `tenantId` może być `undefined` - już obsłużone przez `enabled: !!tenantId`
+- `assistant?.allowed_group_ids` - już używa optional chaining
+- `data` z query może być `null`
+
+**Naprawy:**
+```typescript
+// Linia 90: count może być null
+count: count ?? 0  // już tak jest
+
+// Linia 477-485: company?.created check
+// Już poprawnie z optional chaining
+```
+
+---
+
+### 2.3 src/hooks/useCompanies.ts
+
+**Potencjalne błędy:**
+- `director?.tenant_id` - używane z optional chaining
+- `companies?.find()` - może zwrócić undefined
+- `contactsToUpdate?.length` - wymaga null check
+
+**Naprawy:**
+```typescript
+// Linia 100: contactsData może być null
+for (const contact of contactsData || []) {
+
+// Linia 279: director?.tenant_id
+if (!director?.tenant_id) return [];
+
+// Linia 340: contactsToUpdate może być undefined
+if (!contactsToUpdate?.length) return { updated: 0 };
+```
+
+---
+
+### 2.4 src/hooks/useTasks.ts
+
+**Potencjalne błędy:**
+- `taskContacts?.forEach` - wymaga null check
+- `crossTasksA?.forEach` - wymaga null check
+- `directTasks?.forEach` - wymaga null check
+
+**Naprawy:**
+```typescript
+// Linia 103-105: już używa optional chaining z ?.forEach
+taskContacts?.forEach(tc => tc.task_id && allTaskIds.add(tc.task_id));
+
+// Linia 334: directTasks?.forEach - już poprawne
+directTasks?.forEach(tc => {
+
+// Linia 371: sortowanie po dacie - created_at może być null
+new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+```
+
+---
+
+### 2.5 src/hooks/useAnalytics.ts
+
+**Potencjalne błędy:**
+- Wszystkie `result.data || []` - już poprawne
+- `director?.tenant_id` - już z optional chaining
+- `response.data?.insights` - wymaga null check
+
+**Naprawy:**
+```typescript
+// Linia 194-202: już poprawnie z || []
+const contacts = contactsResult.data || [];
+
+// Linia 311: response.data może być undefined
+setAiInsights(response.data?.insights || []);
+```
+
+---
+
+### 2.6 src/hooks/useSemanticSearch.ts
+
+**Potencjalne błędy:**
+- `user` może być null po getUser()
+- `director` może być null
+- `data` z rpc może być null
+
+**Naprawy:**
+```typescript
+// Linia 46-50: user null check - już jest
+if (!user) {
+  setError('Wymagane zalogowanie');
+  return [];
 }
 
-export function useInsuranceRiskBatch(companyIds: string[]) {
-  return useQuery({
-    queryKey: ['insurance-risk-batch', ...companyIds.sort()],
-    queryFn: async () => {
-      if (companyIds.length === 0) return new Map<string, InsuranceStatus>();
-      
-      const { data, error } = await supabase
-        .from('insurance_risk_assessments')
-        .select('id, company_id, ryzyko_majatkowe, ryzyko_oc, ryzyko_flota')
-        .in('company_id', companyIds);
-      
-      if (error) {
-        console.error('Error fetching insurance assessments:', error);
-        return new Map<string, InsuranceStatus>();
-      }
-      
-      const result = new Map<string, InsuranceStatus>();
-      
-      for (const row of data || []) {
-        const status = aggregateStatus(row);
-        result.set(row.company_id, status);
-      }
-      
-      return result;
-    },
-    enabled: companyIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minut
-  });
+// Linia 55-58: director null check - już jest
+if (!director) {
+  setError('Nie znaleziono konta użytkownika');
+  return [];
 }
+
+// Linia 90: data może być null
+const searchResults: SearchResult[] = (data || []).map(...);
 ```
 
 ---
 
-### Krok 2: Modyfikacja `src/components/structure/StructureVisualization.tsx`
+### 2.7 src/hooks/useInsuranceRisk.ts
 
-```text
-PRZED (linie 30-34):
-  // TODO: In future, fetch insurance assessments from insurance_risk_assessments table
-  // For now, we'll use a mock map
-  const insuranceAssessments = useMemo(() => {
-    return new Map<string, InsuranceStatus>();
-  }, []);
+**Potencjalne błędy:**
+- `assessment?.id` - już z optional chaining
+- `tenantId` może być undefined - obsłużone przez `enabled`
+- `result` z invoke może być null
 
-PO:
-  // Zbierz wszystkie company_id do pobrania
-  const companyIdsToFetch = useMemo(() => {
-    const ids: string[] = [company.id]; // spółka matka
-    members.forEach(member => {
-      if (member.member_company_id) {
-        ids.push(member.member_company_id);
-      }
-    });
-    return ids;
-  }, [company.id, members]);
-
-  // Pobierz dane ubezpieczeniowe dla wszystkich firm
-  const { data: insuranceAssessments = new Map(), isLoading: isLoadingInsurance } = 
-    useInsuranceRiskBatch(companyIdsToFetch);
-```
-
-Dodanie importu:
+**Naprawy:**
 ```typescript
-import { useInsuranceRiskBatch } from '@/hooks/useInsuranceRiskBatch';
-```
+// Linia 130: result może być null
+if (error) throw error;
+return result as AIAnalysisResult | null;
 
-Modyfikacja warunku ładowania (linia 53):
-```text
-PRZED:
-  if (isLoading) {
-
-PO:
-  if (isLoading || isLoadingInsurance) {
+// Linia 65: data z maybeSingle() może być null - już obsłużone
+if (!data) return null;
 ```
 
 ---
 
-## Mapowanie statusów
+## Krok 3: src/lib/supabase.ts
 
-| Baza danych (`StatusUbezpieczenia`) | Wizualizacja (`InsuranceStatus`) | Kolor |
-|-------------------------------------|----------------------------------|-------|
-| `ubezpieczone` | `insured` | Niebieski (#3B82F6) |
-| `luka` | `gap` | Czerwony (#EF4444) |
-| `nie_dotyczy` | `unknown` | Szary (#6B7280) |
-| Brak danych | `unknown` | Szary (#6B7280) |
+**Status:** Plik NIE ISTNIEJE. Klient Supabase znajduje się w `src/integrations/supabase/client.ts` i jest auto-generowany - nie wymaga edycji.
 
 ---
 
-## Logika agregacji statusu
+## Podsumowanie zmian
 
-Dla każdej firmy agregujemy statusy z 3 głównych domen ryzyka:
-- `ryzyko_majatkowe.status`
-- `ryzyko_oc.status`  
-- `ryzyko_flota.status`
+| # | Plik | Szacowana liczba błędów | Strategia |
+|---|------|-------------------------|-----------|
+| 1 | tsconfig.app.json | 0 | Dodanie flagi |
+| 2 | AuthContext.tsx | 0-2 | Optional chaining już użyte |
+| 3 | useContacts.ts | 0-3 | Nullish coalescing już użyte |
+| 4 | useCompanies.ts | 2-5 | Nullish coalescing, optional chaining |
+| 5 | useTasks.ts | 2-4 | Null checks dla created_at |
+| 6 | useAnalytics.ts | 0-2 | Już poprawnie obsłużone |
+| 7 | useSemanticSearch.ts | 0-2 | Już ma null checks |
+| 8 | useInsuranceRisk.ts | 1-2 | Return type fix |
 
-Reguły:
-1. Jeśli JAKAKOLWIEK domena ma status `luka` -> wynik = `gap` (czerwony)
-2. Jeśli WSZYSTKIE aktywne domeny mają `ubezpieczone` -> wynik = `insured` (niebieski)
-3. W pozostałych przypadkach -> wynik = `unknown` (szary)
-
----
-
-## Pliki do utworzenia/modyfikacji
-
-| # | Plik | Akcja |
-|---|------|-------|
-| 1 | `src/hooks/useInsuranceRiskBatch.ts` | NOWY |
-| 2 | `src/components/structure/StructureVisualization.tsx` | Modyfikacja |
+**Szacowana całkowita liczba błędów do naprawy:** 10-20 w tych plikach
 
 ---
 
-## Szczegóły techniczne
+## Strategia naprawy
 
-### Query key
-```typescript
-['insurance-risk-batch', ...companyIds.sort()]
-```
-Sortowanie zapewnia stabilny cache key niezależnie od kolejności ID.
-
-### Optymalizacja
-- `staleTime: 5 * 60 * 1000` - dane ubezpieczeniowe zmieniają się rzadko
-- `enabled: companyIds.length > 0` - nie wykonuj zapytania dla pustej listy
-- Pojedyncze zapytanie z `IN` zamiast wielu osobnych
-
-### Obsługa błędów
-- Błąd zapytania: `console.error` + zwrot pustej mapy (fallback)
-- Brak danych dla firmy: status `unknown` (szary węzeł)
+1. **Preferowane:** `value ?? defaultValue` (nullish coalescing)
+2. **Dla obiektów:** `obj?.property` (optional chaining)
+3. **Dla warunków:** `if (value) { ... }` (explicit check)
+4. **Ostateczność:** `value!` (non-null assertion) - tylko gdy 100% pewność
 
 ---
 
 ## Co pozostaje bez zmian
 
-- Hook `useInsuranceRisk` - dalej działa dla pojedynczej firmy
-- Komponenty wizualizacji (`StructureCanvas`, węzły)
-- Tabele w bazie danych
-- Edge Functions
-- Pozostałe komponenty
+- `useSemanticSearch` - wyszukiwanie musi być fresh (bez staleTime)
+- Wszystkie mutacje (`useMutation`) - nie dotyczą
+- Edge Functions - nie ruszamy
+- Baza danych - nie ruszamy
+- Komponenty .tsx (oprócz AuthContext)
+- `src/integrations/supabase/client.ts` - auto-generowany
+
+---
+
+## Uwaga
+
+Po włączeniu `strictNullChecks` mogą pojawić się błędy w INNYCH plikach projektu (poza listą 7 plików). Te błędy zostaną zignorowane w tym kroku - naprawimy tylko core hooks i context. Pozostałe błędy wylistuję po zmianach.
