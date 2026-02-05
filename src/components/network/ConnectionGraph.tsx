@@ -1,9 +1,10 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import Graph from 'graphology';
 import { SigmaContainer, useRegisterEvents, useSigma, useLoadGraph } from '@react-sigma/core';
 import '@react-sigma/core/lib/react-sigma.min.css';
-import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { ContactNode, Connection } from '@/hooks/useConnections';
+import { useForceAtlas2Worker } from '@/hooks/useForceAtlas2Worker';
+import { Progress } from '@/components/ui/progress';
 
 // Mapa kolorów dla typów połączeń
 const CONNECTION_TYPE_COLORS: Record<string, string> = {
@@ -28,84 +29,112 @@ interface ConnectionGraphProps {
 // Inner component to load graph data
 function GraphDataLoader({ 
   nodes, 
-  edges 
+  edges,
+  onComputingChange,
+  onProgressChange,
 }: { 
   nodes: ContactNode[]; 
-  edges: Connection[] 
+  edges: Connection[];
+  onComputingChange: (isComputing: boolean) => void;
+  onProgressChange: (progress: number) => void;
 }) {
   const loadGraph = useLoadGraph();
   const sigma = useSigma();
+  const { compute, progress, isComputing } = useForceAtlas2Worker();
+
+  // Sync progress state to parent
+  useEffect(() => {
+    onProgressChange(progress);
+  }, [progress, onProgressChange]);
 
   useEffect(() => {
-    const graph = new Graph();
+    onComputingChange(isComputing);
+  }, [isComputing, onComputingChange]);
 
-    // Dodaj węzły w układzie circular
-    nodes.forEach((node, index) => {
-      const baseSize = 8 + (node.connection_count || 0) * 2;
-      const size = Math.min(baseSize, 30);
-      const color = node.group_color || '#6366f1';
-      
-      // Circular layout - stabilne pozycje początkowe
-      const angle = (2 * Math.PI * index) / nodes.length;
-      const radius = 200;
+  useEffect(() => {
+    async function buildGraph() {
+      const graph = new Graph();
 
-      graph.addNode(node.id, {
-        label: node.full_name,
-        size,
-        color,
-        originalColor: color,
-        originalSize: size,
-        x: radius * Math.cos(angle),
-        y: radius * Math.sin(angle),
-        company: node.company,
-        position: node.position,
+      // Dodaj węzły w układzie circular
+      nodes.forEach((node, index) => {
+        const baseSize = 8 + (node.connection_count || 0) * 2;
+        const size = Math.min(baseSize, 30);
+        const color = node.group_color || '#6366f1';
+        
+        // Circular layout - stabilne pozycje początkowe
+        const angle = (2 * Math.PI * index) / nodes.length;
+        const radius = 200;
+
+        graph.addNode(node.id, {
+          label: node.full_name,
+          size,
+          color,
+          originalColor: color,
+          originalSize: size,
+          x: radius * Math.cos(angle),
+          y: radius * Math.sin(angle),
+          company: node.company,
+          position: node.position,
+        });
       });
-    });
 
-    // Dodaj krawędzie
-    edges.forEach((edge) => {
-      if (graph.hasNode(edge.contact_a_id) && graph.hasNode(edge.contact_b_id)) {
+      // Dodaj krawędzie
+      edges.forEach((edge) => {
+        if (graph.hasNode(edge.contact_a_id) && graph.hasNode(edge.contact_b_id)) {
+          try {
+            const typeColor = CONNECTION_TYPE_COLORS[edge.connection_type || 'knows'] || '#6b7280';
+            const edgeSize = Math.max(0.5, (edge.strength || 5) / 2);
+            
+            graph.addEdge(edge.contact_a_id, edge.contact_b_id, {
+              size: edgeSize,
+              color: typeColor,
+              originalColor: typeColor,
+              originalSize: edgeSize,
+              connectionType: edge.connection_type,
+            });
+          } catch {
+            // Edge might already exist
+          }
+        }
+      });
+
+      // Zastosuj layout w Web Workerze (nie blokuje UI)
+      if (graph.order > 0) {
         try {
-          const typeColor = CONNECTION_TYPE_COLORS[edge.connection_type || 'knows'] || '#6b7280';
-          const edgeSize = Math.max(0.5, (edge.strength || 5) / 2);
-          
-          graph.addEdge(edge.contact_a_id, edge.contact_b_id, {
-            size: edgeSize,
-            color: typeColor,
-            originalColor: typeColor,
-            originalSize: edgeSize,
-            connectionType: edge.connection_type,
+          const positions = await compute(graph, {
+            gravity: 0.5,
+            scalingRatio: 20,
+            strongGravityMode: false,
+            slowDown: 3,
+            barnesHutOptimize: true,
+            linLogMode: true,
+            outboundAttractionDistribution: true,
+          }, 150);
+
+          // Aplikuj pozycje na graf
+          Object.entries(positions).forEach(([key, pos]) => {
+            if (graph.hasNode(key)) {
+              graph.setNodeAttribute(key, 'x', pos.x);
+              graph.setNodeAttribute(key, 'y', pos.y);
+            }
           });
-        } catch (e) {
-          // Edge might already exist
+        } catch (error) {
+          console.error('ForceAtlas2 worker error:', error);
+          // Graf zachowa pozycje circular jeśli worker sfailuje
         }
       }
-    });
 
-    // Zastosuj layout PRZED załadowaniem do Sigma
-    if (graph.order > 0) {
-      forceAtlas2.assign(graph, {
-        iterations: 150,
-        settings: {
-          gravity: 0.5,
-          scalingRatio: 20,
-          strongGravityMode: false,
-          slowDown: 3,
-          barnesHutOptimize: true,
-          linLogMode: true,
-          outboundAttractionDistribution: true,
-        },
-      });
+      // Załaduj graf do Sigma
+      loadGraph(graph);
+
+      // Dopasuj widok do grafu po krótkim opóźnieniu
+      setTimeout(() => {
+        sigma.getCamera().animatedReset();
+      }, 100);
     }
 
-    // Załaduj graf do Sigma
-    loadGraph(graph);
-
-    // Dopasuj widok do grafu po krótkim opóźnieniu
-    setTimeout(() => {
-      sigma.getCamera().animatedReset();
-    }, 100);
-  }, [nodes, edges, loadGraph, sigma]);
+    buildGraph();
+  }, [nodes, edges, loadGraph, sigma, compute]);
 
   return null;
 }
@@ -219,9 +248,20 @@ export function ConnectionGraph({
   onNodeClick,
   searchTerm,
 }: ConnectionGraphProps) {
+  const [isComputing, setIsComputing] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   const handleNodeClick = useCallback((nodeId: string | null) => {
     onNodeClick(nodeId);
   }, [onNodeClick]);
+
+  const handleComputingChange = useCallback((computing: boolean) => {
+    setIsComputing(computing);
+  }, []);
+
+  const handleProgressChange = useCallback((prog: number) => {
+    setProgress(prog);
+  }, []);
 
   if (nodes.length === 0) {
     return (
@@ -237,7 +277,19 @@ export function ConnectionGraph({
   }
 
   return (
-    <div className="w-full h-[500px] bg-background rounded-lg border">
+    <div className="w-full h-[500px] bg-background rounded-lg border relative">
+      {/* Progress overlay */}
+      {isComputing && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded-lg">
+          <div className="text-center">
+            <Progress value={progress} className="w-48 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Obliczanie layoutu... {progress}%
+            </p>
+          </div>
+        </div>
+      )}
+
       <SigmaContainer
         style={{ height: '500px', width: '100%' }}
         settings={{
@@ -253,7 +305,12 @@ export function ConnectionGraph({
           allowInvalidContainer: true,
         }}
       >
-        <GraphDataLoader nodes={nodes} edges={edges} />
+        <GraphDataLoader 
+          nodes={nodes} 
+          edges={edges}
+          onComputingChange={handleComputingChange}
+          onProgressChange={handleProgressChange}
+        />
         <GraphEvents
           onNodeClick={handleNodeClick}
           selectedNodeId={selectedNodeId}
