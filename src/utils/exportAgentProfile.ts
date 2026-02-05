@@ -2,6 +2,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable: { finalY: number };
+}
 // Polish character sanitization for PDF compatibility
 const polishMap: Record<string, string> = {
   'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n',
@@ -184,7 +187,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
-    });
+    }) as jsPDFWithAutoTable;
 
     let y = MARGIN;
 
@@ -304,7 +307,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
           }
         });
         
-        y = (doc as any).lastAutoTable.finalY + 5;
+        y = doc.lastAutoTable.finalY + 5;
       }
       
       // Opening topics
@@ -354,7 +357,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
           margin: { left: MARGIN, right: MARGIN }
         });
         
-        y = (doc as any).lastAutoTable.finalY + 5;
+        y = doc.lastAutoTable.finalY + 5;
       }
     }
 
@@ -385,7 +388,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
         margin: { left: MARGIN, right: MARGIN }
       });
       
-      y = (doc as any).lastAutoTable.finalY + 5;
+      y = doc.lastAutoTable.finalY + 5;
     }
 
     // === GOALS ===
@@ -415,7 +418,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
         margin: { left: MARGIN, right: MARGIN }
       });
       
-      y = (doc as any).lastAutoTable.finalY + 5;
+      y = doc.lastAutoTable.finalY + 5;
     }
 
     // === TOPICS TO DISCUSS ===
@@ -443,7 +446,7 @@ export function exportAgentProfileToPDF(data: AgentProfileExportData): void {
         margin: { left: MARGIN, right: MARGIN }
       });
       
-      y = (doc as any).lastAutoTable.finalY + 5;
+      y = doc.lastAutoTable.finalY + 5;
     }
 
     // === COMPANY CONTEXT ===

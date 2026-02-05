@@ -19,7 +19,8 @@ export const safeString = (value: unknown): string => {
     const first = value[0];
     if (typeof first === 'string') return first;
     if (first && typeof first === 'object') {
-      return (first as any).nazwa || (first as any).wartość || (first as any).value || String(first);
+      const obj = first as Record<string, unknown>;
+      return String(obj.nazwa ?? obj.wartość ?? obj.value ?? first);
     }
     return String(first);
   }
