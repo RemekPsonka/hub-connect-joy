@@ -239,11 +239,11 @@ export function SourcesTabContent({ company, contactEmail, pipeline }: SourcesTa
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [candidateData, setCandidateData] = useState<CompanyCandidate | null>(null);
 
-  const sourceStatus = getStatusFromDb(company.source_data_status);
-  const wwwStatus = getStatusFromDb(company.www_data_status);
-  const externalStatus = getStatusFromDb(company.external_data_status);
-  const financialStatus = getStatusFromDb(company.financial_data_status);
-  const profileStatus = getStatusFromDb(company.company_analysis_status);
+  const sourceStatus = getStatusFromDb(company.source_data_status ?? null);
+  const wwwStatus = getStatusFromDb(company.www_data_status ?? null);
+  const externalStatus = getStatusFromDb(company.external_data_status ?? null);
+  const financialStatus = getStatusFromDb(company.financial_data_status ?? null);
+  const profileStatus = getStatusFromDb(company.company_analysis_status ?? null);
 
   const canSynthesize = sourceStatus === 'completed' && 
     (wwwStatus === 'completed' || externalStatus === 'completed');

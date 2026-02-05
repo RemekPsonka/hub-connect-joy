@@ -35,7 +35,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
   
   // Also consider company website domain
   const companyDomain = useMemo(() => {
-    return extractWebsiteDomain(company?.website);
+    return extractWebsiteDomain(company?.website ?? null);
   }, [company?.website]);
   
   // Use either email domain or company website domain

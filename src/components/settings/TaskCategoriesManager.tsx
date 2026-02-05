@@ -128,7 +128,7 @@ export function TaskCategoriesManager() {
                           {getVisibilityIcon(category.visibility_type)}
                           {getVisibilityLabel(category.visibility_type)}
                         </span>
-                        {category.workflow_steps?.steps?.length > 0 && (
+                        {category.workflow_steps?.steps && category.workflow_steps.steps.length > 0 && (
                           <span className="flex items-center gap-1">
                             <GitBranch className="h-3 w-3" />
                             {category.workflow_steps.steps.length} kroków

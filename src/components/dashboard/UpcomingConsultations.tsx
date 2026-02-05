@@ -94,7 +94,7 @@ export function UpcomingConsultations() {
                         </span>
                       </div>
                     </div>
-                    <ConsultationStatusBadge status={consultation.status} />
+                    <ConsultationStatusBadge status={consultation.status ?? 'scheduled'} />
                   </div>
                 </button>
               ))}

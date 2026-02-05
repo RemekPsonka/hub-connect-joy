@@ -84,11 +84,11 @@ export function CompanyProfileHeader({ company }: CompanyProfileHeaderProps) {
             <div className="flex-1 space-y-3">
               <div>
                 <h1 className="text-2xl font-bold">{company.name}</h1>
-                {(company as Record<string, unknown>).tagline && (
+                {(company as Record<string, unknown>).tagline ? (
                   <p className="text-muted-foreground mt-1">
-                    {(company as Record<string, unknown>).tagline as string}
+                    {String((company as Record<string, unknown>).tagline)}
                   </p>
-                )}
+                ) : null}
               </div>
 
               {/* Badges */}
@@ -102,13 +102,13 @@ export function CompanyProfileHeader({ company }: CompanyProfileHeaderProps) {
                     {sizeLabels[company.employee_count]}
                   </Badge>
                 )}
-                {(company as Record<string, unknown>).company_size && 
-                 sizeLabels[(company as Record<string, unknown>).company_size as string] && (
+                {typeof (company as Record<string, unknown>).company_size === 'string' && 
+                 sizeLabels[(company as Record<string, unknown>).company_size as string] ? (
                   <Badge variant="outline">
                     <Users className="h-3 w-3 mr-1" />
                     {sizeLabels[(company as Record<string, unknown>).company_size as string]}
                   </Badge>
-                )}
+                ) : null}
               </div>
 
               {/* Details */}

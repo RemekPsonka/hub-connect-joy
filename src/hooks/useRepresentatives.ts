@@ -52,7 +52,13 @@ export function useRepresentatives() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      return (data || []).map((d) => ({
+        ...d,
+        role_type: d.role_type ?? 'sales_rep',
+        is_active: d.is_active ?? true,
+        created_at: d.created_at ?? new Date().toISOString(),
+        updated_at: d.updated_at ?? new Date().toISOString(),
+      })) as SalesRepresentative[];
     },
     enabled: !!director?.tenant_id,
   });

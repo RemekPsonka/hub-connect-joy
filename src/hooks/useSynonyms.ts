@@ -41,7 +41,7 @@ export function useSynonyms() {
       const { data, error: addError } = await supabase.rpc('add_synonym', {
         p_term: term,
         p_synonyms: synonymsList,
-        p_category: category
+        p_category: category ?? undefined
       });
       
       if (addError) throw addError;

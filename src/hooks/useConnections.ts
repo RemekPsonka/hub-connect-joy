@@ -65,9 +65,13 @@ export function useConnections() {
 
       // Count connections per contact
       const connectionCounts: Record<string, number> = {};
-      (connections || []).forEach((conn: Connection) => {
-        connectionCounts[conn.contact_a_id] = (connectionCounts[conn.contact_a_id] || 0) + 1;
-        connectionCounts[conn.contact_b_id] = (connectionCounts[conn.contact_b_id] || 0) + 1;
+      (connections || []).forEach((conn) => {
+        if (conn.contact_a_id) {
+          connectionCounts[conn.contact_a_id] = (connectionCounts[conn.contact_a_id] || 0) + 1;
+        }
+        if (conn.contact_b_id) {
+          connectionCounts[conn.contact_b_id] = (connectionCounts[conn.contact_b_id] || 0) + 1;
+        }
       });
 
       // Build nodes with connection counts

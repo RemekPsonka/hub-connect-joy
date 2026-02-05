@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 interface SyncJob {
   id: string;
   job_type: string;
-  status: string;
+  status: string | null;
   progress: {
     processed: number;
     total: number;
@@ -147,17 +147,19 @@ export function BatchKRSSyncController() {
         const email = jobs.find(j => j.job_type === 'create_companies_from_emails');
         const krs = jobs.find(j => j.job_type === 'krs_sync');
         
-        setEmailJob(email ? {
+        setEmailJob(email ? ({
           ...email,
+          status: email.status ?? 'pending',
           progress: email.progress as SyncJob['progress'],
           logs: email.logs as SyncJob['logs']
-        } : null);
+        } as SyncJob) : null);
         
-        setKrsJob(krs ? {
+        setKrsJob(krs ? ({
           ...krs,
+          status: krs.status ?? 'pending',
           progress: krs.progress as SyncJob['progress'],
           logs: krs.logs as SyncJob['logs']
-        } : null);
+        } as SyncJob) : null);
       }
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -332,11 +334,12 @@ export function BatchKRSSyncController() {
 
       if (jobError) throw jobError;
 
-      setEmailJob({
+      setEmailJob(({
         ...job,
+        status: job.status ?? 'running',
         progress: job.progress as SyncJob['progress'],
         logs: job.logs as SyncJob['logs']
-      });
+      } as SyncJob));
 
       // Invoke edge function
       await supabase.functions.invoke('create-companies-from-emails', {
@@ -371,11 +374,12 @@ export function BatchKRSSyncController() {
 
       if (jobError) throw jobError;
 
-      setKrsJob({
+      setKrsJob(({
         ...job,
+        status: job.status ?? 'running',
         progress: job.progress as SyncJob['progress'],
         logs: job.logs as SyncJob['logs']
-      });
+      } as SyncJob));
 
       // Invoke edge function
       await supabase.functions.invoke('background-sync-runner', {
