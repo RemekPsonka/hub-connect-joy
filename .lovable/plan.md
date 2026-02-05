@@ -1,239 +1,209 @@
 
-# Plan: Naprawa błędów TypeScript po włączeniu strictNullChecks - Faza 2
+# Plan: Wirtualizacja listy firm i listy zadań
 
 ## Podsumowanie
 
-Kontynuacja naprawy błędów TypeScript w komponentach stron i komponentach UI po włączeniu `strictNullChecks: true`. Plan obejmuje analizę i naprawę plików w kolejności od najczęściej używanych.
+Zastosowanie wzorca virtualizacji z `@tanstack/react-virtual` do dwóch kolejnych list:
+1. **CompaniesTable** - tabela firm
+2. **TasksList** - lista zadań w formie kart
 
 ---
 
-## Analiza plików
+## Analiza komponentów
 
-### Kategoria A: Strony główne (Pages)
+### 1. CompaniesTable (`src/components/contacts/CompaniesTable.tsx`)
 
-#### 1. src/pages/Dashboard.tsx
-**Status:** ✅ Już bezpieczny
-- Używa `director?.full_name?.split(' ')[0] || 'Użytkowniku'` - poprawne
-- Statystyki mają domyślne wartości z `|| 0`
-- Brak zmian wymaganych
+**Obecna struktura:**
+- Tabela HTML (`<Table>` z shadcn/ui)
+- Sortowanie przez kliknięcie na nagłówki kolumn
+- Paginacja po stronie backendu
+- Wiersze: ~56px wysokości
+- 6 kolumn: Nazwa firmy, Miasto, NIP, Osoba kluczowa, Telefon, Profil AI
 
-#### 2. src/pages/Contacts.tsx
-**Status:** ✅ Już bezpieczny
-- Dane z query mają fallback: `contactsQuery.data?.data || []`
-- `count || 0` - poprawne
+**Strategia virtualizacji:**
+- Identyczna jak w ContactsTable
+- Rozdzielenie na sticky header + scrollable body
+- `estimateSize: () => 56`
+- `overscan: 10`
+- Stałe szerokości kolumn z `table-fixed`
 
-#### 3. src/pages/ContactDetail.tsx
-**Status:** ✅ Już bezpieczny
-- Sprawdza `!contact` przed renderowaniem
-- `contact.companies` i `contact.company` używane warunkowo
+### 2. TasksList (`src/components/tasks/TasksList.tsx`)
 
-#### 4. src/pages/Consultations.tsx
-**Status:** ✅ Już bezpieczny
-- `data?.consultations || []` - poprawne
+**Obecna struktura:**
+- Lista kart (`Card` z shadcn/ui)
+- Karty o zmiennej wysokości (100-160px w zależności od treści)
+- Checkbox do zmiany statusu
+- Kliknięcie otwiera szczegóły
+- Cross-taski mają dodatkową sekcję z powodem połączenia
 
-#### 5. src/pages/ConsultationDetail.tsx
-**Status:** ✅ Już bezpieczny
-- Sprawdza `!consultation` przed renderowaniem
+**Strategia virtualizacji:**
+- Użycie div-based virtualization (nie tabela)
+- `estimateSize: () => 120` (średnia wysokość karty)
+- `overscan: 5` (mniejszy overscan bo karty są większe)
+- Kontener z `maxHeight` i `overflow-y: auto`
 
-#### 6. src/pages/Tasks.tsx
-**Status:** ✅ Już bezpieczny
-- `tasks = []` jako domyślna wartość
+### 3. TasksKanban - BEZ ZMIAN
 
-#### 7. src/pages/Meetings.tsx
-**Status:** ✅ Już bezpieczny
-- `meetings = []` jako domyślna wartość
-
-#### 8. src/pages/Search.tsx
-**Status:** ✅ Już bezpieczny
-- `searchParams.get('q') || ''` - poprawne
-- `result.matchSource || 'fts'` - poprawne
-
-#### 9. src/pages/Analytics.tsx
-**Status:** ✅ Już bezpieczny
-- Sprawdza `!data` przed renderowaniem
-
-#### 10. src/pages/Settings.tsx
-**Potencjalne problemy:**
-- Linia ~51: `biStats?.completed || 0` - sprawdzić
-- Linia ~97: `contactsTotal || 0` już użyte - poprawne
-
-**Status:** ✅ Prawdopodobnie bezpieczny
-
-#### 11. src/pages/MeetingDetail.tsx
-**Status:** ✅ Już bezpieczny
-- `participants = []` jako domyślna wartość
-- Sprawdza `!meeting` przed renderowaniem
-
-#### 12. src/pages/CompanyDetail.tsx
-**Status:** ✅ Już bezpieczny
-- Sprawdza `!company` przed renderowaniem
-- `company.ai_analysis as Record<string, unknown> | null` - explicit cast
-
-#### 13. src/pages/Matches.tsx
-**Status:** ✅ Już bezpieczny
-- `allMatches = []` jako domyślna wartość
-
-#### 14. src/pages/Notifications.tsx
-**Status:** ✅ Już bezpieczny
-- Wszystkie filtry mają null checks
-
-#### 15. src/pages/PolicyPipeline.tsx
-**Status:** ✅ Już bezpieczny - prosty komponent
+Kanban nie będzie wirtualizowany ponieważ:
+- Każda kolumna ma osobną listę zadań (zwykle <30 elementów)
+- Drag & drop wymaga fizycznej obecności elementów w DOM
+- Virtualizacja kolidowałaby z logiką przeciągania
 
 ---
 
-### Kategoria B: Komponenty Dashboard
+## Szczegóły implementacji
 
-#### 1. src/components/dashboard/MeetingsOverview.tsx
-**Status:** ✅ Już bezpieczny
-- `meetings?.slice(0, 3)` - optional chaining
-- `!upcomingMeetings || upcomingMeetings.length === 0` - null check
+### CompaniesTable
 
-#### 2. src/components/dashboard/PendingMatches.tsx
-**Status:** ✅ Już bezpieczny
-- `!matches || matches.length === 0` - null check
-- `match.needTitle || match.needDescription || 'Potrzeba'` - fallback
-
-#### 3. src/components/dashboard/TodaysPriorities.tsx
-**Potencjalny problem (linia 71):**
-```typescript
-priority: t.priority || undefined,
-```
-**Naprawa:**
-```typescript
-priority: t.priority ?? undefined, // nullish coalescing dla pustych stringów
-```
-**Status:** ⚠️ Wymaga drobnej zmiany
-
-#### 4. src/components/dashboard/AIRecommendations.tsx
-**Status:** ✅ Już bezpieczny
-
----
-
-### Kategoria C: Komponenty formularzy i modali
-
-#### 1. src/components/consultations/ConsultationModal.tsx
-**Status:** ✅ Już bezpieczny
-- `consultation.duration_minutes || 60` - fallback
-- `consultation.location || ''` - fallback
-- `director` sprawdzany przed użyciem
-
-#### 2. src/components/meetings/MeetingModal.tsx
-**Status:** ✅ Już bezpieczny
-- `meeting?.name ?? ''` - nullish coalescing
-- `meeting?.scheduled_at` - optional chaining
-
----
-
-### Kategoria D: Komponenty list
-
-#### 1. src/components/tasks/TasksList.tsx
-**Potencjalne problemy:**
-- Linia 93-104: `crossTask.contact_a?.full_name` - już optional chaining
-- Linia 117: `tc.contacts?.full_name` - już optional chaining
-
-**Status:** ✅ Już bezpieczny
-
----
-
-### Kategoria E: Hooki (częściowo już naprawione)
-
-#### 1. src/hooks/useMeetings.ts
-**Status:** ✅ Już bezpieczny
-- `count ?? 0` - nullish coalescing
-- Wszystkie `data as Type` mają error handling
-
-#### 2. src/hooks/useConsultations.ts
-**Status:** ✅ Już bezpieczny
-- `count || 0` - fallback
-
-#### 3. src/hooks/useMatches.ts
-**Status:** ✅ Już bezpieczny
-- `data || []` - fallback w mapowaniu
-- `match.needs?.title || 'Brak tytułu'` - fallback
-
-#### 4. src/hooks/useNotifications.ts
-**Status:** ✅ Już bezpieczny
-- `director?.id` - optional chaining wszędzie
-- `data as Notification[]` - explicit cast
-
----
-
-## Pliki wymagające zmian
-
-Na podstawie analizy, większość plików jest już null-safe dzięki wcześniejszym naprawom lub dobrym praktykom kodowania. Pozostałe potencjalne problemy:
-
-### 1. Drobne poprawki w komponentach dashboard
-
-**Plik: src/components/dashboard/TodaysPriorities.tsx**
-```typescript
-// Linia 71 - zmiana z || na ?? dla consistency
-priority: t.priority ?? undefined,
+```text
+┌─────────────────────────────────────────────────────────┐
+│ [Sticky Header]                                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Nazwa firmy ▲ │ Miasto │ NIP │ Osoba │ Tel │ AI    │ │
+│ └─────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│ [Scrollable Body - virtualized]                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Firma A         │ Warszawa │ 123.. │ Jan  │ +48 │ ▶ │ │
+│ │ Firma B         │ Kraków   │ 456.. │ Anna │ +48 │ ▶ │ │
+│ │ ... (tylko widoczne wiersze)                        │ │
+│ └─────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│ [Pagination - zawsze widoczna]                          │
+└─────────────────────────────────────────────────────────┘
 ```
 
----
+**Zmiany:**
+1. Import `useRef` i `useVirtualizer`
+2. Stała `ROW_HEIGHT = 56`
+3. Rozdzielenie tabeli na header/body
+4. Absolutne pozycjonowanie wierszy z `translateY`
+5. Dodanie opcji "200" w paginacji
 
-## Strategia weryfikacji
+### TasksList
 
-Po analizie, większość stron i komponentów UI jest już null-safe. Błędy TypeScript po włączeniu `strictNullChecks` prawdopodobnie pochodzą z innych plików, które nie zostały jeszcze sprawdzone. 
+```text
+┌─────────────────────────────────────────────────────────┐
+│ [Scrollable Container - virtualized]                    │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ ┌───────────────────────────────────────────────┐   │ │
+│ │ │ ☑ Zadanie 1                    [urgent][call] │   │ │
+│ │ │   Opis zadania...             Status: Pending │   │ │
+│ │ │   Kontakt: Jan Kowalski                       │   │ │
+│ │ └───────────────────────────────────────────────┘   │ │
+│ │ ┌───────────────────────────────────────────────┐   │ │
+│ │ │ ☐ Zadanie 2                  [medium][cross]  │   │ │
+│ │ │   Jan Kowalski ↔ Anna Nowak                   │   │ │
+│ │ └───────────────────────────────────────────────┘   │ │
+│ │ ... (tylko widoczne karty)                          │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
 
-Aby zidentyfikować pozostałe błędy, należy:
-
-1. Uruchomić kompilację TypeScript i zebrać pełną listę błędów
-2. Skupić się na plikach z błędami, które jeszcze nie zostały naprawione
-3. Zastosować strategie null-safety:
-   - `value ?? defaultValue` - dla wartości nullish
-   - `obj?.property` - dla dostępu do zagnieżdżonych właściwości
-   - `if (value) { ... }` - dla warunków guard
-   - Explicit type assertions gdy potrzebne
+**Zmiany:**
+1. Import `useRef` i `useVirtualizer`
+2. Stała `CARD_HEIGHT = 120` (szacunkowa wysokość karty)
+3. Wrapper div z `maxHeight` i `overflow-auto`
+4. Wirtualne karty z absolutnym pozycjonowaniem
 
 ---
 
 ## Pliki do modyfikacji
 
-| # | Plik | Typ zmiany | Priorytet |
-|---|------|------------|-----------|
-| 1 | src/components/dashboard/TodaysPriorities.tsx | Zmiana `||` na `??` | Niski |
+| # | Plik | Zmiany |
+|---|------|--------|
+| 1 | `src/components/contacts/CompaniesTable.tsx` | Dodanie virtualizacji tabeli |
+| 2 | `src/components/tasks/TasksList.tsx` | Dodanie virtualizacji listy kart |
 
 ---
 
-## Co pozostaje bez zmian
+## Zachowana funkcjonalność
 
-- Edge Functions - nie ruszamy
-- Baza danych - nie ruszamy
-- Strony główne (Dashboard, Contacts, etc.) - już null-safe
-- Hooki (useMeetings, useConsultations, etc.) - już null-safe
-- Komponenty modali i formularzy - już null-safe
+### CompaniesTable
+- Sortowanie przez nagłówki kolumn
+- Kliknięcie na firmę → nawigacja do kontaktu
+- Generowanie profilu AI
+- Paginacja
+- Wyświetlanie osoby kluczowej i telefonu
+
+### TasksList
+- Checkbox do zmiany statusu
+- Kliknięcie na kartę → otwarcie szczegółów
+- Wyświetlanie kontaktów i cross-tasków
+- Badge'e typu, priorytetu, statusu
+- Sekcja "Powód połączenia" dla cross-tasków
 
 ---
 
-## Uwaga
+## Bez zmian
 
-Analiza pokazuje, że większość kodu jest już null-safe. Jeśli kompilacja nadal pokazuje błędy, będą one w innych plikach niż te wymienione w oryginalnym żądaniu. Potrzebna jest pełna lista błędów z kompilatora TypeScript, aby precyzyjnie zidentyfikować pozostałe problemy.
-
-Proponuję uruchomić build i przekazać mi pełną listę błędów, abym mógł naprawić dokładnie te pliki, które wymagają zmian.
+- `src/components/contacts/ContactsTable.tsx` - już zwirtualizowany
+- `src/components/tasks/TasksKanban.tsx` - drag & drop wymaga fizycznych elementów
+- Hooki danych (`useCompanies`, `useTasks`)
+- Edge Functions
+- Baza danych
 
 ---
 
-## Szacowana liczba błędów
+## Szczegóły techniczne
 
-Na podstawie analizy poprzednich komunikatów o błędach (z wiadomości użytkownika):
-- **Już naprawione:** ~50+ błędów w core hooks i komponentach
-- **Pozostałe:** prawdopodobnie 30-80 błędów w innych komponentach
+### CompaniesTable - kluczowe fragmenty kodu
 
-Błędy z poprzedniej wiadomości (które mogły nie zostać naprawione):
-- `MasterAgentMessage.tsx` - 2 błędy
-- `BugFixSheet.tsx` - 1 błąd
-- `CompanyProfileHeader.tsx` - 2 błędy
-- `BatchKRSSyncController.tsx` - 4 błędy
-- `CompanyHeaderCard.tsx` - 1 błąd
-- `SourcesTabContent.tsx` - 5 błędów
-- `CompanyView.tsx` - 1 błąd
-- `ContactHistoryTab.tsx` - 2 błędy
-- `NetworkOverview.tsx` - 4 błędy
-- `UpcomingConsultations.tsx` - 1 błąd
-- `ExposureManager.tsx` - 1 błąd
-- `RiskDomainAccordion.tsx` - 12+ błędów
-- I inne...
+```typescript
+// Imports
+import { useState, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
-Te pliki wymagają szczegółowej analizy i naprawy zgodnie z wcześniej zdefiniowanymi strategiami.
+// Constants
+const ROW_HEIGHT = 56;
+
+// Virtualizer setup
+const parentRef = useRef<HTMLDivElement>(null);
+const virtualizer = useVirtualizer({
+  count: companies.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => ROW_HEIGHT,
+  overscan: 10,
+});
+
+// Render structure:
+// 1. Sticky header table
+// 2. Scrollable div with parentRef
+// 3. Virtual rows with translateY positioning
+```
+
+### TasksList - kluczowe fragmenty kodu
+
+```typescript
+// Imports
+import { useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+// Constants
+const CARD_HEIGHT = 120;
+
+// Virtualizer setup
+const parentRef = useRef<HTMLDivElement>(null);
+const virtualizer = useVirtualizer({
+  count: tasks.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => CARD_HEIGHT,
+  overscan: 5,
+});
+
+// Render structure:
+// 1. Scrollable container with maxHeight
+// 2. Inner div with getTotalSize() height
+// 3. Virtual cards with absolute positioning
+```
+
+---
+
+## Korzyści wydajnościowe
+
+| Lista | Przed | Po |
+|-------|-------|-----|
+| Firmy (200 elementów) | 200 wierszy DOM | ~15-20 wierszy DOM |
+| Zadania (100 elementów) | 100 kart DOM | ~8-12 kart DOM |
+
+Redukcja elementów DOM o 85-90% przy dużych listach.
