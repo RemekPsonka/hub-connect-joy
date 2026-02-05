@@ -1,6 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { useCompany } from '@/hooks/useCompanies';
 import { CompanyProfileHeader } from '@/components/companies/CompanyProfileHeader';
 import { CompanyAnalysisViewer } from '@/components/company';
@@ -24,10 +31,9 @@ export default function CompanyDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-4">
         <p className="text-muted-foreground">Firma nie została znaleziona</p>
-        <Button variant="outline" onClick={() => navigate('/contacts?tab=companies')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+        <a href="/contacts?tab=companies" className="text-primary hover:underline">
           Powrót do listy firm
-        </Button>
+        </a>
       </div>
     );
   }
@@ -36,18 +42,22 @@ export default function CompanyDetail() {
 
   return (
     <div className="container max-w-6xl py-6 space-y-6">
-      {/* Back button */}
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        onClick={() => navigate('/contacts?tab=companies')}
-        className="gap-2"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Powrót do listy firm
-      </Button>
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/contacts?tab=companies">Firmy</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{company.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      {/* Company Header */}
       <CompanyProfileHeader company={company} />
 
       {/* Tabs */}
