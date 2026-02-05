@@ -1,169 +1,117 @@
 
 
-# Raport: Analiza widoczności funkcji w UI
+# Plan: Włączenie JWT Verification dla Edge Functions
 
-## Podsumowanie problemu
+## Cel
 
-System ma **47 Edge Functions**, **60 hooków**, i **25 stron**, ale sidebar pokazuje tylko **6 pozycji nawigacyjnych**. Wiele kluczowych funkcji jest dostępnych tylko przez:
-- Bezpośrednie wpisanie URL
-- Widgety na Dashboard (które linkują do stron)
-- Zagnieżdżone zakładki w widokach szczegółowych
+Zmiana `verify_jwt = false` na `verify_jwt = true` dla wszystkich 47 Edge Functions w `supabase/config.toml`, co doda warstwę bezpieczeństwa na poziomie Supabase API Gateway.
 
 ---
 
-## Pełna mapa funkcji: Backend → UI
+## Obecny stan (KRYTYCZNA LUKA)
 
-### A. STRONY W ROUTERZE BEZ LINKU W SIDEBARZE
-
-| Strona | Route | Jak teraz dostępna? | Rekomendacja |
-|--------|-------|---------------------|--------------|
-| Konsultacje | `/consultations` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
-| Spotkania grupowe | `/meetings` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
-| Dopasowania AI | `/matches` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
-| Sieć kontaktów | `/network` | Widget Dashboard → "Eksploruj sieć" | **Dodać do sidebar** |
-| Analityka | `/analytics` | **BRAK DOSTĘPU!** Tylko URL | **Dodać do sidebar** |
-| Powiadomienia | `/notifications` | Dzwonek w header | OK (standardowo) |
-| Szczegóły firmy | `/companies/:id` | Link z kontaktu | OK (drilldown) |
-
-### B. FUNKCJE UKRYTE W ZAGNIEŻDŻONYCH WIDOKACH
-
-| Funkcja | Lokalizacja | Problem? |
-|---------|-------------|----------|
-| Business Intelligence | Kontakt → zakładka BI | ⚠️ Mało odkrywalne |
-| Agent AI kontaktu | Kontakt → zakładka Agent AI | ⚠️ Mało odkrywalne |
-| Analiza firmy (5-etapowa) | Kontakt → widok FIRMA → Źródła | ⚠️ Głęboko zagnieżdżone |
-| Struktura kapitałowa | Firma → zakładka Struktura | ⚠️ Bardzo głęboko |
-| OCR wizytówek | Modal dodawania kontaktu | OK |
-| Import LinkedIn | Modal dodawania kontaktu | OK |
-| Scalanie duplikatów | Header Kontaktów → przycisk | OK |
-| Eksport danych | Settings → Eksport danych | ✅ Dodane |
-
-### C. EDGE FUNCTIONS BEZ DEDYKOWANEGO UI
-
-| Function | Status | Opis |
-|----------|--------|------|
-| `ocr-business-cards-batch` | ⚠️ | Hook `useBusinessCardOCR` istnieje, brak UI do batch upload |
-| `parse-linkedin-network` | ⚠️ | Hook `useLinkedInNetwork` istnieje, UI w kontakcie ale mało widoczne |
-| `analyze-insurance-risk` | ⚠️ | Używane wewnętrznie w pipeline polis |
-| `enrich-person-data` | ⚠️ | Wywoływane automatycznie, brak ręcznego triggera |
-| `background-sync-runner` | ✅ | Automatyczny (cron) |
-| `create-companies-from-emails` | ⚠️ | Wywoływane w Settings → KRS, mało widoczne |
-
-### D. HOOKI Z FUNKCJONALNOŚCIĄ BEZ UI
-
-| Hook | Funkcjonalność | Status UI |
-|------|----------------|-----------|
-| `useLinkedInAnalysis` | Analiza profilu LinkedIn | ⚠️ Brak przycisku |
-| `useLiabilityDNA` | DNA odpowiedzialności | ⚠️ Brak widoku |
-| `useInsuranceRiskBatch` | Batch analiza ryzyka | ⚠️ Brak UI |
-| `useExposureLocations` | Mapa ekspozycji | ⚠️ Brak mapy |
-| `useCapitalGroupMembers` | Członkowie grupy kapitałowej | ✅ W widoku firmy |
-| `useRenewalPotential` | Potencjał odnowień | ✅ W pipeline |
-
----
-
-## Rekomendowany plan naprawy
-
-### PRIORYTET 1: Rozbudowa sidebar (brakujące strony)
-
-```text
-OBECNY SIDEBAR:               PROPONOWANY SIDEBAR:
-─────────────────             ─────────────────────
-Dashboard                     Dashboard
-Kontakty                      ──────────────────
-Ofertowanie                   📂 CRM
-Zadania                         Kontakty
-Wyszukiwanie AI                 Konsultacje ← DODAĆ
-AI Chat                         Spotkania ← DODAĆ
-                                Zadania
-                              ──────────────────
-                              📂 AI & Analiza
-                                AI Chat
-                                Wyszukiwanie AI
-                                Dopasowania ← DODAĆ
-                                Analityka ← DODAĆ
-                              ──────────────────
-                              📂 Sieć
-                                Graf kontaktów ← DODAĆ
-                                Ofertowanie
-                              ──────────────────
-                              ⚙️ Administracja
-                                Ustawienia
-                                ...
+```toml
+# Każda z 47 funkcji ma:
+[functions.nazwa-funkcji]
+verify_jwt = false
 ```
 
-### PRIORYTET 2: Onboarding/Discovery
-
-Dodanie sekcji "Odkryj funkcje" na Dashboard lub w Settings:
-- Lista wszystkich dostępnych modułów z opisami
-- Linki do dokumentacji/tutoriali
-- Wskaźnik "% wykorzystanych funkcji"
-
-### PRIORYTET 3: Kontekstowe podpowiedzi
-
-W widoku kontaktu dodać banner informujący o dostępnych zakładkach:
-- "Czy wiesz, że możesz przeprowadzić wywiad BI z tym kontaktem?"
-- "Uruchom pełną analizę firmy klikając 'FIRMA' →"
+**Problem:** Supabase Gateway NIE weryfikuje tokenów JWT przed wywołaniem funkcji. Każdy z dostępem do URL może wywołać funkcję.
 
 ---
 
-## Szczegółowa lista zmian w AppSidebar.tsx
+## Docelowy stan (DEFENSE IN DEPTH)
 
-### Obecny stan (6 pozycji):
-```typescript
-const mainNavigationItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
-  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
-  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
-  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
-];
+```toml
+# Każda z 47 funkcji będzie miała:
+[functions.nazwa-funkcji]
+verify_jwt = true
 ```
 
-### Proponowany stan (11 pozycji w grupach):
-```typescript
-const mainNavigationItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },  // NOWE
-  { title: 'Spotkania', url: '/meetings', icon: UsersRound },            // NOWE
-  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
-];
-
-const aiNavigationItems = [
-  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
-  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
-  { title: 'Dopasowania', url: '/matches', icon: Handshake },            // NOWE
-  { title: 'Analityka', url: '/analytics', icon: BarChart3 },            // NOWE
-];
-
-const networkNavigationItems = [
-  { title: 'Sieć kontaktów', url: '/network', icon: Network },           // NOWE
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
-];
-```
+**Efekt:** Dwuwarstwowa weryfikacja:
+1. **Warstwa 1 (Gateway):** Supabase odrzuca request bez ważnego JWT PRZED wywołaniem funkcji
+2. **Warstwa 2 (Kod):** `verifyAuth()` w funkcji dodatkowo sprawdza token i tenant_id
 
 ---
 
-## Podsumowanie priorytetów
+## Zmiany w pliku
 
-| # | Zmiana | Złożoność | Wpływ |
-|---|--------|-----------|-------|
-| 1 | Dodaj 5 brakujących linków do sidebar | Niska | Wysoki |
-| 2 | Pogrupuj sidebar w sekcje | Średnia | Średni |
-| 3 | Dodaj tooltips do widgetów Dashboard | Niska | Średni |
-| 4 | Dodaj stronę "Odkryj funkcje" | Średnia | Średni |
-| 5 | Dodaj UI dla `ocr-business-cards-batch` | Średnia | Niski |
-| 6 | Dodaj UI dla `useLinkedInAnalysis` | Średnia | Niski |
+**Plik:** `supabase/config.toml`
+
+**Operacja:** Zamiana wszystkich `verify_jwt = false` na `verify_jwt = true`
+
+**Dotyczy funkcji (47 sztuk):**
+- generate-embedding
+- ai-chat
+- ai-chat-router
+- find-matches
+- generate-meeting-recommendations
+- ai-recommendations
+- generate-daily-serendipity
+- generate-analytics-insights
+- ocr-business-card
+- ocr-business-cards-batch
+- enrich-company-data
+- enrich-person-data
+- generate-contact-profile
+- initialize-contact-agent
+- query-contact-agent
+- master-agent-query
+- agent-action
+- turbo-agent-query
+- bi-agent-interview
+- create-tenant-user
+- update-tenant-user
+- create-assistant
+- check-duplicate-contact
+- merge-contacts
+- parse-contacts-list
+- create-new-tenant
+- delete-tenant
+- analyze-linkedin-profile
+- parse-linkedin-network
+- scrape-company-logo
+- update-company-revenue
+- sync-contact-agents
+- verify-company-source
+- scan-company-website
+- analyze-company-external
+- fetch-company-financials
+- synthesize-company-profile
+- batch-krs-sync
+- create-companies-from-emails
+- background-sync-runner
+- create-representative
+- process-bi-ai
+- analyze-insurance-risk
+- remek-chat
 
 ---
 
-## Pliki do modyfikacji
+## Co NIE zostanie zmienione
 
-| Plik | Zmiana |
-|------|--------|
-| `src/components/layout/AppSidebar.tsx` | Dodanie 5 nowych linków + grupowanie |
-| `src/pages/Dashboard.tsx` | Opcjonalnie: sekcja "Odkryj więcej funkcji" |
-| `src/components/contacts/ContactDetailHeader.tsx` | Opcjonalnie: banner o dostępnych zakładkach |
+| Element | Status |
+|---------|--------|
+| `verifyAuth()` w kodzie funkcji | Pozostaje (defense in depth) |
+| `project_id` w config.toml | Bez zmian |
+| Sekcje `[auth]`, `[api]`, `[db]` | Nie dotyczy (nie istnieją) |
+| Inne ustawienia funkcji (np. `import_map`) | Bez zmian |
+
+---
+
+## Wpływ na działanie systemu
+
+| Przed | Po |
+|-------|-----|
+| Każdy może wywołać funkcję bez tokenu | Wymagany ważny JWT token |
+| Błędy autoryzacji wykrywane w kodzie | Błędy wykrywane PRZED wykonaniem kodu |
+| Jedna warstwa ochrony | Dwie warstwy ochrony |
+
+---
+
+## Wymagania
+
+- Wszystkie wywołania Edge Functions muszą zawierać nagłówek `Authorization: Bearer <token>`
+- Supabase client automatycznie dodaje ten nagłówek gdy użytkownik jest zalogowany
+- Niezalogowani użytkownicy nie będą mogli wywoływać żadnych funkcji (zgodnie z oczekiwaniami)
 
