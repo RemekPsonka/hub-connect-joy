@@ -1,356 +1,169 @@
 
-# Plan: Migracja ForceAtlas2 do Web Workera
 
-## Cel
+# Raport: Analiza widoczności funkcji w UI
 
-Przeniesienie synchronicznych obliczeń layoutu grafu (150 iteracji ForceAtlas2) do Web Workera, aby wyeliminować freeze UI trwający 2-5 sekund przy grafach >500 węzłów.
+## Podsumowanie problemu
+
+System ma **47 Edge Functions**, **60 hooków**, i **25 stron**, ale sidebar pokazuje tylko **6 pozycji nawigacyjnych**. Wiele kluczowych funkcji jest dostępnych tylko przez:
+- Bezpośrednie wpisanie URL
+- Widgety na Dashboard (które linkują do stron)
+- Zagnieżdżone zakładki w widokach szczegółowych
 
 ---
 
-## Obecny stan (problem P0)
+## Pełna mapa funkcji: Backend → UI
+
+### A. STRONY W ROUTERZE BEZ LINKU W SIDEBARZE
+
+| Strona | Route | Jak teraz dostępna? | Rekomendacja |
+|--------|-------|---------------------|--------------|
+| Konsultacje | `/consultations` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
+| Spotkania grupowe | `/meetings` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
+| Dopasowania AI | `/matches` | Widget Dashboard → "Zobacz wszystkie" | **Dodać do sidebar** |
+| Sieć kontaktów | `/network` | Widget Dashboard → "Eksploruj sieć" | **Dodać do sidebar** |
+| Analityka | `/analytics` | **BRAK DOSTĘPU!** Tylko URL | **Dodać do sidebar** |
+| Powiadomienia | `/notifications` | Dzwonek w header | OK (standardowo) |
+| Szczegóły firmy | `/companies/:id` | Link z kontaktu | OK (drilldown) |
+
+### B. FUNKCJE UKRYTE W ZAGNIEŻDŻONYCH WIDOKACH
+
+| Funkcja | Lokalizacja | Problem? |
+|---------|-------------|----------|
+| Business Intelligence | Kontakt → zakładka BI | ⚠️ Mało odkrywalne |
+| Agent AI kontaktu | Kontakt → zakładka Agent AI | ⚠️ Mało odkrywalne |
+| Analiza firmy (5-etapowa) | Kontakt → widok FIRMA → Źródła | ⚠️ Głęboko zagnieżdżone |
+| Struktura kapitałowa | Firma → zakładka Struktura | ⚠️ Bardzo głęboko |
+| OCR wizytówek | Modal dodawania kontaktu | OK |
+| Import LinkedIn | Modal dodawania kontaktu | OK |
+| Scalanie duplikatów | Header Kontaktów → przycisk | OK |
+| Eksport danych | Settings → Eksport danych | ✅ Dodane |
+
+### C. EDGE FUNCTIONS BEZ DEDYKOWANEGO UI
+
+| Function | Status | Opis |
+|----------|--------|------|
+| `ocr-business-cards-batch` | ⚠️ | Hook `useBusinessCardOCR` istnieje, brak UI do batch upload |
+| `parse-linkedin-network` | ⚠️ | Hook `useLinkedInNetwork` istnieje, UI w kontakcie ale mało widoczne |
+| `analyze-insurance-risk` | ⚠️ | Używane wewnętrznie w pipeline polis |
+| `enrich-person-data` | ⚠️ | Wywoływane automatycznie, brak ręcznego triggera |
+| `background-sync-runner` | ✅ | Automatyczny (cron) |
+| `create-companies-from-emails` | ⚠️ | Wywoływane w Settings → KRS, mało widoczne |
+
+### D. HOOKI Z FUNKCJONALNOŚCIĄ BEZ UI
+
+| Hook | Funkcjonalność | Status UI |
+|------|----------------|-----------|
+| `useLinkedInAnalysis` | Analiza profilu LinkedIn | ⚠️ Brak przycisku |
+| `useLiabilityDNA` | DNA odpowiedzialności | ⚠️ Brak widoku |
+| `useInsuranceRiskBatch` | Batch analiza ryzyka | ⚠️ Brak UI |
+| `useExposureLocations` | Mapa ekspozycji | ⚠️ Brak mapy |
+| `useCapitalGroupMembers` | Członkowie grupy kapitałowej | ✅ W widoku firmy |
+| `useRenewalPotential` | Potencjał odnowień | ✅ W pipeline |
+
+---
+
+## Rekomendowany plan naprawy
+
+### PRIORYTET 1: Rozbudowa sidebar (brakujące strony)
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ ConnectionGraph.tsx                                         │
-├─────────────────────────────────────────────────────────────┤
-│ useEffect                                                   │
-│   ├── Budowanie grafu (nodes + edges)                       │
-│   ├── forceAtlas2.assign(graph, { iterations: 150, ... })  │  ← BLOKUJE UI
-│   │       └── 150 iteracji synchronicznych                  │
-│   └── loadGraph(graph)                                      │
-└─────────────────────────────────────────────────────────────┘
+OBECNY SIDEBAR:               PROPONOWANY SIDEBAR:
+─────────────────             ─────────────────────
+Dashboard                     Dashboard
+Kontakty                      ──────────────────
+Ofertowanie                   📂 CRM
+Zadania                         Kontakty
+Wyszukiwanie AI                 Konsultacje ← DODAĆ
+AI Chat                         Spotkania ← DODAĆ
+                                Zadania
+                              ──────────────────
+                              📂 AI & Analiza
+                                AI Chat
+                                Wyszukiwanie AI
+                                Dopasowania ← DODAĆ
+                                Analityka ← DODAĆ
+                              ──────────────────
+                              📂 Sieć
+                                Graf kontaktów ← DODAĆ
+                                Ofertowanie
+                              ──────────────────
+                              ⚙️ Administracja
+                                Ustawienia
+                                ...
 ```
 
-**Problem:** `forceAtlas2.assign()` z 150 iteracjami blokuje main thread.
+### PRIORYTET 2: Onboarding/Discovery
+
+Dodanie sekcji "Odkryj funkcje" na Dashboard lub w Settings:
+- Lista wszystkich dostępnych modułów z opisami
+- Linki do dokumentacji/tutoriali
+- Wskaźnik "% wykorzystanych funkcji"
+
+### PRIORYTET 3: Kontekstowe podpowiedzi
+
+W widoku kontaktu dodać banner informujący o dostępnych zakładkach:
+- "Czy wiesz, że możesz przeprowadzić wywiad BI z tym kontaktem?"
+- "Uruchom pełną analizę firmy klikając 'FIRMA' →"
 
 ---
 
-## Rozwiązanie: Architektura z Web Workerem
+## Szczegółowa lista zmian w AppSidebar.tsx
 
-```text
-┌──────────────────┐     postMessage      ┌─────────────────────┐
-│  Main Thread     │ ──────────────────── │  Web Worker         │
-│                  │                      │                     │
-│  ConnectionGraph │  nodes, edges,       │  forceAtlas2Worker  │
-│  GraphDataLoader │  settings, iterations│                     │
-│                  │ ──────────────────── │                     │
-│                  │                      │  ┌─────────────────┐│
-│  ┌─────────────┐ │                      │  │ Batch iteracje  ││
-│  │ Progress:   │ │  ← progress %        │  │ (10 na raz)     ││
-│  │ [████░░] 40%│ │ ──────────────────── │  │                 ││
-│  └─────────────┘ │                      │  │ forceAtlas2.    ││
-│                  │                      │  │   assign()      ││
-│  Aplikacja      │  ← positions{}       │  └─────────────────┘│
-│  pozycji na graf │ ──────────────────── │                     │
-└──────────────────┘                      └─────────────────────┘
-```
-
----
-
-## Składniki implementacji
-
-### Krok 1: Worker `src/workers/forceAtlas2Worker.ts`
-
-**Nowy plik** - worker obliczający layout ForceAtlas2 w tle:
-
+### Obecny stan (6 pozycji):
 ```typescript
-// src/workers/forceAtlas2Worker.ts
-import Graph from 'graphology';
-import forceAtlas2 from 'graphology-layout-forceatlas2';
-
-interface WorkerInput {
-  nodes: Array<{ key: string; attributes: Record<string, unknown> }>;
-  edges: Array<{ source: string; target: string; attributes: Record<string, unknown> }>;
-  settings: Record<string, unknown>;
-  iterations: number;
-}
-
-self.onmessage = (event: MessageEvent<WorkerInput>) => {
-  const { nodes, edges, settings, iterations } = event.data;
-  
-  // Odbuduj graf w kontekście workera
-  const graph = new Graph();
-  nodes.forEach(n => graph.addNode(n.key, n.attributes));
-  edges.forEach(e => {
-    try {
-      graph.addEdge(e.source, e.target, e.attributes);
-    } catch { /* edge may exist */ }
-  });
-
-  // Iteracyjny layout z progress updates (batch po 10)
-  const batchSize = 10;
-  for (let i = 0; i < iterations; i += batchSize) {
-    const count = Math.min(batchSize, iterations - i);
-    forceAtlas2.assign(graph, { iterations: count, settings });
-    
-    self.postMessage({
-      type: 'progress',
-      progress: Math.round(((i + count) / iterations) * 100),
-    });
-  }
-
-  // Wyślij finalne pozycje
-  const positions: Record<string, { x: number; y: number }> = {};
-  graph.forEachNode((key, attrs) => {
-    positions[key] = { x: attrs.x as number, y: attrs.y as number };
-  });
-
-  self.postMessage({ type: 'result', positions });
-};
+const mainNavigationItems = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
+  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
+  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
+];
 ```
 
-### Krok 2: Hook `src/hooks/useForceAtlas2Worker.ts`
-
-**Nowy plik** - hook zarządzający workerem:
-
+### Proponowany stan (11 pozycji w grupach):
 ```typescript
-import { useRef, useCallback, useState } from 'react';
-import Graph from 'graphology';
+const mainNavigationItems = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },  // NOWE
+  { title: 'Spotkania', url: '/meetings', icon: UsersRound },            // NOWE
+  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
+];
 
-interface ForceAtlas2Settings {
-  gravity?: number;
-  scalingRatio?: number;
-  strongGravityMode?: boolean;
-  slowDown?: number;
-  barnesHutOptimize?: boolean;
-  linLogMode?: boolean;
-  outboundAttractionDistribution?: boolean;
-}
+const aiNavigationItems = [
+  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
+  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake },            // NOWE
+  { title: 'Analityka', url: '/analytics', icon: BarChart3 },            // NOWE
+];
 
-interface ComputeResult {
-  [key: string]: { x: number; y: number };
-}
-
-export function useForceAtlas2Worker() {
-  const workerRef = useRef<Worker | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [isComputing, setIsComputing] = useState(false);
-
-  const compute = useCallback((
-    graph: Graph, 
-    settings: ForceAtlas2Settings, 
-    iterations: number = 150
-  ): Promise<ComputeResult> => {
-    return new Promise((resolve, reject) => {
-      setIsComputing(true);
-      setProgress(0);
-
-      // Utwórz worker z Vite URL pattern
-      const worker = new Worker(
-        new URL('../workers/forceAtlas2Worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-      workerRef.current = worker;
-
-      // Serializuj graf do przekazania do workera
-      const nodes: Array<{ key: string; attributes: Record<string, unknown> }> = [];
-      const edges: Array<{ source: string; target: string; attributes: Record<string, unknown> }> = [];
-
-      graph.forEachNode((key, attrs) => {
-        nodes.push({ key, attributes: { ...attrs } });
-      });
-      graph.forEachEdge((key, attrs, source, target) => {
-        edges.push({ source, target, attributes: { ...attrs } });
-      });
-
-      worker.onmessage = (e) => {
-        if (e.data.type === 'progress') {
-          setProgress(e.data.progress);
-        }
-        if (e.data.type === 'result') {
-          setIsComputing(false);
-          setProgress(100);
-          worker.terminate();
-          workerRef.current = null;
-          resolve(e.data.positions);
-        }
-      };
-
-      worker.onerror = (error) => {
-        setIsComputing(false);
-        worker.terminate();
-        workerRef.current = null;
-        reject(error);
-      };
-
-      worker.postMessage({ nodes, edges, settings, iterations });
-    });
-  }, []);
-
-  const cancel = useCallback(() => {
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
-      setIsComputing(false);
-      setProgress(0);
-    }
-  }, []);
-
-  return { compute, cancel, progress, isComputing };
-}
-```
-
-### Krok 3: Aktualizacja `ConnectionGraph.tsx`
-
-**Zmiany w GraphDataLoader:**
-
-| Przed | Po |
-|-------|-----|
-| Synchroniczny `forceAtlas2.assign()` | Asynchroniczny worker z `await compute()` |
-| Brak progress indicator | Progress bar podczas obliczeń |
-| Freeze UI 2-5s | UI responsywne |
-
-```typescript
-// Zmiany w GraphDataLoader:
-
-// 1. Dodaj stan dla workera (przekazany jako props)
-interface GraphDataLoaderProps {
-  nodes: ContactNode[];
-  edges: Connection[];
-  onComputingChange: (isComputing: boolean) => void;
-  onProgressChange: (progress: number) => void;
-}
-
-// 2. Użyj hooka
-const { compute, progress, isComputing } = useForceAtlas2Worker();
-
-// 3. Zamień synchroniczny layout na asynchroniczny
-useEffect(() => {
-  async function buildGraph() {
-    const graph = new Graph();
-    // ... budowanie grafu (bez zmian) ...
-
-    if (graph.order > 0) {
-      onComputingChange(true);
-      
-      // ASYNC zamiast sync
-      const positions = await compute(graph, {
-        gravity: 0.5,
-        scalingRatio: 20,
-        strongGravityMode: false,
-        slowDown: 3,
-        barnesHutOptimize: true,
-        linLogMode: true,
-        outboundAttractionDistribution: true,
-      }, 150);
-
-      // Aplikuj pozycje na graf
-      Object.entries(positions).forEach(([key, pos]) => {
-        graph.setNodeAttribute(key, 'x', pos.x);
-        graph.setNodeAttribute(key, 'y', pos.y);
-      });
-
-      onComputingChange(false);
-    }
-
-    loadGraph(graph);
-  }
-  
-  buildGraph();
-}, [nodes, edges, loadGraph, sigma, compute]);
-```
-
-### Krok 4: UI Progress Indicator w ConnectionGraph
-
-Dodanie overlaya z progress barem podczas obliczeń:
-
-```typescript
-// W głównym komponencie ConnectionGraph:
-const [isComputing, setIsComputing] = useState(false);
-const [progress, setProgress] = useState(0);
-
-return (
-  <div className="w-full h-[500px] bg-background rounded-lg border relative">
-    {/* Progress overlay */}
-    {isComputing && (
-      <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 rounded-lg">
-        <div className="text-center">
-          <Progress value={progress} className="w-48 mb-2" />
-          <p className="text-sm text-muted-foreground">
-            Obliczanie layoutu... {progress}%
-          </p>
-        </div>
-      </div>
-    )}
-
-    <SigmaContainer ...>
-      <GraphDataLoader 
-        nodes={nodes} 
-        edges={edges}
-        onComputingChange={setIsComputing}
-        onProgressChange={setProgress}
-      />
-      ...
-    </SigmaContainer>
-  </div>
-);
+const networkNavigationItems = [
+  { title: 'Sieć kontaktów', url: '/network', icon: Network },           // NOWE
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+];
 ```
 
 ---
 
-## Pliki do utworzenia/modyfikacji
+## Podsumowanie priorytetów
 
-| Plik | Operacja | Opis |
-|------|----------|------|
-| `src/workers/forceAtlas2Worker.ts` | NOWY | Worker z ForceAtlas2 |
-| `src/hooks/useForceAtlas2Worker.ts` | NOWY | Hook zarządzający workerem |
-| `src/components/network/ConnectionGraph.tsx` | MODYFIKACJA | Integracja z workerem + progress UI |
-
----
-
-## Korzyści wydajnościowe
-
-| Metryka | Przed | Po |
-|---------|-------|-----|
-| UI freeze (500 węzłów) | 2-5 sekund | 0ms |
-| Interakcja podczas obliczeń | Niemożliwa | Pełna (scroll, click, etc.) |
-| Feedback dla użytkownika | Brak | Progress bar z % |
-| Anulowanie obliczeń | Niemożliwe | `cancel()` terminuje worker |
+| # | Zmiana | Złożoność | Wpływ |
+|---|--------|-----------|-------|
+| 1 | Dodaj 5 brakujących linków do sidebar | Niska | Wysoki |
+| 2 | Pogrupuj sidebar w sekcje | Średnia | Średni |
+| 3 | Dodaj tooltips do widgetów Dashboard | Niska | Średni |
+| 4 | Dodaj stronę "Odkryj funkcje" | Średnia | Średni |
+| 5 | Dodaj UI dla `ocr-business-cards-batch` | Średnia | Niski |
+| 6 | Dodaj UI dla `useLinkedInAnalysis` | Średnia | Niski |
 
 ---
 
-## Szczegóły techniczne
+## Pliki do modyfikacji
 
-### Wzorzec Vite Worker
-```typescript
-new Worker(
-  new URL('../workers/forceAtlas2Worker.ts', import.meta.url),
-  { type: 'module' }
-)
-```
-Ten wzorzec jest wspierany przez Vite i poprawnie bundluje worker jako osobny moduł.
+| Plik | Zmiana |
+|------|--------|
+| `src/components/layout/AppSidebar.tsx` | Dodanie 5 nowych linków + grupowanie |
+| `src/pages/Dashboard.tsx` | Opcjonalnie: sekcja "Odkryj więcej funkcji" |
+| `src/components/contacts/ContactDetailHeader.tsx` | Opcjonalnie: banner o dostępnych zakładkach |
 
-### Serializacja grafu
-Graf Graphology nie może być przekazany przez `postMessage` (nie jest strukturą serializowalną), więc serializujemy go do tablicy nodes/edges, a worker odbudowuje graf.
-
-### Memory Leak Protection
-- Worker jest terminowany po zakończeniu (`worker.terminate()`)
-- Hook `cancel()` pozwala terminować worker przy unmount komponentu
-- `workerRef` jest czyszczony
-
-### Error Handling
-- `worker.onerror` łapie błędy w workerze
-- Zachowany ErrorBoundary w Network.tsx obsługuje UI fallback
-
----
-
-## Guardrails (bez zmian)
-
-| Element | Status |
-|---------|--------|
-| Logika budowania grafu (nodes/edges) | Bez zmian |
-| ErrorBoundary w Network.tsx | Zachowany |
-| Kolory i style węzłów/krawędzi | Bez zmian |
-| GraphEvents (click, highlight) | Bez zmian |
-| Sigma settings | Bez zmian |
-
----
-
-## Testy weryfikacyjne
-
-1. **Responsywność UI**: Otwórz `/network` → podczas obliczeń layoutu możesz scrollować i klikać
-2. **Progress bar**: Widoczny postęp 0-100% podczas obliczeń
-3. **Poprawność layoutu**: Graf wyświetla się z tym samym layoutem co wcześniej (ForceAtlas2)
-4. **Duże grafy**: Test z >500 węzłami — brak freeze UI
-5. **Błędy**: Worker crashuje → ErrorBoundary łapie błąd i wyświetla fallback
-6. **Cleanup**: Nawigacja poza `/network` podczas obliczeń nie powoduje memory leaków
