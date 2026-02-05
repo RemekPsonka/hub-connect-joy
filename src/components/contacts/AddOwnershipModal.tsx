@@ -103,7 +103,7 @@ export function AddOwnershipModal({ open, onOpenChange, contactId, contactName }
                       className="w-full p-2 text-left hover:bg-accent flex items-center gap-2"
                     >
                       {company.logo_url ? (
-                        <img src={company.logo_url} alt="" className="h-6 w-6 rounded object-contain" />
+                        <img src={company.logo_url} alt="" loading="lazy" className="h-6 w-6 rounded object-contain" />
                       ) : (
                         <Building2 className="h-4 w-4 text-muted-foreground" />
                       )}
@@ -126,7 +126,7 @@ export function AddOwnershipModal({ open, onOpenChange, contactId, contactName }
             {selectedCompany && (
               <div className="flex items-center gap-2 p-2 bg-accent rounded-md">
                 {selectedCompany.logo_url ? (
-                  <img src={selectedCompany.logo_url} alt="" className="h-8 w-8 rounded object-contain" />
+                  <img src={selectedCompany.logo_url} alt="" loading="lazy" className="h-8 w-8 rounded object-contain" />
                 ) : (
                   <Building2 className="h-5 w-5 text-muted-foreground" />
                 )}
