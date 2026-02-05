@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,6 +55,16 @@ serve(async (req) => {
     }
 
     console.log(`[parse-contacts-list] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
+
+    // ============= RATE LIMITING =============
+    const rateLimit = await checkRateLimit(
+      `parse-contacts:${authResult.user.id}`,
+      { max: 10, window: 3600 }  // 10 imports per hour
+    );
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit.resetAt, corsHeaders);
+    }
+    // ============= END RATE LIMITING =============
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
