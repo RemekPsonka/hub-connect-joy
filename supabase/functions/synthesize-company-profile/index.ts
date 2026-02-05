@@ -1,5 +1,11 @@
+import { z } from "zod";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  company_id: z.string().uuid("company_id musi byc poprawnym UUID"),
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -347,6 +353,19 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Validate request body with Zod BEFORE auth
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { company_id } = validation.data;
+
     // Verify authorization
     const authResult = await verifyAuth(req, supabase);
     if (isAuthError(authResult)) {
@@ -354,16 +373,6 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[synthesize-company-profile] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
-
-    const { company_id } = await req.json();
-
-    if (!company_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'company_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const lovableKey = Deno.env.get('LOVABLE_API_KEY');
 
     if (!lovableKey) {

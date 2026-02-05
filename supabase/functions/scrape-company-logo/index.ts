@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
@@ -5,6 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  companyWebsite: z.string().min(1, "URL strony jest wymagany"),
+  companyId: z.string().uuid("companyId musi byc poprawnym UUID").optional(),
+});
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -25,14 +32,18 @@ Deno.serve(async (req) => {
 
     console.log(`[scrape-company-logo] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    const { companyWebsite, companyId } = await req.json();
+    // Validate request body with Zod
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!companyWebsite) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Brak adresu strony WWW' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { companyWebsite, companyId } = validation.data;
 
     console.log(`[scrape-company-logo] Starting for website: ${companyWebsite}, companyId: ${companyId}`);
 

@@ -1,9 +1,16 @@
+import { z } from "zod";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  company_id: z.string().uuid("company_id musi byc poprawnym UUID"),
+  website: z.string().min(1, "website jest wymagany"),
+});
 
 // Priority pages to scan
 const PAGE_PRIORITIES: Record<string, number> = {
@@ -583,21 +590,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { company_id, website } = await req.json();
+    // Validate request body with Zod BEFORE processing
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!company_id) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ success: false, error: 'company_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!website) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'website is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const { company_id, website } = validation.data;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

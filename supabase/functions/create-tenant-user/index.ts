@@ -1,5 +1,16 @@
+import { z } from "zod";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  email: z.string().email("Nieprawidlowy email"),
+  fullName: z.string().min(2, "Imie min. 2 znaki").max(100, "Imie max 100 znakow"),
+  role: z.enum(["director", "assistant"], { 
+    errorMap: () => ({ message: "Rola musi byc director lub assistant" }) 
+  }),
+  tenantId: z.string().uuid("tenantId musi byc poprawnym UUID"),
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,15 +54,18 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body
-    const { email, fullName, role, tenantId } = await req.json();
+    // Validate request body with Zod
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!email || !fullName || !role || !tenantId) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ error: 'Brakujące dane: email, fullName, role lub tenantId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { email, fullName, role, tenantId } = validation.data;
 
     console.log(`Creating user: ${email} with role ${role} for tenant ${tenantId}`);
 
