@@ -68,7 +68,7 @@ export function TodaysPriorities() {
             subtitle: t.due_date 
               ? `Termin: ${format(new Date(t.due_date), 'd MMM', { locale: pl })}`
               : 'Brak terminu',
-            priority: t.priority || undefined,
+            priority: t.priority ?? undefined,
           });
         });
         
