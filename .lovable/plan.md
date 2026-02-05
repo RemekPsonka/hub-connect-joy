@@ -1,117 +1,173 @@
 
-
-# Plan: Włączenie JWT Verification dla Edge Functions
+# Plan: Dodanie virtualizacji do ContactsTable
 
 ## Cel
-
-Zmiana `verify_jwt = false` na `verify_jwt = true` dla wszystkich 47 Edge Functions w `supabase/config.toml`, co doda warstwę bezpieczeństwa na poziomie Supabase API Gateway.
+Zoptymalizować wydajność renderowania listy kontaktów przy dużych zbiorach danych (>100 elementów) poprzez wirtualizację z `@tanstack/react-virtual`.
 
 ---
 
-## Obecny stan (KRYTYCZNA LUKA)
+## Wzorzec z CompaniesTable.tsx
 
-```toml
-# Każda z 47 funkcji ma:
-[functions.nazwa-funkcji]
-verify_jwt = false
+```typescript
+const ROW_HEIGHT = 56;
+const parentRef = useRef<HTMLDivElement>(null);
+const virtualizer = useVirtualizer({
+  count: companies.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => ROW_HEIGHT,
+  overscan: 10,
+});
 ```
 
-**Problem:** Supabase Gateway NIE weryfikuje tokenów JWT przed wywołaniem funkcji. Każdy z dostępem do URL może wywołać funkcję.
-
 ---
 
-## Docelowy stan (DEFENSE IN DEPTH)
+## Zmiany w ContactsTable.tsx
 
-```toml
-# Każda z 47 funkcji będzie miała:
-[functions.nazwa-funkcji]
-verify_jwt = true
+### 1. Importy
+
+Dodać na początku pliku:
+```typescript
+import { useState, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 ```
 
-**Efekt:** Dwuwarstwowa weryfikacja:
-1. **Warstwa 1 (Gateway):** Supabase odrzuca request bez ważnego JWT PRZED wywołaniem funkcji
-2. **Warstwa 2 (Kod):** `verifyAuth()` w funkcji dodatkowo sprawdza token i tenant_id
+### 2. Stała ROW_HEIGHT
+
+Dodać przed interfejsem:
+```typescript
+const ROW_HEIGHT = 56; // Wysokość wiersza tabeli kontaktów
+```
+
+### 3. Virtualizer hook
+
+Dodać wewnątrz komponentu (po useState, przed funkcjami):
+```typescript
+const parentRef = useRef<HTMLDivElement>(null);
+const virtualizer = useVirtualizer({
+  count: contacts.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => ROW_HEIGHT,
+  overscan: 10,
+});
+```
+
+### 4. Struktura tabeli (linie ~229-354)
+
+**PRZED:**
+```tsx
+<div className="border rounded-lg">
+  <Table>
+    <TableHeader>...</TableHeader>
+    <TableBody>
+      {contacts.map((contact) => (
+        <TableRow>...</TableRow>
+      ))}
+    </TableBody>
+  </Table>
+</div>
+```
+
+**PO:**
+```tsx
+<div className="border rounded-lg overflow-hidden">
+  {/* Sticky Header */}
+  <div className="bg-background border-b">
+    <Table className="table-fixed w-full">
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[50px]">...</TableHead>
+          <TableHead className="w-[200px]">...</TableHead>
+          <TableHead className="w-[150px]">...</TableHead>
+          <TableHead className="w-[120px]">...</TableHead>
+          <TableHead className="w-[130px]">...</TableHead>
+          <TableHead className="w-[180px]">...</TableHead>
+          <TableHead className="w-[100px]">...</TableHead>
+          <TableHead className="w-[140px]">...</TableHead>
+          <TableHead className="w-[120px]">...</TableHead>
+        </TableRow>
+      </TableHeader>
+    </Table>
+  </div>
+  
+  {/* Virtualized Body */}
+  <div
+    ref={parentRef}
+    className="overflow-auto"
+    style={{ maxHeight: 'calc(100vh - 350px)' }}
+  >
+    <Table className="table-fixed w-full">
+      <TableBody>
+        <tr style={{ height: virtualizer.getTotalSize() }}>
+          <td colSpan={9} className="p-0 relative">
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const contact = contacts[virtualItem.index];
+              return (
+                <TableRow
+                  key={contact.id}
+                  className="cursor-pointer hover:bg-muted/50 absolute w-full flex"
+                  style={{
+                    height: ROW_HEIGHT,
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  onClick={() => navigate(`/contacts/${contact.id}`)}
+                >
+                  {/* Wszystkie TableCell z flex-shrink-0 i stałą szerokością */}
+                </TableRow>
+              );
+            })}
+          </td>
+        </tr>
+      </TableBody>
+    </Table>
+  </div>
+</div>
+```
+
+### 5. Szerokości kolumn
+
+| Kolumna | Szerokość |
+|---------|-----------|
+| Checkbox | w-[50px] |
+| Imię i nazwisko | w-[200px] |
+| Firma | w-[150px] |
+| Stanowisko | w-[120px] |
+| Telefon | w-[130px] |
+| Email | w-[180px] |
+| Grupa | w-[100px] |
+| Profil AI | w-[140px] |
+| Siła relacji | w-[120px] |
+
+### 6. Opcja "200" w paginacji
+
+Dodać do SelectContent (linia ~365-369):
+```tsx
+<SelectItem value="200">200</SelectItem>
+```
 
 ---
 
-## Zmiany w pliku
-
-**Plik:** `supabase/config.toml`
-
-**Operacja:** Zamiana wszystkich `verify_jwt = false` na `verify_jwt = true`
-
-**Dotyczy funkcji (47 sztuk):**
-- generate-embedding
-- ai-chat
-- ai-chat-router
-- find-matches
-- generate-meeting-recommendations
-- ai-recommendations
-- generate-daily-serendipity
-- generate-analytics-insights
-- ocr-business-card
-- ocr-business-cards-batch
-- enrich-company-data
-- enrich-person-data
-- generate-contact-profile
-- initialize-contact-agent
-- query-contact-agent
-- master-agent-query
-- agent-action
-- turbo-agent-query
-- bi-agent-interview
-- create-tenant-user
-- update-tenant-user
-- create-assistant
-- check-duplicate-contact
-- merge-contacts
-- parse-contacts-list
-- create-new-tenant
-- delete-tenant
-- analyze-linkedin-profile
-- parse-linkedin-network
-- scrape-company-logo
-- update-company-revenue
-- sync-contact-agents
-- verify-company-source
-- scan-company-website
-- analyze-company-external
-- fetch-company-financials
-- synthesize-company-profile
-- batch-krs-sync
-- create-companies-from-emails
-- background-sync-runner
-- create-representative
-- process-bi-ai
-- analyze-insurance-risk
-- remek-chat
-
----
-
-## Co NIE zostanie zmienione
+## Co pozostaje bez zmian
 
 | Element | Status |
 |---------|--------|
-| `verifyAuth()` w kodzie funkcji | Pozostaje (defense in depth) |
-| `project_id` w config.toml | Bez zmian |
-| Sekcje `[auth]`, `[api]`, `[db]` | Nie dotyczy (nie istnieją) |
-| Inne ustawienia funkcji (np. `import_map`) | Bez zmian |
+| Logika selekcji (selectedIds) | Bez zmian |
+| Bulk actions (handleBulkAssignGroup, handleBulkDelete) | Bez zmian |
+| Sortowanie (handleSort) | Bez zmian |
+| Generowanie profilu AI | Bez zmian |
+| Paginacja | Bez zmian (tylko +200) |
+| Event handlery | Wszystkie zachowane |
 
 ---
 
-## Wpływ na działanie systemu
+## Plik do modyfikacji
 
-| Przed | Po |
-|-------|-----|
-| Każdy może wywołać funkcję bez tokenu | Wymagany ważny JWT token |
-| Błędy autoryzacji wykrywane w kodzie | Błędy wykrywane PRZED wykonaniem kodu |
-| Jedna warstwa ochrony | Dwie warstwy ochrony |
+- `src/components/contacts/ContactsTable.tsx`
 
 ---
 
-## Wymagania
+## Techniczne szczegóły
 
-- Wszystkie wywołania Edge Functions muszą zawierać nagłówek `Authorization: Bearer <token>`
-- Supabase client automatycznie dodaje ten nagłówek gdy użytkownik jest zalogowany
-- Niezalogowani użytkownicy nie będą mogli wywoływać żadnych funkcji (zgodnie z oczekiwaniami)
-
+- **ROW_HEIGHT = 56px** - standardowa wysokość wiersza tabeli (sprawdzona w CompaniesTable)
+- **overscan = 10** - renderuje 10 dodatkowych wierszy poza viewport dla płynnego scrollowania
+- **colSpan = 9** - liczba kolumn w tabeli kontaktów
+- **maxHeight: calc(100vh - 350px)** - pozostawia miejsce na header, bulk actions i paginację
