@@ -1,195 +1,41 @@
 
-# Plan: Zod Validation dla 5 Edge Functions
+
+# Plan: Zod Validation dla 5 Edge Functions (PROMPT 6.4)
 
 ## Cel
-Dodanie walidacji Zod do 5 najczesciej uzywanych edge functions dla bezpieczenstwa i lepszego error handlingu.
+Dodanie walidacji Zod do kolejnych 5 edge functions dla bezpieczenstwa i lepszego error handlingu.
 
 ---
 
-## Uwaga wstepna - Import Zod w Deno
+## Uwaga
+Dwie funkcje z promptu nie istnieja w projekcie:
+- `analyze-company-structure` - brak
+- `update-contact-embeddings` - brak
 
-W edge functions Deno, Zod importujemy bezposrednio z npm:
-
-```typescript
-import { z } from "npm:zod@3.23.8";
-```
-
-Nie trzeba modyfikowac import_map.json ani instalowac Zod osobno.
-
----
-
-## Zmiana 1: generate-contact-profile/index.ts
-
-**Linia 1-3** - Dodac import Zod:
-```typescript
-import { z } from "npm:zod@3.23.8";
-```
-
-**Linia 146-155** - Zastapic obecna walidacje Zod schema:
-
-```typescript
-// Dodac przed serve():
-const requestSchema = z.object({
-  contact_id: z.string().uuid("contact_id musi byc poprawnym UUID"),
-  force_regenerate: z.boolean().optional(),
-});
-
-// W serve(), po CORS:
-const body = await req.json();
-const validation = requestSchema.safeParse(body);
-
-if (!validation.success) {
-  return new Response(
-    JSON.stringify({ 
-      error: "Invalid request", 
-      details: validation.error.format() 
-    }),
-    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
-
-const { contact_id, force_regenerate } = validation.data;
-```
+Zastepuje je istniejacymi funkcjami o podobnym przeznaczeniu:
+- `scrape-company-logo` 
+- `generate-embedding`
 
 ---
 
-## Zmiana 2: ai-chat/index.ts
-
-**Linia 1-3** - Dodac import Zod:
-```typescript
-import { z } from "npm:zod@3.23.8";
-```
-
-**Linia 26-57** - Dodac schema i walidacje:
-
-```typescript
-// Dodac przed serve():
-const chatMessageSchema = z.object({
-  role: z.enum(["user", "assistant", "system"]),
-  content: z.string().min(1).max(50000),
-});
-
-const requestSchema = z.object({
-  messages: z.array(chatMessageSchema).min(1, "At least one message required"),
-  context: z.object({
-    contactId: z.string().uuid().optional(),
-    meetingId: z.string().uuid().optional(),
-    includeContacts: z.boolean().optional(),
-    includeNeeds: z.boolean().optional(),
-    includeOffers: z.boolean().optional(),
-  }).optional(),
-});
-
-// W serve(), po auth check:
-const body = await req.json();
-const validation = requestSchema.safeParse(body);
-
-if (!validation.success) {
-  return new Response(
-    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
-    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
-
-const { messages, context } = validation.data;
-```
-
----
-
-## Zmiana 3: parse-contacts-list/index.ts
-
-**Linia 1-3** - Dodac import Zod:
-```typescript
-import { z } from "npm:zod@3.23.8";
-```
-
-**Linia 55-62** - Dodac schema z refinement:
-
-```typescript
-// Dodac przed serve():
-const requestSchema = z.object({
-  content: z.string().min(1, "Content is required").max(5_000_000, "Content too large (max 5MB)"),
-  contentType: z.enum(["csv", "xlsx", "pdf", "image", "text"]).optional().default("text"),
-  fileName: z.string().max(255).optional(),
-});
-
-// W serve(), po auth check:
-const body = await req.json();
-const validation = requestSchema.safeParse(body);
-
-if (!validation.success) {
-  return new Response(
-    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
-    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
-
-const { content, contentType, fileName } = validation.data;
-```
-
----
-
-## Zmiana 4: remek-chat/index.ts
-
-**Linia 1-2** - Dodac import Zod:
-```typescript
-import { z } from "npm:zod@3.23.8";
-```
-
-**Linia 106-115** - Zastapic interface RemekRequest schema Zod:
-
-```typescript
-// Zastapic interface RemekRequest:
-const requestSchema = z.object({
-  message: z.string().min(1, "Message is required").max(5000, "Message too long (max 5000 chars)"),
-  sessionId: z.string().uuid().optional(),
-  context: z.object({
-    module: z.string().max(100).optional(),
-    pageUrl: z.string().max(500).optional(),
-    contactId: z.string().uuid().optional(),
-    companyId: z.string().uuid().optional(),
-  }).optional(),
-});
-
-type RemekRequest = z.infer<typeof requestSchema>;
-
-// W serve(), po auth check (linia 135):
-const body = await req.json();
-const validation = requestSchema.safeParse(body);
-
-if (!validation.success) {
-  return new Response(
-    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
-    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
-
-const { message, context, sessionId: rawSessionId } = validation.data;
-let sessionId = rawSessionId;
-```
-
----
-
-## Zmiana 5: background-sync-runner/index.ts
+## Zmiana 1: synthesize-company-profile/index.ts
 
 **Linia 1** - Dodac import Zod:
 ```typescript
 import { z } from "npm:zod@3.23.8";
 ```
 
-**Linia 17-26** - Dodac schema i walidacje:
-
+**Przed Deno.serve()** - Dodac schema:
 ```typescript
-// Dodac przed Deno.serve():
 const requestSchema = z.object({
-  job_id: z.string().uuid("job_id musi byc poprawnym UUID"),
-  tenant_id: z.string().uuid("tenant_id musi byc poprawnym UUID"),
-  batch_size: z.number().int().min(1).max(100).optional().default(10),
-  skip_errors: z.boolean().optional().default(true),
+  company_id: z.string().uuid("company_id musi byc poprawnym UUID"),
 });
+```
 
-// W serve(), zamiast obecnej walidacji:
-const body = await req.json().catch(() => ({}));
+**Linia 358** - Zastapic obecna walidacje (przed auth check):
+```typescript
+// Po CORS check, PRZED auth:
+const body = await req.json();
 const validation = requestSchema.safeParse(body);
 
 if (!validation.success) {
@@ -199,7 +45,151 @@ if (!validation.success) {
   );
 }
 
-const { job_id, tenant_id, batch_size, skip_errors } = validation.data;
+const { company_id } = validation.data;
+
+// Verify authorization (existing code)
+const authResult = await verifyAuth(req, supabase);
+```
+
+---
+
+## Zmiana 2: create-tenant-user/index.ts
+
+**Linia 1-2** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Przed serve()** - Dodac schema:
+```typescript
+const requestSchema = z.object({
+  email: z.string().email("Nieprawidlowy email"),
+  fullName: z.string().min(2, "Imie min. 2 znaki").max(100, "Imie max 100 znakow"),
+  role: z.enum(["director", "assistant"], { errorMap: () => ({ message: "Rola musi byc director lub assistant" }) }),
+  tenantId: z.string().uuid("tenantId musi byc poprawnym UUID"),
+});
+```
+
+**Linia 46-47** - Zastapic obecna walidacje:
+```typescript
+// Po auth check, przed logika:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { email, fullName, role, tenantId } = validation.data;
+```
+
+---
+
+## Zmiana 3: scan-company-website/index.ts
+
+**Linia 1** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Przed Deno.serve()** - Dodac schema:
+```typescript
+const requestSchema = z.object({
+  company_id: z.string().uuid("company_id musi byc poprawnym UUID"),
+  url: z.string().url("Nieprawidlowy URL").optional(),
+  max_pages: z.number().int().min(1).max(50).optional().default(20),
+});
+```
+
+**Na poczatku serve()** - Dodac walidacje PRZED auth:
+```typescript
+// Po CORS check:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { company_id, url, max_pages } = validation.data;
+```
+
+---
+
+## Zmiana 4: scrape-company-logo/index.ts
+
+**Linia 1** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Przed Deno.serve()** - Dodac schema:
+```typescript
+const requestSchema = z.object({
+  companyWebsite: z.string().min(1, "URL strony jest wymagany"),
+  companyId: z.string().uuid("companyId musi byc poprawnym UUID").optional(),
+});
+```
+
+**Linia 28** - Zastapic obecna walidacje:
+```typescript
+// Po auth check:
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { companyWebsite, companyId } = validation.data;
+```
+
+---
+
+## Zmiana 5: generate-embedding/index.ts
+
+**Linia 1-2** - Dodac import Zod:
+```typescript
+import { z } from "npm:zod@3.23.8";
+```
+
+**Przed serve()** - Zastapic interface schema Zod:
+```typescript
+// Usunac interface EmbeddingRequest, zastapic:
+const requestSchema = z.object({
+  type: z.enum(["contact", "need", "offer"]).optional(),
+  id: z.string().uuid("id musi byc poprawnym UUID").optional(),
+  text: z.string().min(3, "Tekst min. 3 znaki").max(10000, "Tekst max 10000 znakow").optional(),
+}).refine(
+  (data) => (data.text) || (data.type && data.id),
+  { message: "Podaj 'text' dla trybu query, lub 'type' i 'id' dla trybu entity" }
+);
+
+type EmbeddingRequest = z.infer<typeof requestSchema>;
+```
+
+**Linia 43** - Zastapic walidacje:
+```typescript
+const body = await req.json();
+const validation = requestSchema.safeParse(body);
+
+if (!validation.success) {
+  return new Response(
+    JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const { type, id, text: providedText } = validation.data;
 ```
 
 ---
@@ -208,34 +198,19 @@ const { job_id, tenant_id, batch_size, skip_errors } = validation.data;
 
 | Plik | Walidacja | Kluczowe pola |
 |------|-----------|---------------|
-| `generate-contact-profile` | UUID + optional boolean | `contact_id`, `force_regenerate` |
-| `ai-chat` | Array messages + context | `messages[]`, `context` |
-| `parse-contacts-list` | Content + enum contentType | `content`, `contentType`, `fileName` |
-| `remek-chat` | Message + optional context | `message`, `sessionId`, `context` |
-| `background-sync-runner` | UUID job + tenant | `job_id`, `tenant_id`, `batch_size` |
+| `synthesize-company-profile` | UUID | `company_id` |
+| `create-tenant-user` | Email + role enum | `email`, `fullName`, `role`, `tenantId` |
+| `scan-company-website` | UUID + optional URL | `company_id`, `url`, `max_pages` |
+| `scrape-company-logo` | URL + optional UUID | `companyWebsite`, `companyId` |
+| `generate-embedding` | Conditional refine | `type`, `id`, `text` |
 
 ---
 
-## Wazne zasady
+## Wazne zasady (te same co w 6.3)
 
-1. **Walidacja PRZED auth** - oszczedzamy zasoby (nie autoryzujemy blednych requestow)
+1. **Walidacja PRZED auth** - oszczedzamy zasoby
 2. **400 Bad Request** - z pelnym Zod error format w `details`
-3. **safeParse** - nie rzuca wyjatku, zwraca `success: boolean`
-4. **Zod import** - `npm:zod@3.23.8` dziala natywnie w Deno
-5. **NIE zmieniamy logiki** - tylko dodajemy walidacje na wejsciu
+3. **safeParse** - nie rzuca wyjatku
+4. **Zachowujemy istniejacy interface** - uzywamy `z.infer<typeof schema>` dla kompatybilnosci
+5. **NIE zmieniamy logiki** - tylko walidacja na wejsciu
 
----
-
-## Testowanie
-
-Po wdrozeniu mozna testowac invalid payloads:
-
-```bash
-# Test invalid UUID
-curl -X POST https://xxx.supabase.co/functions/v1/generate-contact-profile \
-  -H "Authorization: Bearer XXX" \
-  -d '{"contact_id": "not-a-uuid"}'
-
-# Oczekiwana odpowiedz:
-# {"error":"Invalid request","details":{"contact_id":{"_errors":["contact_id musi byc poprawnym UUID"]}}}
-```
