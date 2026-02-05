@@ -1,224 +1,175 @@
 
-# Plan: TypeScript Strict Mode dla Core Files
+# Plan: TypeScript Strict Mode - Naprawa Bledow Kompilacji
 
 ## Cel
-Wlaczenie strict mode dla katalogow `src/lib/` i `src/utils/` oraz naprawienie bledow kompilacji.
+Naprawic bledy kompilacji TypeScript powstale po wlaczeniu strict mode w poprzednim kroku. Bledy dotycza 4 plikow komponentow i 2 hookow.
 
 ---
 
-## Zmiana 1: tsconfig.app.json
+## Zmiana 1: src/components/ErrorBoundary.tsx
 
-**Plik:** `tsconfig.app.json`
+**Problem:** Typ `ErrorFallbackProps` nie jest kompatybilny z `FallbackProps` z react-error-boundary (error ma typ `unknown` zamiast `Error`)
 
-Zmiana flag kompilacji:
+**Linia 7-10** - Zmiana interfejsu:
 
-```json
-{
-  "compilerOptions": {
-    "strict": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true
-    // reszta bez zmian
-  }
-}
+```typescript
+// USUNAC interfejs ErrorFallbackProps i uzyc FallbackProps z biblioteki
+import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from 'react-error-boundary';
 ```
 
-**Uwaga:** strict mode zostanie wlaczony globalnie, ale poprawki robimy tylko dla `src/lib/` i `src/utils/`. Bledy w innych katalogach beda widoczne, ale nie bedziemy ich naprawiac w tym sprincie.
+**Linia 12** - Zmiana komponentu:
 
----
-
-## Zmiana 2: src/lib/utils.ts (linia 22)
-
-Zamiana `as any` na bezpieczne typowanie:
-
-**PRZED:**
 ```typescript
-return (first as any).nazwa || (first as any).wartosc || (first as any).value || String(first);
-```
-
-**PO:**
-```typescript
-const obj = first as Record<string, unknown>;
-return String(obj.nazwa ?? obj.wartosc ?? obj.value ?? first);
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  // W renderze uzyc errorMessage zamiast error.message
 ```
 
 ---
 
-## Zmiana 3: src/utils/exportAgentProfile.ts
+## Zmiana 2: src/pages/Network.tsx
 
-### Linia 307, 357, 388, 418, 446
-Zamiana `(doc as any).lastAutoTable` na poprawny typ:
+**Problem:** Ten sam problem z `FallbackProps` - lokalna funkcja `GraphErrorFallback` ma wlasny typ
 
-**Dodac na poczatku pliku (po importach):**
+**Linia 26** - Zmiana typu:
+
 ```typescript
-interface jsPDFWithAutoTable extends jsPDF {
-  lastAutoTable: { finalY: number };
-}
-```
+import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
 
-**Zmienic tworzenie doc:**
-```typescript
-const doc = new jsPDF({...}) as jsPDFWithAutoTable;
+function GraphErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  // ...
 ```
 
 ---
 
-## Zmiana 4: src/utils/exportCompanyAnalysis.ts
+## Zmiana 3: src/components/company/sections/RegistryDataSection.tsx
 
-### Linia 59 - formatMergers
-**PRZED:**
+**Problem:** Parametry `source` i `note` w `.map()` maja implicit `any`
+
+**Linia 8** - Dodac poprawny typ dla `data`:
+
 ```typescript
-function formatMergers(mergers: any): string {
-```
-
-**PO:**
-```typescript
-interface MergerRecord {
-  year?: number | string;
-  details?: string;
-  type?: string;
-}
-
-function formatMergers(mergers: string | string[] | MergerRecord[] | undefined): string {
-```
-
-### Linia 115 - parseProducts
-**PRZED:**
-```typescript
-function parseProducts(products: any): Array<{ name: string; description?: string }> {
-```
-
-**PO:**
-```typescript
-interface ProductRecord {
-  name?: string;
-  description?: string;
-}
-
-function parseProducts(products: string | string[] | ProductRecord[] | undefined): Array<{ name: string; description?: string }> {
-```
-
-### Linia 127 - parseManagement
-**PRZED:**
-```typescript
-function parseManagement(management: any): Array<{ name: string; position: string }> {
-```
-
-**PO:**
-```typescript
-interface ManagementRecord {
-  name?: string;
-  position?: string;
-  role?: string;
-}
-
-function parseManagement(management: string | string[] | ManagementRecord[] | undefined): Array<{ name: string; position: string }> {
-```
-
-### Linia 139 - parseCompetitors
-**PRZED:**
-```typescript
-function parseCompetitors(competitors: any): Array<{ name: string; strength?: string; weakness?: string }> {
-```
-
-**PO:**
-```typescript
-interface CompetitorRecord {
-  name?: string;
-  company_name?: string;
-  strength?: string;
-  strengths?: string;
-  weakness?: string;
-  weaknesses?: string;
-}
-
-function parseCompetitors(competitors: CompetitorRecord[] | undefined): Array<{ name: string; strength?: string; weakness?: string }> {
-```
-
-### Linia 154 - parseLocations
-**PRZED:**
-```typescript
-function parseLocations(locations: any): Array<{ type: string; city: string; address?: string }> {
-```
-
-**PO:**
-```typescript
-interface LocationRecord {
-  type?: string;
-  location_type?: string;
-  city?: string;
+interface RegistryData {
+  nip?: string;
+  regon?: string;
+  krs?: string;
   address?: string;
+  city?: string;
+  postal_code?: string;
+  sources?: string | string[];
+  analysis_notes?: string | string[];
+  data_source?: string;
 }
 
-function parseLocations(locations: string[] | LocationRecord[] | undefined): Array<{ type: string; city: string; address?: string }> {
-```
-
-### Linia 169 - parseNews
-**PRZED:**
-```typescript
-function parseNews(news: any): Array<{ date?: string; title: string; summary?: string }> {
-```
-
-**PO:**
-```typescript
-interface NewsRecord {
-  date?: string;
-  published_at?: string;
-  title?: string;
-  headline?: string;
-  summary?: string;
-  description?: string;
+interface RegistryDataSectionProps {
+  data: RegistryData;
+  dataSources?: DataSources;
 }
-
-function parseNews(news: string | string[] | NewsRecord[] | undefined): Array<{ date?: string; title: string; summary?: string }> {
 ```
 
-### Linia 185 - parseTimeline
-**PRZED:**
+**Linia 155** - Dodac typ do map:
+
 ```typescript
-function parseTimeline(timeline: any): Array<{ year: string; event: string }> {
+{sources.slice(0, 10).map((source: string, i: number) => (
 ```
 
-**PO:**
-```typescript
-interface TimelineRecord {
-  year?: number | string;
-  date?: string;
-  event?: string;
-  description?: string;
-  title?: string;
-}
+**Linia 178** - Dodac typ do map:
 
-function parseTimeline(timeline: TimelineRecord[] | undefined): Array<{ year: string; event: string }> {
+```typescript
+{analysisNotes.map((note: string, i: number) => (
 ```
 
 ---
 
-## Pliki BEZ ZMIAN
+## Zmiana 4: src/components/insurance/RiskDomainAccordion.tsx
 
-Nastepujace pliki juz maja poprawne typowanie:
-- `src/utils/bugFixPrompt.ts`
-- `src/utils/crossTaskStatus.ts`
-- `src/utils/exportReports.ts`
-- `src/utils/passwordValidation.ts`
-- `src/utils/exportInsuranceBrief.ts`
+**Problem:** `onAddPolicy` ma typ `QuickPolicyData` z `PolicyType`, ale `DomainProps` definiuje `policy_type` jako `string`
+
+**Rozwiazanie:** Zmodyfikowac typ w `DomainProps` lub uzyc type assertion
+
+**Zmiana w src/components/insurance/types.ts**, linia 189-197:
+
+```typescript
+import type { PolicyType } from '@/components/renewal/types';
+
+export interface DomainProps<T> {
+  data: T;
+  onChange: (data: T) => void;
+  operationalTypes: TypDzialnosci[];
+  companyId?: string;
+  onAddPolicy?: (data: {
+    policy_type: PolicyType;  // Zmiana z string na PolicyType
+    policy_name: string;
+    start_date: string;
+    end_date: string;
+    sum_insured?: number;
+    premium?: number;
+    is_our_policy?: boolean;
+  }) => void;
+}
+```
+
+---
+
+## Zmiana 5: src/hooks/useBusinessInterview.ts
+
+**Problem:** Element has implicit 'any' type because expression can't index union type
+
+**Linia 233** - Naprawic indeksowanie:
+
+```typescript
+// PRZED:
+const items = (current[itemType] as any[]) || [];
+
+// PO:
+const currentData = current as Record<string, unknown>;
+const items = (currentData[itemType] as Array<{ id: string; [key: string]: unknown }>) || [];
+```
+
+---
+
+## Zmiana 6: src/hooks/useConnections.ts
+
+**Problem:** `contact_a_id` moze byc `null` ale typ `Connection` wymaga `string`
+
+**Linia 166 i 181** - Dodac filtrowanie null:
+
+```typescript
+// Linia 166 - Filtrowac przed mapowaniem:
+const validConnections = (connections || []).filter(
+  (conn): conn is typeof conn & { contact_a_id: string; contact_b_id: string } =>
+    conn.contact_a_id !== null && conn.contact_b_id !== null
+);
+
+const otherContactIds = validConnections.map((conn) =>
+  conn.contact_a_id === contactId ? conn.contact_b_id : conn.contact_a_id
+);
+
+// Linia 181:
+return validConnections.map((conn) => {
+  // ...
+});
+```
 
 ---
 
 ## Podsumowanie zmian
 
-| Plik | Zmiana |
-|------|--------|
-| `tsconfig.app.json` | Wlaczenie `strict: true`, `noImplicitAny: true` |
-| `src/lib/utils.ts` | Zamiana `as any` na `Record<string, unknown>` |
-| `src/utils/exportAgentProfile.ts` | Dodanie interfejsu `jsPDFWithAutoTable` |
-| `src/utils/exportCompanyAnalysis.ts` | Zdefiniowanie 6 interfejsow dla funkcji parsujacych |
+| Plik | Problem | Rozwiazanie |
+|------|---------|-------------|
+| `ErrorBoundary.tsx` | FallbackProps type mismatch | Uzyc typu z biblioteki + type guard dla error |
+| `Network.tsx` | FallbackProps type mismatch | Uzyc typu z biblioteki + type guard dla error |
+| `RegistryDataSection.tsx` | Implicit any w map() | Dodac typy do parametrow + interface dla data |
+| `RiskDomainAccordion.tsx` | PolicyType vs string | Zmienic DomainProps na PolicyType |
+| `useBusinessInterview.ts` | Cannot index union type | Type assertion z Record |
+| `useConnections.ts` | null vs string | Type guard filter |
 
 ---
 
 ## Wazne uwagi
 
-1. Po wlaczeniu strict mode moga pojawic sie bledy w innych katalogach (components, hooks, pages) - to jest oczekiwane i bedzie naprawione w kolejnych sprintach
-2. Uzywamy `unknown` zamiast `any` gdzie to mozliwe
-3. Dla obiektow z zewnetrznych API (KRS, jsPDF) definiujemy wlasne interfejsy
-4. Kompilacja `src/lib/` i `src/utils/` musi przejsc bez bledow
+1. Wszystkie zmiany dotycza tylko typow - logika biznesowa pozostaje bez zmian
+2. Uzywamy type guards zamiast type assertions gdzie to mozliwe
+3. Import `FallbackProps` z react-error-boundary zapewnia kompatybilnosc
+4. Po tych zmianach kompilacja powinna przejsc bez bledow
