@@ -1,108 +1,196 @@
 
-
-# Plan: Dodanie native lazy loading do obrazków
+# Plan: Dodanie breadcrumbs do stron szczegolowych
 
 ## Cel
-Zoptymalizować ładowanie obrazków (avatary, logo firm) poprzez dodanie atrybutu `loading="lazy"` do wszystkich komponentów `<img>` i `<AvatarImage>`.
+Dodac nawigacje breadcrumb do 4 kluczowych stron szczegolowych, aby uzytkownik widzial gdzie sie znajduje i mogl szybko wrocic do poprzednich poziomow bez uzycia przycisku "Back".
 
 ---
 
-## Strategia: Globalna zmiana w komponencie Avatar
+## Zmiana 1: ContactDetail.tsx
 
-Zamiast modyfikować każdy plik osobno, zmienimy **komponent bazowy** `AvatarImage` w `src/components/ui/avatar.tsx`. Dzięki temu wszystkie 30 użyć automatycznie otrzymają lazy loading.
+**Plik:** `src/pages/ContactDetail.tsx`
 
----
-
-## Zmiana 1: Modyfikacja AvatarImage (najważniejsza)
-
-**Plik:** `src/components/ui/avatar.tsx` (linie 18-24)
-
-**PRZED:**
-```tsx
-const AvatarImage = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Image>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image ref={ref} className={cn("aspect-square h-full w-full", className)} {...props} />
-));
+**Dodac import (linia 1-19):**
+```typescript
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 ```
 
-**PO:**
+**Dodac breadcrumb przed ContactDetailHeader (linia 79):**
 ```tsx
-const AvatarImage = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Image>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image> & { loading?: 'lazy' | 'eager' }
->(({ className, loading = 'lazy', ...props }, ref) => (
-  <AvatarPrimitive.Image 
-    ref={ref} 
-    className={cn("aspect-square h-full w-full", className)} 
-    loading={loading}
-    {...props} 
-  />
-));
+return (
+  <div className="space-y-6">
+    <Breadcrumb className="mb-4">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/contacts">Kontakty</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>{contact.full_name}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+
+    <ContactDetailHeader ... />
 ```
 
-**Efekt:** Wszystkie AvatarImage w całej aplikacji automatycznie mają `loading="lazy"`.
+---
+
+## Zmiana 2: CompanyDetail.tsx
+
+**Plik:** `src/pages/CompanyDetail.tsx`
+
+**Dodac import (linia 1-9):**
+```typescript
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+```
+
+**Zamienic przycisk "Powrot do listy firm" na breadcrumb (linie 39-48):**
+```tsx
+return (
+  <div className="container max-w-6xl py-6 space-y-6">
+    <Breadcrumb className="mb-4">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/contacts?tab=companies">Firmy</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>{company.name}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+
+    <CompanyProfileHeader ... />
+```
+
+**Uwaga:** Usuwamy przycisk Button z ArrowLeft - breadcrumb go zastepuje.
 
 ---
 
-## Zmiana 2: Obrazki <img> w AddOwnershipModal
+## Zmiana 3: ConsultationDetail.tsx
 
-**Plik:** `src/components/contacts/AddOwnershipModal.tsx`
+**Plik:** `src/pages/ConsultationDetail.tsx`
 
-Dwie lokalizacje:
+**Dodac import (linia 1-12):**
+```typescript
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+```
 
-| Linia | PRZED | PO |
-|-------|-------|-----|
-| 106 | `<img src={company.logo_url} alt="" className="h-6 w-6 rounded object-contain" />` | `<img src={company.logo_url} alt="" loading="lazy" className="h-6 w-6 rounded object-contain" />` |
-| 129 | `<img src={selectedCompany.logo_url} alt="" className="h-8 w-8 rounded object-contain" />` | `<img src={selectedCompany.logo_url} alt="" loading="lazy" className="h-8 w-8 rounded object-contain" />` |
+**Dodac breadcrumb przed ConsultationDetailHeader (linia 37):**
+```tsx
+return (
+  <div className="space-y-6">
+    <Breadcrumb className="mb-4">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/consultations">Konsultacje</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>
+            {consultation.contact?.full_name 
+              ? `Konsultacja z ${consultation.contact.full_name}` 
+              : 'Konsultacja'}
+          </BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
 
----
-
-## Wyjątki (NIE modyfikujemy)
-
-| Komponent | Powód |
-|-----------|-------|
-| `UserMenu.tsx` | Używa tylko AvatarFallback (bez obrazka) |
-| Ikony lucide-react | To nie są elementy `<img>` |
-| SVG ilustracje | Inline SVG, nie obrazki |
-
----
-
-## Komponenty objęte zmianą (automatycznie przez Avatar)
-
-Wszystkie te komponenty używają `AvatarImage` i otrzymają lazy loading automatycznie:
-
-1. `CompanyModal.tsx` - logo firmy w formularzu
-2. `PersonnelSection.tsx` - zdjęcia osób z zarządu
-3. `CompanyKPIHeader.tsx` - logo firmy w nagłówku KPI
-4. `CompanyHeaderCard.tsx` - logo firmy w karcie
-5. `CompaniesTable.tsx` - logo firm na liście (virtualizowana)
-6. `CompanyProfileHeader.tsx` - duże logo firmy na profilu
-
----
-
-## Pliki do modyfikacji
-
-| Plik | Zmiana |
-|------|--------|
-| `src/components/ui/avatar.tsx` | Dodać `loading="lazy"` jako domyślny props |
-| `src/components/contacts/AddOwnershipModal.tsx` | Dodać `loading="lazy"` do 2 elementów `<img>` |
-
----
-
-## Techniczne szczegóły
-
-- `loading="lazy"` to natywny atrybut HTML5 obsługiwany przez wszystkie nowoczesne przeglądarki
-- Radix UI `AvatarPrimitive.Image` renderuje standardowy element `<img>`, więc atrybut będzie przekazany
-- Obrazki "above the fold" mogą być nadpisane przez `loading="eager"` gdy potrzebne
+    <ConsultationDetailHeader ... />
+```
 
 ---
 
-## Weryfikacja
+## Zmiana 4: MeetingDetail.tsx
 
-Po wdrożeniu można sprawdzić w DevTools → Network:
-1. Załadować stronę z listą kontaktów
-2. Przewinąć w dół
-3. Obserwować jak obrazki ładują się dopiero przy scrollowaniu
+**Plik:** `src/pages/MeetingDetail.tsx`
 
+**Dodac import (linia 1-17):**
+```typescript
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+```
+
+**Dodac breadcrumb przed MeetingDetailHeader (linia 74):**
+```tsx
+return (
+  <div className="space-y-6">
+    <Breadcrumb className="mb-4">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/meetings">Spotkania</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>{meeting.title}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+
+    <MeetingDetailHeader ... />
+```
+
+---
+
+## Podsumowanie zmian
+
+| Plik | Akcja |
+|------|-------|
+| `src/pages/ContactDetail.tsx` | Dodac import + breadcrumb przed header |
+| `src/pages/CompanyDetail.tsx` | Dodac import + zamienic Button na breadcrumb |
+| `src/pages/ConsultationDetail.tsx` | Dodac import + breadcrumb przed header |
+| `src/pages/MeetingDetail.tsx` | Dodac import + breadcrumb przed header |
+
+---
+
+## Wazne szczegoly
+
+- Uzywamy `<BreadcrumbLink href="...">` dla klikanych elementow (natywna nawigacja)
+- Ostatni element to zawsze `<BreadcrumbPage>` (tekst bez linku)
+- Klasa `mb-4` zapewnia odstep od contentu ponizej
+- W CompanyDetail usuwamy przycisk "Powrot" - breadcrumb go zastepuje
+- Breadcrumbs sa widoczne tylko gdy dane sa zaladowane (po sprawdzeniu isLoading/error)
