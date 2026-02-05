@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -6,6 +7,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  message: z.string().min(1, "Message is required").max(5000, "Message too long (max 5000 chars)"),
+  sessionId: z.string().uuid().optional(),
+  context: z.object({
+    module: z.string().max(100).optional(),
+    pageUrl: z.string().max(500).optional(),
+    contactId: z.string().uuid().optional(),
+    companyId: z.string().uuid().optional(),
+  }).optional(),
+});
+
+type RemekRequest = z.infer<typeof requestSchema>;
 
 const REMEK_SYSTEM_PROMPT = `Jesteś AI Remek — przyjazny asystent systemowy CRM do zarządzania kontaktami AI dla networkingu biznesowego.
 
@@ -103,23 +118,26 @@ Znasz cały system CRM od podszewki. Oto moduły które znasz:
 - Edge Functions mają timeout 60s — długie operacje mogą się urywać
 - Brak push notifications — sugestie AI generowane na żądanie`;
 
-interface RemekRequest {
-  message: string;
-  sessionId?: string;
-  context?: {
-    module?: string;
-    pageUrl?: string;
-    contactId?: string;
-    companyId?: string;
-  };
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Zod validation BEFORE auth check
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { message, context, sessionId: rawSessionId } = validation.data;
+    let sessionId = rawSessionId;
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -131,17 +149,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const { tenantId, directorId, assistantId } = authResult;
-
-    const body: RemekRequest = await req.json();
-    const { message, context } = body;
-    let sessionId = body.sessionId;
-
-    if (!message?.trim()) {
-      return new Response(
-        JSON.stringify({ error: "Message is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Generate session ID if not provided
     if (!sessionId) {

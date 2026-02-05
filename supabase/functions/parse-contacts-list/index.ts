@@ -1,11 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Zod schema for request validation
+const requestSchema = z.object({
+  content: z.string().min(1, "Content is required").max(5_000_000, "Content too large (max 5MB)"),
+  contentType: z.enum(["csv", "xlsx", "pdf", "image", "text"]).optional().default("text"),
+  fileName: z.string().max(255).optional(),
+});
 
 interface ParsedContact {
   first_name: string | null;
@@ -52,14 +60,18 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const { content, contentType, fileName } = await req.json();
+    // Zod validation
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!content) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ error: 'Content is required' }),
+        JSON.stringify({ error: "Invalid request", details: validation.error.format() }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { content, contentType, fileName } = validation.data;
 
     console.log(`Parsing contacts from ${contentType}, fileName: ${fileName || 'none'}`);
 
