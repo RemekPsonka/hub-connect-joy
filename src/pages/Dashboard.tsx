@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { RelationshipAlerts } from '@/components/dashboard/RelationshipAlerts';
@@ -21,17 +21,9 @@ import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContactModal } from '@/components/contacts/ContactModal';
 
-interface Stats {
-  contacts: number;
-  todayMeetings: number;
-  pendingTasks: number;
-  activeNeeds: number;
-}
-
 export default function Dashboard() {
   const { director } = useAuth();
-  const [stats, setStats] = useState<Stats>({ contacts: 0, todayMeetings: 0, pendingTasks: 0, activeNeeds: 0 });
-  const [loading, setLoading] = useState(true);
+  const { data: dashboardStats, isLoading } = useDashboardStats();
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
   const formatDate = (date: Date) => {
@@ -43,35 +35,13 @@ export default function Dashboard() {
     });
   };
 
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        // Use RPC to get all dashboard stats in one query from materialized view
-        const { data: dashboardStats, error } = await supabase.rpc('get_dashboard_stats');
-
-        if (error) {
-          console.error('Error fetching dashboard stats:', error);
-          return;
-        }
-
-        if (dashboardStats && dashboardStats.length > 0) {
-          const stats = dashboardStats[0];
-          setStats({
-            contacts: Number(stats.total_contacts) || 0,
-            todayMeetings: Number(stats.today_consultations) || 0,
-            pendingTasks: Number(stats.pending_tasks) || 0,
-            activeNeeds: Number(stats.active_needs) || 0,
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStats();
-  }, []);
+  // Computed values from MV
+  const stats = {
+    contacts: dashboardStats?.total_contacts ?? 0,
+    todayMeetings: dashboardStats?.today_consultations ?? 0,
+    pendingTasks: dashboardStats?.pending_tasks ?? 0,
+    activeNeeds: dashboardStats?.active_needs ?? 0,
+  };
 
   const firstName = director?.full_name?.split(' ')[0] || 'Użytkowniku';
   const hasNoContacts = stats.contacts === 0;
@@ -94,25 +64,25 @@ export default function Dashboard() {
           title="Kontakty"
           value={stats.contacts}
           icon={Users}
-          loading={loading}
+          loading={isLoading}
         />
         <StatsCard
           title="Dzisiejsze konsultacje"
           value={stats.todayMeetings}
           icon={Calendar}
-          loading={loading}
+          loading={isLoading}
         />
         <StatsCard
           title="Oczekujące zadania"
           value={stats.pendingTasks}
           icon={CheckSquare}
-          loading={loading}
+          loading={isLoading}
         />
         <StatsCard
           title="Aktywne potrzeby"
           value={stats.activeNeeds}
           icon={Target}
-          loading={loading}
+          loading={isLoading}
         />
       </div>
 
@@ -120,7 +90,7 @@ export default function Dashboard() {
       <QuickActions />
 
       {/* Empty state */}
-      {!loading && hasNoContacts && (
+      {!isLoading && hasNoContacts && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -141,7 +111,7 @@ export default function Dashboard() {
       )}
 
       {/* AI Widgets - show only when there are contacts */}
-      {!loading && !hasNoContacts && (
+      {!isLoading && !hasNoContacts && (
         <>
           {/* Task widgets - KPI, My Tasks, Team Tasks (najważniejsze) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -468,6 +468,7 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }
@@ -533,6 +534,7 @@ export function useCreateCrossTask() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }
@@ -558,6 +560,7 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ['task'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }
@@ -613,6 +616,7 @@ export function useUpdateCrossTaskStatus() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['task'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }
@@ -637,6 +641,7 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }

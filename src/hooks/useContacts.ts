@@ -192,6 +192,7 @@ export function useCreateContact() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Kontakt został dodany');
       
       // Generate embedding in background
@@ -224,6 +225,7 @@ export function useUpdateContact() {
       if (!silent) {
         queryClient.invalidateQueries({ queryKey: ['contacts'] });
         queryClient.invalidateQueries({ queryKey: ['contact', data.id] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
         
         // Regenerate embedding in background
         generateEmbeddingInBackground('contact', data.id);
@@ -262,6 +264,7 @@ export function useDeleteContact() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Kontakt został usunięty');
     },
     onError: (error) => {
@@ -287,6 +290,7 @@ export function useBulkUpdateContacts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Kontakty zostały zaktualizowane');
     },
     onError: (error) => {
@@ -313,6 +317,7 @@ export function useBulkDeleteContacts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Kontakty zostały usunięte');
     },
     onError: (error) => {
