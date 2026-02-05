@@ -229,9 +229,10 @@ export function useUpdateAIOutputItem() {
       
       if (fetchError) throw fetchError;
 
-      // Update the specific item
-      const items = (current[itemType] as any[]) || [];
-      const updatedItems = items.map((item: any) => 
+      // Update the specific item - use Record to safely index union type
+      const currentData = current as Record<string, unknown>;
+      const items = (currentData[itemType] as Array<{ id: string; [key: string]: unknown }>) || [];
+      const updatedItems = items.map((item) => 
         item.id === itemId ? { ...item, ...updates } : item
       );
 

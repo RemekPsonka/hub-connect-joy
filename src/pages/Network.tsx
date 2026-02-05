@@ -13,7 +13,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { ErrorBoundary } from 'react-error-boundary';
+import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
 import { ConnectionGraph } from '@/components/network/ConnectionGraph';
 import { GraphSidebar } from '@/components/network/GraphSidebar';
 import { FindPathModal } from '@/components/network/FindPathModal';
@@ -23,7 +23,9 @@ import { useConnections } from '@/hooks/useConnections';
 import type { Connection } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
 
-function GraphErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+function GraphErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
   return (
     <Card className="m-4">
       <CardContent className="flex flex-col items-center justify-center p-8 text-center">
@@ -34,7 +36,7 @@ function GraphErrorFallback({ error, resetErrorBoundary }: { error: Error; reset
           Spróbuj odświeżyć stronę lub skontaktuj się z pomocą techniczną.
         </p>
         <p className="text-xs text-muted-foreground mb-4 font-mono bg-muted p-2 rounded max-w-md overflow-auto">
-          {error.message}
+          {errorMessage}
         </p>
         <Button onClick={resetErrorBoundary}>Spróbuj ponownie</Button>
       </CardContent>

@@ -162,8 +162,13 @@ export function useContactConnections(contactId: string | null) {
 
       if (error) throw error;
 
-      // Get the other contact IDs
-      const otherContactIds = (connections || []).map((conn: Connection) =>
+      // Filter out connections with null IDs and get the other contact IDs
+      const validConnections = (connections || []).filter(
+        (conn): conn is typeof conn & { contact_a_id: string; contact_b_id: string } =>
+          conn.contact_a_id !== null && conn.contact_b_id !== null
+      );
+
+      const otherContactIds = validConnections.map((conn) =>
         conn.contact_a_id === contactId ? conn.contact_b_id : conn.contact_a_id
       );
 
@@ -178,9 +183,9 @@ export function useContactConnections(contactId: string | null) {
       if (contactsError) throw contactsError;
 
       // Combine connections with contact details
-      return (connections || []).map((conn: Connection) => {
+      return validConnections.map((conn) => {
         const otherId = conn.contact_a_id === contactId ? conn.contact_b_id : conn.contact_a_id;
-        const otherContact = contacts?.find((c: any) => c.id === otherId);
+        const otherContact = contacts?.find((c) => c.id === otherId);
         return {
           ...conn,
           connected_contact: otherContact,

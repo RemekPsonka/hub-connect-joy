@@ -181,13 +181,15 @@ export const DEFAULT_RYZYKO_FINANSOWE: RyzykoFinansowe = {
 };
 
 // Props dla komponentów domen
+import type { PolicyType } from '@/components/renewal/types';
+
 export interface DomainProps<T> {
   data: T;
   onChange: (data: T) => void;
   operationalTypes: TypDzialnosci[];
   companyId?: string;
   onAddPolicy?: (data: {
-    policy_type: string;
+    policy_type: PolicyType;
     policy_name: string;
     start_date: string;
     end_date: string;
