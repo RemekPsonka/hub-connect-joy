@@ -1,6 +1,7 @@
-import { useState } from 'react';
+ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown, Building2, Phone, Sparkles, Loader2, User } from 'lucide-react';
+ import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Table,
   TableBody,
@@ -28,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getCompanyLogoUrl, useRegenerateCompanyAI, type CompanyWithTopContact } from '@/hooks/useCompanies';
+ 
+ const ROW_HEIGHT = 56;
 
 interface CompaniesTableProps {
   companies: CompanyWithTopContact[];
@@ -57,6 +60,14 @@ export function CompaniesTable({
   const navigate = useNavigate();
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const regenerateAI = useRegenerateCompanyAI();
+ 
+   const parentRef = useRef<HTMLDivElement>(null);
+   const virtualizer = useVirtualizer({
+     count: companies.length,
+     getScrollElement: () => parentRef.current,
+     estimateSize: () => ROW_HEIGHT,
+     overscan: 10,
+   });
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -128,122 +139,144 @@ export function CompaniesTable({
   return (
     <div className="space-y-4">
       {/* Table */}
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 -ml-3"
-                  onClick={() => handleSort('name')}
-                >
-                  Nazwa firmy
-                  <ArrowUpDown className="h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 -ml-3"
-                  onClick={() => handleSort('city')}
-                >
-                  Miasto
-                  <ArrowUpDown className="h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>NIP</TableHead>
-              <TableHead>Osoba kluczowa</TableHead>
-              <TableHead>Telefon</TableHead>
-              <TableHead className="w-[140px]">Profil AI</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {companies.map((company) => {
-              const logoUrl = getCompanyLogoUrl(company.website);
-              return (
-                <TableRow
-                  key={company.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => {
-                    // Navigate to top contact if exists, otherwise just show company info
-                    if (company.top_contact?.id) {
-                      navigate(`/contacts/${company.top_contact.id}`);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        {logoUrl && <AvatarImage src={logoUrl} alt={company.name} />}
-                        <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-                          <Building2 className="h-4 w-4" />
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">{company.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{company.city || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground font-mono text-sm">
-                    {company.nip || '-'}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {company.top_contact ? (
-                      <button
-                        onClick={() => navigate(`/contacts/${company.top_contact!.id}`)}
-                        className="text-left hover:underline"
-                      >
-                        <div className="flex items-center gap-2">
-                          <User className="h-3 w-3 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium text-foreground">{company.top_contact.full_name}</div>
-                            {company.top_contact.position && (
-                              <div className="text-xs text-muted-foreground">{company.top_contact.position}</div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {company.phone ? (
-                      <a
-                        href={`tel:${company.phone}`}
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        <Phone className="h-3 w-3" />
-                        {company.phone}
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={generatingId === company.id}
-                      onClick={(e) => handleGenerateAI(e, company)}
-                      className="gap-1"
-                    >
-                      {generatingId === company.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-3 w-3" />
-                      )}
-                      Generuj AI
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+     <div className="border rounded-lg overflow-hidden">
+       {/* Sticky Header */}
+       <div className="bg-background border-b">
+         <Table className="table-fixed w-full">
+           <TableHeader>
+             <TableRow>
+               <TableHead className="w-[200px]">
+                 <Button
+                   variant="ghost"
+                   size="sm"
+                   className="gap-1 -ml-3"
+                   onClick={() => handleSort('name')}
+                 >
+                   Nazwa firmy
+                   <ArrowUpDown className="h-4 w-4" />
+                 </Button>
+               </TableHead>
+               <TableHead className="w-[120px]">
+                 <Button
+                   variant="ghost"
+                   size="sm"
+                   className="gap-1 -ml-3"
+                   onClick={() => handleSort('city')}
+                 >
+                   Miasto
+                   <ArrowUpDown className="h-4 w-4" />
+                 </Button>
+               </TableHead>
+               <TableHead className="w-[130px]">NIP</TableHead>
+               <TableHead className="w-[180px]">Osoba kluczowa</TableHead>
+               <TableHead className="w-[130px]">Telefon</TableHead>
+               <TableHead className="w-[140px]">Profil AI</TableHead>
+             </TableRow>
+           </TableHeader>
+         </Table>
+       </div>
+ 
+       {/* Virtualized Body */}
+       <div
+         ref={parentRef}
+         className="overflow-auto"
+         style={{ maxHeight: 'calc(100vh - 350px)' }}
+       >
+         <Table className="table-fixed w-full">
+           <TableBody>
+             <tr style={{ height: virtualizer.getTotalSize() }}>
+               <td colSpan={6} className="p-0 relative">
+                 {virtualizer.getVirtualItems().map((virtualItem) => {
+                   const company = companies[virtualItem.index];
+                   const logoUrl = getCompanyLogoUrl(company.website);
+                   return (
+                     <TableRow
+                       key={company.id}
+                       className="cursor-pointer hover:bg-muted/50 absolute w-full flex"
+                       style={{
+                         height: ROW_HEIGHT,
+                         transform: `translateY(${virtualItem.start}px)`,
+                       }}
+                       onClick={() => {
+                         // Navigate to top contact if exists, otherwise just show company info
+                         if (company.top_contact?.id) {
+                           navigate(`/contacts/${company.top_contact.id}`);
+                         }
+                       }}
+                     >
+                       <TableCell className="w-[200px] flex-shrink-0">
+                         <div className="flex items-center gap-3">
+                           <Avatar className="h-8 w-8">
+                             {logoUrl && <AvatarImage src={logoUrl} alt={company.name} />}
+                             <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
+                               <Building2 className="h-4 w-4" />
+                             </AvatarFallback>
+                           </Avatar>
+                           <span className="font-medium truncate">{company.name}</span>
+                         </div>
+                       </TableCell>
+                       <TableCell className="w-[120px] flex-shrink-0 text-muted-foreground">{company.city || '-'}</TableCell>
+                       <TableCell className="w-[130px] flex-shrink-0 text-muted-foreground font-mono text-sm">
+                         {company.nip || '-'}
+                       </TableCell>
+                       <TableCell className="w-[180px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                         {company.top_contact ? (
+                           <button
+                             onClick={() => navigate(`/contacts/${company.top_contact!.id}`)}
+                             className="text-left hover:underline"
+                           >
+                             <div className="flex items-center gap-2">
+                               <User className="h-3 w-3 text-muted-foreground" />
+                               <div>
+                                 <div className="font-medium text-foreground truncate">{company.top_contact.full_name}</div>
+                                 {company.top_contact.position && (
+                                   <div className="text-xs text-muted-foreground truncate">{company.top_contact.position}</div>
+                                 )}
+                               </div>
+                             </div>
+                           </button>
+                         ) : (
+                           <span className="text-muted-foreground">-</span>
+                         )}
+                       </TableCell>
+                       <TableCell className="w-[130px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                         {company.phone ? (
+                           <a
+                             href={`tel:${company.phone}`}
+                             className="text-primary hover:underline flex items-center gap-1"
+                           >
+                             <Phone className="h-3 w-3" />
+                             {company.phone}
+                           </a>
+                         ) : (
+                           <span className="text-muted-foreground">-</span>
+                         )}
+                       </TableCell>
+                       <TableCell className="w-[140px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           disabled={generatingId === company.id}
+                           onClick={(e) => handleGenerateAI(e, company)}
+                           className="gap-1"
+                         >
+                           {generatingId === company.id ? (
+                             <Loader2 className="h-3 w-3 animate-spin" />
+                           ) : (
+                             <Sparkles className="h-3 w-3" />
+                           )}
+                           Generuj AI
+                         </Button>
+                       </TableCell>
+                     </TableRow>
+                   );
+                 })}
+               </td>
+             </tr>
+           </TableBody>
+         </Table>
+       </div>
+     </div>
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
@@ -258,6 +291,7 @@ export function CompaniesTable({
               <SelectItem value="20">20</SelectItem>
               <SelectItem value="50">50</SelectItem>
               <SelectItem value="100">100</SelectItem>
+             <SelectItem value="200">200</SelectItem>
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground ml-4">
