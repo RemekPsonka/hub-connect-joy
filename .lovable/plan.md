@@ -1,209 +1,220 @@
 
-# Plan: Wirtualizacja listy firm i listy zadań
+# Plan: Migracja SQL z Materialized View dla metryk dashboardu
 
-## Podsumowanie
+## Cel
 
-Zastosowanie wzorca virtualizacji z `@tanstack/react-virtual` do dwóch kolejnych list:
-1. **CompaniesTable** - tabela firm
-2. **TasksList** - lista zadań w formie kart
+Utworzenie materialized view `mv_dashboard_stats` agregującego statystyki dashboardu z możliwością szybkiego odczytu i bezpiecznym dostępem przez tenant_id.
 
 ---
 
-## Analiza komponentów
+## Analiza istniejącej struktury
 
-### 1. CompaniesTable (`src/components/contacts/CompaniesTable.tsx`)
+### Tabele źródłowe
+| Tabela | Klucz | Kolumna statusu/aktywności |
+|--------|-------|---------------------------|
+| contacts | tenant_id | is_active (boolean) |
+| companies | tenant_id | brak (liczymy wszystkie) |
+| needs | tenant_id, contact_id | status ('active', 'fulfilled', ...) |
+| offers | tenant_id, contact_id | status ('active', 'inactive', ...) |
+| tasks | tenant_id | status ('pending', 'done', ...) |
 
-**Obecna struktura:**
-- Tabela HTML (`<Table>` z shadcn/ui)
-- Sortowanie przez kliknięcie na nagłówki kolumn
-- Paginacja po stronie backendu
-- Wiersze: ~56px wysokości
-- 6 kolumn: Nazwa firmy, Miasto, NIP, Osoba kluczowa, Telefon, Profil AI
-
-**Strategia virtualizacji:**
-- Identyczna jak w ContactsTable
-- Rozdzielenie na sticky header + scrollable body
-- `estimateSize: () => 56`
-- `overscan: 10`
-- Stałe szerokości kolumn z `table-fixed`
-
-### 2. TasksList (`src/components/tasks/TasksList.tsx`)
-
-**Obecna struktura:**
-- Lista kart (`Card` z shadcn/ui)
-- Karty o zmiennej wysokości (100-160px w zależności od treści)
-- Checkbox do zmiany statusu
-- Kliknięcie otwiera szczegóły
-- Cross-taski mają dodatkową sekcję z powodem połączenia
-
-**Strategia virtualizacji:**
-- Użycie div-based virtualization (nie tabela)
-- `estimateSize: () => 120` (średnia wysokość karty)
-- `overscan: 5` (mniejszy overscan bo karty są większe)
-- Kontener z `maxHeight` i `overflow-y: auto`
-
-### 3. TasksKanban - BEZ ZMIAN
-
-Kanban nie będzie wirtualizowany ponieważ:
-- Każda kolumna ma osobną listę zadań (zwykle <30 elementów)
-- Drag & drop wymaga fizycznej obecności elementów w DOM
-- Virtualizacja kolidowałaby z logiką przeciągania
+### Obecne pobieranie danych
+Dashboard wykonuje 4 osobne zapytania `SELECT COUNT(*)` z filtrami - każde z osobnym round-tripem do bazy.
 
 ---
 
-## Szczegóły implementacji
+## Składniki migracji
 
-### CompaniesTable
+### 1. Materialized View
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│ [Sticky Header]                                         │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Nazwa firmy ▲ │ Miasto │ NIP │ Osoba │ Tel │ AI    │ │
-│ └─────────────────────────────────────────────────────┘ │
-├─────────────────────────────────────────────────────────┤
-│ [Scrollable Body - virtualized]                         │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ Firma A         │ Warszawa │ 123.. │ Jan  │ +48 │ ▶ │ │
-│ │ Firma B         │ Kraków   │ 456.. │ Anna │ +48 │ ▶ │ │
-│ │ ... (tylko widoczne wiersze)                        │ │
-│ └─────────────────────────────────────────────────────┘ │
-├─────────────────────────────────────────────────────────┤
-│ [Pagination - zawsze widoczna]                          │
-└─────────────────────────────────────────────────────────┘
+```sql
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dashboard_stats AS
+SELECT 
+  c.tenant_id,
+  COUNT(DISTINCT c.id) as total_contacts,
+  COUNT(DISTINCT c.id) FILTER (WHERE c.is_active = true) as active_contacts,
+  COUNT(DISTINCT comp.id) as total_companies,
+  COUNT(DISTINCT n.id) FILTER (WHERE n.status = 'active') as active_needs,
+  COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'active') as active_offers,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'pending') as pending_tasks,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'done') as completed_tasks
+FROM contacts c
+LEFT JOIN companies comp ON comp.tenant_id = c.tenant_id
+LEFT JOIN needs n ON n.contact_id = c.id
+LEFT JOIN offers o ON o.contact_id = c.id
+LEFT JOIN tasks t ON t.tenant_id = c.tenant_id
+GROUP BY c.tenant_id;
 ```
 
-**Zmiany:**
-1. Import `useRef` i `useVirtualizer`
-2. Stała `ROW_HEIGHT = 56`
-3. Rozdzielenie tabeli na header/body
-4. Absolutne pozycjonowanie wierszy z `translateY`
-5. Dodanie opcji "200" w paginacji
+**Uwaga techniczna**: Użycie `LEFT JOIN ... ON tenant_id` dla companies i tasks, ale `contact_id` dla needs i offers (zgodnie ze schematem).
 
-### TasksList
+### 2. Unikalny indeks (wymagany dla CONCURRENTLY refresh)
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│ [Scrollable Container - virtualized]                    │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │ ☑ Zadanie 1                    [urgent][call] │   │ │
-│ │ │   Opis zadania...             Status: Pending │   │ │
-│ │ │   Kontakt: Jan Kowalski                       │   │ │
-│ │ └───────────────────────────────────────────────┘   │ │
-│ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │ ☐ Zadanie 2                  [medium][cross]  │   │ │
-│ │ │   Jan Kowalski ↔ Anna Nowak                   │   │ │
-│ │ └───────────────────────────────────────────────┘   │ │
-│ │ ... (tylko widoczne karty)                          │ │
-│ └─────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_dashboard_tenant 
+ON mv_dashboard_stats(tenant_id);
 ```
 
-**Zmiany:**
-1. Import `useRef` i `useVirtualizer`
-2. Stała `CARD_HEIGHT = 120` (szacunkowa wysokość karty)
-3. Wrapper div z `maxHeight` i `overflow-auto`
-4. Wirtualne karty z absolutnym pozycjonowaniem
+### 3. Funkcja odświeżania
+
+```sql
+CREATE OR REPLACE FUNCTION refresh_dashboard_stats()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_stats;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+```
+
+**Korzyść**: `CONCURRENTLY` pozwala odświeżać bez blokowania odczytów.
+
+### 4. Wrapper function (bezpieczny dostęp)
+
+Materialized views nie wspierają RLS, więc tworzymy funkcję proxy:
+
+```sql
+CREATE OR REPLACE FUNCTION get_dashboard_stats(p_tenant_id uuid)
+RETURNS TABLE (
+  total_contacts bigint,
+  active_contacts bigint,
+  total_companies bigint,
+  active_needs bigint,
+  active_offers bigint,
+  pending_tasks bigint,
+  completed_tasks bigint
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    mv.total_contacts, mv.active_contacts, mv.total_companies,
+    mv.active_needs, mv.active_offers, mv.pending_tasks, mv.completed_tasks
+  FROM mv_dashboard_stats mv
+  WHERE mv.tenant_id = p_tenant_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+```
+
+**Bezpieczeństwo**: Funkcja wymaga podania tenant_id - frontend przekaże wartość z kontekstu auth.
 
 ---
 
-## Pliki do modyfikacji
+## Plik migracji
 
-| # | Plik | Zmiany |
-|---|------|--------|
-| 1 | `src/components/contacts/CompaniesTable.tsx` | Dodanie virtualizacji tabeli |
-| 2 | `src/components/tasks/TasksList.tsx` | Dodanie virtualizacji listy kart |
+**Ścieżka**: `supabase/migrations/[timestamp]_dashboard_materialized_view.sql`
+
+**Zawartość**:
+```sql
+-- =====================================================
+-- Materialized View dla metryk dashboardu
+-- =====================================================
+
+-- Krok 1: Materialized View z agregacjami
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dashboard_stats AS
+SELECT 
+  c.tenant_id,
+  COUNT(DISTINCT c.id) as total_contacts,
+  COUNT(DISTINCT c.id) FILTER (WHERE c.is_active = true) as active_contacts,
+  COUNT(DISTINCT comp.id) as total_companies,
+  COUNT(DISTINCT n.id) FILTER (WHERE n.status = 'active') as active_needs,
+  COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'active') as active_offers,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'pending') as pending_tasks,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'done') as completed_tasks
+FROM contacts c
+LEFT JOIN companies comp ON comp.tenant_id = c.tenant_id
+LEFT JOIN needs n ON n.contact_id = c.id
+LEFT JOIN offers o ON o.contact_id = c.id
+LEFT JOIN tasks t ON t.tenant_id = c.tenant_id
+GROUP BY c.tenant_id;
+
+-- Krok 2: Unikalny indeks (wymagany dla REFRESH CONCURRENTLY)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_dashboard_tenant 
+ON mv_dashboard_stats(tenant_id);
+
+-- Krok 3: Funkcja odświeżania (do wywołania przez cron/trigger)
+CREATE OR REPLACE FUNCTION refresh_dashboard_stats()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_stats;
+END;
+$$;
+
+-- Krok 4: Wrapper function z dostępem przez tenant_id
+CREATE OR REPLACE FUNCTION get_dashboard_stats(p_tenant_id uuid)
+RETURNS TABLE (
+  total_contacts bigint,
+  active_contacts bigint,
+  total_companies bigint,
+  active_needs bigint,
+  active_offers bigint,
+  pending_tasks bigint,
+  completed_tasks bigint
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    mv.total_contacts,
+    mv.active_contacts,
+    mv.total_companies,
+    mv.active_needs,
+    mv.active_offers,
+    mv.pending_tasks,
+    mv.completed_tasks
+  FROM mv_dashboard_stats mv
+  WHERE mv.tenant_id = p_tenant_id;
+END;
+$$;
+
+-- Krok 5: Komentarze dokumentacyjne
+COMMENT ON MATERIALIZED VIEW mv_dashboard_stats IS 
+'Agregowane statystyki dashboardu per tenant. Odświeżane przez refresh_dashboard_stats().';
+
+COMMENT ON FUNCTION refresh_dashboard_stats() IS 
+'Odświeża materialized view ze statystykami. Użyj z cron job lub po batch operacjach.';
+
+COMMENT ON FUNCTION get_dashboard_stats(uuid) IS 
+'Bezpieczny wrapper do pobierania statystyk dla danego tenanta.';
+```
 
 ---
 
-## Zachowana funkcjonalność
+## Użycie w przyszłości (następny sprint)
 
-### CompaniesTable
-- Sortowanie przez nagłówki kolumn
-- Kliknięcie na firmę → nawigacja do kontaktu
-- Generowanie profilu AI
-- Paginacja
-- Wyświetlanie osoby kluczowej i telefonu
-
-### TasksList
-- Checkbox do zmiany statusu
-- Kliknięcie na kartę → otwarcie szczegółów
-- Wyświetlanie kontaktów i cross-tasków
-- Badge'e typu, priorytetu, statusu
-- Sekcja "Powód połączenia" dla cross-tasków
-
----
-
-## Bez zmian
-
-- `src/components/contacts/ContactsTable.tsx` - już zwirtualizowany
-- `src/components/tasks/TasksKanban.tsx` - drag & drop wymaga fizycznych elementów
-- Hooki danych (`useCompanies`, `useTasks`)
-- Edge Functions
-- Baza danych
-
----
-
-## Szczegóły techniczne
-
-### CompaniesTable - kluczowe fragmenty kodu
+Frontend wywoła funkcję przez Supabase client:
 
 ```typescript
-// Imports
-import { useState, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-
-// Constants
-const ROW_HEIGHT = 56;
-
-// Virtualizer setup
-const parentRef = useRef<HTMLDivElement>(null);
-const virtualizer = useVirtualizer({
-  count: companies.length,
-  getScrollElement: () => parentRef.current,
-  estimateSize: () => ROW_HEIGHT,
-  overscan: 10,
-});
-
-// Render structure:
-// 1. Sticky header table
-// 2. Scrollable div with parentRef
-// 3. Virtual rows with translateY positioning
-```
-
-### TasksList - kluczowe fragmenty kodu
-
-```typescript
-// Imports
-import { useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-
-// Constants
-const CARD_HEIGHT = 120;
-
-// Virtualizer setup
-const parentRef = useRef<HTMLDivElement>(null);
-const virtualizer = useVirtualizer({
-  count: tasks.length,
-  getScrollElement: () => parentRef.current,
-  estimateSize: () => CARD_HEIGHT,
-  overscan: 5,
-});
-
-// Render structure:
-// 1. Scrollable container with maxHeight
-// 2. Inner div with getTotalSize() height
-// 3. Virtual cards with absolute positioning
+const { data } = await supabase
+  .rpc('get_dashboard_stats', { p_tenant_id: director.tenant_id });
 ```
 
 ---
 
-## Korzyści wydajnościowe
+## Co NIE jest zmieniane
 
-| Lista | Przed | Po |
-|-------|-------|-----|
-| Firmy (200 elementów) | 200 wierszy DOM | ~15-20 wierszy DOM |
-| Zadania (100 elementów) | 100 kart DOM | ~8-12 kart DOM |
+- Frontend (`Dashboard.tsx`) - bez zmian
+- Edge Functions - bez zmian
+- Istniejące tabele - bez zmian
+- Inne funkcje bazy - bez zmian
 
-Redukcja elementów DOM o 85-90% przy dużych listach.
+---
+
+## Strategia odświeżania (rekomendacja na przyszłość)
+
+Po wdrożeniu migracji, rozważ:
+
+1. **Cron job** - `pg_cron` co 5-15 minut
+2. **Trigger** - po INSERT/UPDATE/DELETE na kluczowych tabelach
+3. **API endpoint** - ręczne odświeżanie przez admina
+
+Przykładowy cron (do dodania później):
+```sql
+SELECT cron.schedule('refresh-dashboard-stats', '*/10 * * * *', 
+  'SELECT refresh_dashboard_stats()');
+```
