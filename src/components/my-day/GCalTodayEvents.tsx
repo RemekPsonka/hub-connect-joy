@@ -1,11 +1,14 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, ExternalLink } from 'lucide-react';
-import { format, differenceInMinutes, parseISO } from 'date-fns';
+import { Calendar, MapPin } from 'lucide-react';
+import { format, differenceInMinutes, parseISO, isWithinInterval } from 'date-fns';
 import { DataCard } from '@/components/ui/data-card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useGCalConnection, useGCalEvents } from '@/hooks/useGoogleCalendar';
+import { CalendarEventPopover } from '@/components/calendar/CalendarEventPopover';
+import { gcalToItem } from '@/hooks/useCalendarData';
+import { cn } from '@/lib/utils';
 
 function formatDuration(startStr: string, endStr: string): string {
   const start = parseISO(startStr);
@@ -17,9 +20,24 @@ function formatDuration(startStr: string, endStr: string): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+function isEventNow(event: { start: { dateTime?: string }; end: { dateTime?: string } }, now: Date): boolean {
+  if (!event.start.dateTime || !event.end.dateTime) return false;
+  return isWithinInterval(now, {
+    start: parseISO(event.start.dateTime),
+    end: parseISO(event.end.dateTime),
+  });
+}
+
 export function GCalTodayEvents() {
   const navigate = useNavigate();
   const { isConnected, isLoading: isLoadingConnection } = useGCalConnection();
+  const [now, setNow] = useState(new Date());
+
+  // Update "now" every minute for live NOW badge
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
@@ -88,8 +106,8 @@ export function GCalTodayEvents() {
           <p className="text-xs text-muted-foreground">Brak zaplanowanych spotkań</p>
         </div>
       ) : (
-        <div>
-          {events.map((event) => {
+        <div className="relative pl-6">
+          {events.map((event, index) => {
             const startTime = event.start.dateTime
               ? format(parseISO(event.start.dateTime), 'HH:mm')
               : 'Cały dzień';
@@ -97,31 +115,51 @@ export function GCalTodayEvents() {
               event.start.dateTime && event.end.dateTime
                 ? formatDuration(event.start.dateTime, event.end.dateTime)
                 : null;
+            const happening = isEventNow(event, now);
+            const isLast = index === events.length - 1;
+            const calendarItem = gcalToItem(event);
 
             return (
-              <div
-                key={event.id}
-                className="flex items-center gap-3 py-2.5 border-b border-border last:border-0"
-              >
-                <span className="text-xs font-mono text-muted-foreground w-14 shrink-0 text-right">
-                  {startTime}
-                </span>
-                <span
-                  className="w-1 h-8 rounded-full shrink-0"
+              <div key={event.id} className="relative pb-3 last:pb-0">
+                {/* Timeline line */}
+                {!isLast && (
+                  <div className="absolute left-[7px] top-6 bottom-0 w-0.5 bg-border" />
+                )}
+
+                {/* Timeline dot */}
+                <div
+                  className={cn(
+                    'absolute left-0 top-1.5 w-[16px] h-[16px] rounded-full border-2 border-background shadow-sm shrink-0',
+                    happening && 'ring-2 ring-primary/40 animate-pulse'
+                  )}
                   style={{ backgroundColor: event.color }}
                 />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{event.summary}</p>
-                  {event.location && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      {event.location}
-                    </p>
-                  )}
-                </div>
-                {duration && (
-                  <span className="text-xs text-muted-foreground shrink-0">{duration}</span>
-                )}
+
+                {/* Event content */}
+                <CalendarEventPopover item={calendarItem}>
+                  <button className="w-full text-left pl-4 cursor-pointer hover:bg-muted/30 rounded-lg py-1 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">
+                        {startTime}
+                      </span>
+                      <p className="text-sm font-medium truncate flex-1">{event.summary}</p>
+                      {happening && (
+                        <Badge className="text-[10px] bg-primary/10 text-primary border-0 shrink-0">
+                          TERAZ
+                        </Badge>
+                      )}
+                      {duration && !happening && (
+                        <span className="text-xs text-muted-foreground shrink-0">{duration}</span>
+                      )}
+                    </div>
+                    {event.location && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate ml-12 mt-0.5">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        {event.location}
+                      </p>
+                    )}
+                  </button>
+                </CalendarEventPopover>
               </div>
             );
           })}

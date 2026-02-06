@@ -2887,6 +2887,61 @@ export type Database = {
           },
         ]
       }
+      gcal_event_links: {
+        Row: {
+          created_at: string
+          director_id: string
+          gcal_calendar_id: string
+          gcal_event_id: string
+          id: string
+          linked_id: string
+          linked_type: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          director_id: string
+          gcal_calendar_id: string
+          gcal_event_id: string
+          id?: string
+          linked_id: string
+          linked_type: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          director_id?: string
+          gcal_calendar_id?: string
+          gcal_event_id?: string
+          id?: string
+          linked_id?: string
+          linked_type?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gcal_event_links_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gcal_event_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "gcal_event_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gcal_tokens: {
         Row: {
           access_token: string
