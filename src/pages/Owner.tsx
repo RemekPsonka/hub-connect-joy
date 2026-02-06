@@ -39,16 +39,19 @@ import AddUserModal from '@/components/owner/AddUserModal';
 import EditUserModal from '@/components/owner/EditUserModal';
 import { AssistantsList } from '@/components/owner/AssistantsList';
 import { DealTeamsManager } from '@/components/owner/DealTeamsManager';
+import { RoleAuditLog } from '@/components/owner/RoleAuditLog';
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'Właściciel',
   admin: 'Administrator',
+  sgu: 'SGU',
   director: 'Dyrektor',
 };
 
 const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   owner: 'default',
   admin: 'secondary',
+  sgu: 'secondary',
   director: 'outline',
 };
 
@@ -95,9 +98,10 @@ export default function Owner() {
     return <Navigate to="/" replace />;
   }
 
-  const getHighestRole = (roles: AppRole[]): AppRole => {
+const getHighestRole = (roles: AppRole[]): AppRole => {
     if (roles.includes('owner')) return 'owner';
     if (roles.includes('admin')) return 'admin';
+    if (roles.includes('sgu')) return 'sgu';
     return 'director';
   };
 
@@ -198,6 +202,12 @@ export default function Owner() {
                                   Administrator
                                 </div>
                               </SelectItem>
+                              <SelectItem value="sgu">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4" />
+                                  SGU
+                                </div>
+                              </SelectItem>
                               <SelectItem value="director">
                                 <div className="flex items-center gap-2">
                                   <Users className="h-4 w-4" />
@@ -273,6 +283,9 @@ export default function Owner() {
 
       {/* Deal Teams Section */}
       <DealTeamsManager />
+
+      {/* Role Audit Log Section */}
+      <RoleAuditLog />
 
       {/* Add User Modal */}
       <AddUserModal 

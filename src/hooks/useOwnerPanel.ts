@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-export type AppRole = 'owner' | 'admin' | 'director';
+export type AppRole = 'owner' | 'admin' | 'sgu' | 'director';
 
 export interface TenantUser {
   id: string;

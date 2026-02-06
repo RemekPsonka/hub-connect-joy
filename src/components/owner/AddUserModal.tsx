@@ -101,6 +101,7 @@ export default function AddUserModal({ isOpen, onClose }: AddUserModalProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Administrator</SelectItem>
+                <SelectItem value="sgu">SGU</SelectItem>
                 <SelectItem value="director">Dyrektor</SelectItem>
               </SelectContent>
             </Select>
