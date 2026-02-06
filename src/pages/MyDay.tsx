@@ -280,8 +280,15 @@ export default function MyDay() {
                     className="flex items-center gap-3 py-2 border-b border-border last:border-0"
                   >
                     {getActivityIcon(entry.activity_type)}
-                    <p className="text-sm text-foreground flex-1 min-w-0 truncate">
-                      {entry.description || `Aktywność: ${entry.activity_type}`}
+                    <p className="text-sm text-foreground flex-1 min-w-0">
+                      <span className="truncate block">
+                        {entry.description || `Aktywność: ${entry.activity_type}`}
+                      </span>
+                      {entry.contacts?.full_name && (
+                        <span className="text-xs text-muted-foreground">
+                          {entry.contacts.full_name}
+                        </span>
+                      )}
                     </p>
                     <span className="text-xs text-muted-foreground shrink-0">
                       {formatDistanceToNow(new Date(entry.created_at), {
