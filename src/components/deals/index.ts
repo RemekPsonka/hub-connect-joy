@@ -8,3 +8,6 @@ export { DealActivitiesTimeline } from './DealActivitiesTimeline';
 export { DealProductsCard } from './DealProductsCard';
 export { KanbanColumn } from './KanbanColumn';
 export { DraggableDealCard } from './DraggableDealCard';
+export { DealOverview } from './DealOverview';
+export { DealProducts } from './DealProducts';
+export { DealTimeline } from './DealTimeline';
