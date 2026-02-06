@@ -1,110 +1,156 @@
 
 
-# Plan: Aktualizacja schematu tabeli deal_stages
+# Plan: Tabela Deal Products (Produkty w Deal)
 
 ## Cel
-Rozszerzenie istniejącej tabeli `deal_stages` o dodatkowe pola i automatyczne tworzenie etapów dla nowych tenantów.
+Dodanie możliwości zarządzania produktami/pozycjami w ramach pojedynczego deala, z automatycznym obliczaniem wartości.
 
 ---
 
-## Analiza różnic
+## Analiza schematu
 
-| Pole | Obecnie | Proponowane | Decyzja |
-|------|---------|-------------|---------|
-| `description` | ❌ | ✅ | Dodać |
-| `probability_default` | ❌ | ✅ | Dodać |
-| `is_active` | ❌ | ✅ | Dodać |
-| `updated_at` | ❌ | ✅ | Dodać |
-| `is_closed_won` | ✅ | ❌ | **Zachować** (używane w kodzie) |
-| `is_closed_lost` | ✅ | ❌ | **Zachować** (używane w kodzie) |
-| Trigger na `tenants` | ❌ | ✅ | Dodać |
+Proponowany schemat zawiera kolumnę `GENERATED ALWAYS AS`:
+
+```sql
+total_price DECIMAL(15, 2) GENERATED ALWAYS AS (quantity * unit_price) STORED
+```
+
+Jest to wspierane przez PostgreSQL i automatycznie oblicza wartość wiersza.
 
 ---
 
 ## Krok 1: Migracja bazy danych
 
 ```sql
--- Dodanie nowych kolumn do deal_stages
-ALTER TABLE public.deal_stages
-ADD COLUMN IF NOT EXISTS description TEXT,
-ADD COLUMN IF NOT EXISTS probability_default INTEGER DEFAULT 50,
-ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true,
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE TABLE public.deal_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
+  
+  name TEXT NOT NULL,
+  description TEXT,
+  quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,
+  unit_price DECIMAL(15, 2) NOT NULL,
+  total_price DECIMAL(15, 2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+  
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
--- Trigger dla updated_at
-CREATE TRIGGER update_deal_stages_updated_at
-  BEFORE UPDATE ON public.deal_stages
-  FOR EACH ROW
-  EXECUTE FUNCTION public.update_updated_at_column();
+CREATE INDEX idx_deal_products_deal ON deal_products(deal_id);
+```
 
--- Funkcja tworzenia domyślnych etapów przy nowym tenancie
-CREATE OR REPLACE FUNCTION public.create_default_deal_stages()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.deal_stages 
-    (tenant_id, name, color, position, probability_default, is_closed_won, is_closed_lost) 
-  VALUES
-    (NEW.id, 'Lead', '#6366f1', 1, 10, false, false),
-    (NEW.id, 'Kwalifikacja', '#8b5cf6', 2, 25, false, false),
-    (NEW.id, 'Propozycja', '#ec4899', 3, 50, false, false),
-    (NEW.id, 'Negocjacje', '#f59e0b', 4, 75, false, false),
-    (NEW.id, 'Zamknięty - Wygrany', '#10b981', 5, 100, true, false),
-    (NEW.id, 'Zamknięty - Przegrany', '#ef4444', 6, 0, false, true);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+### RLS (Row Level Security)
 
--- Trigger na tabeli tenants
-CREATE TRIGGER trigger_create_default_deal_stages
-  AFTER INSERT ON public.tenants
-  FOR EACH ROW
-  EXECUTE FUNCTION public.create_default_deal_stages();
+Dostęp przez relację do `deals`:
+
+```sql
+ALTER TABLE public.deal_products ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "tenant_access" ON public.deal_products
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+  );
 ```
 
 ---
 
-## Krok 2: Aktualizacja typów TypeScript
+## Krok 2: TypeScript interface
 
-Plik: `src/hooks/useDeals.ts`
+Nowy interface w `src/hooks/useDeals.ts`:
 
 ```typescript
-export interface DealStage {
+export interface DealProduct {
   id: string;
-  tenant_id: string;
+  deal_id: string;
   name: string;
-  description: string | null;      // nowe
-  position: number;
-  color: string;
-  probability_default: number;      // nowe
-  is_active: boolean;               // nowe
-  is_closed_won: boolean;
-  is_closed_lost: boolean;
+  description: string | null;
+  quantity: number;
+  unit_price: number;
+  total_price: number; // obliczane automatycznie przez DB
   created_at: string;
-  updated_at: string;               // nowe
 }
 ```
 
 ---
 
-## Krok 3: Usunięcie ręcznego seedowania
+## Krok 3: Hooki CRUD
 
-Ponieważ trigger automatycznie utworzy etapy dla nowego tenanta, funkcja `seed_deal_stages_for_tenant` może zostać zachowana jako backup dla istniejących tenantów bez etapów.
+Nowe hooki w `src/hooks/useDeals.ts`:
+
+| Hook | Opis |
+|------|------|
+| `useDealProducts(dealId)` | Pobierz produkty dla deala |
+| `useCreateDealProduct()` | Dodaj produkt |
+| `useUpdateDealProduct()` | Edytuj produkt |
+| `useDeleteDealProduct()` | Usuń produkt |
 
 ---
 
-## Podsumowanie zmian
+## Krok 4: Komponent UI
 
-| Plik / Zasób | Akcja |
-|--------------|-------|
-| Migracja SQL | **Utworzyć** - ALTER TABLE + trigger |
-| `src/hooks/useDeals.ts` | **Edytować** - rozszerzyć interface DealStage |
+Nowy plik: `src/components/deals/DealProductsCard.tsx`
+
+Funkcjonalności:
+- Lista produktów z tabelą (Nazwa, Ilość, Cena jednostkowa, Suma)
+- Przycisk "Dodaj produkt" otwierający inline formularz lub modal
+- Możliwość edycji i usuwania pozycji
+- Podsumowanie całkowitej wartości produktów
+- Przycisk "Aktualizuj wartość deal" (synchronizacja z `deals.value`)
+
+---
+
+## Krok 5: Integracja z DealDetail.tsx
+
+Dodanie komponentu `DealProductsCard` do strony szczegółów deala:
+
+```tsx
+<DealProductsCard 
+  dealId={deal.id} 
+  currency={deal.currency}
+  onValueChange={(total) => handleUpdateDealValue(total)}
+/>
+```
+
+---
+
+## Pliki do utworzenia/modyfikacji
+
+| Plik | Akcja |
+|------|-------|
+| Migracja SQL | **Utworzyć** - CREATE TABLE + RLS |
+| `src/hooks/useDeals.ts` | **Edytować** - dodać interface i hooki |
+| `src/components/deals/DealProductsCard.tsx` | **Utworzyć** - komponent UI |
+| `src/components/deals/index.ts` | **Edytować** - eksport nowego komponentu |
+| `src/pages/DealDetail.tsx` | **Edytować** - dodać sekcję produktów |
+
+---
+
+## Wizualizacja komponentu
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│ Produkty                                    [+ Dodaj]  │
+├─────────────────────────────────────────────────────────┤
+│ Nazwa          │ Ilość │ Cena jedn. │ Suma    │ Akcje  │
+├─────────────────────────────────────────────────────────┤
+│ Licencja CRM   │   10  │  1 000 PLN │ 10 000  │ ✏️ 🗑️  │
+│ Wdrożenie      │    1  │ 15 000 PLN │ 15 000  │ ✏️ 🗑️  │
+│ Szkolenie      │    2  │  2 500 PLN │  5 000  │ ✏️ 🗑️  │
+├─────────────────────────────────────────────────────────┤
+│                        RAZEM: │ 30 000 PLN            │
+│                [Ustaw jako wartość deal]              │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Korzyści
 
-- Nowe pola `description` i `probability_default` pozwalają na dokładniejszą konfigurację etapów
-- `is_active` umożliwia dezaktywację etapów bez usuwania
-- Automatyczny trigger przy tworzeniu tenanta eliminuje potrzebę ręcznego seedowania
-- Zachowanie `is_closed_won`/`is_closed_lost` zapewnia kompatybilność z istniejącym kodem
+- Szczegółowy breakdown wartości deala na produkty/usługi
+- Automatyczne obliczanie sum dzięki `GENERATED COLUMN`
+- Możliwość synchronizacji sumy produktów z wartością główną deala
+- Lepsza kontrola nad wyceną i ofertowaniem
 
