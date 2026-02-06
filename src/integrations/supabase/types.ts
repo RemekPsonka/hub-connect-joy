@@ -2001,6 +2001,7 @@ export type Database = {
           id: string
           new_value: string | null
           old_value: string | null
+          user_id: string | null
         }
         Insert: {
           activity_type: string
@@ -2012,6 +2013,7 @@ export type Database = {
           id?: string
           new_value?: string | null
           old_value?: string | null
+          user_id?: string | null
         }
         Update: {
           activity_type?: string
@@ -2023,6 +2025,7 @@ export type Database = {
           id?: string
           new_value?: string | null
           old_value?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
