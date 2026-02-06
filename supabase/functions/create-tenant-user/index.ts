@@ -6,8 +6,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const requestSchema = z.object({
   email: z.string().email("Nieprawidlowy email"),
   fullName: z.string().min(2, "Imie min. 2 znaki").max(100, "Imie max 100 znakow"),
-  role: z.enum(["director", "assistant"], { 
-    errorMap: () => ({ message: "Rola musi byc director lub assistant" }) 
+  role: z.enum(["director", "assistant", "admin"], { 
+    errorMap: () => ({ message: "Rola musi byc director, assistant lub admin" }) 
   }),
   tenantId: z.string().uuid("tenantId musi byc poprawnym UUID"),
 });
