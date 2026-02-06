@@ -1,97 +1,137 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
+import { useUpcomingConsultations } from '@/hooks/useConsultations';
+import { useProjects, getStatusConfig } from '@/hooks/useProjects';
+import { useContacts } from '@/hooks/useContacts';
 import { StatCard } from '@/components/ui/stat-card';
 import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { QuickActions } from '@/components/dashboard/QuickActions';
-import { RelationshipAlerts } from '@/components/dashboard/RelationshipAlerts';
-import { AIRecommendations } from '@/components/dashboard/AIRecommendations';
-import { TodaysPriorities } from '@/components/dashboard/TodaysPriorities';
-import { DailySerendipity } from '@/components/dashboard/DailySerendipity';
-import { UpcomingConsultations } from '@/components/dashboard/UpcomingConsultations';
-import { PendingMatches } from '@/components/dashboard/PendingMatches';
-import { NetworkOverview } from '@/components/dashboard/NetworkOverview';
-import { MeetingsOverview } from '@/components/dashboard/MeetingsOverview';
-import { ContactsToRenew } from '@/components/dashboard/ContactsToRenew';
-import { AnalyticsOverview } from '@/components/dashboard/AnalyticsOverview';
-import { KPITasksWidget } from '@/components/dashboard/KPITasksWidget';
-import { MyTasksWidget } from '@/components/dashboard/MyTasksWidget';
-import { TeamTasksWidget } from '@/components/dashboard/TeamTasksWidget';
-import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ContactModal } from '@/components/contacts/ContactModal';
+import {
+  Users,
+  CheckSquare,
+  Calendar,
+  Heart,
+  FolderOpen,
+  UserPlus,
+} from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { pl } from 'date-fns/locale';
+
+const LazyActivityChart = lazy(
+  () => import('@/components/dashboard/DashboardActivityChart'),
+);
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { director } = useAuth();
   const { data: dashboardStats, isLoading } = useDashboardStats();
+  const { data: upcomingConsultations, isLoading: isLoadingConsultations } =
+    useUpcomingConsultations(5);
+  const { data: allProjects, isLoading: isLoadingProjects } = useProjects();
+  const { data: contactsResult, isLoading: isLoadingContacts } = useContacts({
+    sortBy: 'created_at',
+    sortOrder: 'desc',
+    pageSize: 5,
+  });
+
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('pl-PL', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
-  // Computed values from MV
-  const stats = {
-    contacts: dashboardStats?.total_contacts ?? 0,
-    todayMeetings: dashboardStats?.today_consultations ?? 0,
-    pendingTasks: dashboardStats?.pending_tasks ?? 0,
-    activeNeeds: dashboardStats?.active_needs ?? 0,
-  };
-
   const firstName = director?.full_name?.split(' ')[0] || 'Użytkowniku';
-  const hasNoContacts = stats.contacts === 0;
+  const formattedDate = new Date().toLocaleDateString('pl-PL', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
-  return (
-    <div className="space-y-6 max-w-[1400px] mx-auto">
-      {/* Welcome section */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Witaj, {firstName}!
-        </h1>
-        <p className="text-sm text-muted-foreground capitalize">
-          {formatDate(new Date())}
-        </p>
+  // ── Computed stats ──────────────────────────────
+  const totalContacts = dashboardStats?.total_contacts ?? 0;
+  const pendingTasks = dashboardStats?.pending_tasks ?? 0;
+  const todayConsultations = dashboardStats?.today_consultations ?? 0;
+
+  const healthy = dashboardStats?.healthy_contacts ?? 0;
+  const warning = dashboardStats?.warning_contacts ?? 0;
+  const critical = dashboardStats?.critical_contacts ?? 0;
+  const healthTotal = healthy + warning + critical;
+  const healthPercent =
+    healthTotal > 0 ? Math.round((healthy / healthTotal) * 100) : 0;
+
+  const prevCount = dashboardStats?.contacts_prev_30d ?? 0;
+  const newCount = dashboardStats?.new_contacts_30d ?? 0;
+  const contactsTrend =
+    prevCount > 0 ? Math.round(((newCount - prevCount) / prevCount) * 100) : 0;
+
+  // ── Filtered projects ───────────────────────────
+  const activeStatuses = ['new', 'in_progress', 'analysis'];
+  const activeProjects = (allProjects ?? [])
+    .filter((p) => activeStatuses.includes(p.status ?? ''))
+    .slice(0, 5);
+
+  // ── Recent contacts ─────────────────────────────
+  const recentContacts = contactsResult?.data ?? [];
+
+  const hasNoContacts = totalContacts === 0;
+
+  // ── Loading skeleton ────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-[1400px] mx-auto">
+        {/* Welcome */}
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Witaj, {firstName}!
+          </h1>
+          <p className="text-sm text-muted-foreground capitalize">
+            {formattedDate}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-6 lg:grid-cols-12 gap-4">
+          {/* Top: 4 stat skeletons */}
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="col-span-1 sm:col-span-3">
+              <SkeletonCard variant="stat" />
+            </div>
+          ))}
+
+          {/* Middle */}
+          <div className="col-span-1 sm:col-span-6 lg:col-span-8">
+            <SkeletonCard variant="data" lines={6} />
+          </div>
+          <div className="col-span-1 sm:col-span-6 lg:col-span-4">
+            <SkeletonCard variant="list" lines={5} />
+          </div>
+
+          {/* Bottom */}
+          <div className="col-span-1 sm:col-span-6">
+            <SkeletonCard variant="data" lines={5} />
+          </div>
+          <div className="col-span-1 sm:col-span-6">
+            <SkeletonCard variant="data" lines={5} />
+          </div>
+        </div>
       </div>
+    );
+  }
 
-      {/* Stats cards — 4 columns */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Kontakty"
-          value={stats.contacts}
-          icon={Users}
-          loading={isLoading}
-        />
-        <StatCard
-          title="Dzisiejsze konsultacje"
-          value={stats.todayMeetings}
-          icon={Calendar}
-          loading={isLoading}
-        />
-        <StatCard
-          title="Oczekujące zadania"
-          value={stats.pendingTasks}
-          icon={CheckSquare}
-          loading={isLoading}
-        />
-        <StatCard
-          title="Aktywne potrzeby"
-          value={stats.activeNeeds}
-          icon={Target}
-          loading={isLoading}
-        />
-      </div>
-
-      {/* Quick actions */}
-      <QuickActions />
-
-      {/* Empty state */}
-      {!isLoading && hasNoContacts && (
+  // ── Empty state (no contacts) ───────────────────
+  if (hasNoContacts) {
+    return (
+      <div className="space-y-6 max-w-[1400px] mx-auto">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Witaj, {firstName}!
+          </h1>
+          <p className="text-sm text-muted-foreground capitalize">
+            {formattedDate}
+          </p>
+        </div>
         <DataCard>
           <EmptyState
             icon={UserPlus}
@@ -104,47 +144,251 @@ export default function Dashboard() {
             }}
           />
         </DataCard>
-      )}
+        <ContactModal
+          isOpen={isContactModalOpen}
+          onClose={() => setIsContactModalOpen(false)}
+        />
+      </div>
+    );
+  }
 
-      {/* AI Widgets - show only when there are contacts */}
-      {!isLoading && !hasNoContacts && (
-        <>
-          {/* Task widgets — KPI, My Tasks, Team Tasks */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <KPITasksWidget />
-            <MyTasksWidget />
-            <TeamTasksWidget />
-          </div>
-          
-          {/* Main grid — Konsultacje + Spotkania */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UpcomingConsultations />
-            <MeetingsOverview />
-          </div>
+  return (
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      {/* Welcome */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">
+          Witaj, {firstName}!
+        </h1>
+        <p className="text-sm text-muted-foreground capitalize">
+          {formattedDate}
+        </p>
+      </div>
 
-          {/* Dopasowania + Sieć */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <PendingMatches />
-            <NetworkOverview />
-          </div>
-          
-          {/* Analityka — full width */}
-          <AnalyticsOverview />
-          
-          {/* Zarządzanie relacjami — 3 columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <TodaysPriorities />
-            <AIRecommendations />
-            <RelationshipAlerts />
-          </div>
-          
-          {/* Bottom — mniej pilne */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <DailySerendipity />
-            <ContactsToRenew />
-          </div>
-        </>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-6 lg:grid-cols-12 gap-4">
+        {/* ── Top Row: 4 StatCards ──────────────────── */}
+        <div className="col-span-1 sm:col-span-3">
+          <StatCard
+            label="Kontakty"
+            value={totalContacts}
+            icon={Users}
+            color="blue"
+            trend={
+              contactsTrend !== 0
+                ? { value: contactsTrend, label: 'vs. mies.' }
+                : undefined
+            }
+          />
+        </div>
+        <div className="col-span-1 sm:col-span-3">
+          <StatCard
+            label="Zadania w toku"
+            value={pendingTasks}
+            icon={CheckSquare}
+            color="violet"
+          />
+        </div>
+        <div className="col-span-1 sm:col-span-3">
+          <StatCard
+            label="Spotkania dziś"
+            value={todayConsultations}
+            icon={Calendar}
+            color="emerald"
+          />
+        </div>
+        <div className="col-span-1 sm:col-span-3">
+          <StatCard
+            label="Średnia relacji"
+            value={`${healthPercent}%`}
+            icon={Heart}
+            color="amber"
+          />
+        </div>
+
+        {/* ── Middle Row: Activity Chart + Upcoming ── */}
+        <div className="col-span-1 sm:col-span-6 lg:col-span-8">
+          <DataCard title="Aktywność tygodnia">
+            <Suspense fallback={<SkeletonCard variant="data" lines={6} />}>
+              <LazyActivityChart />
+            </Suspense>
+          </DataCard>
+        </div>
+
+        <div className="col-span-1 sm:col-span-6 lg:col-span-4">
+          <DataCard
+            title="Nadchodzące spotkania"
+            isLoading={isLoadingConsultations}
+            footer={
+              upcomingConsultations && upcomingConsultations.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-muted-foreground"
+                  onClick={() => navigate('/consultations')}
+                >
+                  Zobacz konsultacje
+                </Button>
+              ) : undefined
+            }
+          >
+            {!upcomingConsultations || upcomingConsultations.length === 0 ? (
+              <EmptyState
+                icon={Calendar}
+                title="Brak spotkań"
+                description="Spokojny dzień!"
+                className="border-0 shadow-none"
+              />
+            ) : (
+              <div className="space-y-1">
+                {upcomingConsultations.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => navigate(`/consultations/${c.id}`)}
+                    className="flex gap-3 w-full text-left rounded-lg p-2 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-violet-500 mt-2 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {c.contacts?.full_name || 'Nieznany kontakt'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(c.scheduled_at), 'd MMM, HH:mm', {
+                          locale: pl,
+                        })}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </DataCard>
+        </div>
+
+        {/* ── Bottom Row: Projects + Recent Contacts ── */}
+        <div className="col-span-1 sm:col-span-6">
+          <DataCard
+            title="Projekty w toku"
+            isLoading={isLoadingProjects}
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => navigate('/projects')}
+              >
+                Zobacz wszystkie
+              </Button>
+            }
+          >
+            {activeProjects.length === 0 ? (
+              <EmptyState
+                icon={FolderOpen}
+                title="Brak projektów"
+                description="Utwórz swój pierwszy projekt."
+                actionLabel="Utwórz projekt"
+                onAction={() => navigate('/projects')}
+                className="border-0 shadow-none"
+              />
+            ) : (
+              <div className="divide-y divide-border">
+                {activeProjects.map((project) => {
+                  const statusCfg = getStatusConfig(project.status ?? 'new');
+                  return (
+                    <button
+                      key={project.id}
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      className="flex items-center justify-between w-full py-2.5 text-left hover:bg-muted/30 transition-colors rounded-md px-1"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: project.color || '#7C3AED',
+                          }}
+                        />
+                        <span className="text-sm font-medium truncate">
+                          {project.name}
+                        </span>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={`text-[10px] shrink-0 ${statusCfg.color}`}
+                      >
+                        {statusCfg.label}
+                      </Badge>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </DataCard>
+        </div>
+
+        <div className="col-span-1 sm:col-span-6">
+          <DataCard
+            title="Ostatnio dodane kontakty"
+            isLoading={isLoadingContacts}
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => navigate('/contacts')}
+              >
+                Wszyscy
+              </Button>
+            }
+          >
+            {recentContacts.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Brak kontaktów"
+                description="Dodaj pierwszy kontakt, aby go tu zobaczyć."
+                className="border-0 shadow-none"
+              />
+            ) : (
+              <div className="divide-y divide-border">
+                {recentContacts.map((contact) => {
+                  const initials = contact.full_name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase();
+                  return (
+                    <button
+                      key={contact.id}
+                      onClick={() => navigate(`/contacts/${contact.id}`)}
+                      className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-muted/30 transition-colors rounded-md px-1"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {contact.full_name}
+                        </p>
+                        {contact.company && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {contact.company}
+                          </p>
+                        )}
+                      </div>
+                      {contact.created_at && (
+                        <span className="text-xs text-muted-foreground/70 shrink-0">
+                          {formatDistanceToNow(new Date(contact.created_at), {
+                            addSuffix: true,
+                            locale: pl,
+                          })}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </DataCard>
+        </div>
+      </div>
 
       <ContactModal
         isOpen={isContactModalOpen}
