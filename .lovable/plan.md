@@ -1,134 +1,236 @@
 
 
-# Plan: Tabele deal_team_assignments + deal_team_activity_log + trigger kategorii
+# Plan: Typy TypeScript + Hooki: useDealsTeam + useDealsTeamContacts
 
 ## Cel
-Utworzenie ostatnich 2 tabel modułu "Zespół Deals" oraz triggera automatycznego logowania zmian kategorii. Po tej migracji baza danych modułu jest **KOMPLETNA (7/7 tabel)**.
+Utworzenie warstwy danych React dla modułu Deal Teams: plik typów TypeScript oraz 2 hooki z React Query do zarządzania zespołami i kontaktami dealowymi.
 
-## Stan obecny
-- Tabele `deal_team_assignments`, `deal_team_activity_log` **nie istnieją** — będą utworzone
-- Funkcje `is_deal_team_member()`, `get_current_director_id()` **istnieją** — gotowe do użycia
-- Trigger `log_deal_category_change` **nie istnieje** — zostanie utworzony
+## Analiza istniejącego kodu
 
-## Jedna migracja SQL
+### Wzorce z projektu
+Przeanalizowano `useContacts.ts` i `useDealTeams.ts`:
+- Import: `useQuery`, `useMutation`, `useQueryClient` z `@tanstack/react-query`
+- Import: `supabase` z `@/integrations/supabase/client`
+- Import: `useAuth` z `@/contexts/AuthContext`
+- Import: `toast` z `sonner`
+- Pattern: `tenantId = director?.tenant_id || assistant?.tenant_id`
+- Pattern: `enabled: !!tenantId && !!directorId`
+- Pattern: `staleTime: 5 * 60 * 1000` dla stabilnych danych
 
-### Tabela 1: `deal_team_assignments`
+### Istniejący hook `useDealTeams.ts`
+Już zawiera podstawowe operacje na zespołach:
+- `useDealTeams()` — wszystkie zespoły w tenant
+- `useMyDealTeams()` — zespoły zalogowanego directora
+- `useCreateDealTeam()` / `useUpdateDealTeam()` / `useDeleteDealTeam()`
+- `useDealTeamWithMembers()` — zespół z członkami
 
-Lekkie zadania operacyjne przypisane do członków zespołu w kontekście kontaktu dealowego.
+**Wniosek**: Nie duplikujemy tego hooka — rozszerzamy o brakujące funkcje członków.
 
-| Kolumna | Typ | Opis |
-|---------|-----|------|
-| `id` | UUID PK | Identyfikator |
-| `team_contact_id` | UUID NOT NULL | FK → deal_team_contacts |
-| `team_id` | UUID NOT NULL | FK → deal_teams |
-| `tenant_id` | UUID NOT NULL | Izolacja multi-tenant |
-| `assigned_to` | UUID NOT NULL | Kto ma wykonać |
-| `assigned_by` | UUID NOT NULL | Kto zlecił |
-| `title` | TEXT NOT NULL | Tytuł zadania |
-| `description` | TEXT | Szczegóły |
-| `due_date` | DATE | Termin wykonania |
-| `status` | TEXT | 'pending' / 'in_progress' / 'done' / 'cancelled' |
-| `priority` | TEXT | 'low' / 'medium' / 'high' / 'urgent' |
-| `completed_at` | TIMESTAMPTZ | Data zakończenia |
-| `created_at` | TIMESTAMPTZ | Data utworzenia |
+## Pliki do utworzenia
 
-### Tabela 2: `deal_team_activity_log`
+### 1. `src/types/dealTeam.ts` — Typy TypeScript
 
-Append-only log aktywności zespołu (bez UPDATE/DELETE).
-
-| Kolumna | Typ | Opis |
-|---------|-----|------|
-| `id` | UUID PK | Identyfikator |
-| `team_id` | UUID NOT NULL | FK → deal_teams |
-| `tenant_id` | UUID NOT NULL | Izolacja |
-| `team_contact_id` | UUID | FK → deal_team_contacts (opcjonalne) |
-| `prospect_id` | UUID | FK → deal_team_prospects (opcjonalne) |
-| `actor_id` | UUID NOT NULL | Kto wykonał akcję |
-| `action` | TEXT NOT NULL | Typ akcji |
-| `old_value` | JSONB | Poprzednia wartość |
-| `new_value` | JSONB | Nowa wartość |
-| `note` | TEXT | Opcjonalna notatka |
-| `created_at` | TIMESTAMPTZ | Data utworzenia |
-
-**Dozwolone akcje**: `category_changed`, `status_changed`, `assigned`, `meeting_scheduled`, `weekly_status`, `prospect_converted`, `note_added`, `assignment_created`, `assignment_completed`, `contact_added`, `contact_removed`, `prospect_created`
-
-### Polityki RLS
-
-**deal_team_assignments** — pełny CRUD dla członków zespołu:
-```sql
-USING (tenant_id = get_current_tenant_id() AND is_deal_team_member(team_id))
-```
-
-**deal_team_activity_log** — tylko SELECT i INSERT (append-only):
-```sql
--- SELECT: członek zespołu
--- INSERT: członek zespołu
--- BRAK UPDATE/DELETE — log niezmienny
-```
-
-### Trigger: `log_deal_category_change`
-
-Automatycznie loguje zmianę kategorii w `deal_team_contacts`:
-
-```sql
-IF OLD.category IS DISTINCT FROM NEW.category THEN
-  1. INSERT INTO deal_team_activity_log (action='category_changed')
-  2. NEW.category_changed_at = now()
-END IF
-```
-
-### Indeksy
-
-| Tabela | Indeks | Kolumny | Cel |
-|--------|--------|---------|-----|
-| assignments | `idx_dta_assigned` | (assigned_to, status) | Moje zadania |
-| assignments | `idx_dta_contact` | (team_contact_id) | Zadania kontaktu |
-| assignments | `idx_dta_team_pending` | (team_id) WHERE status IN (...) | Otwarte w zespole |
-| activity_log | `idx_dtal_team` | (team_id, created_at DESC) | Historia zespołu |
-| activity_log | `idx_dtal_contact` | (team_contact_id, created_at DESC) | Historia kontaktu |
-| activity_log | `idx_dtal_prospect` | (prospect_id, created_at DESC) | Historia prospectu |
-
-## Przepływ danych
+Definiuje union types i interfejsy dla całego modułu Deal Teams:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  deal_team_assignments                                      │
-│  ├── Przypisanie: assigned_by → assigned_to                │
-│  ├── Statusy: pending → in_progress → done                 │
-│  └── Powiązane z: deal_team_contacts                       │
-└─────────────────────────────────────────────────────────────┘
+UNION TYPES:
+├── DealTeamRole: 'leader' | 'member' | 'viewer'
+├── DealCategory: 'hot' | 'top' | 'lead'
+├── DealContactStatus: 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified'
+├── DealPriority: 'low' | 'medium' | 'high' | 'urgent'
+├── ProspectStatus: 'searching' | 'found_connection' | 'intro_sent' | ...
+├── AssignmentStatus: 'pending' | 'in_progress' | 'done' | 'cancelled'
+└── CategoryRecommendation: 'keep' | 'promote' | 'demote' | 'close_won' | 'close_lost'
 
-┌─────────────────────────────────────────────────────────────┐
-│  deal_team_activity_log (append-only)                       │
-│  ├── TRIGGER: UPDATE deal_team_contacts.category           │
-│  │   → INSERT log + SET category_changed_at = now()        │
-│  └── Ręczne INSERT z aplikacji dla innych akcji            │
-└─────────────────────────────────────────────────────────────┘
+INTERFACES:
+├── DealTeamContact — kontakt dealowy z JOINami (contact, assigned_director)
+├── DealTeamContactStats — zagregowane statystyki zespołu
+├── DealTeamProspect — poszukiwany kontakt
+├── DealTeamWeeklyStatus — cotygodniowy raport
+├── DealTeamAssignment — zadanie operacyjne
+└── DealTeamActivityLogEntry — wpis w logu aktywności
 ```
 
-## Kompletna struktura modułu (7 tabel)
+### 2. `src/hooks/useDealsTeamMembers.ts` — Zarządzanie członkami
+
+Rozszerzenie funkcjonalności członków (nie duplikujemy istniejącego `useDealTeams.ts`):
 
 ```text
-deal_teams                    ← Zespoły
-deal_team_members             ← Członkowie zespołów
-deal_team_contacts            ← Kontakty HOT/TOP/LEAD
-deal_team_prospects           ← Poszukiwani (pre-CRM)
-deal_team_weekly_statuses     ← Cotygodniowe raporty
-deal_team_assignments         ← Zadania operacyjne (NOWA)
-deal_team_activity_log        ← Log aktywności (NOWA)
+QUERIES:
+├── useTeamMembers(teamId) — członkowie z JOIN directors
+└── useDirectorsByTenant() — wszyscy directors do wyboru
+
+MUTATIONS:
+├── useAddTeamMember() — dodaj directora do zespołu
+├── useRemoveTeamMember() — soft delete (is_active = false)
+└── useUpdateMemberRole() — zmiana roli (leader/member/viewer)
 ```
 
-## Pliki do modyfikacji
+### 3. `src/hooks/useDealsTeamContacts.ts` — Kontakty dealowe
 
-| Plik | Operacja | Opis |
-|------|----------|------|
-| Migracja SQL | Nowa | 2 tabele + RLS + trigger + indeksy |
+Główny hook do zarządzania kontaktami w zespole:
+
+```text
+QUERIES:
+├── useTeamContacts(teamId, category?) — lista z JOIN contacts
+├── useTeamContact(id) — pojedynczy kontakt
+└── useTeamContactStats(teamId) — statystyki (obliczane z danych)
+
+MUTATIONS:
+├── useAddContactToTeam() — dodaj kontakt CRM do zespołu
+├── useUpdateTeamContact() — edycja pól (category, status, assigned_to, ...)
+├── useRemoveContactFromTeam() — DELETE rekordu
+└── usePromoteContact() — zmiana kategorii z walidacją
+```
+
+## Szczegóły implementacji
+
+### Typ `DealTeamContact` z JOINami
+
+```typescript
+export interface DealTeamContact {
+  id: string;
+  team_id: string;
+  contact_id: string;
+  tenant_id: string;
+  category: DealCategory;
+  status: DealContactStatus;
+  assigned_to: string | null;
+  priority: DealPriority;
+  // ... pozostałe pola z tabeli
+  status_overdue: boolean;
+  
+  // JOIN z contacts
+  contact?: {
+    id: string;
+    full_name: string;
+    company: string | null;
+    position: string | null;
+    email: string | null;
+    phone: string | null;
+    city: string | null;
+  };
+  
+  // JOIN z directors (assigned_to)
+  assigned_director?: {
+    id: string;
+    full_name: string;
+  };
+}
+```
+
+### Query `useTeamContacts`
+
+```typescript
+const { data } = await supabase
+  .from('deal_team_contacts')
+  .select(`
+    *,
+    contact:contacts(id, full_name, company, position, email, phone, city)
+  `)
+  .eq('team_id', teamId)
+  .not('status', 'in', '("won","lost","disqualified")');
+
+// Uwaga: JOIN z directors przez FK logiczne może nie działać
+// Alternatywa: pobierz assigned_director osobno lub rozwiąż z listy członków
+```
+
+### Statystyki obliczane z danych
+
+```typescript
+export function useTeamContactStats(teamId: string) {
+  const { data: contacts = [] } = useTeamContacts(teamId);
+  
+  const stats = useMemo(() => ({
+    hot_count: contacts.filter(c => c.category === 'hot').length,
+    top_count: contacts.filter(c => c.category === 'top').length,
+    lead_count: contacts.filter(c => c.category === 'lead').length,
+    overdue_count: contacts.filter(c => c.status_overdue).length,
+    total_value: contacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
+    upcoming_meetings: contacts.filter(c => 
+      c.next_meeting_date && new Date(c.next_meeting_date) > new Date()
+    ).length,
+  }), [contacts]);
+  
+  return stats;
+}
+```
+
+### Mutacja `usePromoteContact` z walidacją
+
+```typescript
+export function usePromoteContact() {
+  return useMutation({
+    mutationFn: async ({ id, newCategory }: { id: string; newCategory: DealCategory }) => {
+      // Pobierz aktualny kontakt
+      const { data: contact } = await supabase
+        .from('deal_team_contacts')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      // Walidacja wymaganych pól
+      if (newCategory === 'top' && !contact.assigned_to) {
+        throw new Error('Promocja do TOP wymaga przypisania osoby odpowiedzialnej');
+      }
+      if (newCategory === 'hot' && !contact.next_meeting_date) {
+        throw new Error('Promocja do HOT wymaga zaplanowanego spotkania');
+      }
+      
+      // Aktualizacja kategorii
+      const { error } = await supabase
+        .from('deal_team_contacts')
+        .update({ category: newCategory })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts'] });
+      toast.success('Kategoria została zmieniona');
+    },
+  });
+}
+```
+
+## Query Keys
+
+```text
+deal-team-members     : ['deal-team-members', teamId]
+deal-team-contacts    : ['deal-team-contacts', teamId, category || 'all']
+deal-team-contact     : ['deal-team-contact', id]
+tenant-directors      : ['tenant-directors', tenantId]
+```
+
+## Cache Invalidation
+
+| Mutacja | Invalidate |
+|---------|------------|
+| useAddTeamMember | `['deal-team-members', teamId]` |
+| useRemoveTeamMember | `['deal-team-members', teamId]` |
+| useUpdateMemberRole | `['deal-team-members', teamId]` |
+| useAddContactToTeam | `['deal-team-contacts', teamId]` |
+| useUpdateTeamContact | `['deal-team-contacts']`, `['deal-team-contact', id]` |
+| useRemoveContactFromTeam | `['deal-team-contacts', teamId]` |
+| usePromoteContact | `['deal-team-contacts', teamId]` |
+
+## Struktura plików
+
+```text
+src/
+├── types/
+│   └── dealTeam.ts              ← NOWY: typy i interfejsy
+└── hooks/
+    ├── useDealTeams.ts          ← ISTNIEJĄCY (nie modyfikujemy)
+    ├── useDealsTeamMembers.ts   ← NOWY: zarządzanie członkami
+    └── useDealsTeamContacts.ts  ← NOWY: kontakty dealowe
+```
 
 ## Guardrails ✓
-- NIE modyfikuję istniejących 5 tabel modułu
-- NIE tworzę ponownie istniejących funkcji
-- NIE tworzę komponentów React
-- `deal_team_activity_log` jest append-only (brak UPDATE/DELETE policies)
-- Trigger używa `IS DISTINCT FROM` (bezpieczne dla NULL)
-- FK logiczne bez FOREIGN KEY constraints
+- NIE modyfikuję istniejącego `useDealTeams.ts`
+- NIE tworzę komponentów UI ani stron
+- NIE tworzę migracji SQL
+- Użycie `useAuth()` do pobrania `director.id` i `director.tenant_id`
+- Obsługa błędów przez `toast.error()` w `onError`
+- Fallback dla JOIN directors przez FK logiczne (rozwiązanie po stronie klienta)
 
