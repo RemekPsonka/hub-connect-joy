@@ -6,3 +6,5 @@ export { DealStageBadge } from './DealStageBadge';
 export { CreateDealModal } from './CreateDealModal';
 export { DealActivitiesTimeline } from './DealActivitiesTimeline';
 export { DealProductsCard } from './DealProductsCard';
+export { KanbanColumn } from './KanbanColumn';
+export { DraggableDealCard } from './DraggableDealCard';

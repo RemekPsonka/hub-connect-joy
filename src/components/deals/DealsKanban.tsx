@@ -1,8 +1,17 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  DragStartEvent,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { KanbanColumn } from './KanbanColumn';
 import { DealCard } from './DealCard';
-import { Deal, DealStage } from '@/hooks/useDeals';
-import { cn } from '@/lib/utils';
+import { Deal, DealStage, useMoveDeal } from '@/hooks/useDeals';
 
 interface DealsKanbanProps {
   deals: Deal[];
@@ -11,6 +20,17 @@ interface DealsKanbanProps {
 }
 
 export function DealsKanban({ deals, stages, isLoading }: DealsKanbanProps) {
+  const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
+  const moveDeal = useMoveDeal();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
   const dealsByStage = useMemo(() => {
     const map = new Map<string, Deal[]>();
     stages.forEach((stage) => {
@@ -25,9 +45,35 @@ export function DealsKanban({ deals, stages, isLoading }: DealsKanbanProps) {
     return map;
   }, [deals, stages]);
 
-  const getColumnTotal = (stageId: string) => {
-    const stageDeals = dealsByStage.get(stageId) || [];
-    return stageDeals.reduce((sum, deal) => sum + Number(deal.value), 0);
+  const handleDragStart = (event: DragStartEvent) => {
+    const deal = deals.find((d) => d.id === event.active.id);
+    setActiveDeal(deal || null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    setActiveDeal((prev) => {
+      if (prev && prev.id === active.id) {
+        return null;
+      }
+      return prev;
+    });
+
+    if (!over) return;
+
+    const dealId = active.id as string;
+    const newStageId = over.id as string;
+
+    // Find the deal and check if stage actually changed
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal || deal.stage_id === newStageId) return;
+
+    // Verify the target is a valid stage
+    const newStage = stages.find((s) => s.id === newStageId);
+    if (!newStage) return;
+
+    moveDeal.mutate({ dealId, stageId: newStageId });
   };
 
   if (stages.length === 0 && !isLoading) {
@@ -40,67 +86,30 @@ export function DealsKanban({ deals, stages, isLoading }: DealsKanbanProps) {
   }
 
   return (
-    <ScrollArea className="w-full">
-      <div className="flex gap-4 pb-4 min-w-max">
-        {stages.map((stage) => {
-          const stageDeals = dealsByStage.get(stage.id) || [];
-          const columnTotal = getColumnTotal(stage.id);
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <ScrollArea className="w-full">
+        <div className="flex gap-4 pb-4 min-w-max">
+          {stages.map((stage) => {
+            const stageDeals = dealsByStage.get(stage.id) || [];
+            return (
+              <KanbanColumn
+                key={stage.id}
+                stage={stage}
+                deals={stageDeals}
+              />
+            );
+          })}
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
 
-          return (
-            <div
-              key={stage.id}
-              className="flex flex-col w-[300px] shrink-0"
-            >
-              {/* Column Header */}
-              <div
-                className="rounded-t-lg p-3 border-b-2"
-                style={{
-                  backgroundColor: `${stage.color}15`,
-                  borderBottomColor: stage.color,
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: stage.color }}
-                    />
-                    <span className="font-medium text-sm">{stage.name}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full">
-                    {stageDeals.length}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {columnTotal.toLocaleString('pl-PL', {
-                    style: 'currency',
-                    currency: 'PLN',
-                  })}
-                </p>
-              </div>
-
-              {/* Column Content */}
-              <div
-                className={cn(
-                  "flex-1 min-h-[400px] p-2 space-y-2 rounded-b-lg border border-t-0",
-                  "bg-muted/30"
-                )}
-              >
-                {stageDeals.length === 0 ? (
-                  <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">
-                    Brak deals
-                  </div>
-                ) : (
-                  stageDeals.map((deal) => (
-                    <DealCard key={deal.id} deal={deal} />
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+      <DragOverlay>
+        {activeDeal ? <DealCard deal={activeDeal} /> : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
