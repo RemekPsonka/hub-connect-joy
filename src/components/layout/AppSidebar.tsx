@@ -19,21 +19,6 @@ import {
   Users2,
   FolderKanban,
 } from 'lucide-react';
-  Settings,
-  Network,
-  Search,
-  Shield,
-  Building2,
-  Bug,
-  UserCog,
-  Briefcase,
-  TrendingUp,
-  CalendarCheck,
-  UsersRound,
-  Handshake,
-  BarChart3,
-  Users2,
-} from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useAuth } from '@/contexts/AuthContext';
