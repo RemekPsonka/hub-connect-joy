@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,7 +26,17 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null);
   const { isLocked, attemptsRemaining, formatRemainingTime, recordFailedAttempt, recordSuccess } = useLoginRateLimiter();
+
+  // Check for auth rejection message (unregistered user tried to login)
+  useEffect(() => {
+    const msg = sessionStorage.getItem('auth_rejection');
+    if (msg) {
+      setRejectionMessage(msg);
+      sessionStorage.removeItem('auth_rejection');
+    }
+  }, []);
 
   const {
     register,
@@ -132,6 +142,12 @@ export default function Login() {
                   Konto tymczasowo zablokowane z powodu zbyt wielu nieudanych prób logowania. 
                   Spróbuj ponownie za <strong>{formatRemainingTime()}</strong>.
                 </AlertDescription>
+              </Alert>
+            )}
+            {rejectionMessage && (
+              <Alert variant="destructive">
+                <ShieldAlert className="h-4 w-4" />
+                <AlertDescription className="ml-2">{rejectionMessage}</AlertDescription>
               </Alert>
             )}
             {error && !isLocked && (

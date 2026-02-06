@@ -98,6 +98,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  // Verify user has a linked director/assistant — reject if not
+  const verifyAndSetUser = async (currentUser: User) => {
+    const dir = await fetchDirector(currentUser.id);
+    if (dir) {
+      setDirector(dir);
+      setAssistant(null);
+      return true;
+    }
+
+    const asst = await fetchAssistant(currentUser.id);
+    if (asst) {
+      setAssistant(asst);
+      setDirector(null);
+      return true;
+    }
+
+    // No director or assistant found — unregistered user, sign out
+    console.warn('User not linked to any organization, signing out:', currentUser.email);
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setDirector(null);
+    setAssistant(null);
+    
+    // Store rejection message for Login page to display
+    sessionStorage.setItem('auth_rejection', 'Twoje konto nie jest powiązane z żadną organizacją. Skontaktuj się z administratorem.');
+    return false;
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -108,15 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Defer Supabase calls with setTimeout to prevent deadlock
         if (session?.user) {
           setTimeout(async () => {
-            const dir = await fetchDirector(session.user.id);
-            setDirector(dir);
-            
-            if (!dir) {
-              const asst = await fetchAssistant(session.user.id);
-              setAssistant(asst);
-            } else {
-              setAssistant(null);
-            }
+            await verifyAndSetUser(session.user);
           }, 0);
         } else {
           setDirector(null);
@@ -131,14 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        const dir = await fetchDirector(session.user.id);
-        setDirector(dir);
-        
-        if (!dir) {
-          const asst = await fetchAssistant(session.user.id);
-          setAssistant(asst);
-        }
-        
+        await verifyAndSetUser(session.user);
         setLoading(false);
       } else {
         setLoading(false);
