@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface DealStage {
   id: string;
@@ -51,6 +52,7 @@ export interface DealActivity {
   description: string | null;
   old_value: string | null;
   new_value: string | null;
+  details: Json | null;
   created_by: string | null;
   created_at: string;
   creator?: { id: string; full_name: string } | null;
@@ -340,12 +342,18 @@ export function useCreateDealActivity() {
       description?: string;
       old_value?: string;
       new_value?: string;
+      details?: Json;
     }) => {
       const { data, error } = await supabase
         .from('deal_activities')
         .insert({
-          ...activity,
-          created_by: director?.id || null,
+          deal_id: activity.deal_id,
+          activity_type: activity.activity_type,
+          description: activity.description ?? null,
+          old_value: activity.old_value ?? null,
+          new_value: activity.new_value ?? null,
+          details: activity.details ?? null,
+          created_by: director?.id ?? null,
         })
         .select()
         .single();
