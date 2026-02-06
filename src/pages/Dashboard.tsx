@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
-import { StatsCard } from '@/components/dashboard/StatsCard';
+import { StatCard } from '@/components/ui/stat-card';
+import { DataCard } from '@/components/ui/data-card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { RelationshipAlerts } from '@/components/dashboard/RelationshipAlerts';
 import { AIRecommendations } from '@/components/dashboard/AIRecommendations';
@@ -16,7 +18,6 @@ import { AnalyticsOverview } from '@/components/dashboard/AnalyticsOverview';
 import { KPITasksWidget } from '@/components/dashboard/KPITasksWidget';
 import { MyTasksWidget } from '@/components/dashboard/MyTasksWidget';
 import { TeamTasksWidget } from '@/components/dashboard/TeamTasksWidget';
-import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, CheckSquare, Target, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContactModal } from '@/components/contacts/ContactModal';
@@ -47,38 +48,38 @@ export default function Dashboard() {
   const hasNoContacts = stats.contacts === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1400px] mx-auto">
       {/* Welcome section */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">
           Witaj, {firstName}!
         </h1>
-        <p className="text-muted-foreground capitalize">
+        <p className="text-sm text-muted-foreground capitalize">
           {formatDate(new Date())}
         </p>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats cards — 4 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
+        <StatCard
           title="Kontakty"
           value={stats.contacts}
           icon={Users}
           loading={isLoading}
         />
-        <StatsCard
+        <StatCard
           title="Dzisiejsze konsultacje"
           value={stats.todayMeetings}
           icon={Calendar}
           loading={isLoading}
         />
-        <StatsCard
+        <StatCard
           title="Oczekujące zadania"
           value={stats.pendingTasks}
           icon={CheckSquare}
           loading={isLoading}
         />
-        <StatsCard
+        <StatCard
           title="Aktywne potrzeby"
           value={stats.activeNeeds}
           icon={Target}
@@ -91,62 +92,54 @@ export default function Dashboard() {
 
       {/* Empty state */}
       {!isLoading && hasNoContacts && (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <UserPlus className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">
-              Zacznij od dodania pierwszego kontaktu
-            </h3>
-            <p className="text-muted-foreground mb-4 max-w-md">
-              Twoja sieć kontaktów jest pusta. Dodaj pierwszy kontakt, aby zacząć korzystać z AI Network Assistant.
-            </p>
-            <Button onClick={() => setIsContactModalOpen(true)} className="gap-2">
-              <UserPlus className="h-4 w-4" />
-              Dodaj kontakt
-            </Button>
-          </CardContent>
-        </Card>
+        <DataCard>
+          <EmptyState
+            icon={UserPlus}
+            title="Zacznij od dodania pierwszego kontaktu"
+            description="Twoja sieć kontaktów jest pusta. Dodaj pierwszy kontakt, aby zacząć korzystać z AI Network Assistant."
+            action={{
+              label: 'Dodaj kontakt',
+              onClick: () => setIsContactModalOpen(true),
+              icon: UserPlus,
+            }}
+          />
+        </DataCard>
       )}
 
       {/* AI Widgets - show only when there are contacts */}
       {!isLoading && !hasNoContacts && (
         <>
-          {/* Task widgets - KPI, My Tasks, Team Tasks (najważniejsze) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Task widgets — KPI, My Tasks, Team Tasks */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <KPITasksWidget />
             <MyTasksWidget />
             <TeamTasksWidget />
           </div>
           
-          {/* Main grid - 2x2 for main widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Kolumna 1: Konsultacje */}
+          {/* Main grid — Konsultacje + Spotkania */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <UpcomingConsultations />
-            
-            {/* Kolumna 2: Spotkania grupowe */}
             <MeetingsOverview />
-            
-            {/* Kolumna 3: Dopasowania AI */}
+          </div>
+
+          {/* Dopasowania + Sieć */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <PendingMatches />
-            
-            {/* Kolumna 4: Sieć */}
             <NetworkOverview />
           </div>
           
-          {/* Analityka - full width */}
+          {/* Analityka — full width */}
           <AnalyticsOverview />
           
-          {/* Zarządzanie relacjami - 3 columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Zarządzanie relacjami — 3 columns */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <TodaysPriorities />
             <AIRecommendations />
             <RelationshipAlerts />
           </div>
           
-          {/* DÓŁ STRONY - mniej pilne, obok siebie */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Bottom — mniej pilne */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <DailySerendipity />
             <ContactsToRenew />
           </div>

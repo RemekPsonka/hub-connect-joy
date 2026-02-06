@@ -1,7 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
@@ -32,11 +31,9 @@ export class ErrorBoundary extends Component<Props, State> {
     
     this.setState({ error, errorInfo });
 
-    // Log to Supabase - do this BEFORE showing UI to not lose the error
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Try to get tenant_id from directors table if user is logged in
       let tenantId: string | null = null;
       if (user) {
         const { data: director } = await supabase
@@ -51,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
         user_id: user?.id || null,
         tenant_id: tenantId,
         error_message: error.message,
-        error_stack: error.stack?.substring(0, 5000), // Limit stack size
+        error_stack: error.stack?.substring(0, 5000),
         component_stack: errorInfo.componentStack?.substring(0, 5000),
         url: window.location.href,
         user_agent: navigator.userAgent,
@@ -74,6 +71,18 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  handleReportBug = () => {
+    const subject = encodeURIComponent(`Błąd: ${this.state.error?.message || 'Nieznany'}`);
+    const body = encodeURIComponent(
+      `Opis błędu:\n\n` +
+      `URL: ${window.location.href}\n` +
+      `Czas: ${new Date().toLocaleString('pl-PL')}\n` +
+      `Przeglądarka: ${navigator.userAgent}\n\n` +
+      `Komunikat: ${this.state.error?.message || 'Brak'}\n`
+    );
+    window.open(`mailto:support@example.com?subject=${subject}&body=${body}`, '_blank');
+  };
+
   toggleDetails = () => {
     this.setState(prev => ({ showDetails: !prev.showDetails }));
   };
@@ -87,69 +96,83 @@ export class ErrorBoundary extends Component<Props, State> {
       const isDev = import.meta.env.DEV;
 
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-          <Card className="max-w-lg w-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
-                Coś poszło nie tak
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground">
-                Aplikacja napotkała nieoczekiwany błąd. Możesz spróbować:
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={this.handleReset} className="flex-1">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Spróbuj ponownie
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={this.handleGoHome}
-                  className="flex-1"
-                >
-                  <Home className="mr-2 h-4 w-4" />
-                  Strona główna
-                </Button>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/50">
+          <div className="max-w-lg w-full bg-card rounded-2xl shadow-lg border border-border p-8">
+            {/* Icon */}
+            <div className="flex justify-center mb-6">
+              <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
+                <AlertTriangle className="h-8 w-8 text-destructive" />
               </div>
+            </div>
 
-              {/* Error details - only in development or with toggle */}
-              {this.state.error && (
-                <div className="pt-2">
-                  <button
-                    onClick={this.toggleDetails}
-                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {this.state.showDetails ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                    {isDev ? 'Szczegóły błędu' : 'Szczegóły techniczne'}
-                  </button>
-                  
-                  {this.state.showDetails && (
-                    <div className="mt-2 p-3 bg-muted rounded-md overflow-auto max-h-48">
-                      <p className="text-sm font-medium text-destructive mb-2">
-                        {this.state.error.message}
-                      </p>
-                      {isDev && this.state.error.stack && (
-                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                          {this.state.error.stack}
-                        </pre>
-                      )}
-                    </div>
+            {/* Title */}
+            <h2 className="text-xl font-bold text-foreground text-center mb-2">
+              Coś poszło nie tak
+            </h2>
+            <p className="text-sm text-muted-foreground text-center mb-6">
+              Aplikacja napotkała nieoczekiwany błąd. Możesz spróbować poniższych akcji.
+            </p>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-2 mb-6">
+              <Button onClick={this.handleReset} className="flex-1 gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Spróbuj ponownie
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={this.handleGoHome}
+                className="flex-1 gap-2"
+              >
+                <Home className="h-4 w-4" />
+                Strona główna
+              </Button>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full gap-2 text-muted-foreground"
+              onClick={this.handleReportBug}
+            >
+              <Mail className="h-4 w-4" />
+              Zgłoś błąd
+            </Button>
+
+            {/* Error details */}
+            {this.state.error && (
+              <div className="pt-4 mt-4 border-t border-border">
+                <button
+                  onClick={this.toggleDetails}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                >
+                  {this.state.showDetails ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
                   )}
-                </div>
-              )}
+                  {isDev ? 'Szczegóły błędu' : 'Szczegóły techniczne'}
+                </button>
+                
+                {this.state.showDetails && (
+                  <div className="mt-2 p-3 bg-muted rounded-lg overflow-auto max-h-48">
+                    <p className="text-xs font-mono font-medium text-destructive mb-2">
+                      {this.state.error.message}
+                    </p>
+                    {isDev && this.state.error.stack && (
+                      <pre className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                        {this.state.error.stack}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-              <p className="text-xs text-muted-foreground">
-                Błąd został automatycznie zgłoszony do zespołu technicznego.
-              </p>
-            </CardContent>
-          </Card>
+            <p className="text-[11px] text-muted-foreground/60 text-center mt-4">
+              Błąd został automatycznie zgłoszony do zespołu technicznego.
+            </p>
+          </div>
         </div>
       );
     }
