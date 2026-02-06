@@ -414,10 +414,10 @@ async function fetchCRMContext(
 
   // Specific context based on type
   if (contextType === "project" && contextId) {
-    const [project, projectTasks] = await Promise.all([
+    const [project, projectTasks, existingPc] = await Promise.all([
       serviceClient
         .from("projects")
-        .select("id, name, status, description, color, start_date, target_end_date")
+        .select("id, name, status, description, color, start_date, target_end_date, embedding")
         .eq("id", contextId)
         .eq("tenant_id", tenantId)
         .single()
@@ -431,6 +431,11 @@ async function fetchCRMContext(
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(20)
         .then(({ data }) => data || []),
+      serviceClient
+        .from("project_contacts")
+        .select("contact_id")
+        .eq("project_id", contextId)
+        .then(({ data }) => data || []),
     ]);
 
     if (project) {
@@ -443,6 +448,27 @@ Start: ${project.start_date || "nie ustalono"}
 Deadline: ${project.target_end_date || "nie ustalono"}
 Zadania w projekcie (${projectTasks.length}):
 ${projectTasks.map((t) => `- [ID: ${t.id}] ${t.title} [${t.status}] priorytet: ${t.priority || "brak"}, termin: ${t.due_date || "brak"}`).join("\n")}`;
+
+      // Add contact suggestions if project has embedding
+      if (project.embedding) {
+        try {
+          const excludeIds = existingPc.map((pc) => pc.contact_id);
+          const { data: suggestions } = await serviceClient.rpc("match_contacts_by_project", {
+            query_embedding: JSON.stringify(project.embedding),
+            match_tenant_id: tenantId,
+            match_threshold: 0.65,
+            match_count: 3,
+            exclude_ids: excludeIds,
+          });
+
+          if (suggestions && suggestions.length > 0) {
+            result.specificContext += `\n\nSUGEROWANE KONTAKTY DLA PROJEKTU:
+${suggestions.map((s: any) => `- 👤 ${s.full_name} (${s.position || "brak stanowiska"} @ ${s.company || "brak firmy"}) — dopasowanie: ${Math.round(s.similarity * 100)}%`).join("\n")}`;
+          }
+        } catch (e) {
+          console.warn("Could not fetch contact suggestions for chat context:", e);
+        }
+      }
     }
   } else if (contextType === "contact" && contextId) {
     const contact = await serviceClient

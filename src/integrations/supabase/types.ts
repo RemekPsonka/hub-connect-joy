@@ -4657,6 +4657,7 @@ export type Database = {
           color: string | null
           created_at: string
           description: string | null
+          embedding: string | null
           id: string
           name: string
           owner_id: string
@@ -4669,6 +4670,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          embedding?: string | null
           id?: string
           name: string
           owner_id: string
@@ -4681,6 +4683,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          embedding?: string | null
           id?: string
           name?: string
           owner_id?: string
@@ -5991,6 +5994,22 @@ export type Database = {
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
+      }
+      match_contacts_by_project: {
+        Args: {
+          exclude_ids?: string[]
+          match_count?: number
+          match_tenant_id: string
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          company: string
+          full_name: string
+          id: string
+          position: string
+          similarity: number
+        }[]
       }
       representative_can_access_contact: {
         Args: { _contact_id: string; _rep_id: string }
