@@ -2,14 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design System — Phase 0: ConnectHub CRM
+/* Design System — ClickUp-inspired Premium CRM
    All colors MUST be HSL.
-   Primary: violet, Secondary: emerald, No blues.
+   Primary: violet-600, Secondary: blue-600
 */
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    --background: 210 40% 98%;
     --foreground: 215 28% 17%;
 
     --card: 0 0% 100%;
@@ -18,12 +18,12 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 28% 17%;
 
-    /* Primary: violet-600 */
+    /* Primary: violet-600 (#7C3AED) */
     --primary: 263 70% 50%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary: emerald-500 (zamiast blue) */
-    --secondary: 160 84% 39%;
+    /* Secondary: blue-600 (#2563EB) */
+    --secondary: 217 91% 60%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 20% 95%;
@@ -41,7 +41,7 @@
 
     --radius: 0.75rem;
 
-    /* Sidebar: dark slate — always dark */
+    /* Sidebar: dark slate-800 (#1E293B) — always dark */
     --sidebar-background: 215 28% 17%;
     --sidebar-foreground: 210 20% 90%;
     --sidebar-primary: 263 70% 65%;
@@ -57,15 +57,17 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --info: 263 50% 60%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    /* Chart colors — warm palette */
+    /* Chart colors */
     --chart-1: 263 70% 50%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 330 65% 50%;
-    --chart-5: 25 95% 53%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 160 84% 39%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 84% 60%;
   }
 
   .dark {
@@ -81,7 +83,7 @@
     --primary: 263 70% 65%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 160 70% 35%;
+    --secondary: 217 80% 55%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 215 25% 18%;
@@ -112,14 +114,16 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 80% 45%;
     --warning-foreground: 0 0% 100%;
-    --info: 263 50% 55%;
+    --danger: 0 62% 40%;
+    --danger-foreground: 0 0% 100%;
+    --info: 217 80% 55%;
     --info-foreground: 0 0% 100%;
 
     --chart-1: 263 70% 65%;
-    --chart-2: 160 70% 35%;
-    --chart-3: 38 80% 45%;
-    --chart-4: 330 55% 45%;
-    --chart-5: 25 85% 48%;
+    --chart-2: 217 80% 55%;
+    --chart-3: 160 70% 35%;
+    --chart-4: 38 80% 45%;
+    --chart-5: 0 62% 40%;
   }
 }
 
