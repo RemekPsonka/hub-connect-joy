@@ -1,222 +1,237 @@
 
 
-# Plan: Rozszerzenie polityk RLS dla tabel Deals
+# Plan: Automatyczne logowanie aktywności Deal (Trigger)
 
 ## Cel
-Zastąpienie generycznych polityk `FOR ALL` bardziej granularnymi politykami opartymi na rolach, zapewniającymi:
-- Izolację danych między tenantami
-- Kontrolę operacji INSERT/UPDATE/DELETE tylko dla uprawnionych użytkowników
+Dodanie triggera bazodanowego, który automatycznie rejestruje aktywności w tabeli `deal_activities` przy każdym INSERT lub UPDATE na tabeli `deals`. Eliminuje to potrzebę ręcznego logowania z poziomu frontendu.
 
 ---
 
-## Analiza obecnego stanu
+## Analiza obecnego schematu
 
-### Istniejące polityki (zbyt permisywne)
+### Kolumny `deal_activities` (aktualne)
 
-| Tabela | Obecna polityka | Problem |
-|--------|-----------------|---------|
-| `deals` | `FOR ALL USING (tenant_id = get_current_tenant_id())` | Każdy użytkownik tenanta może wszystko |
-| `deal_stages` | `FOR ALL USING (tenant_id = get_current_tenant_id())` | Każdy użytkownik może zmieniać etapy |
-| `deal_products` | `FOR ALL USING/WITH CHECK (przez deals)` | Brak kontroli ról |
-| `deal_activities` | `FOR ALL USING (przez deals)` | Brak kontroli zapisu |
+| Kolumna | Typ | Opis |
+|---------|-----|------|
+| `id` | UUID | PK, auto-generowane |
+| `deal_id` | UUID | FK do deals |
+| `activity_type` | TEXT | Typ aktywności |
+| `description` | TEXT | Opis (nullable) |
+| `old_value` | TEXT | Wartość przed zmianą |
+| `new_value` | TEXT | Wartość po zmianie |
+| `created_by` | UUID | FK do **directors** (nie auth.users!) |
+| `created_at` | TIMESTAMPTZ | Data utworzenia |
+| `details` | JSONB | Elastyczne metadane |
 
-### Dostępne funkcje pomocnicze
+### Problem z proponowanym kodem
 
-```sql
--- Pobiera tenant_id aktualnego użytkownika
-public.get_current_tenant_id() → UUID
+Proponowany trigger używa `user_id` (FK do auth.users), ale obecna tabela używa `created_by` (FK do directors). Musimy:
 
--- Sprawdza czy user ma konkretną rolę w tenancie
-public.has_role(_user_id UUID, _tenant_id UUID, _role app_role) → BOOLEAN
+1. Dodać kolumnę `user_id` **LUB**
+2. Dostosować trigger do używania `created_by` przez lookup do `directors`
 
--- Sprawdza czy user jest adminem (owner/admin)
-public.is_tenant_admin(_user_id UUID, _tenant_id UUID) → BOOLEAN
-```
-
-Typy ról w `app_role`: `owner`, `admin`, `director`, `viewer`
+**Rekomendacja:** Dodać kolumnę `user_id` dla pełnej zgodności z `auth.uid()` w triggerze + zachować `created_by` dla kompatybilności z istniejącym kodem.
 
 ---
 
-## Krok 1: Migracja - usunięcie starych i dodanie nowych polityk
+## Krok 1: Migracja bazy danych
 
-### 1.1 Tabela `deals`
-
-```sql
--- Usunięcie starej polityki
-DROP POLICY IF EXISTS "tenant_access" ON public.deals;
-
--- SELECT - wszyscy w tenancie mogą widzieć
-CREATE POLICY "deals_select" ON public.deals
-  FOR SELECT
-  USING (tenant_id = public.get_current_tenant_id());
-
--- INSERT - tylko użytkownicy z rolą (owner/admin/director)
-CREATE POLICY "deals_insert" ON public.deals
-  FOR INSERT
-  WITH CHECK (
-    tenant_id = public.get_current_tenant_id()
-    AND EXISTS (
-      SELECT 1 FROM public.directors 
-      WHERE user_id = auth.uid() 
-      AND tenant_id = public.get_current_tenant_id()
-    )
-  );
-
--- UPDATE - tylko użytkownicy z rolą
-CREATE POLICY "deals_update" ON public.deals
-  FOR UPDATE
-  USING (tenant_id = public.get_current_tenant_id())
-  WITH CHECK (
-    tenant_id = public.get_current_tenant_id()
-    AND EXISTS (
-      SELECT 1 FROM public.directors 
-      WHERE user_id = auth.uid()
-    )
-  );
-
--- DELETE - tylko admini
-CREATE POLICY "deals_delete" ON public.deals
-  FOR DELETE
-  USING (
-    tenant_id = public.get_current_tenant_id()
-    AND public.is_tenant_admin(auth.uid(), tenant_id)
-  );
-```
-
-### 1.2 Tabela `deal_stages`
+### 1.1 Dodanie kolumny `user_id`
 
 ```sql
-DROP POLICY IF EXISTS "tenant_access" ON public.deal_stages;
+ALTER TABLE public.deal_activities 
+ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
 
--- SELECT - wszyscy w tenancie
-CREATE POLICY "deal_stages_select" ON public.deal_stages
-  FOR SELECT
-  USING (tenant_id = public.get_current_tenant_id());
-
--- INSERT/UPDATE/DELETE - tylko admini (konfiguracja pipeline)
-CREATE POLICY "deal_stages_modify" ON public.deal_stages
-  FOR ALL
-  USING (
-    tenant_id = public.get_current_tenant_id()
-    AND public.is_tenant_admin(auth.uid(), tenant_id)
-  )
-  WITH CHECK (
-    tenant_id = public.get_current_tenant_id()
-    AND public.is_tenant_admin(auth.uid(), tenant_id)
-  );
+-- Indeks dla wydajności
+CREATE INDEX IF NOT EXISTS idx_deal_activities_user 
+ON public.deal_activities(user_id);
 ```
 
-### 1.3 Tabela `deal_products`
+### 1.2 Funkcja triggera (dostosowana)
 
 ```sql
-DROP POLICY IF EXISTS "tenant_access" ON public.deal_products;
+CREATE OR REPLACE FUNCTION public.log_deal_activity()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_director_id UUID;
+BEGIN
+  -- Pobierz director_id dla aktualnego usera (do created_by)
+  SELECT id INTO v_director_id 
+  FROM public.directors 
+  WHERE user_id = auth.uid() 
+  LIMIT 1;
 
--- SELECT - przez relację do deals
-CREATE POLICY "deal_products_select" ON public.deal_products
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO public.deal_activities (
+      deal_id, user_id, created_by, activity_type, details
     )
-  );
-
--- INSERT/UPDATE/DELETE - przez relację + sprawdzenie roli
-CREATE POLICY "deal_products_modify" ON public.deal_products
-  FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-    AND EXISTS (
-      SELECT 1 FROM public.directors 
-      WHERE user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-  );
+    VALUES (
+      NEW.id, 
+      auth.uid(), 
+      v_director_id,
+      'created', 
+      jsonb_build_object(
+        'title', NEW.title,
+        'value', NEW.value,
+        'currency', NEW.currency,
+        'stage_id', NEW.stage_id
+      )
+    );
+    
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Zmiana etapu
+    IF OLD.stage_id IS DISTINCT FROM NEW.stage_id THEN
+      INSERT INTO public.deal_activities (
+        deal_id, user_id, created_by, activity_type, old_value, new_value, details
+      )
+      VALUES (
+        NEW.id, 
+        auth.uid(), 
+        v_director_id,
+        'stage_change',
+        OLD.stage_id::TEXT,
+        NEW.stage_id::TEXT,
+        jsonb_build_object(
+          'from_stage_id', OLD.stage_id,
+          'to_stage_id', NEW.stage_id
+        )
+      );
+    END IF;
+    
+    -- Zmiana wartości
+    IF OLD.value IS DISTINCT FROM NEW.value THEN
+      INSERT INTO public.deal_activities (
+        deal_id, user_id, created_by, activity_type, old_value, new_value, details
+      )
+      VALUES (
+        NEW.id, 
+        auth.uid(), 
+        v_director_id,
+        'value_change',
+        OLD.value::TEXT,
+        NEW.value::TEXT,
+        jsonb_build_object(
+          'from_value', OLD.value,
+          'to_value', NEW.value,
+          'currency', NEW.currency
+        )
+      );
+    END IF;
+    
+    -- Wygrany deal
+    IF OLD.status = 'open' AND NEW.status = 'won' THEN
+      INSERT INTO public.deal_activities (
+        deal_id, user_id, created_by, activity_type, details
+      )
+      VALUES (
+        NEW.id, 
+        auth.uid(), 
+        v_director_id,
+        'won', 
+        jsonb_build_object(
+          'value', NEW.value,
+          'currency', NEW.currency,
+          'won_at', NEW.won_at
+        )
+      );
+    END IF;
+    
+    -- Przegrany deal
+    IF OLD.status = 'open' AND NEW.status = 'lost' THEN
+      INSERT INTO public.deal_activities (
+        deal_id, user_id, created_by, activity_type, details
+      )
+      VALUES (
+        NEW.id, 
+        auth.uid(), 
+        v_director_id,
+        'lost', 
+        jsonb_build_object(
+          'reason', NEW.lost_reason
+        )
+      );
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
-### 1.4 Tabela `deal_activities`
+### 1.3 Utworzenie triggera
 
 ```sql
-DROP POLICY IF EXISTS "tenant_access" ON public.deal_activities;
+DROP TRIGGER IF EXISTS trigger_log_deal_activity ON public.deals;
 
--- SELECT - przez relację do deals
-CREATE POLICY "deal_activities_select" ON public.deal_activities
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-  );
-
--- INSERT - dyrektorzy mogą dodawać aktywności
-CREATE POLICY "deal_activities_insert" ON public.deal_activities
-  FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-    AND EXISTS (
-      SELECT 1 FROM public.directors 
-      WHERE user_id = auth.uid()
-    )
-  );
-
--- UPDATE/DELETE - tylko admini lub autor
-CREATE POLICY "deal_activities_modify" ON public.deal_activities
-  FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-    AND (
-      created_by = (SELECT id FROM public.directors WHERE user_id = auth.uid() LIMIT 1)
-      OR public.is_tenant_admin(auth.uid(), public.get_current_tenant_id())
-    )
-  );
+CREATE TRIGGER trigger_log_deal_activity
+AFTER INSERT OR UPDATE ON public.deals
+FOR EACH ROW
+EXECUTE FUNCTION public.log_deal_activity();
 ```
+
+---
+
+## Krok 2: Aktualizacja TypeScript interface
+
+Plik: `src/hooks/useDeals.ts`
+
+```typescript
+export interface DealActivity {
+  id: string;
+  deal_id: string;
+  user_id: string | null;      // NOWE - auth.uid()
+  activity_type: string;
+  description: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  details: Json | null;
+  created_by: string | null;   // Zachowane dla kompatybilności
+  created_at: string;
+  creator?: { id: string; full_name: string } | null;
+}
+```
+
+---
+
+## Krok 3: Aktualizacja komponentu Timeline
+
+Plik: `src/components/deals/DealActivitiesTimeline.tsx`
+
+Rozszerzenie o wyświetlanie danych z `details` JSONB dla automatycznych aktywności:
+
+- Dla `stage_change`: wyświetlić nazwy etapów (pobrane z cache)
+- Dla `value_change`: sformatować wartości walutowe
+- Dla `won`/`lost`: wyświetlić szczegóły
 
 ---
 
 ## Podsumowanie zmian
 
-| Tabela | SELECT | INSERT | UPDATE | DELETE |
-|--------|--------|--------|--------|--------|
-| `deals` | Tenant | Director | Director | Admin |
-| `deal_stages` | Tenant | Admin | Admin | Admin |
-| `deal_products` | Tenant (via deal) | Director | Director | Director |
-| `deal_activities` | Tenant (via deal) | Director | Autor/Admin | Autor/Admin |
+| Plik | Akcja |
+|------|-------|
+| Migracja SQL | **Utworzyć** - ALTER TABLE + funkcja + trigger |
+| `src/hooks/useDeals.ts` | **Edytować** - rozszerzyć interface |
+| `src/components/deals/DealActivitiesTimeline.tsx` | **Edytować** - obsługa nowych typów aktywności |
 
 ---
 
-## Plik do utworzenia
+## Automatycznie logowane zdarzenia
 
-| Plik | Akcja |
-|------|-------|
-| `supabase/migrations/[timestamp]_rls_deals_granular.sql` | **Utworzyć** |
+| Zdarzenie | `activity_type` | Dane w `details` |
+|-----------|-----------------|------------------|
+| Nowy deal | `created` | title, value, currency, stage_id |
+| Zmiana etapu | `stage_change` | from_stage_id, to_stage_id |
+| Zmiana wartości | `value_change` | from_value, to_value, currency |
+| Deal wygrany | `won` | value, currency, won_at |
+| Deal przegrany | `lost` | reason |
 
 ---
 
 ## Korzyści
 
-- Granularna kontrola dostępu oparta na rolach
-- Etapy pipeline mogą być zmieniane tylko przez adminów
-- Ochrona przed przypadkowym usunięciem danych przez nieuprawnionych
-- Aktywności mogą być edytowane tylko przez autora lub admina
+- Automatyczne śledzenie wszystkich kluczowych zmian w deals
+- Brak potrzeby ręcznego logowania z frontendu dla podstawowych operacji
+- Pełna historia zmian z metadanymi JSONB
+- Zachowanie kompatybilności wstecznej (kolumna `created_by` nadal wypełniana)
+- `SECURITY DEFINER` zapewnia działanie w kontekście uprawnień funkcji
 
