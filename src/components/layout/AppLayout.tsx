@@ -4,6 +4,7 @@ import { AppSidebar } from './AppSidebar';
 import { HeaderBar } from './HeaderBar';
 import { ReportBugButton } from '@/components/bugs/ReportBugButton';
 import { RemekChatWidget } from '@/components/remek/RemekChatWidget';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export function AppLayout() {
   return (
@@ -16,7 +17,9 @@ export function AppLayout() {
           
           {/* Main content */}
           <main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </main>
         </div>
       </div>
