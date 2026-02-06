@@ -49,6 +49,7 @@ import {
 import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { TaskLinkedMeetings } from './TaskLinkedMeetings';
 
 interface TaskDetailSheetProps {
   open: boolean;
@@ -307,6 +308,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
               </div>
             </>
           )}
+
+          {/* Linked GCal meetings */}
+          <TaskLinkedMeetings taskId={task.id} />
 
           {/* Actions */}
           <Separator />

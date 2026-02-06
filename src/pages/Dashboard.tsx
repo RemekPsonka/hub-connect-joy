@@ -5,6 +5,7 @@ import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useUpcomingConsultations } from '@/hooks/useConsultations';
 import { useProjects, getStatusConfig } from '@/hooks/useProjects';
 import { useContacts } from '@/hooks/useContacts';
+import { useGCalConnection, useGCalEvents } from '@/hooks/useGoogleCalendar';
 import { StatCard } from '@/components/ui/stat-card';
 import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -19,8 +20,9 @@ import {
   Heart,
   FolderOpen,
   UserPlus,
+  MapPin,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, endOfWeek, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
 const LazyActivityChart = lazy(
@@ -41,6 +43,19 @@ export default function Dashboard() {
   });
 
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+
+  // GCal data for dashboard widget
+  const { isConnected: gcalConnected } = useGCalConnection();
+  const now = new Date();
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const { data: gcalEvents = [], isLoading: isLoadingGcal } = useGCalEvents(
+    now.toISOString(),
+    weekEnd.toISOString(),
+    gcalConnected
+  );
+  const upcomingGcalEvents = gcalEvents
+    .filter(e => e.start.dateTime) // only timed events
+    .slice(0, 5);
 
   const firstName = director?.full_name?.split(' ')[0] || 'Użytkowniku';
   const formattedDate = new Date().toLocaleDateString('pl-PL', {
@@ -216,21 +231,60 @@ export default function Dashboard() {
         <div className="col-span-1 sm:col-span-6 lg:col-span-4">
           <DataCard
             title="Nadchodzące spotkania"
-            isLoading={isLoadingConsultations}
+            isLoading={gcalConnected ? isLoadingGcal : isLoadingConsultations}
             footer={
-              upcomingConsultations && upcomingConsultations.length > 0 ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-xs text-muted-foreground"
-                  onClick={() => navigate('/consultations')}
-                >
-                  Zobacz konsultacje
-                </Button>
-              ) : undefined
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => navigate(gcalConnected ? '/calendar' : '/consultations')}
+              >
+                {gcalConnected ? 'Zobacz kalendarz' : 'Zobacz konsultacje'}
+              </Button>
             }
           >
-            {!upcomingConsultations || upcomingConsultations.length === 0 ? (
+            {gcalConnected && upcomingGcalEvents.length > 0 ? (
+              <div className="space-y-1">
+                {upcomingGcalEvents.map((event) => {
+                  const startDt = parseISO(event.start.dateTime!);
+                  return (
+                    <div
+                      key={event.id}
+                      className="flex gap-3 w-full text-left rounded-lg p-2 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="bg-muted rounded-lg px-2 py-1 text-center min-w-[50px] shrink-0">
+                        <p className="text-[10px] text-muted-foreground uppercase">
+                          {format(startDt, 'EEE', { locale: pl })}
+                        </p>
+                        <p className="text-sm font-semibold">
+                          {format(startDt, 'HH:mm')}
+                        </p>
+                      </div>
+                      <div
+                        className="w-1 rounded-full shrink-0"
+                        style={{ backgroundColor: event.color }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{event.summary}</p>
+                        {event.location && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {event.location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : gcalConnected && upcomingGcalEvents.length === 0 ? (
+              <EmptyState
+                icon={Calendar}
+                title="Brak spotkań"
+                description="Spokojny tydzień!"
+                className="border-0 shadow-none"
+              />
+            ) : !upcomingConsultations || upcomingConsultations.length === 0 ? (
               <EmptyState
                 icon={Calendar}
                 title="Brak spotkań"
@@ -245,7 +299,7 @@ export default function Dashboard() {
                     onClick={() => navigate(`/consultations/${c.id}`)}
                     className="flex gap-3 w-full text-left rounded-lg p-2 hover:bg-muted/50 transition-colors"
                   >
-                    <div className="w-2 h-2 rounded-full bg-violet-500 mt-2 shrink-0" />
+                    <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
                         {c.contacts?.full_name || 'Nieznany kontakt'}

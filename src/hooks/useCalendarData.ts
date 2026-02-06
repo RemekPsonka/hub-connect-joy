@@ -21,7 +21,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: '#9ca3af',
 };
 
-function gcalToItem(event: GCalEvent): CalendarItem {
+export function gcalToItem(event: GCalEvent): CalendarItem {
   const allDay = !event.start.dateTime;
   const startStr = event.start.dateTime || event.start.date || '';
   const endStr = event.end.dateTime || event.end.date || '';

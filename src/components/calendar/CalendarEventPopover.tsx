@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import type { CalendarItem } from '@/types/calendar';
+import { EventLinkSection } from './EventLinkSection';
 
 interface CalendarEventPopoverProps {
   item: CalendarItem;
@@ -111,6 +112,9 @@ export function CalendarEventPopover({ item, children }: CalendarEventPopoverPro
               Otwórz zadanie
             </Button>
           )}
+
+          {/* Event links section — only for GCal events */}
+          {item.type === 'gcal_event' && <EventLinkSection item={item} />}
         </div>
       </PopoverContent>
     </Popover>
