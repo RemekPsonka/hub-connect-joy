@@ -1,163 +1,152 @@
 
-# Strona Kalendarza — /calendar z widokiem tygodniowym i miesiecznym
+
+# Powazania kalendarza z CRM + Widgety kalendarza
 
 ## Podsumowanie
 
-Tworzymy dedykowana strone kalendarza /calendar, ktora laczy eventy z Google Calendar i zadania CRM w jednym widoku. Dwa tryby: tygodniowy (domyslny, z siatka godzinowa) i miesieczny (grid dniowy). Calosc budowana z div/grid + CSS, bez zewnetrznych bibliotek kalendarza.
+Dwie czesci w jednym prompcie:
+- **Czesc A**: Nowa tabela `gcal_event_links` i UI do wiazania eventow Google Calendar z taskami/kontaktami/projektami — w popoverze na /calendar, w TaskDetailSheet oraz w MeetingsTab kontaktu.
+- **Czesc B**: Podmiana widgetow na Dashboard ("Nadchodzace spotkania" z prawdziwych eventow GCal) oraz ulepszenie sekcji "Spotkania dzis" na /my-day o timeline i badge "TERAZ".
 
 ## Co sie zmieni
 
 | Zmiana | Plik |
 |--------|------|
-| Nowy hook | `src/hooks/useCalendarData.ts` — merge GCal events + CRM tasks |
-| Nowa strona | `src/pages/Calendar.tsx` — glowna strona kalendarza |
-| Nowy komponent | `src/components/calendar/WeekView.tsx` — widok tygodniowy |
-| Nowy komponent | `src/components/calendar/MonthView.tsx` — widok miesieczny |
-| Nowy komponent | `src/components/calendar/CalendarEventPopover.tsx` — popover z detalami |
-| Nowy komponent | `src/components/calendar/CalendarHeader.tsx` — nawigacja daty + przelacznik widoku |
-| Nowy typ | `src/types/calendar.ts` — rozszerzenie o CalendarItem |
-| Modyfikacja | `src/App.tsx` — lazy route /calendar z DirectorGuard |
-| Modyfikacja | `src/components/layout/AppSidebar.tsx` — "Kalendarz" w grupie Overview |
-| Modyfikacja | `src/components/layout/Breadcrumbs.tsx` — label 'calendar': 'Kalendarz' |
+| Migracja SQL | Nowa tabela `gcal_event_links` z RLS |
+| Nowy hook | `src/hooks/useGCalLinks.ts` — CRUD na powiazaniach + resolve nazw |
+| Nowy komponent | `src/components/calendar/EventLinkSection.tsx` — sekcja powiazan w popoverze |
+| Nowy komponent | `src/components/calendar/LinkSearchDialog.tsx` — CommandDialog do szukania task/contact/project |
+| Modyfikacja | `src/components/calendar/CalendarEventPopover.tsx` — dodanie sekcji powiazan |
+| Modyfikacja | `src/components/tasks/TaskDetailSheet.tsx` — nowa sekcja "Spotkania" po subtaskach |
+| Modyfikacja | `src/components/contacts/MeetingsTab.tsx` — nowy tab "Google Calendar" z powiazanymi eventami |
+| Modyfikacja | `src/pages/Dashboard.tsx` — widget "Nadchodzace spotkania" z prawdziwymi eventami GCal |
+| Modyfikacja | `src/components/my-day/GCalTodayEvents.tsx` — timeline + badge "TERAZ" |
+
+---
 
 ## Szczegoly techniczne
 
-### 1. Typ CalendarItem — rozszerzenie `src/types/calendar.ts`
+### 1. Migracja SQL — tabela `gcal_event_links`
 
-Nowy interface dodany do istniejacego pliku:
+Nowa tabela laczaca Google Calendar event ID (text) z encjami CRM (UUID):
 
 ```text
-CalendarItem {
-  id: string
-  title: string
-  start: Date
-  end: Date
-  type: 'gcal_event' | 'crm_task'
-  color: string           // gcal: calendar color, task: priority color
-  allDay: boolean
-  location?: string       // tylko gcal
-  status?: string         // tylko task
-  htmlLink?: string       // tylko gcal
-  calendarName?: string   // tylko gcal
-  projectName?: string    // tylko task
-}
+gcal_event_links
+  - id: uuid PK (gen_random_uuid)
+  - tenant_id: uuid NOT NULL FK -> tenants(id)
+  - director_id: uuid NOT NULL FK -> directors(id)
+  - gcal_event_id: text NOT NULL
+  - gcal_calendar_id: text NOT NULL
+  - linked_type: text NOT NULL CHECK ('task', 'contact', 'project')
+  - linked_id: uuid NOT NULL
+  - created_at: timestamptz DEFAULT now()
+  - UNIQUE(tenant_id, gcal_event_id, linked_type, linked_id)
 ```
 
-### 2. Hook useCalendarData
+RLS policy "gcal_links_own" — FOR ALL USING tenant_id = get_current_tenant_id() AND director_id = get_current_director_id().
 
-Props: `{ view: 'week' | 'month', currentDate: Date }`
+### 2. Hook `useGCalLinks.ts`
 
-Logika:
-- Oblicza timeMin/timeMax na podstawie view + currentDate (week: pon-ndz, month: 1-ostatni dzien)
-- Pobiera rownolegle: `useGCalEvents(timeMin, timeMax)` + query do tabeli `tasks` (WHERE due_date BETWEEN timeMin AND timeMax)
-- Mapuje GCalEvent na CalendarItem (type='gcal_event', color z kalendarza)
-- Mapuje tasks na CalendarItem (type='crm_task', color wg priorytetu: urgent=red, high=amber, medium=blue, low=gray)
-- Dla taskow bez godziny (due_date bez czasu) — ustawia allDay=true
-- Merge obu tablic i sortuje po start Date
-- Zwraca: `{ items: CalendarItem[], isLoading: boolean, gcalConnected: boolean }`
+Cztery eksportowane hooki:
 
-Hook dziala nawet bez Google Calendar — wtedy gcalConnected=false, items zawieraja tylko taski CRM.
+- **useEventLinks(gcalEventId)** — query `['gcal-links', gcalEventId]` z resolve nazw (join-like): po pobraniu linkow, wykonuje osobne zapytania do `tasks`, `contacts`, `projects` aby rozwiazac nazwy. Zwraca `{ links: { type, id, name, linkId }[], isLoading }`.
 
-### 3. CalendarHeader
+- **useCreateEventLink()** — mutation insert do `gcal_event_links` z tenant_id i director_id z kontekstu auth. onSuccess invaliduje `['gcal-links', eventId]` + toast.
 
-Elementy:
-- Lewo: h2 "Kalendarz" + badge z zakresem dat (np. "3-9 lut 2026" lub "luty 2026")
-- Srodek: przyciski ChevronLeft / "Dzis" / ChevronRight — przesuwaja o tydzien lub miesiac
-- Prawo: przelacznik widoku Tydzien | Miesiac (dwa przyciski z aktywnym stanem bg-primary text-white)
+- **useRemoveEventLink()** — mutation delete z `gcal_event_links` po id linku. onSuccess invaliduje cache + toast.
 
-### 4. WeekView
+- **useLinkedEvents(linkedType, linkedId)** — query `['linked-events', linkedType, linkedId]` do gcal_event_links WHERE linked_type = linkedType AND linked_id = linkedId. Zwraca tablice `{ gcal_event_id, gcal_calendar_id, created_at }[]`. Gracefully zwraca `[]` jesli brak gcal_tokens (nie crashuje).
 
-Siatka 8 kolumn: 1 kolumna czasu (w-16) + 7 kolumn dni.
+### 3. Komponent `EventLinkSection.tsx`
 
-**Header (sticky):**
-- Kazdy dzien: skrocona nazwa (Pon, Wt...) + numer, dzis podswietlony (bg-primary text-white, rounded-full)
+Wydzielona sekcja renderowana wewnatrz CalendarEventPopover, ale tylko dla eventow typu `gcal_event`:
 
-**Time grid:**
-- Godziny 7:00-21:00, kazda godzina = 64px wysokosci
-- Lewa kolumna: etykiety godzin (text-xs text-muted-foreground)
+- Uzywa `useEventLinks(eventId)` gdzie eventId to item.id z prefixem `gcal-` usunietym
+- Lista istniejacych linkow: ikona (CheckSquare/User/FolderKanban) + nazwa (klikalna, nawiguje do detali) + przycisk X do usuniecia (z AlertDialog confirm)
+- Przycisk "Dodaj powiazanie" otwiera `LinkSearchDialog`
+- Separator nad sekcja
+- Heading "Powiazania" w stylu text-xs uppercase tracking-wider
 
-**Event positioning:**
-- Kazdy event pozycjonowany absolutnie: top = (startHour - 7) * 64px, height = durationMinutes * (64/60)px, min-height 24px
-- gcal_event: tlo z kolorem kalendarza (opacity 20%), border-left-3 z pelnym kolorem
-- crm_task: tlo bg-violet-50, border-left-3 border-violet-500
-- Zawartosc: tytul (font-medium, truncate) + godzina (text-xs, muted)
+### 4. Komponent `LinkSearchDialog.tsx`
 
-**Overlapping events:**
-- Grupowanie eventow po przedzialach czasowych: jesli dwa+ eventy nachodza na siebie, kazdy dostaje width = 100/n % i jest przesuniety w lewo o swoj indeks * (100/n)%
+Mini-dialog do wyszukiwania encji CRM — wzorowany na istniejacym CommandPalette:
 
-**All-day events:**
-- Osobny rzad nad siatka godzinowa, kazdy jako inline-block z tlem koloru i truncated tytul
+- Props: `{ open, onOpenChange, onSelect: (type, id) => void }`
+- Trzy zakladki/grupy: Zadania, Kontakty, Projekty
+- CommandDialog z CommandInput do szukania
+- Debounced search (300ms) po tabeli tasks (ilike title), contacts (ilike full_name), projects (ilike name)
+- Po wyborze: wywoluje onSelect(linkedType, linkedId) i zamyka dialog
+- Limit 5 wynikow per typ
 
-**Current time indicator:**
-- Czerwona linia na dzisiejszej kolumnie, pozycja obliczana z aktualnej godziny
-- Aktualizacja co minute (setInterval z cleanup)
-- Kropka na lewym koncu linii
+### 5. Modyfikacja CalendarEventPopover
 
-**Auto-scroll:**
-- useEffect na mount: scrollTo tak zeby godzina 8:00 byla widoczna
+Dodanie `<EventLinkSection>` pod istniejacymi akcjami (po Separator), tylko gdy `item.type === 'gcal_event'`. EventLinkSection otrzymuje item jako prop i samodzielnie parsuje gcal event ID.
 
-### 5. MonthView
+### 6. Modyfikacja TaskDetailSheet
 
-Grid 7 kolumn (Pon-Ndz) x 5-6 wierszy.
+Po sekcji "Powiazane kontakty" (linia 309), przed Actions (linia 312):
 
-**Header:** etykiety dni tygodnia (Pon, Wt, Sr...) uppercase, text-xs.
+- Nowa sekcja "Spotkania z kalendarza" (opcjonalna, tylko gdy gcalConnected)
+- Uzywa `useLinkedEvents('task', task.id)` + `useGCalConnection()`
+- Lista powiazanych eventow: data + nazwa
+- Jesli brak: tekst "Brak powiazanych spotkan"
+- Przycisk "Powiaz spotkanie" otwierajacy uproszczony dialog (lista ostatnich eventow z GCal)
+- Sekcja nie renderuje sie w ogole jesli gcal nie jest podlaczony
 
-**Komorka dnia:**
-- min-h-[100px], border, padding 4px
-- Numer dnia: text-sm, dzis podswietlony (bg-primary text-white, rounded-full w-6 h-6)
-- Dni spoza miesiaca: text-muted-foreground/30, bg-muted/20
-- Max 3 eventy widoczne, kazdy jako truncate text-xs z tlem koloru
-- "+N wiecej" jesli jest wiecej niz 3
+### 7. Modyfikacja MeetingsTab
 
-**Drill-down:** klik na dzien przelacza na widok tygodniowy z tym dniem
+Dodanie nowego TabsTrigger "Google Calendar" w istniejacym Tabs:
 
-### 6. CalendarEventPopover
+- Nowy TabsContent "gcal" renderujacy liste eventow powiazanych z kontaktem
+- Uzywa `useLinkedEvents('contact', contactId)` + `useGCalConnection()`
+- Jesli gcal nie podlaczony: EmptyState z linkiem do /settings
+- Jesli brak eventow: EmptyState "Brak powiazanych spotkan"
+- Jesli sa: lista chronologiczna z data, godzina, tytulem, nazwa kalendarza
+- Rozroznienie przeszle (text-muted-foreground) vs nadchodzace (text-foreground font-medium)
 
-Shadcn Popover, wyswietlany po kliknieciu na event.
+### 8. Dashboard widget — "Nadchodzace spotkania"
 
-Zawartosc:
-- Kolorowy pasek u gory (h-1, kolor eventu)
-- Tytul (font-semibold)
-- Czas (Clock icon + "09:30 - 10:30")
-- Lokalizacja (MapPin icon, jesli jest)
-- Nazwa kalendarza (CalendarDays icon, jesli gcal)
-- Projekt (FolderOpen icon + badge, jesli task)
-- Status (badge color-coded, jesli task)
-- Divider
-- Akcje:
-  - gcal: "Otworz w Google Calendar" → window.open(htmlLink, '_blank')
-  - task: "Otworz zadanie" → navigate(/tasks) lub link
+Modyfikacja istniejacej sekcji w Dashboard.tsx (linie 216-264, col-span-4 DataCard):
 
-### 7. Calendar.tsx (strona)
+- Dodanie warunku: jesli `gcalConnected` — pobierz eventy z `useGCalEvents(now, endOfWeek)` i pokaz je zamiast konsultacji
+- Jesli `!gcalConnected` — zachowaj istniejace konsultacje (fallback)
+- Nowy layout eventu: blok data/godzina (bg-muted rounded px-2 py-1, dzien tygodnia + godzina) + kolorowy pasek + tytul + lokalizacja
+- Max 5 eventow
+- Footer "Zobacz kalendarz" nawigujacy do /calendar
+- Import `useGCalConnection` i `useGCalEvents` z hooka
 
-Stan:
-- `view: 'week' | 'month'` — domyslnie 'week'
-- `currentDate: Date` — domyslnie new Date()
+### 9. Ulepszenie GCalTodayEvents na /my-day
 
-Layout:
-- Banner "Polacz Google Calendar" (jesli !gcalConnected): bg-blue-50 border-blue-200, z linkiem do /settings?tab=integrations
-- CalendarHeader z nawigacja i przelacznikiem
-- WeekView lub MonthView w zaleznosci od stanu view
-- Loading: skeleton grid z pulse blocks
+Modyfikacja `src/components/my-day/GCalTodayEvents.tsx`:
 
-### 8. Routing i nawigacja
+- Dodanie wizualnej linii timeline:
+  - Kazdy event owiniety w relative div
+  - Pionowa linia (before pseudo-element via Tailwind): `relative pl-8` na kontener, linia po lewej stronie laczaca eventy
+  - Kropka (dot) przy kazdym evencie w kolorze kalendarza
+  - Ostatni element bez linii koncowej
 
-**App.tsx:**
-- Lazy import: `const Calendar = lazy(() => import("./pages/Calendar"))`
-- Route: `<Route path="/calendar" element={<DirectorGuard><Calendar /></DirectorGuard>} />`
+- Badge "TERAZ" na aktualnie trwajacym spotkaniu:
+  - Warunek: `event.start.dateTime && event.end.dateTime && now >= parseISO(start) && now <= parseISO(end)`
+  - Badge: text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400, z animate-pulse na kropce
+  - Pulsujacy ring na docie: ring-2 ring-violet-300
 
-**AppSidebar.tsx:**
-- Import `CalendarDays` z lucide-react
-- Dodaj do `overviewItems`: `{ title: 'Kalendarz', url: '/calendar', icon: CalendarDays }`
+- Po kliknieciu eventu: otwiera `CalendarEventPopover` (reuse z /calendar)
+  - Wymaga mapowania GCalEvent -> CalendarItem (reuse gcalToItem z useCalendarData)
+  - Popover otwiera sie na kliknietym evencie
 
-**Breadcrumbs.tsx:**
-- Dodaj: `'calendar': 'Kalendarz'` do routeLabels
+## Bezpieczenstwo
+
+- Tabela `gcal_event_links` zabezpieczona RLS — kazdy dyrektor widzi tylko swoje powiazania (tenant_id + director_id)
+- Brak modyfikacji Edge Functions
+- Tokeny Google nie sa ujawniane na froncie — hooki operuja tylko na metadanych (event ID, nazwy)
 
 ## Co NIE zostanie zmienione
 
-- Strona /my-day — bez zmian
-- Strona Settings — bez zmian
-- Edge Functions — bez zmian
-- Hook useGoogleCalendar — bez zmian (uzywany as-is)
-- Hook useMyDayData — bez zmian
-- Zadne istniejace komponenty
+- Edge Functions `gcal-auth` i `gcal-events` — bez zmian
+- Hook `useGoogleCalendar.ts` — bez zmian (uzywany as-is)
+- Hook `useCalendarData.ts` — bez zmian
+- Strona `Calendar.tsx` — bez zmian (popover jest rozszerzany wewnetrznie)
+- Komponenty `WeekView.tsx` i `MonthView.tsx` — bez zmian
+- Strona `/my-day` (MyDay.tsx) — bez zmian (modyfikujemy tylko komponent GCalTodayEvents)
+- Settings — bez zmian
+
