@@ -1,0 +1,78 @@
+import { ReactNode } from 'react';
+import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+interface KanbanColumnProps {
+  title: string;
+  icon: string;
+  color: string;
+  count: number;
+  totalValue?: number;
+  currency?: string;
+  children: ReactNode;
+  onAdd: () => void;
+  addButtonLabel?: string;
+}
+
+const colorClasses: Record<string, string> = {
+  red: 'border-t-red-500',
+  amber: 'border-t-amber-500',
+  blue: 'border-t-blue-500',
+  purple: 'border-t-purple-500',
+};
+
+export function KanbanColumn({
+  title,
+  icon,
+  color,
+  count,
+  totalValue,
+  currency = 'PLN',
+  children,
+  onAdd,
+  addButtonLabel = '+ Dodaj',
+}: KanbanColumnProps) {
+  return (
+    <div
+      className={`bg-muted/30 rounded-lg border border-t-2 ${colorClasses[color] || 'border-t-primary'} flex flex-col min-h-[400px] max-h-[calc(100vh-280px)]`}
+    >
+      {/* Header */}
+      <div className="p-3 border-b bg-muted/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{icon}</span>
+            <h3 className="font-semibold text-sm">{title}</h3>
+            <Badge variant="secondary" className="text-xs">
+              {count}
+            </Badge>
+          </div>
+        </div>
+        {totalValue !== undefined && totalValue > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {totalValue.toLocaleString('pl-PL')} {currency}
+          </p>
+        )}
+      </div>
+
+      {/* Cards */}
+      <ScrollArea className="flex-1 p-2">
+        <div className="space-y-2">{children}</div>
+      </ScrollArea>
+
+      {/* Add button */}
+      <div className="p-2 border-t">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={onAdd}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          {addButtonLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}

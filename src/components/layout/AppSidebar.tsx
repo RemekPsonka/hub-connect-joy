@@ -16,6 +16,7 @@ import {
   UsersRound,
   Handshake,
   BarChart3,
+  Users2,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -57,6 +58,7 @@ const networkNavigationItems = [
   { title: 'Sieć kontaktów', url: '/network', icon: Network },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
   { title: 'Deals', url: '/deals', icon: TrendingUp },
+  { title: 'Zespół Deals', url: '/deals-team', icon: Users2 },
 ];
 
 // Nawigacja dla asystenta - ograniczona
