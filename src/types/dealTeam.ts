@@ -113,21 +113,30 @@ export interface DealTeamProspect {
   id: string;
   team_id: string;
   tenant_id: string;
-  target_name: string;
-  target_company: string | null;
-  target_position: string | null;
-  target_linkedin: string | null;
+  prospect_name: string;
+  prospect_company: string | null;
+  prospect_position: string | null;
+  prospect_linkedin: string | null;
+  prospect_email: string | null;
+  prospect_phone: string | null;
+  prospect_notes: string | null;
   status: ProspectStatus;
-  connection_path: string | null;
+  found_via: string | null;
   intro_contact_id: string | null;
   assigned_to: string | null;
+  requested_by: string;
+  requested_for_reason: string | null;
   priority: DealPriority;
-  notes: string | null;
-  converted_contact_id: string | null;
+  target_date: string | null;
+  converted_to_contact_id: string | null;
   created_at: string;
   updated_at: string;
   // JOIN z directors
   assigned_director?: {
+    id: string;
+    full_name: string;
+  };
+  requested_by_director?: {
     id: string;
     full_name: string;
   };
