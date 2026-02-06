@@ -1,152 +1,144 @@
 
 
-# Powazania kalendarza z CRM + Widgety kalendarza
+# Sovra — Tabele bazy danych + Edge Function sovra-morning-session
 
 ## Podsumowanie
 
-Dwie czesci w jednym prompcie:
-- **Czesc A**: Nowa tabela `gcal_event_links` i UI do wiazania eventow Google Calendar z taskami/kontaktami/projektami — w popoverze na /calendar, w TaskDetailSheet oraz w MeetingsTab kontaktu.
-- **Czesc B**: Podmiana widgetow na Dashboard ("Nadchodzace spotkania" z prawdziwych eventow GCal) oraz ulepszenie sekcji "Spotkania dzis" na /my-day o timeline i badge "TERAZ".
+Tworzymy fundamenty AI asystentki Sovra: dwie tabele w bazie danych (`sovra_sessions` i `sovra_reminders`) oraz Edge Function `sovra-morning-session`, ktora generuje poranny brief AI z danymi CRM i Google Calendar.
 
 ## Co sie zmieni
 
-| Zmiana | Plik |
-|--------|------|
-| Migracja SQL | Nowa tabela `gcal_event_links` z RLS |
-| Nowy hook | `src/hooks/useGCalLinks.ts` — CRUD na powiazaniach + resolve nazw |
-| Nowy komponent | `src/components/calendar/EventLinkSection.tsx` — sekcja powiazan w popoverze |
-| Nowy komponent | `src/components/calendar/LinkSearchDialog.tsx` — CommandDialog do szukania task/contact/project |
-| Modyfikacja | `src/components/calendar/CalendarEventPopover.tsx` — dodanie sekcji powiazan |
-| Modyfikacja | `src/components/tasks/TaskDetailSheet.tsx` — nowa sekcja "Spotkania" po subtaskach |
-| Modyfikacja | `src/components/contacts/MeetingsTab.tsx` — nowy tab "Google Calendar" z powiazanymi eventami |
-| Modyfikacja | `src/pages/Dashboard.tsx` — widget "Nadchodzace spotkania" z prawdziwymi eventami GCal |
-| Modyfikacja | `src/components/my-day/GCalTodayEvents.tsx` — timeline + badge "TERAZ" |
-
----
+| Zmiana | Plik / Zasob |
+|--------|-------------|
+| Migracja SQL | Dwie nowe tabele: `sovra_sessions`, `sovra_reminders` z RLS + indeksy |
+| Nowa Edge Function | `supabase/functions/sovra-morning-session/index.ts` |
+| Modyfikacja | `supabase/config.toml` — wpis dla nowej funkcji |
 
 ## Szczegoly techniczne
 
-### 1. Migracja SQL — tabela `gcal_event_links`
+### 1. Migracja SQL
 
-Nowa tabela laczaca Google Calendar event ID (text) z encjami CRM (UUID):
+Tabele nie istnieja jeszcze w bazie — zostana utworzone od zera.
+
+**sovra_sessions** — przechowuje sesje AI (morning brief, evening debrief, chat):
+- `id`, `tenant_id` (FK tenants), `director_id` (FK directors)
+- `type` — CHECK ('morning', 'evening', 'debrief', 'chat')
+- `title` — tytul sesji (np. "Poranny brief - 2026-02-06")
+- `content` — jsonb z danymi sesji (brief_text, statystyki)
+- `tasks_created`, `notes_created` — liczniki akcji podjqtych w sesji
+- `started_at`, `ended_at` — timestamptz
+- `metadata` — jsonb z kontekstem (surowe dane uzyte do generowania)
+
+**sovra_reminders** — przypomnienia generowane przez Sovre:
+- `id`, `tenant_id` (FK tenants), `director_id` (FK directors)
+- `type` — CHECK ('contact', 'deadline', 'inactive_project', 'daily_summary', 'follow_up')
+- `reference_id`, `reference_type` — opcjonalne powiazanie z encja CRM
+- `message` — tresc przypomnienia
+- `scheduled_at` — kiedy wyslac, `sent_at` — kiedy wyslano, `read_at` — kiedy przeczytano
+- `channel` — CHECK ('app', 'email'), domyslnie 'app'
+- `priority` — CHECK ('low', 'normal', 'high'), domyslnie 'normal'
+
+Obie tabele z RLS: `tenant_id = get_current_tenant_id() AND director_id = get_current_director_id()`.
+Indeksy na `(director_id, type)` dla sesji i `(director_id, scheduled_at) WHERE sent_at IS NULL` dla reminders.
+
+### 2. Edge Function — sovra-morning-session
+
+Funkcja generujaca poranny brief AI. Flow:
 
 ```text
-gcal_event_links
-  - id: uuid PK (gen_random_uuid)
-  - tenant_id: uuid NOT NULL FK -> tenants(id)
-  - director_id: uuid NOT NULL FK -> directors(id)
-  - gcal_event_id: text NOT NULL
-  - gcal_calendar_id: text NOT NULL
-  - linked_type: text NOT NULL CHECK ('task', 'contact', 'project')
-  - linked_id: uuid NOT NULL
-  - created_at: timestamptz DEFAULT now()
-  - UNIQUE(tenant_id, gcal_event_id, linked_type, linked_id)
+1. CORS + metoda POST
+2. Autentykacja przez verifyAuth() z _shared/auth.ts
+3. Rate limit: Upstash Redis (3 wywolania/h/director)
+   - Sekrety UPSTASH_REDIS_REST_URL i UPSTASH_REDIS_REST_TOKEN juz sa skonfigurowane
+4. Pobranie imienia directora z tabeli directors
+5. Rownolegle (Promise.all) pobranie danych kontekstowych:
+   A) tasksToday — tasks WHERE due_date = TODAY, assigned_to = director_id, status != 'done'
+   B) tasksOverdue — tasks WHERE due_date < TODAY, status NOT IN ('done','cancelled')
+   C) activeProjects — projects WHERE status IN ('new','in_progress','analysis')
+      i (owner_id = director_id OR director_id w project_members)
+   D) todayEvents — gcal-events (jesli gcal_tokens istnieje), w przeciwnym razie []
+   E) unreadReminders — sovra_reminders WHERE sent_at IS NULL, scheduled_at <= NOW()
+   F) recentNotes — project_notes ORDER BY created_at DESC LIMIT 5
+   G) tasksDoneYesterday — tasks WHERE updated_at >= wczoraj, status = 'done'
+6. Budowa context string (structured plaintext, max ~4000 tokenow)
+7. Wywolanie Lovable AI Gateway (Gemini 2.5 Flash)
+8. Zapis sesji do sovra_sessions
+9. Oznaczenie reminders jako wyslane (sent_at = NOW)
+10. Zwrot JSON z brief + danymi
 ```
 
-RLS policy "gcal_links_own" — FOR ALL USING tenant_id = get_current_tenant_id() AND director_id = get_current_director_id().
+**Rate limiting** — implementacja bez zewnetrznego importu Upstash SDK (Deno nie obsluguje @upstash/ratelimit przez skypack). Zamiast tego: prosta logika sliding window bezposrednio przez Upstash REST API:
+- GET klucza z Redis (lista timestampow)
+- Sprawdz ile wywolan w ostatniej godzinie
+- Jesli >= 3: zwroc 429
+- Jesli < 3: ZADD timestamp i kontynuuj
 
-### 2. Hook `useGCalLinks.ts`
+**Google Calendar events** — pobierane wewnetrznie przez ten sam mechanizm co gcal-events (bezposrednie wywolanie Google Calendar API z tokenem z gcal_tokens, z auto-refresh). NIE wywolujemy innej Edge Function — duplikujemy logike refreshowania tokena i fetchowania eventow wewnatrz tej funkcji, korzystajac z serwisowego klienta Supabase.
 
-Cztery eksportowane hooki:
+**Lovable AI Gateway** — wywolanie:
+- URL: `https://ai.gateway.lovable.dev/v1/chat/completions`
+- Header: `Authorization: Bearer ${LOVABLE_API_KEY}`
+- Model: `google/gemini-2.5-flash`
+- Messages: system prompt SOVRA_MORNING_SYSTEM_PROMPT + user message z kontekstem
+- Bez streamingu (standardowy request/response)
 
-- **useEventLinks(gcalEventId)** — query `['gcal-links', gcalEventId]` z resolve nazw (join-like): po pobraniu linkow, wykonuje osobne zapytania do `tasks`, `contacts`, `projects` aby rozwiazac nazwy. Zwraca `{ links: { type, id, name, linkId }[], isLoading }`.
+**System prompt** — zdefiniowany jako stala w pliku Edge Function. Instrukcje dla Sovra:
+- Styl: pewna siebie, konkretna, po polsku, uzywa imienia uzytkownika
+- Format: powitanie, podsumowanie wczoraj, priorytety na dzis (TOP 3), spotkania, zaleglosci, projekty, motywacja
+- Zasady: nie wymyslaj danych, logika dla piatku/poniedzialku, brak spotkan/zalegsosci = pozytywna informacja
 
-- **useCreateEventLink()** — mutation insert do `gcal_event_links` z tenant_id i director_id z kontekstu auth. onSuccess invaliduje `['gcal-links', eventId]` + toast.
+**Fallback** — gdy Gemini jest niedostepny lub zwroci blad:
+- Generowany jest prosty brief bez AI z surowymi danymi
+- Format: "Dzien dobry, [imie]. Nie udalem sie wygenerowac pelnego briefu..." + listy taskow/eventow
+- Sesja zapisywana z metadata.fallback = true
 
-- **useRemoveEventLink()** — mutation delete z `gcal_event_links` po id linku. onSuccess invaliduje cache + toast.
+**Response** — JSON:
+```text
+{
+  session_id: string,
+  brief: string,
+  data: {
+    tasks_today: array,
+    tasks_overdue: array,
+    events: array,
+    projects: array,
+    reminders_cleared: number
+  }
+}
+```
 
-- **useLinkedEvents(linkedType, linkedId)** — query `['linked-events', linkedType, linkedId]` do gcal_event_links WHERE linked_type = linkedType AND linked_id = linkedId. Zwraca tablice `{ gcal_event_id, gcal_calendar_id, created_at }[]`. Gracefully zwraca `[]` jesli brak gcal_tokens (nie crashuje).
+### 3. config.toml
 
-### 3. Komponent `EventLinkSection.tsx`
+Nowy wpis:
+```text
+[functions.sovra-morning-session]
+verify_jwt = false
+```
 
-Wydzielona sekcja renderowana wewnatrz CalendarEventPopover, ale tylko dla eventow typu `gcal_event`:
+Uwaga: mimo ze plan mowi `verify_jwt = true`, w praktyce funkcja sama weryfikuje JWT przez `verifyAuth()` z _shared/auth.ts (ten sam wzorzec co wszystkie inne funkcje w projekcie). Ustawienie `verify_jwt = false` w config.toml jest zgodne z istniejacym wzorcem — kazda funkcja w projekcie ma `verify_jwt = false` i weryfikuje auth rucznie.
 
-- Uzywa `useEventLinks(eventId)` gdzie eventId to item.id z prefixem `gcal-` usunietym
-- Lista istniejacych linkow: ikona (CheckSquare/User/FolderKanban) + nazwa (klikalna, nawiguje do detali) + przycisk X do usuniecia (z AlertDialog confirm)
-- Przycisk "Dodaj powiazanie" otwiera `LinkSearchDialog`
-- Separator nad sekcja
-- Heading "Powiazania" w stylu text-xs uppercase tracking-wider
+### 4. Sekrety
 
-### 4. Komponent `LinkSearchDialog.tsx`
+Wszystkie wymagane sekrety sa juz skonfigurowane:
+- `LOVABLE_API_KEY` — do Lovable AI Gateway (auto-provisioned)
+- `UPSTASH_REDIS_REST_URL` — do rate limitingu
+- `UPSTASH_REDIS_REST_TOKEN` — do rate limitingu
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — do refreshowania tokenow GCal
 
-Mini-dialog do wyszukiwania encji CRM — wzorowany na istniejacym CommandPalette:
-
-- Props: `{ open, onOpenChange, onSelect: (type, id) => void }`
-- Trzy zakladki/grupy: Zadania, Kontakty, Projekty
-- CommandDialog z CommandInput do szukania
-- Debounced search (300ms) po tabeli tasks (ilike title), contacts (ilike full_name), projects (ilike name)
-- Po wyborze: wywoluje onSelect(linkedType, linkedId) i zamyka dialog
-- Limit 5 wynikow per typ
-
-### 5. Modyfikacja CalendarEventPopover
-
-Dodanie `<EventLinkSection>` pod istniejacymi akcjami (po Separator), tylko gdy `item.type === 'gcal_event'`. EventLinkSection otrzymuje item jako prop i samodzielnie parsuje gcal event ID.
-
-### 6. Modyfikacja TaskDetailSheet
-
-Po sekcji "Powiazane kontakty" (linia 309), przed Actions (linia 312):
-
-- Nowa sekcja "Spotkania z kalendarza" (opcjonalna, tylko gdy gcalConnected)
-- Uzywa `useLinkedEvents('task', task.id)` + `useGCalConnection()`
-- Lista powiazanych eventow: data + nazwa
-- Jesli brak: tekst "Brak powiazanych spotkan"
-- Przycisk "Powiaz spotkanie" otwierajacy uproszczony dialog (lista ostatnich eventow z GCal)
-- Sekcja nie renderuje sie w ogole jesli gcal nie jest podlaczony
-
-### 7. Modyfikacja MeetingsTab
-
-Dodanie nowego TabsTrigger "Google Calendar" w istniejacym Tabs:
-
-- Nowy TabsContent "gcal" renderujacy liste eventow powiazanych z kontaktem
-- Uzywa `useLinkedEvents('contact', contactId)` + `useGCalConnection()`
-- Jesli gcal nie podlaczony: EmptyState z linkiem do /settings
-- Jesli brak eventow: EmptyState "Brak powiazanych spotkan"
-- Jesli sa: lista chronologiczna z data, godzina, tytulem, nazwa kalendarza
-- Rozroznienie przeszle (text-muted-foreground) vs nadchodzace (text-foreground font-medium)
-
-### 8. Dashboard widget — "Nadchodzace spotkania"
-
-Modyfikacja istniejacej sekcji w Dashboard.tsx (linie 216-264, col-span-4 DataCard):
-
-- Dodanie warunku: jesli `gcalConnected` — pobierz eventy z `useGCalEvents(now, endOfWeek)` i pokaz je zamiast konsultacji
-- Jesli `!gcalConnected` — zachowaj istniejace konsultacje (fallback)
-- Nowy layout eventu: blok data/godzina (bg-muted rounded px-2 py-1, dzien tygodnia + godzina) + kolorowy pasek + tytul + lokalizacja
-- Max 5 eventow
-- Footer "Zobacz kalendarz" nawigujacy do /calendar
-- Import `useGCalConnection` i `useGCalEvents` z hooka
-
-### 9. Ulepszenie GCalTodayEvents na /my-day
-
-Modyfikacja `src/components/my-day/GCalTodayEvents.tsx`:
-
-- Dodanie wizualnej linii timeline:
-  - Kazdy event owiniety w relative div
-  - Pionowa linia (before pseudo-element via Tailwind): `relative pl-8` na kontener, linia po lewej stronie laczaca eventy
-  - Kropka (dot) przy kazdym evencie w kolorze kalendarza
-  - Ostatni element bez linii koncowej
-
-- Badge "TERAZ" na aktualnie trwajacym spotkaniu:
-  - Warunek: `event.start.dateTime && event.end.dateTime && now >= parseISO(start) && now <= parseISO(end)`
-  - Badge: text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400, z animate-pulse na kropce
-  - Pulsujacy ring na docie: ring-2 ring-violet-300
-
-- Po kliknieciu eventu: otwiera `CalendarEventPopover` (reuse z /calendar)
-  - Wymaga mapowania GCalEvent -> CalendarItem (reuse gcalToItem z useCalendarData)
-  - Popover otwiera sie na kliknietym evencie
+Nie trzeba dodawac zadnych nowych sekretow.
 
 ## Bezpieczenstwo
 
-- Tabela `gcal_event_links` zabezpieczona RLS — kazdy dyrektor widzi tylko swoje powiazania (tenant_id + director_id)
-- Brak modyfikacji Edge Functions
-- Tokeny Google nie sa ujawniane na froncie — hooki operuja tylko na metadanych (event ID, nazwy)
+- RLS na obu tabelach — kazdy dyrektor widzi tylko swoje sesje i reminders
+- Rate limit 3/h/director zapobiega naduzywaniu AI
+- Tokeny Google nie sa przekazywane do Gemini — tylko nazwy eventow i czasy
+- Edge Function wymaga autentykacji (verifyAuth)
+- Context string jest truncowany do ~4000 tokenow
 
 ## Co NIE zostanie zmienione
 
-- Edge Functions `gcal-auth` i `gcal-events` — bez zmian
-- Hook `useGoogleCalendar.ts` — bez zmian (uzywany as-is)
-- Hook `useCalendarData.ts` — bez zmian
-- Strona `Calendar.tsx` — bez zmian (popover jest rozszerzany wewnetrznie)
-- Komponenty `WeekView.tsx` i `MonthView.tsx` — bez zmian
-- Strona `/my-day` (MyDay.tsx) — bez zmian (modyfikujemy tylko komponent GCalTodayEvents)
-- Settings — bez zmian
+- Zadne istniejace Edge Functions (gcal-auth, gcal-events, ai-chat, remek-chat itd.)
+- Zadne pliki frontendowe (UI Sovra bedzie w kolejnym prompcie)
+- Zadne istniejace tabele w bazie danych
+- Hook useGoogleCalendar — bez zmian
 
