@@ -7,6 +7,7 @@ import {
   FolderOpen,
   ExternalLink,
   ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -90,15 +91,29 @@ export function CalendarEventPopover({ item, children }: CalendarEventPopoverPro
           <Separator />
 
           {item.type === 'gcal_event' && item.htmlLink && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2 text-xs"
-              onClick={() => window.open(item.htmlLink, '_blank')}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Otwórz w Google Calendar
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={() => window.open(item.htmlLink, '_blank')}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Otwórz w Google Calendar
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={() => {
+                  const gcalId = item.id.startsWith('gcal-') ? item.id.slice(5) : item.id;
+                  navigate(`/sovra?mode=debrief&event=${encodeURIComponent(gcalId)}&calendar=${encodeURIComponent(item.calendarName || 'primary')}`);
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Debrief z Sovra
+              </Button>
+            </>
           )}
 
           {item.type === 'crm_task' && taskId && (

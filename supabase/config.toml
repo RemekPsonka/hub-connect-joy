@@ -140,3 +140,6 @@ verify_jwt = false
 
 [functions.sovra-chat]
 verify_jwt = false
+
+[functions.sovra-debrief]
+verify_jwt = false
