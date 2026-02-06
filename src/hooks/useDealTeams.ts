@@ -7,7 +7,11 @@ export interface DealTeamMember {
   id: string;
   team_id: string;
   director_id: string;
-  created_at: string;
+  tenant_id?: string;
+  role?: string;
+  is_active?: boolean;
+  joined_at?: string;
+  created_at?: string;
   director?: {
     id: string;
     full_name: string;
@@ -21,9 +25,12 @@ export interface DealTeam {
   name: string;
   description: string | null;
   color: string;
+  icon?: string;
   is_active: boolean;
   created_by: string | null;
+  weekly_status_day?: number;
   created_at: string;
+  updated_at?: string;
   members?: DealTeamMember[];
 }
 
@@ -141,6 +148,7 @@ export function useCreateDealTeam() {
         const members = team.member_ids.map(directorId => ({
           team_id: teamData.id,
           director_id: directorId,
+          tenant_id: tenantId,
         }));
 
         const { error: membersError } = await supabase
@@ -166,9 +174,13 @@ export function useCreateDealTeam() {
 
 export function useUpdateDealTeam() {
   const queryClient = useQueryClient();
+  const { director } = useAuth();
+  const tenantId = director?.tenant_id;
 
   return useMutation({
     mutationFn: async (team: DealTeamUpdate) => {
+      if (!tenantId) throw new Error('Brak tenant_id');
+
       // Update team basic info
       const updateData: Record<string, unknown> = {};
       if (team.name !== undefined) updateData.name = team.name;
@@ -199,6 +211,7 @@ export function useUpdateDealTeam() {
           const members = team.member_ids.map(directorId => ({
             team_id: team.id,
             director_id: directorId,
+            tenant_id: tenantId,
           }));
 
           const { error: insertError } = await supabase

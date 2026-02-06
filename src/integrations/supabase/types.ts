@@ -2150,19 +2150,31 @@ export type Database = {
           created_at: string | null
           director_id: string
           id: string
+          is_active: boolean | null
+          joined_at: string | null
+          role: string
           team_id: string
+          tenant_id: string
         }
         Insert: {
           created_at?: string | null
           director_id: string
           id?: string
+          is_active?: boolean | null
+          joined_at?: string | null
+          role?: string
           team_id: string
+          tenant_id: string
         }
         Update: {
           created_at?: string | null
           director_id?: string
           id?: string
+          is_active?: boolean | null
+          joined_at?: string | null
+          role?: string
           team_id?: string
+          tenant_id?: string
         }
         Relationships: [
           {
@@ -2187,30 +2199,39 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          icon: string | null
           id: string
           is_active: boolean | null
           name: string
           tenant_id: string
+          updated_at: string | null
+          weekly_status_day: number | null
         }
         Insert: {
           color?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean | null
           name: string
           tenant_id: string
+          updated_at?: string | null
+          weekly_status_day?: number | null
         }
         Update: {
           color?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
           tenant_id?: string
+          updated_at?: string | null
+          weekly_status_day?: number | null
         }
         Relationships: [
           {
@@ -4966,10 +4987,9 @@ export type Database = {
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
-      is_deal_team_member: {
-        Args: { _team_id: string; _user_id: string }
-        Returns: boolean
-      }
+      is_deal_team_member:
+        | { Args: { _team_id: string; _user_id: string }; Returns: boolean }
+        | { Args: { p_team_id: string }; Returns: boolean }
       is_sales_representative: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin:
         | { Args: never; Returns: boolean }
