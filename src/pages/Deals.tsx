@@ -4,6 +4,7 @@ import {
   DealsHeader,
   DealsTable,
   DealsKanban,
+  DealsAnalytics,
   CreateDealModal,
   type ViewMode,
 } from '@/components/deals';
@@ -138,13 +139,15 @@ export default function Deals() {
         stages={stages}
       />
 
-      {viewMode === 'kanban' ? (
+      {viewMode === 'kanban' && (
         <DealsKanban
           deals={dealsData?.data || []}
           stages={stages}
           isLoading={dealsLoading || stagesLoading}
         />
-      ) : (
+      )}
+      
+      {viewMode === 'table' && (
         <DealsTable
           deals={dealsData?.data || []}
           totalCount={dealsData?.count || 0}
@@ -154,6 +157,8 @@ export default function Deals() {
           isLoading={dealsLoading}
         />
       )}
+      
+      {viewMode === 'analytics' && <DealsAnalytics />}
 
       <CreateDealModal
         open={isCreateModalOpen}

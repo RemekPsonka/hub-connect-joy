@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, LayoutGrid, List } from 'lucide-react';
+import { Search, Plus, Filter, LayoutGrid, List, BarChart3 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DealStage } from '@/hooks/useDeals';
 
-export type ViewMode = 'table' | 'kanban';
+export type ViewMode = 'table' | 'kanban' | 'analytics';
 
 interface DealsHeaderProps {
   totalCount: number;
@@ -76,6 +76,10 @@ export function DealsHeader({
             <TabsTrigger value="table" className="gap-2">
               <List className="h-4 w-4" />
               Tabela
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analityka
             </TabsTrigger>
           </TabsList>
         </Tabs>
