@@ -2042,32 +2042,44 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          description: string | null
           id: string
+          is_active: boolean
           is_closed_lost: boolean | null
           is_closed_won: boolean | null
           name: string
           position: number
+          probability_default: number | null
           tenant_id: string
+          updated_at: string
         }
         Insert: {
           color?: string | null
           created_at?: string
+          description?: string | null
           id?: string
+          is_active?: boolean
           is_closed_lost?: boolean | null
           is_closed_won?: boolean | null
           name: string
           position?: number
+          probability_default?: number | null
           tenant_id: string
+          updated_at?: string
         }
         Update: {
           color?: string | null
           created_at?: string
+          description?: string | null
           id?: string
+          is_active?: boolean
           is_closed_lost?: boolean | null
           is_closed_won?: boolean | null
           name?: string
           position?: number
+          probability_default?: number | null
           tenant_id?: string
+          updated_at?: string
         }
         Relationships: [
           {

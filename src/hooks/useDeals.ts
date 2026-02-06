@@ -7,11 +7,15 @@ export interface DealStage {
   id: string;
   tenant_id: string;
   name: string;
+  description: string | null;
   position: number;
   color: string;
+  probability_default: number;
+  is_active: boolean;
   is_closed_won: boolean;
   is_closed_lost: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Deal {
