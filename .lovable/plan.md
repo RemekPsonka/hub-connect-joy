@@ -1,162 +1,180 @@
 
 
-# Naprawa wyswietlania kontaktow (lista Osoby i Firmy)
+# Przebudowa strony Firma (CompanyDetail) na Split View
 
-## Problem
+## Obecny stan
 
-Obie tabele -- **ContactsTable** (lista osob) i **CompaniesTable** (lista firm) -- maja bledy layoutu spowodowane virtualizacja:
+Strona `/companies/:id` ma prosty layout:
+1. Breadcrumb
+2. `CompanyProfileHeader` -- karta z logo, nazwa, branża, akcje (Edytuj, Analiza AI)
+3. 3 taby: **Analiza AI** | **Grupa kapitałowa** | **Kontakty**
 
-1. **Podwojny scroll**: Naglowek i cialo tabeli sa w osobnych kontenerach scroll, przez co kolumny sie rozjezdzaja
-2. **Konflikt elementow** (CompaniesTable): Uzycie `display: flex` na elementach `<tr>` lamie natywne zachowanie tabeli
-3. **Rozne szerokosci**: Naglowek rozciaga sie na cala szerokosc, ale cialo ma stale piksele -- na szerszych ekranach kolumny sie nie pokrywaja
+Analiza AI wewnątrz wyświetla `CompanyAnalysisViewer` z 10 sub-tabami (Profil, Finanse, Produkty itd.). Widok jest "płaski" -- cały ekran jest zajęty jednym panelem, brak kontekstowych informacji referencyjnych po boku.
 
-## Rozwiazanie
-
-Zamiana obu tabel na **layout oparty na divach** z jednym kontenerem scroll dla naglowka i ciala. Virtualizacja zostaje bez zmian.
-
-### Struktura docelowa
+## Nowy layout -- Split View (analogicznie do ContactDetail)
 
 ```text
-<div className="border rounded-lg overflow-hidden">
-  <div className="overflow-x-auto">
-    <div style={{ minWidth: calkowitaSzerokoscKolumn }}>
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Breadcrumb: Dashboard > Firmy > {nazwa}                                │
+│  CompanyProfileHeader (bez zmian -- logo, nazwa, branża, akcje)         │
+└──────────────────────────────────────────────────────────────────────────┘
 
-      <!-- Naglowek: div + flex -->
-      <div className="flex bg-muted/50 border-b">
-        <div className="w-[200px] flex-shrink-0">Kolumna 1</div>
-        <div className="w-[120px] flex-shrink-0">Kolumna 2</div>
-        ...
-      </div>
-
-      <!-- Cialo: virtualizowane divy -->
-      <div ref={parentRef} style={{ maxHeight: 'calc(100vh - 350px)' }}>
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map(item => (
-            <div className="flex absolute w-full" style={{ transform, height }}>
-              <div className="w-[200px] flex-shrink-0">Dane 1</div>
-              ...
-            </div>
-          ))}
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
+┌──── LEWA KOLUMNA (lg:w-[65%]) ──────────────────┐  ┌── PRAWA KOLUMNA (lg:w-[35%]) ──┐
+│                                                   │  │                                 │
+│  TABS (jednowarstwowe)                           │  │  DANE REJESTROWE (mini karta)   │
+│  ┌─────────────────────────────────────────────┐ │  │  ┌─────────────────────────┐   │
+│  │ [Źródła][Analiza AI][Struktura][Ubezp.]    │ │  │  │ NIP: 123-456-78-90      │   │
+│  │ [Ekspozycja][DNA OC][Harmonogram]          │ │  │  │ KRS: 0000123456         │   │
+│  │                                             │ │  │  │ REGON: 123456789        │   │
+│  │ {zawartość aktywnego tabu}                  │ │  │  │ Forma: Sp. z o.o.       │   │
+│  │                                             │ │  │  │ Adres: ul. Testowa 1    │   │
+│  └─────────────────────────────────────────────┘ │  │  │ WWW: www.example.com    │   │
+│                                                   │  │  └─────────────────────────┘   │
+│                                                   │  │                                 │
+│                                                   │  │  KONTAKTY (lista osób)         │
+│                                                   │  │  ┌─────────────────────────┐   │
+│                                                   │  │  │ 👤 Jan Kowalski         │   │
+│                                                   │  │  │    Prezes zarządu        │   │
+│                                                   │  │  │ 👤 Anna Nowak            │   │
+│                                                   │  │  │    Dyrektor handlowy     │   │
+│                                                   │  │  │ [→ Wszyscy kontakty]     │   │
+│                                                   │  │  └─────────────────────────┘   │
+│                                                   │  │                                 │
+│                                                   │  │  SZYBKIE STATYSTYKI            │
+│                                                   │  │  ┌─────────────────────────┐   │
+│                                                   │  │  │ Pewność: 85%             │   │
+│                                                   │  │  │ Źródła: 12               │   │
+│                                                   │  │  │ Status: Pełna analiza    │   │
+│                                                   │  │  │ Kontakty: 5              │   │
+│                                                   │  │  │ Grupa kap.: 3 spółki     │   │
+│                                                   │  │  │ Przychód: 12.5M PLN      │   │
+│                                                   │  │  └─────────────────────────┘   │
+│                                                   │  │                                 │
+│                                                   │  │  NOTATKI FIRMY                 │
+│                                                   │  │  ┌─────────────────────────┐   │
+│                                                   │  │  │ Textarea auto-save       │   │
+│                                                   │  │  │ max 2000 znaków          │   │
+│                                                   │  │  └─────────────────────────┘   │
+│                                                   │  │                                 │
+└───────────────────────────────────────────────────┘  └─────────────────────────────────┘
 ```
+
+### Na mobile (< lg): Jedna kolumna, taby na gorze, potem prawa kolumna pod spodem.
 
 ## Pliki do modyfikacji
 
-### 1. `src/components/contacts/ContactsTable.tsx`
-
-**Szerokosci kolumn** (suma = 1190px):
-- Checkbox: 50px
-- Imie i nazwisko: 220px
-- Firma: 180px
-- Stanowisko: 140px
-- Telefon: 150px
-- Email: 180px
-- Grupa: 100px
-- Profil AI: 140px
-- Sila relacji: 130px
-
-**Zmiany**:
-- Usuniecie surowych elementow `<table>`, `<thead>`, `<th>`, `<tbody>`, `<tr>`, `<td>`
-- Zastapienie elementami `<div>` z layoutem flex
-- Jeden wrapper `overflow-x-auto` dla naglowka i ciala
-- `minWidth` na wewnetrznym kontenerze rowny sumie kolumn
-- Naglowek uzywa tych samych stalych szerokosci co cialo
-- Zachowana cala funkcjonalnosc: checkbox, sortowanie, bulk actions, paginacja, generowanie AI
-
-### 2. `src/components/contacts/CompaniesTable.tsx`
-
-**Szerokosci kolumn** (suma = 900px):
-- Nazwa firmy: 220px
-- Miasto: 120px
-- NIP: 140px
-- Osoba kluczowa: 200px
-- Telefon: 140px
-- Profil AI: 140px
-
-**Zmiany**:
-- Usuniecie komponentow `<Table>`, `<TableHeader>`, `<TableRow>`, `<TableHead>`, `<TableBody>`, `<TableCell>`
-- Zastapienie elementami `<div>` z layoutem flex
-- Ten sam wzorzec jednego kontenera scroll
-- Naprawienie problemu `<tr display:flex>`
-- Zachowana cala funkcjonalnosc: sortowanie, paginacja, generowanie AI, nawigacja
+| Plik | Akcja | Opis |
+|------|-------|------|
+| `src/pages/CompanyDetail.tsx` | MODYFIKACJA | Nowy split-view layout z lewą/prawą kolumną |
+| `src/components/companies/CompanyRegistryCard.tsx` | NOWY | Mini karta danych rejestrowych (NIP/KRS/REGON/adres/www) |
+| `src/components/companies/CompanyContactsMini.tsx` | NOWY | Kompaktowa lista osób z firmy (max 5 + "Pokaż wszystkie") |
+| `src/components/companies/CompanyQuickStats.tsx` | NOWY | Statystyki: pewność, źródła, status analizy, kontakty, przychód |
+| `src/components/companies/CompanyNotesPanel.tsx` | NOWY | Notatki firmy z auto-save (analogicznie do ContactNotesPanel) |
 
 ## Co sie NIE zmienia
 
-- `ContactsHeader.tsx` -- bez zmian
-- `Contacts.tsx` (strona) -- bez zmian
-- Wszystkie hooki (`useContacts`, `useCompanies` itd.) -- bez zmian
-- Logika paginacji -- identyczna
-- Pasek akcji zbiorczych -- identyczny
-- Virtualizacja `@tanstack/react-virtual` -- zachowana
-- Sortowanie, filtry, rozmiar strony -- wszystko zachowane
+- `CompanyProfileHeader.tsx` -- bez zmian, zostaje na gorze
+- `CompanyFlatTabs.tsx` -- bez zmian, przechodzi do lewej kolumny
+- `CompanyAnalysisViewer.tsx` -- bez zmian
+- `CapitalGroupViewer.tsx` -- bez zmian
+- `CompanyContactsList.tsx` -- bez zmian (pozostaje jako pelny widok w prawo-kolumnowym "Pokaż wszystkie")
+- Wszystkie hooki -- bez zmian
+- Istniejące moduly (insurance, structure, exposure, liability, renewal) -- bez zmian
 
 ## Sekcja techniczna
 
-### ContactsTable -- kluczowe fragmenty
+### 1. CompanyDetail.tsx -- nowy layout
 
-Naglowek (divy zamiast table):
 ```typescript
-const CONTACTS_MIN_WIDTH = 1190;
+// Usunięcie 3 tabów (Analiza AI / Grupa kapitałowa / Kontakty)
+// Zamiast tego: split view z CompanyFlatTabs w lewej kolumnie
 
-<div className="border rounded-lg overflow-hidden">
-  <div className="overflow-x-auto">
-    <div style={{ minWidth: CONTACTS_MIN_WIDTH }}>
-      {/* Naglowek */}
-      <div className="flex items-center border-b bg-muted/50 h-12 text-sm font-medium text-muted-foreground">
-        <div className="px-4 w-[50px] flex-shrink-0">
-          <Checkbox ... />
-        </div>
-        <div className="px-4 w-[220px] flex-shrink-0">
-          <Button variant="ghost" onClick={() => handleSort('full_name')}>
-            Imie i nazwisko <ArrowUpDown />
-          </Button>
-        </div>
-        ...
-      </div>
+<div className="container max-w-7xl py-6 space-y-6">
+  <Breadcrumb ... />
+  <CompanyProfileHeader company={company} />
 
-      {/* Cialo virtualizowane */}
-      <div ref={parentRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map(virtualItem => {
-            const contact = contacts[virtualItem.index];
-            return (
-              <div
-                key={contact.id}
-                className="flex items-center border-b cursor-pointer hover:bg-muted/50 absolute w-full transition-colors"
-                style={{ height: ROW_HEIGHT, transform: `translateY(${virtualItem.start}px)` }}
-                onClick={() => navigate(`/contacts/${contact.id}`)}
-              >
-                <div className="px-4 w-[50px] flex-shrink-0" onClick={e => e.stopPropagation()}>
-                  <Checkbox ... />
-                </div>
-                <div className="px-4 w-[220px] flex-shrink-0">
-                  <div className="flex items-center gap-3">
-                    <Avatar>...</Avatar>
-                    <span className="font-medium truncate">{contact.full_name}</span>
-                  </div>
-                </div>
-                ...
-              </div>
-            );
-          })}
-        </div>
-      </div>
+  {/* SPLIT VIEW */}
+  <div className="flex flex-col lg:flex-row gap-6">
+    {/* LEWA KOLUMNA */}
+    <div className="flex-1 lg:w-[65%] min-w-0">
+      <CompanyFlatTabs
+        company={company}
+        onUpdateRevenue={...}
+        isUpdatingRevenue={...}
+        onRemoveGroupCompany={...}
+      />
     </div>
+
+    {/* PRAWA KOLUMNA -- sticky */}
+    <aside className="lg:w-[35%] space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <CompanyRegistryCard company={company} />
+      <CompanyContactsMini companyId={company.id} />
+      <CompanyQuickStats company={company} />
+      <CompanyNotesPanel company={company} />
+    </aside>
   </div>
 </div>
 ```
 
-### CompaniesTable -- analogicznie
+Kluczowa zmiana: Usunięcie wrapujących tabów `Analiza AI / Grupa kapitałowa / Kontakty`. `CompanyFlatTabs` juz zawiera tab "Źródła" (pipeline), "Struktura" (grupa kapitałowa), oraz wszystkie taby AI. Trzeba dodać nowy tab "Kontakty" wewnątrz `CompanyFlatTabs` aby nie stracic tej funkcjonalności.
+
+### 2. CompanyFlatTabs.tsx -- dodanie tabu "Kontakty"
+
+Dodanie jednego nowego tabu `contacts` do listy `tabs[]` z ikona `Users` i labelem `Kontakty`. Tab bedzie renderowac `CompanyContactsList` -- komponent juz istnieje.
+
+### 3. CompanyRegistryCard.tsx (NOWY)
 
 ```typescript
-const COMPANIES_MIN_WIDTH = 960;
-
-// Ta sama struktura: div wrapper -> div header -> div virtualized body
-// Bez importow Table/TableRow/TableCell z shadcn
+// Mini karta z danymi rejestrowymi
+// Wyswietla: NIP, KRS, REGON, forma prawna, adres, strona WWW
+// Kompaktowy layout, klikalne linki (WWW otwiera w nowym tabie)
+// Jezeli dane nie istnieja -- nie renderuj pustych pol
 ```
+
+### 4. CompanyContactsMini.tsx (NOWY)
+
+```typescript
+// Kompaktowa lista max 5 osob z firmy
+// Kazda osoba: Avatar + imie + stanowisko, link do /contacts/:id
+// Jezeli > 5 osob: link "Pokaż wszystkich (n)"
+// Uzywa istniejacego hooka useCompanyContacts
+```
+
+### 5. CompanyQuickStats.tsx (NOWY)
+
+```typescript
+// Siatka statystyk:
+// - Pewność danych (confidence_score) -- badge kolorowy
+// - Status analizy (completed / pending / brak)
+// - Liczba kontaktów (z useCompanyContacts)
+// - Przychód (revenue_amount / revenue_year)
+// - Branża (industry)
+// - Data ostatniej analizy
+```
+
+### 6. CompanyNotesPanel.tsx (NOWY)
+
+```typescript
+// Analogicznie do ContactNotesPanel:
+// - Textarea z auto-save (debounce 1s)
+// - Zapis do pola 'notes' w tabeli companies (lub dowolnego pola tekstowego)
+// - Max 2000 znaków z licznikiem
+// - Badge "Zapisano" / "Zapisywanie..."
+// Uwaga: tabela companies moze nie miec pola 'notes' -- 
+// jeśli nie istnieje, trzeba dodac migracje
+```
+
+### Sprawdzenie pola notes w tabeli companies
+
+Przed implementacją trzeba sprawdzic czy tabela `companies` ma pole `notes`. Jesli nie -- zostanie dodana migracja SQL: `ALTER TABLE companies ADD COLUMN notes TEXT DEFAULT NULL`.
+
+## Guardrails
+
+- NIE usuwaj zadnych istniejacych komponentow -- tylko przenies je w nowe miejsce
+- NIE modyfikuj hookow
+- NIE modyfikuj Edge Functions
+- ZACHOWAJ responsywność -- na mobile (< lg) jedna kolumna
+- NIE lamij istniejacych route'ow
+- CompanyFlatTabs zachowuje swoje 15 tabow + dodatkowy tab Kontakty
+- Kontakty w prawej kolumnie to MINI wersja (max 5), pelna lista jest w nowym tabie CompanyFlatTabs
 
