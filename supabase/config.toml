@@ -152,3 +152,6 @@ verify_jwt = false
 
 [functions.sovra-generate-embeddings]
 verify_jwt = false
+
+[functions.sovra-weekly-report]
+verify_jwt = false

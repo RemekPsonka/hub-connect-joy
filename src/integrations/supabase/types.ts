@@ -5145,6 +5145,73 @@ export type Database = {
           },
         ]
       }
+      sovra_report_config: {
+        Row: {
+          created_at: string | null
+          day_of_week: number | null
+          director_id: string
+          email_override: string | null
+          enabled: boolean | null
+          frequency: string | null
+          id: string
+          include_sections: Json | null
+          last_sent_at: string | null
+          tenant_id: string
+          time_of_day: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          day_of_week?: number | null
+          director_id: string
+          email_override?: string | null
+          enabled?: boolean | null
+          frequency?: string | null
+          id?: string
+          include_sections?: Json | null
+          last_sent_at?: string | null
+          tenant_id: string
+          time_of_day?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          day_of_week?: number | null
+          director_id?: string
+          email_override?: string | null
+          enabled?: boolean | null
+          frequency?: string | null
+          id?: string
+          include_sections?: Json | null
+          last_sent_at?: string | null
+          tenant_id?: string
+          time_of_day?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sovra_report_config_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_report_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sovra_report_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sovra_sessions: {
         Row: {
           content: Json | null
