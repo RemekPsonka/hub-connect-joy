@@ -2038,6 +2038,47 @@ export type Database = {
           },
         ]
       }
+      deal_products: {
+        Row: {
+          created_at: string
+          deal_id: string
+          description: string | null
+          id: string
+          name: string
+          quantity: number
+          total_price: number | null
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          description?: string | null
+          id?: string
+          name: string
+          quantity?: number
+          total_price?: number | null
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          description?: string | null
+          id?: string
+          name?: string
+          quantity?: number
+          total_price?: number | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_products_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_stages: {
         Row: {
           color: string | null

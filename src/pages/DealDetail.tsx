@@ -36,7 +36,7 @@ import {
   useDealActivities,
   useCreateDealActivity,
 } from '@/hooks/useDeals';
-import { DealStageBadge, DealActivitiesTimeline } from '@/components/deals';
+import { DealStageBadge, DealActivitiesTimeline, DealProductsCard } from '@/components/deals';
 
 export default function DealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -314,6 +314,22 @@ export default function DealDetail() {
           isLoading={activitiesLoading}
         />
       </div>
+
+      {/* Products Section */}
+      <DealProductsCard
+        dealId={deal.id}
+        currency={deal.currency}
+        onValueChange={async (total) => {
+          await updateDeal.mutateAsync({ id: deal.id, value: total });
+          await createActivity.mutateAsync({
+            deal_id: deal.id,
+            activity_type: 'value_change',
+            description: 'Wartość zaktualizowana na podstawie produktów',
+            old_value: deal.value.toString(),
+            new_value: total.toString(),
+          });
+        }}
+      />
     </div>
   );
 }

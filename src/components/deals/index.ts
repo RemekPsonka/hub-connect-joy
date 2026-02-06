@@ -5,3 +5,4 @@ export { DealCard } from './DealCard';
 export { DealStageBadge } from './DealStageBadge';
 export { CreateDealModal } from './CreateDealModal';
 export { DealActivitiesTimeline } from './DealActivitiesTimeline';
+export { DealProductsCard } from './DealProductsCard';
