@@ -112,13 +112,14 @@ export function useDealStages() {
         .from('deal_stages')
         .select('*')
         .eq('tenant_id', tenantId)
+        .eq('is_active', true)
         .order('position', { ascending: true });
 
       if (error) throw error;
       return data as DealStage[];
     },
     enabled: !!tenantId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
   });
 }
 
