@@ -48,6 +48,7 @@ export interface Deal {
 export interface DealActivity {
   id: string;
   deal_id: string;
+  user_id: string | null;
   activity_type: string;
   description: string | null;
   old_value: string | null;
