@@ -1,156 +1,136 @@
 
 
-# Plan: Tabela Deal Products (Produkty w Deal)
+# Plan: Rozszerzenie tabeli deal_activities
 
 ## Cel
-Dodanie możliwości zarządzania produktami/pozycjami w ramach pojedynczego deala, z automatycznym obliczaniem wartości.
+Rozszerzenie istniejącej tabeli `deal_activities` o kolumnę `details` (JSONB) oraz ujednolicenie typów aktywności zgodnie z nowym standardem.
 
 ---
 
-## Analiza schematu
+## Analiza różnic
 
-Proponowany schemat zawiera kolumnę `GENERATED ALWAYS AS`:
+| Pole | Obecny schemat | Proponowany schemat | Decyzja |
+|------|----------------|---------------------|---------|
+| `id` | UUID | UUID | ✅ Bez zmian |
+| `deal_id` | UUID (FK do deals) | UUID (FK do deals) | ✅ Bez zmian |
+| `user_id` | ❌ Brak | UUID (FK do auth.users) | ⚠️ Używamy `created_by` (FK do directors) |
+| `activity_type` | TEXT | TEXT | ✅ Bez zmian (rozszerzyć typy) |
+| `description` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
+| `old_value` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
+| `new_value` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
+| `details` | ❌ Brak | JSONB | **Dodać** (elastyczne dane) |
+| `created_by` | UUID (FK do directors) | ❌ Brak | **Zachować** (kompatybilność) |
+| `created_at` | TIMESTAMPTZ | TIMESTAMPTZ | ✅ Bez zmian |
 
-```sql
-total_price DECIMAL(15, 2) GENERATED ALWAYS AS (quantity * unit_price) STORED
-```
+---
 
-Jest to wspierane przez PostgreSQL i automatycznie oblicza wartość wiersza.
+## Powód zachowania istniejących kolumn
+
+Obecna implementacja w `src/hooks/useDeals.ts` używa kolumn:
+- `description` - opis aktywności
+- `old_value` / `new_value` - wartości przed/po zmianie
+- `created_by` - referencja do dyrektora (nie auth.users)
+
+Kolumna `details` JSONB zostanie dodana jako uzupełnienie dla elastycznych danych, które nie pasują do sztywnego schematu.
 
 ---
 
 ## Krok 1: Migracja bazy danych
 
 ```sql
-CREATE TABLE public.deal_products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
-  
-  name TEXT NOT NULL,
-  description TEXT,
-  quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,
-  unit_price DECIMAL(15, 2) NOT NULL,
-  total_price DECIMAL(15, 2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
-  
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Dodanie kolumny details do istniejącej tabeli
+ALTER TABLE public.deal_activities
+ADD COLUMN IF NOT EXISTS details JSONB;
 
-CREATE INDEX idx_deal_products_deal ON deal_products(deal_id);
-```
-
-### RLS (Row Level Security)
-
-Dostęp przez relację do `deals`:
-
-```sql
-ALTER TABLE public.deal_products ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "tenant_access" ON public.deal_products
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-  );
+-- Indeks dla szybkiego wyszukiwania w JSONB
+CREATE INDEX IF NOT EXISTS idx_deal_activities_details 
+ON public.deal_activities USING GIN (details);
 ```
 
 ---
 
-## Krok 2: TypeScript interface
+## Krok 2: Aktualizacja TypeScript interface
 
-Nowy interface w `src/hooks/useDeals.ts`:
+Plik: `src/hooks/useDeals.ts`
 
+Zmiana:
 ```typescript
-export interface DealProduct {
+export interface DealActivity {
   id: string;
   deal_id: string;
-  name: string;
+  activity_type: string;
   description: string | null;
-  quantity: number;
-  unit_price: number;
-  total_price: number; // obliczane automatycznie przez DB
+  old_value: string | null;
+  new_value: string | null;
+  details: Record<string, unknown> | null;  // NOWE
+  created_by: string | null;
   created_at: string;
+  creator?: { id: string; full_name: string } | null;
 }
 ```
 
 ---
 
-## Krok 3: Hooki CRUD
+## Krok 3: Aktualizacja hooka useCreateDealActivity
 
-Nowe hooki w `src/hooks/useDeals.ts`:
+Rozszerzenie mutacji o obsługę `details`:
 
-| Hook | Opis |
-|------|------|
-| `useDealProducts(dealId)` | Pobierz produkty dla deala |
-| `useCreateDealProduct()` | Dodaj produkt |
-| `useUpdateDealProduct()` | Edytuj produkt |
-| `useDeleteDealProduct()` | Usuń produkt |
-
----
-
-## Krok 4: Komponent UI
-
-Nowy plik: `src/components/deals/DealProductsCard.tsx`
-
-Funkcjonalności:
-- Lista produktów z tabelą (Nazwa, Ilość, Cena jednostkowa, Suma)
-- Przycisk "Dodaj produkt" otwierający inline formularz lub modal
-- Możliwość edycji i usuwania pozycji
-- Podsumowanie całkowitej wartości produktów
-- Przycisk "Aktualizuj wartość deal" (synchronizacja z `deals.value`)
-
----
-
-## Krok 5: Integracja z DealDetail.tsx
-
-Dodanie komponentu `DealProductsCard` do strony szczegółów deala:
-
-```tsx
-<DealProductsCard 
-  dealId={deal.id} 
-  currency={deal.currency}
-  onValueChange={(total) => handleUpdateDealValue(total)}
-/>
+```typescript
+export function useCreateDealActivity() {
+  // ...
+  return useMutation({
+    mutationFn: async (activity: {
+      deal_id: string;
+      activity_type: string;
+      description?: string;
+      old_value?: string;
+      new_value?: string;
+      details?: Record<string, unknown>;  // NOWE
+    }) => {
+      // ...
+    },
+  });
+}
 ```
 
 ---
 
-## Pliki do utworzenia/modyfikacji
+## Krok 4: Aktualizacja komponentu DealActivitiesTimeline
+
+Komponent może teraz wyświetlać dodatkowe dane z `details` dla typów aktywności, które tego wymagają.
+
+---
+
+## Typy aktywności (ujednolicone)
+
+| Typ | Opis | Dane w details |
+|-----|------|----------------|
+| `created` | Deal utworzony | - |
+| `stage_change` | Zmiana etapu | `{ from_stage, to_stage }` |
+| `value_change` | Zmiana wartości | `{ from_value, to_value, currency }` |
+| `won` | Deal wygrany | `{ won_reason }` |
+| `lost` | Deal przegrany | `{ lost_reason }` |
+| `note` | Notatka dodana | - |
+| `call` | Rozmowa telefoniczna | `{ duration, outcome }` |
+| `email` | Email wysłany | `{ subject }` |
+| `meeting` | Spotkanie | `{ location, attendees }` |
+
+---
+
+## Pliki do modyfikacji
 
 | Plik | Akcja |
 |------|-------|
-| Migracja SQL | **Utworzyć** - CREATE TABLE + RLS |
-| `src/hooks/useDeals.ts` | **Edytować** - dodać interface i hooki |
-| `src/components/deals/DealProductsCard.tsx` | **Utworzyć** - komponent UI |
-| `src/components/deals/index.ts` | **Edytować** - eksport nowego komponentu |
-| `src/pages/DealDetail.tsx` | **Edytować** - dodać sekcję produktów |
-
----
-
-## Wizualizacja komponentu
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│ Produkty                                    [+ Dodaj]  │
-├─────────────────────────────────────────────────────────┤
-│ Nazwa          │ Ilość │ Cena jedn. │ Suma    │ Akcje  │
-├─────────────────────────────────────────────────────────┤
-│ Licencja CRM   │   10  │  1 000 PLN │ 10 000  │ ✏️ 🗑️  │
-│ Wdrożenie      │    1  │ 15 000 PLN │ 15 000  │ ✏️ 🗑️  │
-│ Szkolenie      │    2  │  2 500 PLN │  5 000  │ ✏️ 🗑️  │
-├─────────────────────────────────────────────────────────┤
-│                        RAZEM: │ 30 000 PLN            │
-│                [Ustaw jako wartość deal]              │
-└─────────────────────────────────────────────────────────┘
-```
+| Migracja SQL | **Utworzyć** - ALTER TABLE + indeks |
+| `src/hooks/useDeals.ts` | **Edytować** - rozszerzyć interface i hook |
+| `src/components/deals/DealActivitiesTimeline.tsx` | **Edytować** - obsługa details |
 
 ---
 
 ## Korzyści
 
-- Szczegółowy breakdown wartości deala na produkty/usługi
-- Automatyczne obliczanie sum dzięki `GENERATED COLUMN`
-- Możliwość synchronizacji sumy produktów z wartością główną deala
-- Lepsza kontrola nad wyceną i ofertowaniem
+- Elastyczna kolumna `details` JSONB dla dodatkowych danych
+- Zachowanie kompatybilności wstecznej z istniejącym kodem
+- Możliwość przechowywania dowolnych metadanych per aktywność
+- Indeks GIN dla szybkiego wyszukiwania w JSONB
 
