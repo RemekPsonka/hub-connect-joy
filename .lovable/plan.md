@@ -1,125 +1,162 @@
 
 
-# Fix: Missing useDealsTeamAssignments hook + HotLeadCard task list
+# Naprawa wyswietlania kontaktow (lista Osoby i Firmy)
 
-## Issues to fix
+## Problem
 
-### Issue 1: Missing `src/hooks/useDealsTeamAssignments.ts`
+Obie tabele -- **ContactsTable** (lista osob) i **CompaniesTable** (lista firm) -- maja bledy layoutu spowodowane virtualizacja:
 
-The database table `deal_team_assignments` exists with correct schema and RLS policies, but there is no React hook to interact with it. This hook is needed for the HotLeadCard mini-task list.
+1. **Podwojny scroll**: Naglowek i cialo tabeli sa w osobnych kontenerach scroll, przez co kolumny sie rozjezdzaja
+2. **Konflikt elementow** (CompaniesTable): Uzycie `display: flex` na elementach `<tr>` lamie natywne zachowanie tabeli
+3. **Rozne szerokosci**: Naglowek rozciaga sie na cala szerokosc, ale cialo ma stale piksele -- na szerszych ekranach kolumny sie nie pokrywaja
 
-**New file: `src/hooks/useDealsTeamAssignments.ts`**
+## Rozwiazanie
 
-The hook will provide:
-- `useContactAssignments(teamContactId)` -- fetches assignments for a specific deal team contact
-- `useCreateAssignment()` -- creates a new assignment
-- `useUpdateAssignment()` -- updates assignment (including status toggle for checkbox)
+Zamiana obu tabel na **layout oparty na divach** z jednym kontenerem scroll dla naglowka i ciala. Virtualizacja zostaje bez zmian.
 
-Implementation details:
-- Query `deal_team_assignments` filtered by `team_contact_id`
-- JOIN with `directors` for `assigned_to` and `assigned_by` names
-- On toggle: update `status` between `'pending'` and `'done'`, set `completed_at` when done
-- Invalidate query keys: `['deal-team-assignments', teamContactId]`
-- Use existing `useAuth()` for `tenant_id` and `director_id`
-
-### Issue 2: HotLeadCard missing mini-task list
-
-**Modified file: `src/components/deals-team/HotLeadCard.tsx`**
-
-Add a compact task list below the existing content showing up to 3 assignments with checkboxes:
+### Struktura docelowa
 
 ```text
-Existing card content...
-+---------------------------------+
-| [x] Przygotuj oferte           |
-| [ ] Wyslij kontrakt            |
-| +1 wiecej                      |
-+---------------------------------+
+<div className="border rounded-lg overflow-hidden">
+  <div className="overflow-x-auto">
+    <div style={{ minWidth: calkowitaSzerokoscKolumn }}>
+
+      <!-- Naglowek: div + flex -->
+      <div className="flex bg-muted/50 border-b">
+        <div className="w-[200px] flex-shrink-0">Kolumna 1</div>
+        <div className="w-[120px] flex-shrink-0">Kolumna 2</div>
+        ...
+      </div>
+
+      <!-- Cialo: virtualizowane divy -->
+      <div ref={parentRef} style={{ maxHeight: 'calc(100vh - 350px)' }}>
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map(item => (
+            <div className="flex absolute w-full" style={{ transform, height }}>
+              <div className="w-[200px] flex-shrink-0">Dane 1</div>
+              ...
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
 ```
 
-Implementation:
-- Import `useContactAssignments` and `useUpdateAssignment` from the new hook
-- Render up to 3 assignments with `Checkbox` from shadcn/ui
-- Clicking checkbox toggles between `pending` and `done`
-- Show "+N wiecej" if more than 3 assignments
-- Style completed tasks with `line-through` and muted text
+## Pliki do modyfikacji
 
-## Files to create/modify
+### 1. `src/components/contacts/ContactsTable.tsx`
 
-| File | Action |
-|------|--------|
-| `src/hooks/useDealsTeamAssignments.ts` | CREATE -- CRUD hook for assignments table |
-| `src/components/deals-team/HotLeadCard.tsx` | MODIFY -- Add mini-task list with checkboxes |
+**Szerokosci kolumn** (suma = 1190px):
+- Checkbox: 50px
+- Imie i nazwisko: 220px
+- Firma: 180px
+- Stanowisko: 140px
+- Telefon: 150px
+- Email: 180px
+- Grupa: 100px
+- Profil AI: 140px
+- Sila relacji: 130px
 
-## Technical details
+**Zmiany**:
+- Usuniecie surowych elementow `<table>`, `<thead>`, `<th>`, `<tbody>`, `<tr>`, `<td>`
+- Zastapienie elementami `<div>` z layoutem flex
+- Jeden wrapper `overflow-x-auto` dla naglowka i ciala
+- `minWidth` na wewnetrznym kontenerze rowny sumie kolumn
+- Naglowek uzywa tych samych stalych szerokosci co cialo
+- Zachowana cala funkcjonalnosc: checkbox, sortowanie, bulk actions, paginacja, generowanie AI
 
-### useDealsTeamAssignments.ts structure
+### 2. `src/components/contacts/CompaniesTable.tsx`
+
+**Szerokosci kolumn** (suma = 900px):
+- Nazwa firmy: 220px
+- Miasto: 120px
+- NIP: 140px
+- Osoba kluczowa: 200px
+- Telefon: 140px
+- Profil AI: 140px
+
+**Zmiany**:
+- Usuniecie komponentow `<Table>`, `<TableHeader>`, `<TableRow>`, `<TableHead>`, `<TableBody>`, `<TableCell>`
+- Zastapienie elementami `<div>` z layoutem flex
+- Ten sam wzorzec jednego kontenera scroll
+- Naprawienie problemu `<tr display:flex>`
+- Zachowana cala funkcjonalnosc: sortowanie, paginacja, generowanie AI, nawigacja
+
+## Co sie NIE zmienia
+
+- `ContactsHeader.tsx` -- bez zmian
+- `Contacts.tsx` (strona) -- bez zmian
+- Wszystkie hooki (`useContacts`, `useCompanies` itd.) -- bez zmian
+- Logika paginacji -- identyczna
+- Pasek akcji zbiorczych -- identyczny
+- Virtualizacja `@tanstack/react-virtual` -- zachowana
+- Sortowanie, filtry, rozmiar strony -- wszystko zachowane
+
+## Sekcja techniczna
+
+### ContactsTable -- kluczowe fragmenty
+
+Naglowek (divy zamiast table):
+```typescript
+const CONTACTS_MIN_WIDTH = 1190;
+
+<div className="border rounded-lg overflow-hidden">
+  <div className="overflow-x-auto">
+    <div style={{ minWidth: CONTACTS_MIN_WIDTH }}>
+      {/* Naglowek */}
+      <div className="flex items-center border-b bg-muted/50 h-12 text-sm font-medium text-muted-foreground">
+        <div className="px-4 w-[50px] flex-shrink-0">
+          <Checkbox ... />
+        </div>
+        <div className="px-4 w-[220px] flex-shrink-0">
+          <Button variant="ghost" onClick={() => handleSort('full_name')}>
+            Imie i nazwisko <ArrowUpDown />
+          </Button>
+        </div>
+        ...
+      </div>
+
+      {/* Cialo virtualizowane */}
+      <div ref={parentRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map(virtualItem => {
+            const contact = contacts[virtualItem.index];
+            return (
+              <div
+                key={contact.id}
+                className="flex items-center border-b cursor-pointer hover:bg-muted/50 absolute w-full transition-colors"
+                style={{ height: ROW_HEIGHT, transform: `translateY(${virtualItem.start}px)` }}
+                onClick={() => navigate(`/contacts/${contact.id}`)}
+              >
+                <div className="px-4 w-[50px] flex-shrink-0" onClick={e => e.stopPropagation()}>
+                  <Checkbox ... />
+                </div>
+                <div className="px-4 w-[220px] flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <Avatar>...</Avatar>
+                    <span className="font-medium truncate">{contact.full_name}</span>
+                  </div>
+                </div>
+                ...
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+### CompaniesTable -- analogicznie
 
 ```typescript
-// Query: fetch assignments for a team contact
-export function useContactAssignments(teamContactId: string | undefined) {
-  // SELECT * FROM deal_team_assignments
-  // WHERE team_contact_id = teamContactId
-  // ORDER BY status ASC (pending first), priority DESC, created_at DESC
-}
+const COMPANIES_MIN_WIDTH = 960;
 
-// Mutation: toggle assignment status (pending <-> done)
-export function useUpdateAssignment() {
-  // UPDATE deal_team_assignments SET status, completed_at
-  // Invalidate ['deal-team-assignments', teamContactId]
-}
-
-// Mutation: create new assignment
-export function useCreateAssignment() {
-  // INSERT INTO deal_team_assignments
-  // Uses director_id for assigned_by
-  // Invalidate ['deal-team-assignments', teamContactId]
-}
+// Ta sama struktura: div wrapper -> div header -> div virtualized body
+// Bez importow Table/TableRow/TableCell z shadcn
 ```
-
-### HotLeadCard changes
-
-- Import `useContactAssignments`, `useUpdateAssignment`
-- Add after the estimated_value row:
-
-```tsx
-// Fetch assignments for this contact
-const { data: assignments = [] } = useContactAssignments(contact.id);
-const updateAssignment = useUpdateAssignment();
-
-// Render max 3 items
-{assignments.length > 0 && (
-  <div className="space-y-1">
-    {assignments.slice(0, 3).map(a => (
-      <div key={a.id} className="flex items-center gap-1.5">
-        <Checkbox
-          checked={a.status === 'done'}
-          onCheckedChange={() => updateAssignment.mutate({
-            id: a.id,
-            teamContactId: contact.id,
-            status: a.status === 'done' ? 'pending' : 'done',
-          })}
-          className="h-3 w-3"
-        />
-        <span className={cn("text-xs truncate",
-          a.status === 'done' && "line-through text-muted-foreground"
-        )}>
-          {a.title}
-        </span>
-      </div>
-    ))}
-    {assignments.length > 3 && (
-      <p className="text-xs text-muted-foreground">
-        +{assignments.length - 3} wiecej
-      </p>
-    )}
-  </div>
-)}
-```
-
-## Guardrails
-- No SQL changes needed (table and RLS already exist)
-- No modifications to existing hooks
-- HotLeadCard only gets additional content appended (no existing code removed)
-- Uses existing shadcn/ui Checkbox component
 
