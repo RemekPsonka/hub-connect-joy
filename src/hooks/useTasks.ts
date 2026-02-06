@@ -16,9 +16,9 @@ export interface TasksFilters {
   search?: string;
   crossProgress?: 'all' | '0' | '1' | '2' | '3';
   contactId?: string;
+  projectId?: string;
   sortBy?: 'created_at' | 'due_date' | 'priority';
   sortDirection?: 'asc' | 'desc';
-  // New filters for visibility and categories
   visibility?: 'all' | 'private' | 'team' | 'public';
   categoryId?: string;
   ownerId?: string;
@@ -185,6 +185,9 @@ export function useTasks(filters: TasksFilters = {}) {
       }
       if (filters.excludeSnoozed) {
         query = query.or('snoozed_until.is.null,snoozed_until.lte.' + new Date().toISOString().split('T')[0]);
+      }
+      if (filters.projectId) {
+        query = query.eq('project_id', filters.projectId);
       }
 
       const { data, error } = await query;
@@ -641,6 +644,101 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
+  });
+}
+
+// ─── Subtasks ───────────────────────────────────────────
+
+export function useSubtasks(parentTaskId: string | undefined) {
+  return useQuery({
+    queryKey: ['subtasks', parentTaskId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('parent_task_id', parentTaskId!)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data as Task[];
+    },
+    enabled: !!parentTaskId,
+  });
+}
+
+export function useCreateSubtask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ parentTaskId, title }: { parentTaskId: string; title: string }) => {
+      // Get parent task's tenant_id and project_id
+      const { data: parent, error: parentError } = await supabase
+        .from('tasks')
+        .select('tenant_id, project_id, owner_id')
+        .eq('id', parentTaskId)
+        .single();
+      if (parentError) throw parentError;
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          title,
+          parent_task_id: parentTaskId,
+          tenant_id: parent.tenant_id,
+          project_id: parent.project_id,
+          owner_id: parent.owner_id,
+          status: 'pending',
+          priority: 'medium',
+          task_type: 'standard',
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks', vars.parentTaskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+    },
+  });
+}
+
+// ─── Bulk Operations ────────────────────────────────────
+
+export function useBulkUpdateTasks() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ ids, updates }: { ids: string[]; updates: Partial<TaskUpdate> }) => {
+      const { error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
+  });
+}
+
+export function useBulkDeleteTasks() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      await supabase.from('task_contacts').delete().in('task_id', ids);
+      await supabase.from('cross_tasks').delete().in('task_id', ids);
+      const { error } = await supabase.from('tasks').delete().in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });

@@ -8,9 +8,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown, FolderKanban } from 'lucide-react';
 import type { TasksFilters } from '@/hooks/useTasks';
 import { TaskContactFilter } from './TaskContactFilter';
+import { useProjects } from '@/hooks/useProjects';
+
+function ProjectFilterSelect({ value, onChange }: { value?: string; onChange: (v: string | undefined) => void }) {
+  const { data: projects } = useProjects();
+  return (
+    <Select value={value || 'all'} onValueChange={(v) => onChange(v === 'all' ? undefined : v)}>
+      <SelectTrigger className="w-[160px]">
+        <FolderKanban className="h-4 w-4 mr-2" />
+        <SelectValue placeholder="Projekt" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Wszystkie</SelectItem>
+        {projects?.map((p) => (
+          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 interface TasksHeaderProps {
   filters: TasksFilters;
@@ -139,6 +158,12 @@ export function TasksHeader({
             </SelectContent>
           </Select>
         )}
+
+        {/* Project filter */}
+        <ProjectFilterSelect
+          value={filters.projectId}
+          onChange={(projectId: string | undefined) => onFiltersChange({ ...filters, projectId })}
+        />
 
         {/* Contact filter */}
         <TaskContactFilter
