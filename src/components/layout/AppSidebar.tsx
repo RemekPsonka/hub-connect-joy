@@ -11,6 +11,7 @@ import {
   Bug,
   UserCog,
   Briefcase,
+  TrendingUp,
   CalendarCheck,
   UsersRound,
   Handshake,
@@ -55,6 +56,7 @@ const aiNavigationItems = [
 const networkNavigationItems = [
   { title: 'Sieć kontaktów', url: '/network', icon: Network },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+  { title: 'Deals', url: '/deals', icon: TrendingUp },
 ];
 
 // Nawigacja dla asystenta - ograniczona

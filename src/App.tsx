@@ -40,6 +40,8 @@ const BugReports = lazy(() => import("./pages/BugReports"));
 const Representatives = lazy(() => import("./pages/Representatives"));
 const PolicyPipeline = lazy(() => import("./pages/PolicyPipeline"));
 const Network = lazy(() => import("./pages/Network"));
+const Deals = lazy(() => import("./pages/Deals"));
+const DealDetail = lazy(() => import("./pages/DealDetail"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -103,6 +105,8 @@ const App = () => (
                   />
                   <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
                   <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
+                  <Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />
+                  <Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
                   <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
                   <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
                   <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
