@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, User, Building } from 'lucide-react';
+import { Loader2, User, Building, Sparkles } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,19 +11,25 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useContact } from '@/hooks/useContacts';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useContact, useGenerateContactProfile } from '@/hooks/useContacts';
 import { ContactDetailHeader } from '@/components/contacts/ContactDetailHeader';
-import { ContactOverviewTab } from '@/components/contacts/ContactOverviewTab';
+import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
 import { ContactNeedsOffersTab } from '@/components/contacts/ContactNeedsOffersTab';
-import { ContactConsultationsTab } from '@/components/contacts/ContactConsultationsTab';
 import { ContactHistoryTab } from '@/components/contacts/ContactHistoryTab';
 import { ContactTasksTab } from '@/components/contacts/ContactTasksTab';
-import { ContactNotesTab } from '@/components/contacts/ContactNotesTab';
-import { ContactAgentSection } from '@/components/contacts/ContactAgentSection';
+import { ContactOverviewTab } from '@/components/contacts/ContactOverviewTab';
+import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
 import { ContactModal } from '@/components/contacts/ContactModal';
 import { CompanyView } from '@/components/contacts/CompanyView';
-import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
-import { BITab } from '@/components/bi/BITab';
+import { ContactNotesPanel } from '@/components/contacts/ContactNotesPanel';
+import { ContactTasksPanel } from '@/components/contacts/ContactTasksPanel';
+import { ContactCompanyCard } from '@/components/contacts/ContactCompanyCard';
+import { ContactQuickStats } from '@/components/contacts/ContactQuickStats';
+import { MeetingsTab } from '@/components/contacts/MeetingsTab';
+import { ContactConnectionsSection } from '@/components/contacts/ContactConnectionsSection';
+import { LinkedInNetworkSection } from '@/components/contacts/LinkedInNetworkSection';
+import { AIProfileRenderer } from '@/components/contacts/AIProfileRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 
@@ -50,19 +56,20 @@ export default function ContactDetail() {
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
+  const generateContactProfile = useGenerateContactProfile();
 
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && !isAssistant) {
-      // Admin widzi wszystkie zakładki, pozostali tylko wybrane
-      const adminTabs = ['overview', 'bi', 'agent', 'ownership', 'needs-offers', 'consultations', 'history', 'tasks', 'notes'];
-      const directorTabs = ['overview', 'agent', 'ownership', 'needs-offers', 'consultations', 'history', 'tasks'];
-      const validTabs = isAdmin ? adminTabs : directorTabs;
+      const validTabs = ['company', 'meetings', 'needs-offers', 'profile-ai', 'network', 'more'];
       if (validTabs.includes(tabFromUrl)) {
         return tabFromUrl;
       }
+      // Legacy compatibility
+      if (tabFromUrl === 'consultations') return 'meetings';
+      if (tabFromUrl === 'bi') return 'meetings';
     }
-    return isAssistant ? "agent" : "overview";
+    return 'company';
   };
 
   if (isLoading) {
@@ -134,65 +141,161 @@ export default function ContactDetail() {
 
       {/* Content based on viewMode */}
       {viewMode === 'person' ? (
-        <Tabs defaultValue={getDefaultTab()} className="w-full">
-          {isAssistant ? (
-            <TabsList>
-              <TabsTrigger value="agent">Agent AI</TabsTrigger>
-            </TabsList>
-          ) : (
-            <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-9">
-              <TabsTrigger value="overview">Przegląd</TabsTrigger>
-              {isAdmin && <TabsTrigger value="bi">BI</TabsTrigger>}
-              <TabsTrigger value="agent">Agent AI</TabsTrigger>
-              <TabsTrigger value="ownership">Udziały</TabsTrigger>
-              <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
-              <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
-              <TabsTrigger value="history">Historia</TabsTrigger>
-              <TabsTrigger value="tasks">Zadania</TabsTrigger>
-              {isAdmin && <TabsTrigger value="notes">Notatki</TabsTrigger>}
-            </TabsList>
-          )}
+        isAssistant ? (
+          /* Asystent widzi tylko Agent AI */
+          <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
+        ) : (
+          /* Split View Layout */
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* LEWA KOLUMNA — 60% */}
+            <div className="flex-1 lg:w-[60%] space-y-6 min-w-0">
+              {/* AGENT AI — na górze lewej kolumny */}
+              <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
 
-          <TabsContent value="overview" className="mt-6">
-            <ContactOverviewTab contact={contact} />
-          </TabsContent>
+              {/* TABY z resztą treści */}
+              <Tabs defaultValue={getDefaultTab()} className="w-full">
+                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-6">
+                  <TabsTrigger value="company">Firma</TabsTrigger>
+                  <TabsTrigger value="meetings">Spotkania</TabsTrigger>
+                  <TabsTrigger value="needs-offers">Potrzeby</TabsTrigger>
+                  <TabsTrigger value="profile-ai">Profil AI</TabsTrigger>
+                  <TabsTrigger value="network">Sieć</TabsTrigger>
+                  <TabsTrigger value="more">Więcej</TabsTrigger>
+                </TabsList>
 
-          {isAdmin && (
-            <TabsContent value="bi" className="mt-6">
-              <BITab contactId={contact.id} contactName={contact.full_name} />
-            </TabsContent>
-          )}
+                {/* Tab: Firma — pełna karta firmy */}
+                <TabsContent value="company" className="mt-6">
+                  {contact.companies ? (
+                    <CompanyView contact={contact} />
+                  ) : (
+                    <Card>
+                      <CardContent className="py-8 text-center">
+                        <Building className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-muted-foreground">Firma nie jest przypisana do tego kontaktu</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
 
-          <TabsContent value="agent" className="mt-6">
-            <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
-          </TabsContent>
+                {/* Tab: Spotkania — BI + Konsultacje */}
+                <TabsContent value="meetings" className="mt-6">
+                  <MeetingsTab contactId={contact.id} contactName={contact.full_name} />
+                </TabsContent>
 
-          <TabsContent value="ownership" className="mt-6">
-            <ContactOwnershipTab contactId={contact.id} contactName={contact.full_name} />
-          </TabsContent>
+                {/* Tab: Potrzeby i Oferty */}
+                <TabsContent value="needs-offers" className="mt-6">
+                  <ContactNeedsOffersTab contactId={contact.id} />
+                </TabsContent>
 
-          <TabsContent value="needs-offers" className="mt-6">
-            <ContactNeedsOffersTab contactId={contact.id} />
-          </TabsContent>
+                {/* Tab: Profil AI osoby */}
+                <TabsContent value="profile-ai" className="mt-6">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          Profil AI osoby
+                        </CardTitle>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => generateContactProfile.mutate(contact.id)}
+                          disabled={generateContactProfile.isPending}
+                        >
+                          {generateContactProfile.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-1" />
+                              {contact.profile_summary ? 'Regeneruj' : 'Wygeneruj'}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {contact.profile_summary ? (
+                        <AIProfileRenderer markdown={contact.profile_summary} />
+                      ) : (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Brak profilu AI dla tej osoby
+                          </p>
+                          <Button
+                            onClick={() => generateContactProfile.mutate(contact.id)}
+                            disabled={generateContactProfile.isPending}
+                            size="sm"
+                          >
+                            {generateContactProfile.isPending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Generowanie...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Wygeneruj profil AI
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
 
-          <TabsContent value="consultations" className="mt-6">
-            <ContactConsultationsTab contactId={contact.id} contactName={contact.full_name} />
-          </TabsContent>
+                {/* Tab: Sieć — LinkedIn + Connections */}
+                <TabsContent value="network" className="mt-6">
+                  <div className="space-y-6">
+                    <LinkedInNetworkSection contactId={contact.id} contactName={contact.full_name} />
+                    <ContactConnectionsSection contactId={contact.id} contactName={contact.full_name} />
+                  </div>
+                </TabsContent>
 
-          <TabsContent value="history" className="mt-6">
-            <ContactHistoryTab contactId={contact.id} />
-          </TabsContent>
+                {/* Tab: Więcej — Udziały + Historia + Zadania (pełny widok) */}
+                <TabsContent value="more" className="mt-6">
+                  <Tabs defaultValue="ownership">
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="ownership">Udziały</TabsTrigger>
+                      <TabsTrigger value="tasks-full">Zadania</TabsTrigger>
+                      <TabsTrigger value="history">Historia</TabsTrigger>
+                      {isAdmin && <TabsTrigger value="overview">Przegląd</TabsTrigger>}
+                    </TabsList>
+                    <TabsContent value="ownership">
+                      <ContactOwnershipTab contactId={contact.id} contactName={contact.full_name} />
+                    </TabsContent>
+                    <TabsContent value="tasks-full">
+                      <ContactTasksTab contactId={contact.id} />
+                    </TabsContent>
+                    <TabsContent value="history">
+                      <ContactHistoryTab contactId={contact.id} />
+                    </TabsContent>
+                    {isAdmin && (
+                      <TabsContent value="overview">
+                        <ContactOverviewTab contact={contact} />
+                      </TabsContent>
+                    )}
+                  </Tabs>
+                </TabsContent>
+              </Tabs>
+            </div>
 
-          <TabsContent value="tasks" className="mt-6">
-            <ContactTasksTab contactId={contact.id} />
-          </TabsContent>
+            {/* PRAWA KOLUMNA — 40%, sticky */}
+            <div className="lg:w-[40%] space-y-4 lg:sticky lg:top-4 lg:self-start">
+              {/* Notatki */}
+              {isAdmin && <ContactNotesPanel contact={contact} />}
 
-          {isAdmin && (
-            <TabsContent value="notes" className="mt-6">
-              <ContactNotesTab contact={contact} />
-            </TabsContent>
-          )}
-        </Tabs>
+              {/* Zadania */}
+              <ContactTasksPanel contactId={contact.id} />
+
+              {/* Firma mini karta */}
+              <ContactCompanyCard contact={contact} />
+
+              {/* Szybkie statystyki */}
+              <ContactQuickStats contact={contact} />
+            </div>
+          </div>
+        )
       ) : (
         <CompanyView contact={contact} />
       )}
