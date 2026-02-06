@@ -2145,6 +2145,96 @@ export type Database = {
           },
         ]
       }
+      deal_team_activity_log: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string | null
+          id: string
+          new_value: Json | null
+          note: string | null
+          old_value: Json | null
+          prospect_id: string | null
+          team_contact_id: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          note?: string | null
+          old_value?: Json | null
+          prospect_id?: string | null
+          team_contact_id?: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          note?: string | null
+          old_value?: Json | null
+          prospect_id?: string | null
+          team_contact_id?: string | null
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      deal_team_assignments: {
+        Row: {
+          assigned_by: string
+          assigned_to: string
+          completed_at: string | null
+          created_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string | null
+          status: string | null
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          title: string
+        }
+        Insert: {
+          assigned_by: string
+          assigned_to: string
+          completed_at?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          status?: string | null
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          title: string
+        }
+        Update: {
+          assigned_by?: string
+          assigned_to?: string
+          completed_at?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          status?: string | null
+          team_contact_id?: string
+          team_id?: string
+          tenant_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       deal_team_contacts: {
         Row: {
           assigned_to: string | null
