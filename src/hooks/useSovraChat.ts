@@ -64,6 +64,9 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
           session_id: sessionId,
           context_type: ctxType || options.contextType || 'general',
           context_id: ctxId || options.contextId || undefined,
+          history: messages
+            .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content.trim() !== '')
+            .map(m => ({ role: m.role, content: m.content })),
         }),
         signal: controller.signal,
       });

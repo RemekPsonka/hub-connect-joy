@@ -623,11 +623,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 4. Fetch CRM context + conversation history in parallel
-    const [crmContext, previousMessages] = await Promise.all([
-      fetchCRMContext(serviceClient, directorId, tenantId, contextType, contextId),
-      sessionId ? loadConversationHistory(serviceClient, sessionId, directorId) : Promise.resolve([]),
-    ]);
+    // 4. Fetch CRM context + conversation history
+    const clientHistory = body.history as Array<{ role: string; content: string }> | undefined;
+
+    let previousMessages: ChatMessage[] = [];
+    let crmContext: CRMContext;
+
+    if (Array.isArray(clientHistory) && clientHistory.length > 0) {
+      // Path 1: Use history from client (active conversation — zero race condition)
+      previousMessages = clientHistory
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-MAX_HISTORY_MESSAGES)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      crmContext = await fetchCRMContext(serviceClient, directorId, tenantId, contextType, contextId);
+    } else {
+      // Path 2: Fallback — load from DB (resuming old session from sidebar)
+      const [ctx, dbMessages] = await Promise.all([
+        fetchCRMContext(serviceClient, directorId, tenantId, contextType, contextId),
+        sessionId ? loadConversationHistory(serviceClient, sessionId, directorId) : Promise.resolve([]),
+      ]);
+      crmContext = ctx;
+      previousMessages = dbMessages;
+    }
 
     const contextString = buildContextString(crmContext);
 
