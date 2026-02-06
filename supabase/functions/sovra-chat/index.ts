@@ -28,20 +28,259 @@ MOŻLIWOŚCI:
 - Sugestie kto powinien być zaangażowany w projekt (na bazie kontaktów CRM)
 - Podsumowania i briefy na żądanie
 - Pomoc w planowaniu dnia/tygodnia
-- Tworzenie zadań z rozmowy (opisz co ma być zrobione → zaproponuj task)
 - Analiza relacji z kontaktami i sugestie follow-upów
+
+MOŻLIWOŚCI NARZĘDZI:
+- Możesz TWORZYĆ zadania — użyj narzędzia create_task
+- Możesz ZAPISYWAĆ notatki projektowe — użyj narzędzia add_project_note
+- Możesz ZMIENIAĆ STATUS zadania — użyj narzędzia update_task_status
+- Możesz ZMIENIAĆ STATUS projektu — użyj narzędzia update_project_status
+
+ZASADY UŻYWANIA NARZĘDZI:
+- Kiedy user prosi o stworzenie zadania — STWÓRZ JE od razu, nie pytaj o potwierdzenie
+- Kiedy user mówi "dodaj notatkę do projektu X" — ZAPISZ JĄ
+- Kiedy user mówi "zmień status na done" — ZMIEŃ od razu
+- Po wykonaniu akcji — potwierdź co zrobiłeś krótkim komunikatem
+- Możesz wywołać wiele narzędzi naraz (np. 3 taski na raz)
+- Jeśli brakuje kluczowych danych do akcji (np. nie wiesz do którego projektu) — ZAPYTAJ usera
+- Jeśli user podaje kontekst projektu w rozmowie — użyj jego ID do project_id
 
 OGRANICZENIA:
 - NIE wymyślaj danych — używaj TYLKO kontekstu który dostałeś
 - Jeśli nie masz informacji — powiedz wprost i zasugeruj gdzie szukać
-- NIE wykonujesz akcji bezpośrednio (nie tworzysz tasków, nie wysyłasz maili) — SUGERUJESZ i user potwierdza
 - Odpowiadaj zwięźle — max 300 słów na odpowiedź, chyba że user prosi o więcej
 
 FORMAT ODPOWIEDZI:
 - Używaj markdown do struktury (## nagłówki, **bold**, - listy) ale oszczędnie
 - Emoji max 2-3 na odpowiedź
-- Jeśli sugerujesz task — formatuj: 📋 **[tytuł]** — [opis], priorytet: [wysoki/średni/niski], deadline: [data]
 - Jeśli sugerujesz kontakt — formatuj: 👤 **[imię]** — [powód sugestii]`;
+
+// ─── Tool Definitions ────────────────────────────────────────────────
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "create_task",
+      description: "Utwórz nowe zadanie w CRM. Używaj gdy user prosi o stworzenie taska, zadania, todo.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Tytuł zadania" },
+          description: { type: "string", description: "Szczegółowy opis zadania" },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high", "urgent"],
+            description: "Priorytet zadania (domyślnie medium)",
+          },
+          due_date: { type: "string", description: "Termin wykonania w formacie YYYY-MM-DD" },
+          project_id: { type: "string", description: "UUID projektu do którego przypisać zadanie" },
+          status: {
+            type: "string",
+            enum: ["pending", "in_progress"],
+            description: "Status początkowy (domyślnie pending)",
+          },
+        },
+        required: ["title"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_project_note",
+      description: "Dodaj notatkę do projektu. Używaj gdy user prosi o zapisanie notatki w projekcie.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "UUID projektu" },
+          content: { type: "string", description: "Treść notatki" },
+        },
+        required: ["project_id", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task_status",
+      description: "Zmień status zadania. Używaj gdy user prosi o zmianę statusu taska.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "UUID zadania" },
+          status: {
+            type: "string",
+            enum: ["pending", "in_progress", "done", "cancelled"],
+            description: "Nowy status",
+          },
+        },
+        required: ["task_id", "status"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_project_status",
+      description: "Zmień status projektu. Używaj gdy user prosi o zmianę statusu projektu.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "UUID projektu" },
+          status: {
+            type: "string",
+            enum: ["new", "analysis", "in_progress", "waiting", "done", "cancelled"],
+            description: "Nowy status",
+          },
+        },
+        required: ["project_id", "status"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
+
+// ─── Tool Executors ──────────────────────────────────────────────────
+type ServiceClient = ReturnType<typeof createClient>;
+
+interface ToolResult {
+  tool: string;
+  success: boolean;
+  result: Record<string, unknown>;
+}
+
+async function executeCreateTask(
+  client: ServiceClient,
+  tenantId: string,
+  directorId: string,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    const { data, error } = await client.from("tasks").insert({
+      tenant_id: tenantId,
+      title: args.title as string,
+      description: (args.description as string) || null,
+      priority: (args.priority as string) || "medium",
+      due_date: (args.due_date as string) || null,
+      project_id: (args.project_id as string) || null,
+      owner_id: directorId,
+      assigned_to: directorId,
+      status: (args.status as string) || "pending",
+      visibility: "private",
+    }).select("id, title").single();
+
+    if (error) throw error;
+    return { tool: "create_task", success: true, result: { task_id: data.id, title: data.title } };
+  } catch (e) {
+    console.error("executeCreateTask error:", e);
+    return { tool: "create_task", success: false, result: { error: (e as Error).message } };
+  }
+}
+
+async function executeAddProjectNote(
+  client: ServiceClient,
+  tenantId: string,
+  directorId: string,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Verify project belongs to tenant
+    const { data: project, error: pErr } = await client
+      .from("projects")
+      .select("id, name")
+      .eq("id", args.project_id as string)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (pErr || !project) {
+      return { tool: "add_project_note", success: false, result: { error: "Projekt nie znaleziony" } };
+    }
+
+    const { data, error } = await client.from("project_notes").insert({
+      tenant_id: tenantId,
+      project_id: args.project_id as string,
+      content: args.content as string,
+      created_by: directorId,
+      source: "sovra_chat",
+    }).select("id").single();
+
+    if (error) throw error;
+    return { tool: "add_project_note", success: true, result: { note_id: data.id, project_name: project.name } };
+  } catch (e) {
+    console.error("executeAddProjectNote error:", e);
+    return { tool: "add_project_note", success: false, result: { error: (e as Error).message } };
+  }
+}
+
+async function executeUpdateTaskStatus(
+  client: ServiceClient,
+  tenantId: string,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    const { data, error } = await client
+      .from("tasks")
+      .update({ status: args.status as string })
+      .eq("id", args.task_id as string)
+      .eq("tenant_id", tenantId)
+      .select("id, title, status")
+      .single();
+
+    if (error) throw error;
+    if (!data) return { tool: "update_task_status", success: false, result: { error: "Zadanie nie znalezione" } };
+    return { tool: "update_task_status", success: true, result: { task_id: data.id, title: data.title, new_status: data.status } };
+  } catch (e) {
+    console.error("executeUpdateTaskStatus error:", e);
+    return { tool: "update_task_status", success: false, result: { error: (e as Error).message } };
+  }
+}
+
+async function executeUpdateProjectStatus(
+  client: ServiceClient,
+  tenantId: string,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    const { data, error } = await client
+      .from("projects")
+      .update({ status: args.status as string })
+      .eq("id", args.project_id as string)
+      .eq("tenant_id", tenantId)
+      .select("id, name, status")
+      .single();
+
+    if (error) throw error;
+    if (!data) return { tool: "update_project_status", success: false, result: { error: "Projekt nie znaleziony" } };
+    return { tool: "update_project_status", success: true, result: { project_id: data.id, project_name: data.name, new_status: data.status } };
+  } catch (e) {
+    console.error("executeUpdateProjectStatus error:", e);
+    return { tool: "update_project_status", success: false, result: { error: (e as Error).message } };
+  }
+}
+
+async function executeToolCall(
+  client: ServiceClient,
+  tenantId: string,
+  directorId: string,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  switch (toolName) {
+    case "create_task":
+      return executeCreateTask(client, tenantId, directorId, args);
+    case "add_project_note":
+      return executeAddProjectNote(client, tenantId, directorId, args);
+    case "update_task_status":
+      return executeUpdateTaskStatus(client, tenantId, args);
+    case "update_project_status":
+      return executeUpdateProjectStatus(client, tenantId, args);
+    default:
+      return { tool: toolName, success: false, result: { error: `Unknown tool: ${toolName}` } };
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function jsonResponse(body: Record<string, unknown>, status = 200, extraHeaders: Record<string, string> = {}) {
@@ -126,7 +365,7 @@ interface CRMContext {
 }
 
 async function fetchCRMContext(
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: ServiceClient,
   directorId: string,
   tenantId: string,
   contextType: string,
@@ -197,12 +436,13 @@ async function fetchCRMContext(
     if (project) {
       result.specificContext = `\n=== AKTYWNY KONTEKST: PROJEKT ===
 Nazwa: ${project.name}
+ID projektu: ${project.id}
 Status: ${project.status || "brak"}
 Opis: ${project.description || "brak opisu"}
 Start: ${project.start_date || "nie ustalono"}
 Deadline: ${project.target_end_date || "nie ustalono"}
 Zadania w projekcie (${projectTasks.length}):
-${projectTasks.map((t) => `- ${t.title} [${t.status}] priorytet: ${t.priority || "brak"}, termin: ${t.due_date || "brak"}`).join("\n")}`;
+${projectTasks.map((t) => `- [ID: ${t.id}] ${t.title} [${t.status}] priorytet: ${t.priority || "brak"}, termin: ${t.due_date || "brak"}`).join("\n")}`;
     }
   } else if (contextType === "contact" && contextId) {
     const contact = await serviceClient
@@ -237,6 +477,7 @@ Notatki: ${contact.notes || "brak"}`;
     if (task) {
       const projectName = (task.projects as Record<string, unknown> | null)?.name as string | undefined;
       result.specificContext = `\n=== AKTYWNY KONTEKST: ZADANIE ===
+ID zadania: ${task.id}
 Tytuł: ${task.title}
 Opis: ${task.description || "brak"}
 Status: ${task.status}
@@ -260,12 +501,12 @@ Dzień: ${dayOfWeek}, ${today}
 Imię użytkownika: ${ctx.directorName}
 
 === AKTYWNE PROJEKTY (${ctx.activeProjects.length}) ===
-${ctx.activeProjects.length === 0 ? "Brak aktywnych projektów." : ctx.activeProjects.map((p) => `- ${p.name} [${p.status}]`).join("\n")}
+${ctx.activeProjects.length === 0 ? "Brak aktywnych projektów." : ctx.activeProjects.map((p) => `- [ID: ${p.id}] ${p.name} [${p.status}]`).join("\n")}
 
 === ZADANIA DO ZROBIENIA (${ctx.recentTasks.length}) ===
 ${ctx.recentTasks.length === 0 ? "Brak zadań." : ctx.recentTasks.map((t) => {
     const project = t.project_name ? ` (${t.project_name})` : "";
-    return `- ${t.title} [${t.status}] priorytet: ${t.priority || "brak"}, termin: ${t.due_date || "brak"}${project}`;
+    return `- [ID: ${t.id}] ${t.title} [${t.status}] priorytet: ${t.priority || "brak"}, termin: ${t.due_date || "brak"}${project}`;
   }).join("\n")}`;
 
   if (ctx.specificContext) {
@@ -282,7 +523,7 @@ interface ChatMessage {
 }
 
 async function loadConversationHistory(
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: ServiceClient,
   sessionId: string,
   directorId: string
 ): Promise<ChatMessage[]> {
@@ -391,20 +632,20 @@ Deno.serve(async (req) => {
     const contextString = buildContextString(crmContext);
 
     // 5. Build messages array
-    const aiMessages = [
-      { role: "system" as const, content: SOVRA_CHAT_SYSTEM_PROMPT },
-      { role: "system" as const, content: `AKTUALNY KONTEKST:\n${contextString}` },
+    const aiMessages: Array<Record<string, unknown>> = [
+      { role: "system", content: SOVRA_CHAT_SYSTEM_PROMPT },
+      { role: "system", content: `AKTUALNY KONTEKST:\n${contextString}` },
       ...previousMessages,
-      { role: "user" as const, content: message },
+      { role: "user", content: message },
     ];
 
-    // 6. Call AI Gateway with streaming
+    // 6. Call AI Gateway — Step 1: Non-streaming with tools
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) {
       return jsonResponse({ error: "AI not configured" }, 500);
     }
 
-    const aiResponse = await fetch(AI_GATEWAY_URL, {
+    const initialResponse = await fetch(AI_GATEWAY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -413,54 +654,217 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: aiMessages,
+        tools: TOOLS,
         temperature: 0.7,
-        stream: true,
+        stream: false,
       }),
     });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errText);
+    if (!initialResponse.ok) {
+      const errText = await initialResponse.text();
+      console.error("AI Gateway error:", initialResponse.status, errText);
 
-      if (aiResponse.status === 429) {
+      if (initialResponse.status === 429) {
         return jsonResponse({ error: "Przekroczono limit zapytań AI. Spróbuj za chwilę." }, 429);
       }
-      if (aiResponse.status === 402) {
+      if (initialResponse.status === 402) {
         return jsonResponse({ error: "Wymagana płatność — doładuj kredyty AI." }, 402);
       }
 
       return jsonResponse({ error: "Błąd komunikacji z AI" }, 500);
     }
 
-    // 7. Determine session ID for the response header
-    // For new sessions, generate UUID upfront
+    const initialData = await initialResponse.json();
+    const assistantChoice = initialData.choices?.[0];
+
+    if (!assistantChoice) {
+      return jsonResponse({ error: "Brak odpowiedzi od AI" }, 500);
+    }
+
+    const toolCalls = assistantChoice.message?.tool_calls;
+    let toolResults: ToolResult[] = [];
+    let tasksCreated = 0;
+    let notesCreated = 0;
+
+    // 7. If AI wants to call tools — execute them
+    if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
+      console.log(`Executing ${toolCalls.length} tool calls`);
+
+      // Execute all tool calls
+      const toolPromises = toolCalls.map(async (tc: Record<string, unknown>) => {
+        const fn = tc.function as { name: string; arguments: string };
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(fn.arguments);
+        } catch {
+          console.error("Failed to parse tool args:", fn.arguments);
+        }
+        return executeToolCall(serviceClient, tenantId, directorId, fn.name, args);
+      });
+
+      toolResults = await Promise.all(toolPromises);
+
+      tasksCreated = toolResults.filter((r) => r.tool === "create_task" && r.success).length;
+      notesCreated = toolResults.filter((r) => r.tool === "add_project_note" && r.success).length;
+
+      // Build tool result messages for the second AI call
+      const toolMessages: Array<Record<string, unknown>> = [];
+
+      // Add the assistant message with tool_calls
+      toolMessages.push({
+        role: "assistant",
+        content: assistantChoice.message.content || null,
+        tool_calls: toolCalls,
+      });
+
+      // Add tool results
+      for (let i = 0; i < toolCalls.length; i++) {
+        const tc = toolCalls[i] as Record<string, unknown>;
+        toolMessages.push({
+          role: "tool",
+          tool_call_id: tc.id as string,
+          content: JSON.stringify(toolResults[i]?.result || { error: "Unknown error" }),
+        });
+      }
+
+      // 8. Second AI call — streaming with tool results
+      const followUpMessages = [...aiMessages, ...toolMessages];
+
+      const streamResponse = await fetch(AI_GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: followUpMessages,
+          temperature: 0.7,
+          stream: true,
+        }),
+      });
+
+      if (!streamResponse.ok) {
+        console.error("AI follow-up stream error:", streamResponse.status);
+        return jsonResponse({ error: "Błąd komunikacji z AI" }, 500);
+      }
+
+      // Stream response with tool_results SSE event prepended
+      const responseSessionId = sessionId || crypto.randomUUID();
+      const aiBodyReader = streamResponse.body!.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedSSE = "";
+
+      const outputStream = new ReadableStream({
+        async start(controller) {
+          try {
+            // Send tool_results event FIRST
+            const toolResultsEvent = `data: ${JSON.stringify({ type: "tool_results", actions: toolResults })}\n\n`;
+            controller.enqueue(new TextEncoder().encode(toolResultsEvent));
+
+            // Then stream AI response
+            while (true) {
+              const { done, value } = await aiBodyReader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              accumulatedSSE += chunk;
+              controller.enqueue(new TextEncoder().encode(chunk));
+            }
+          } catch (e) {
+            console.error("Stream error:", e);
+          } finally {
+            // Save session
+            try {
+              const assistantText = extractContentFromSSE(accumulatedSSE);
+              if (assistantText) {
+                if (sessionId) {
+                  const { data: existing } = await serviceClient
+                    .from("sovra_sessions")
+                    .select("content")
+                    .eq("id", sessionId)
+                    .eq("director_id", directorId)
+                    .single();
+
+                  const existingContent = (existing?.content as Record<string, unknown>) || {};
+                  const existingMessages = (existingContent.messages as unknown[]) || [];
+
+                  const newMessages = [
+                    { role: "user", content: message, timestamp: new Date().toISOString() },
+                    { role: "assistant", content: assistantText, timestamp: new Date().toISOString(), tool_results: toolResults },
+                  ];
+
+                  await serviceClient
+                    .from("sovra_sessions")
+                    .update({
+                      content: { messages: [...existingMessages, ...newMessages] },
+                      ended_at: new Date().toISOString(),
+                      tasks_created: (existingContent.tasks_created as number || 0) + tasksCreated,
+                      notes_created: (existingContent.notes_created as number || 0) + notesCreated,
+                    })
+                    .eq("id", sessionId)
+                    .eq("director_id", directorId);
+                } else {
+                  const title = message.length > 50 ? message.slice(0, 50) + "…" : message;
+
+                  await serviceClient.from("sovra_sessions").insert({
+                    id: responseSessionId,
+                    tenant_id: tenantId,
+                    director_id: directorId,
+                    type: "chat",
+                    title,
+                    content: {
+                      messages: [
+                        { role: "user", content: message, timestamp: new Date().toISOString() },
+                        { role: "assistant", content: assistantText, timestamp: new Date().toISOString(), tool_results: toolResults },
+                      ],
+                    },
+                    tasks_created: tasksCreated,
+                    notes_created: notesCreated,
+                  });
+                }
+              }
+            } catch (e) {
+              console.error("Session save error:", e);
+            }
+
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(outputStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "X-Sovra-Session-Id": responseSessionId,
+        },
+      });
+    }
+
+    // 9. No tool calls — simple text response, stream it
+    // Re-do call with streaming since initial was non-streaming
     const responseSessionId = sessionId || crypto.randomUUID();
 
-    // 8. Stream response to client while accumulating text for session save
-    const aiBodyReader = aiResponse.body!.getReader();
-    const decoder = new TextDecoder();
-    let accumulatedSSE = "";
+    // If the initial response already has content, we can use it directly
+    const directContent = assistantChoice.message?.content;
+    if (directContent) {
+      // Stream the already-received content as SSE
+      const sseLines = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: directContent } }] })}\n\n`,
+        `data: [DONE]\n\n`,
+      ];
 
-    const outputStream = new ReadableStream({
-      async start(controller) {
-        try {
-          while (true) {
-            const { done, value } = await aiBodyReader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            accumulatedSSE += chunk;
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
-        } catch (e) {
-          console.error("Stream error:", e);
-        } finally {
-          // Save session after stream completes
+      const outputStream = new ReadableStream({
+        async start(controller) {
           try {
-            const assistantText = extractContentFromSSE(accumulatedSSE);
-            if (assistantText) {
+            for (const line of sseLines) {
+              controller.enqueue(new TextEncoder().encode(line));
+            }
+          } finally {
+            // Save session
+            try {
               if (sessionId) {
-                // Update existing session
                 const { data: existing } = await serviceClient
                   .from("sovra_sessions")
                   .select("content")
@@ -473,7 +877,7 @@ Deno.serve(async (req) => {
 
                 const newMessages = [
                   { role: "user", content: message, timestamp: new Date().toISOString() },
-                  { role: "assistant", content: assistantText, timestamp: new Date().toISOString() },
+                  { role: "assistant", content: directContent, timestamp: new Date().toISOString() },
                 ];
 
                 await serviceClient
@@ -485,7 +889,6 @@ Deno.serve(async (req) => {
                   .eq("id", sessionId)
                   .eq("director_id", directorId);
               } else {
-                // Create new session with pre-generated ID
                 const title = message.length > 50 ? message.slice(0, 50) + "…" : message;
 
                 await serviceClient.from("sovra_sessions").insert({
@@ -497,30 +900,33 @@ Deno.serve(async (req) => {
                   content: {
                     messages: [
                       { role: "user", content: message, timestamp: new Date().toISOString() },
-                      { role: "assistant", content: assistantText, timestamp: new Date().toISOString() },
+                      { role: "assistant", content: directContent, timestamp: new Date().toISOString() },
                     ],
                   },
                   tasks_created: 0,
                   notes_created: 0,
                 });
               }
+            } catch (e) {
+              console.error("Session save error:", e);
             }
-          } catch (e) {
-            console.error("Session save error:", e);
+
+            controller.close();
           }
+        },
+      });
 
-          controller.close();
-        }
-      },
-    });
+      return new Response(outputStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "X-Sovra-Session-Id": responseSessionId,
+        },
+      });
+    }
 
-    return new Response(outputStream, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "X-Sovra-Session-Id": responseSessionId,
-      },
-    });
+    // Fallback: no content and no tool calls
+    return jsonResponse({ error: "Brak odpowiedzi od AI" }, 500);
   } catch (error) {
     console.error("sovra-chat error:", error);
     return jsonResponse({ error: "Internal server error" }, 500);

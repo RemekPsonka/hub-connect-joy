@@ -1,11 +1,19 @@
 import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+
+export interface ToolAction {
+  tool: string;
+  success: boolean;
+  result: Record<string, unknown>;
+}
 
 export interface SovraMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool_results';
   content: string;
   timestamp: Date;
+  actions?: ToolAction[];
 }
 
 interface UseSovraChatOptions {
@@ -18,6 +26,7 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
 
   const sendMessage = useCallback(async (text: string, ctxType?: string, ctxId?: string) => {
     if (!text.trim() || isStreaming) return;
@@ -31,6 +40,8 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    let hadToolResults = false;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -116,6 +127,33 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
 
           try {
             const parsed = JSON.parse(jsonStr);
+
+            // Check for tool_results event
+            if (parsed.type === 'tool_results' && Array.isArray(parsed.actions)) {
+              hadToolResults = true;
+              const toolMsg: SovraMessage = {
+                role: 'tool_results',
+                content: '',
+                timestamp: new Date(),
+                actions: parsed.actions as ToolAction[],
+              };
+              // Insert tool_results message BEFORE the empty assistant message
+              setMessages(prev => {
+                const updated = [...prev];
+                // Find the last assistant message (should be the empty one)
+                const lastIdx = updated.length - 1;
+                if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                  // Insert before it
+                  updated.splice(lastIdx, 0, toolMsg);
+                } else {
+                  updated.push(toolMsg);
+                }
+                return updated;
+              });
+              continue;
+            }
+
+            // Normal streaming content
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               assistantContent += content;
@@ -163,6 +201,13 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
           } catch { /* ignore */ }
         }
       }
+
+      // Invalidate caches if tool actions were performed
+      if (hadToolResults) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['project-notes'] });
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+      }
     } catch (e) {
       if ((e as Error).name === 'AbortError') return;
       console.error('Sovra chat error:', e);
@@ -179,7 +224,7 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [isStreaming, sessionId, options.contextType, options.contextId]);
+  }, [isStreaming, sessionId, options.contextType, options.contextId, queryClient]);
 
   const loadSession = useCallback(async (id: string) => {
     try {
@@ -192,18 +237,29 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
       if (!data?.content) return;
 
       const content = data.content as Record<string, unknown>;
-      const msgs = content.messages as Array<{ role: string; content: string; timestamp?: string }> | undefined;
+      const msgs = content.messages as Array<{ role: string; content: string; timestamp?: string; tool_results?: ToolAction[] }> | undefined;
 
       if (Array.isArray(msgs)) {
-        setMessages(
-          msgs
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => ({
+        const loaded: SovraMessage[] = [];
+        for (const m of msgs) {
+          if (m.role === 'user' || m.role === 'assistant') {
+            // If assistant message has tool_results, insert a tool_results message before it
+            if (m.role === 'assistant' && Array.isArray(m.tool_results) && m.tool_results.length > 0) {
+              loaded.push({
+                role: 'tool_results',
+                content: '',
+                timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+                actions: m.tool_results,
+              });
+            }
+            loaded.push({
               role: m.role as 'user' | 'assistant',
               content: m.content,
               timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
-            }))
-        );
+            });
+          }
+        }
+        setMessages(loaded);
         setSessionId(id);
       }
     } catch (e) {
