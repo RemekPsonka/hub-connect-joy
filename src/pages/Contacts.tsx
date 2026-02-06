@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useContacts } from '@/hooks/useContacts';
 import { useCompaniesWithContacts } from '@/hooks/useCompanies';
 import { ContactsHeader, type ViewMode } from '@/components/contacts/ContactsHeader';
@@ -8,7 +9,9 @@ import { BulkMergeDomainsModal } from '@/components/contacts/BulkMergeDomainsMod
 import { FindDuplicatesModal } from '@/components/contacts/FindDuplicatesModal';
 
 export default function Contacts() {
-  const [viewMode, setViewMode] = useState<ViewMode>('people');
+  const [searchParams] = useSearchParams();
+  const initialView: ViewMode = searchParams.get('view') === 'companies' ? 'companies' : 'people';
+  const [viewMode, setViewMode] = useState<ViewMode>(initialView);
   const [search, setSearch] = useState('');
   const [groupId, setGroupId] = useState('');
   const [companyId, setCompanyId] = useState('');
