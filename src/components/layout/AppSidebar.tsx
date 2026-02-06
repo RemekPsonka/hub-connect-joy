@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -47,7 +48,7 @@ const overviewItems = [
 // CRM
 const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Firmy', url: '/contacts', icon: Building2 }, // filtered by companies
+  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2 },
   { title: 'Sieć kontaktów', url: '/network', icon: Network },
 ];
 
@@ -85,14 +86,39 @@ const assistantNavigationItems = [
 ];
 
 function NavItem({ item }: { item: { title: string; url: string; icon: typeof Settings } }) {
+  const location = useLocation();
+  const hasQuery = item.url.includes('?');
+  const basePath = hasQuery ? item.url.split('?')[0] : item.url;
+
+  // Custom active detection for query-param links
+  let isActiveItem = false;
+  if (hasQuery) {
+    if (location.pathname === basePath) {
+      const itemParams = new URLSearchParams(item.url.split('?')[1]);
+      const locParams = new URLSearchParams(location.search);
+      isActiveItem = Array.from(itemParams.entries()).every(
+        ([key, value]) => locParams.get(key) === value
+      );
+    }
+  } else if (item.url === '/contacts') {
+    // "Kontakty" should NOT be active when ?view=companies is set
+    isActiveItem = location.pathname === '/contacts' && !location.search.includes('view=companies');
+  } else if (item.url === '/') {
+    isActiveItem = location.pathname === '/';
+  } else {
+    isActiveItem = location.pathname.startsWith(item.url);
+  }
+
+  const baseClass = "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150";
+  const activeClass = "bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]";
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild tooltip={item.title}>
         <NavLink
           to={item.url}
-          end={item.url === '/'}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150"
-          activeClassName="bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]"
+          end
+          className={`${baseClass} ${isActiveItem ? activeClass : ''}`}
         >
           <item.icon className="h-4 w-4 shrink-0" />
           <span>{item.title}</span>

@@ -15,6 +15,7 @@ const routeLabels: Record<string, string> = {
   'analytics': 'Analityka',
   'network': 'Sieć kontaktów',
   'pipeline': 'Ofertowanie',
+  'projects': 'Projekty',
   'deals': 'Deals',
   'deals-team': 'Zespół Deals',
   'settings': 'Ustawienia',
