@@ -1,255 +1,381 @@
 
-
-# Plan: UI — Strona DealsTeamDashboard + TeamSelector + KanbanBoard + Karty kontaktów + Routing
+# Plan: WeeklyStatusPanel + PromoteDialog + ConvertProspectDialog
 
 ## Cel
-Utworzenie głównego widoku UI modułu "Zespół Deals" — strona `/deals-team` z 4-kolumnowym Kanbanem (HOT, TOP, LEAD, POSZUKIWANI), selektorem zespołu i kartami kontaktów.
+Utworzenie 4 komponentów operacyjnych do zarządzania statusami cotygodniowymi, awansowaniem kontaktów i konwersją prospektów oraz podpięcie przycisków na istniejących kartach.
 
 ## Stan obecny
 
 ### Istniejące hooki (gotowe do użycia)
-- `useDealTeams.ts` — `useMyDealTeams()`, `useCreateDealTeam()`
-- `useDealsTeamMembers.ts` — `useTeamMembers()`, `useDirectorsByTenant()`
-- `useDealsTeamContacts.ts` — `useTeamContacts()`, `useTeamContactStats()`, `useAddContactToTeam()`, `usePromoteContact()`
+- `useTeamContacts()` — kontakty z flagą `status_overdue`
+- `useTeamContactStats()` — statystyki z `overdue_count`
+- `useUpdateTeamContact()` — aktualizacja pól kontaktu (w tym `category`, `assigned_to`, `next_meeting_date`)
+- `useTeamMembers()` — lista członków zespołu do selectów
+- `useConvertProspect()` — placeholder do rozszerzenia
+- `useAddContactToTeam()` — dodawanie kontaktu do zespołu
 
-### Brakujące hooki (trzeba utworzyć)
-- `useDealsTeamProspects.ts` — brak, trzeba dodać dla kolumny POSZUKIWANI
-- Typy w `src/types/dealTeam.ts` są kompletne
+### Brakujący hook (trzeba stworzyć)
+- `useWeeklyStatuses` — CRUD dla tabeli `deal_team_weekly_statuses`:
+  - `useWeeklyStatuses(teamId)` — statusy złożone w tym tygodniu
+  - `useOverdueContacts(teamId)` — kontakty HOT/TOP z `status_overdue = true`
+  - `useSubmitWeeklyStatus()` — wstawianie nowego statusu
 
-### Istniejące wzorce w projekcie
-- Strona `Deals.tsx` — wzorzec dla głównej strony z Kanbanem i statystykami
-- `DealsKanban.tsx` — wzorzec dla tablicy Kanban (bez drag & drop w nowym module)
-- `AppSidebar.tsx` — sekcja "Sieć" zawiera wpis "Deals" — tam dodamy "Zespół Deals"
-- `App.tsx` — routing z `DirectorGuard`, lazy loading
+### Istniejące karty z placeholder buttons
+- `TopLeadCard.tsx:21-23` — `toast.info('Wkrótce — prompt 5.8')`
+- `LeadCard.tsx:21-23` — `toast.info('Wkrótce — prompt 5.8')`
+- `ProspectCard.tsx:37-39` — `toast.info('Wkrótce — prompt 5.8')`
+
+### Schemat bazy `deal_team_weekly_statuses`
+```typescript
+{
+  id: string;
+  team_id: string;
+  team_contact_id: string;
+  tenant_id: string;
+  week_start: string;
+  status_summary: string;
+  next_steps: string | null;
+  blockers: string | null;
+  meeting_happened: boolean | null;
+  meeting_outcome: string | null;
+  category_recommendation: string | null;
+  reported_by: string;
+  created_at: string | null;
+}
+```
 
 ## Pliki do utworzenia
 
-### 1. Hook dla prospektów: `src/hooks/useDealsTeamProspects.ts`
+### 1. Hook `src/hooks/useWeeklyStatuses.ts`
 
-Brakujący hook do obsługi tabeli `deal_team_prospects`:
+Hook CRUD dla cotygodniowych statusów:
 
 | Funkcja | Opis |
 |---------|------|
-| `useTeamProspects(teamId)` | Lista prospektów zespołu |
-| `useCreateProspect()` | Dodanie nowego poszukiwanego |
-| `useUpdateProspect()` | Edycja danych |
-| `useConvertProspect()` | Konwersja do LEAD (placeholder) |
+| `useWeeklyStatuses(teamId)` | Statusy złożone w bieżącym tygodniu |
+| `useOverdueContacts(teamId)` | Kontakty HOT/TOP z `status_overdue = true` |
+| `useSubmitWeeklyStatus()` | INSERT do `deal_team_weekly_statuses` |
 
-### 2. Strona główna: `src/pages/DealsTeamDashboard.tsx`
+Szczegóły implementacji:
+- `week_start` obliczany automatycznie (poniedziałek bieżącego tygodnia)
+- `reported_by` = `director.id` z `useAuth()`
+- Po sukcesie invalidate: `['deal-team-contacts']`, `['weekly-statuses']`
 
-Layout strony:
+### 2. Panel `src/components/deals-team/WeeklyStatusPanel.tsx`
+
+Sheet (panel boczny) z dwoma sekcjami:
+
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ [TeamSelector ▼]  [⚙️ Ustawienia]  [📊│📋 Widok]           │
-├─────────────────────────────────────────────────────────────┤
-│                     KanbanBoard                             │
-│  HOT 🔥  │  TOP ⭐  │  LEAD 📋  │  POSZUKIWANI 🔍          │
-│  (3)     │  (5)     │  (8)      │  (2)                      │
-│ [Card]   │ [Card]   │ [Card]    │ [Card]                    │
-│ [Card]   │ [Card]   │ [Card]    │ [Card]                    │
-│ [+Dodaj] │ [+Dodaj] │ [+Dodaj]  │ [+Szukaj]                 │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│ Cotygodniowe statusy          [✕]  │
+│ Tydzień: 03.02 - 09.02.2026        │
+├─────────────────────────────────────┤
+│ ⚠️ Wymagają statusu (4)            │
+│ 🔴 Jan Kowalski — HOT • 12 dni     │
+│    [Dodaj status →]                 │
+│ ...                                 │
+├─────────────────────────────────────┤
+│ ✅ Złożone w tym tygodniu (2)       │
+│ ✅ Maria Wiśniewska — "Spotkanie..."│
+└─────────────────────────────────────┘
 ```
+
+Props:
+- `teamId: string`
+- `open: boolean`
+- `onOpenChange: (open: boolean) => void`
 
 Logika:
-- `selectedTeamId` w `useState` + persystencja `localStorage('deals-team-selected')`
-- Pusty stan z CTA "Utwórz pierwszy zespół" gdy brak zespołów
-- Przełącznik widoku Kanban/Tabela (Tabela = placeholder)
-- Użycie `useMyDealTeams()`, `useTeamContacts()`, `useTeamContactStats()`
+- `useOverdueContacts(teamId)` → sekcja "Wymagają statusu"
+- `useWeeklyStatuses(teamId)` → sekcja "Złożone w tym tygodniu"
+- Sortowanie: najdłużej bez statusu na górze
+- Stan `selectedContactId` do otwierania `WeeklyStatusForm`
 
-### 3. Selektor zespołu: `src/components/deals-team/TeamSelector.tsx`
+### 3. Formularz `src/components/deals-team/WeeklyStatusForm.tsx`
 
-Dropdown z shadcn/ui Select:
-- Lista zespołów użytkownika z kolorowym wskaźnikiem
-- Badge z liczbą HOT i przeterminowanych
-- Przycisk ustawień zespołu (ikona Settings)
+Dialog z formularzem react-hook-form + zod:
 
-### 4. Tablica Kanban: `src/components/deals-team/KanbanBoard.tsx`
-
-4 kolumny w CSS grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`):
-
-| Kolumna | Kolor | Dane | Przycisk |
-|---------|-------|------|----------|
-| HOT LEAD 🔥 | red | `category='hot'` | + Dodaj |
-| TOP LEAD ⭐ | amber | `category='top'` | + Dodaj |
-| LEAD 📋 | blue | `category='lead'` | + Dodaj |
-| POSZUKIWANI 🔍 | purple | prospects | + Szukaj |
-
-Wewnętrzny komponent `KanbanColumn`:
-- Nagłówek z ikoną, nazwą, ilością, sumą wartości (HOT)
-- Kolorowy border-top (2px)
-- `max-height` z `overflow-y-auto` dla scroll
-- Karty posortowane: priority DESC, next_action_date ASC
-
-### 5. Karty kontaktów
-
-**HotLeadCard.tsx** — najbogatsza karta:
-- Imię + link do kontaktu + firma + stanowisko
-- Status badge + wskaźnik cotygodniowy (zielona/czerwona kropka)
-- Najbliższe spotkanie (ikona kalendarza + data)
-- Następna akcja (tło muted + termin)
-- Wartość szacunkowa (zielony tekst)
-- Border-left 4px czerwony
-
-**TopLeadCard.tsx** — uproszczona:
-- Imię + firma
-- Następna akcja
-- Wskaźnik cotygodniowy
-- Priority badge
-- Przycisk "↑ do HOT" → `toast.info("Wkrótce — prompt 5.8")`
-
-**LeadCard.tsx** — minimalna:
-- Imię + firma
-- Priority badge (kolorowy)
-- Notatka (1 linia, truncate)
-- Przycisk "↑ do TOP" → placeholder
-
-**ProspectCard.tsx** — karta poszukiwanego:
-- Nazwa osoby/firmy (pogrubiona)
-- Stanowisko
-- "Dla: {requested_by}" + "Szuka: {assigned_to}"
-- Mini-stepper statusu (searching → found → intro → meeting → converted)
-- Priority badge
-- Przycisk "Konwertuj do LEAD" → placeholder
-
-### 6. Dialogi
-
-**AddContactDialog.tsx**:
-- Wyszukiwarka kontaktów CRM (ilike na full_name)
-- Select kategorii (pre-filled z kolumny)
-- Select priorytetu
-- Przycisk "Dodaj" → `useAddContactToTeam()`
-
-**AddProspectDialog.tsx**:
-- Pola: imię/nazwa, firma, stanowisko, email, LinkedIn, telefon, notatki
-- Select "Dla kogo szukamy" (członkowie zespołu)
-- Select "Kto szuka" (członkowie zespołu)
-- Priorytet, deadline
-- Przycisk "Dodaj" → `useCreateProspect()`
-
-**CreateTeamDialog.tsx**:
-- Nazwa zespołu
-- Opis (opcjonalnie)
-- Kolor (color picker lub preset)
-- Przycisk "Utwórz" → `useCreateDealTeam()`
-
-### 7. Routing i Sidebar
-
-**App.tsx** — nowa trasa:
-```tsx
-const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
-
-<Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
+```typescript
+const weeklyStatusSchema = z.object({
+  statusSummary: z.string().min(10, 'Minimum 10 znaków'),
+  nextSteps: z.string().optional(),
+  blockers: z.string().optional(),
+  meetingHappened: z.boolean().default(false),
+  meetingOutcome: z.string().optional(),
+  categoryRecommendation: z.enum(['keep', 'promote', 'demote', 'close_won', 'close_lost']).default('keep'),
+});
 ```
 
-**AppSidebar.tsx** — nowy wpis w sekcji "Sieć":
-```tsx
-const networkNavigationItems = [
-  { title: 'Sieć kontaktów', url: '/network', icon: Network },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
-  { title: 'Deals', url: '/deals', icon: TrendingUp },
-  { title: 'Zespół Deals', url: '/deals-team', icon: Users },  // ← NOWY
-];
+Props:
+- `teamContactId: string`
+- `teamId: string`
+- `contactName: string`
+- `contactCompany: string | null`
+- `open: boolean`
+- `onClose: () => void`
+
+Logika:
+- Sekcja "Wynik spotkania" widoczna tylko gdy `meetingHappened = true`
+- Po submit: `useSubmitWeeklyStatus()` z automatycznym `week_start` i `reported_by`
+- Błąd UNIQUE → `toast.error("Status na ten tydzień już istnieje")`
+
+### 4. Dialog `src/components/deals-team/PromoteDialog.tsx`
+
+Dialog awansowania LEAD → TOP lub TOP → HOT:
+
+```text
+LEAD → TOP wymaga:
+├── assigned_to (Select z członków zespołu) *
+├── next_action (Input) *
+├── next_action_date (DatePicker, opcjonalne)
+└── priority (Select, opcjonalne)
+
+TOP → HOT wymaga:
+├── next_meeting_date (DatePicker) *
+├── next_meeting_with (Select z członków, opcjonalne)
+├── estimated_value (Input number, opcjonalne)
+└── value_currency (Select PLN/EUR/USD, opcjonalne)
 ```
 
-## Struktura plików
+Props:
+- `contact: DealTeamContact`
+- `targetCategory: 'top' | 'hot'`
+- `teamId: string`
+- `open: boolean`
+- `onClose: () => void`
+
+Logika:
+- Dynamiczne renderowanie pól w zależności od `targetCategory`
+- `useTeamMembers(teamId)` dla selectów członków
+- Po submit: `useUpdateTeamContact()` z nowymi polami + zmianą kategorii
+- Walidacja: przycisk disabled gdy brak wymaganych pól
+
+### 5. Dialog `src/components/deals-team/ConvertProspectDialog.tsx`
+
+Dialog konwersji prospekta do LEAD z dwoma wariantami:
+
+**Wariant A** (prospect ma `contact_id`):
+```text
+✅ Kontakt już istnieje w CRM
+→ Tylko wybór kategorii docelowej
+→ Automatyczne powiązanie
+```
+
+**Wariant B** (prospect nie ma `contact_id`):
+```text
+⚠️ Kontakt nie istnieje w CRM
+→ Formularz z pre-filled danymi z prospekta:
+  - full_name ← prospect_name
+  - company ← prospect_company
+  - position ← prospect_position
+  - email ← prospect_email
+  - phone ← prospect_phone
+→ Utwórz kontakt CRM + dodaj do zespołu
+```
+
+Props:
+- `prospect: DealTeamProspect`
+- `teamId: string`
+- `open: boolean`
+- `onClose: () => void`
+
+Logika:
+- Sprawdzenie `prospect.contact_id` decyduje o wariancie
+- Wariant A: `useAddContactToTeam()` + `useConvertProspect()`
+- Wariant B: INSERT do `contacts` + `useAddContactToTeam()` + `useConvertProspect()`
+- Po sukcesie invalidate obu list
+
+## Modyfikacje istniejących plików
+
+### 1. `src/components/deals-team/TopLeadCard.tsx`
+
+Zmiana:
+- Dodanie state `showPromoteDialog`
+- Import i renderowanie `PromoteDialog`
+- Podmiana `handlePromote`:
+
+```typescript
+// Było:
+const handlePromote = () => toast.info('Wkrótce — prompt 5.8');
+
+// Będzie:
+const [showPromote, setShowPromote] = useState(false);
+// ... w JSX:
+<PromoteDialog
+  contact={contact}
+  targetCategory="hot"
+  teamId={teamId}
+  open={showPromote}
+  onClose={() => setShowPromote(false)}
+/>
+```
+
+**Wymaga dodania `teamId` do props komponentu!**
+
+### 2. `src/components/deals-team/LeadCard.tsx`
+
+Analogiczna zmiana jak TopLeadCard:
+- State `showPromoteDialog`
+- `PromoteDialog` z `targetCategory="top"`
+- Props: dodać `teamId`
+
+### 3. `src/components/deals-team/ProspectCard.tsx`
+
+Zmiana:
+- Dodanie state `showConvertDialog`
+- Import i renderowanie `ConvertProspectDialog`
+- Props: dodać `teamId`
+
+### 4. `src/components/deals-team/KanbanBoard.tsx`
+
+Zmiana:
+- Przekazanie `teamId` do wszystkich kart:
+
+```typescript
+// Było:
+<TopLeadCard key={contact.id} contact={contact} />
+
+// Będzie:
+<TopLeadCard key={contact.id} contact={contact} teamId={teamId} />
+```
+
+### 5. `src/pages/DealsTeamDashboard.tsx`
+
+Zmiany:
+- Import `WeeklyStatusPanel`
+- State `showWeeklyStatus`
+- Przycisk "📊 Statusy" w headerze z badge overdue
+
+```typescript
+const overdueCount = contactStats.overdue_count;
+
+// W header:
+<Button
+  variant="outline"
+  onClick={() => setShowWeeklyStatus(true)}
+  className="gap-2"
+>
+  <BarChart3 className="h-4 w-4" />
+  Statusy
+  {overdueCount > 0 && (
+    <Badge variant="destructive" className="text-xs">
+      {overdueCount}
+    </Badge>
+  )}
+</Button>
+
+// Na końcu:
+<WeeklyStatusPanel
+  teamId={selectedTeamId}
+  open={showWeeklyStatus}
+  onOpenChange={setShowWeeklyStatus}
+/>
+```
+
+### 6. `src/components/deals-team/index.ts`
+
+Dodanie eksportów:
+```typescript
+export { WeeklyStatusPanel } from './WeeklyStatusPanel';
+export { WeeklyStatusForm } from './WeeklyStatusForm';
+export { PromoteDialog } from './PromoteDialog';
+export { ConvertProspectDialog } from './ConvertProspectDialog';
+```
+
+## Struktura plików (nowe + modyfikowane)
 
 ```text
 src/
-├── pages/
-│   └── DealsTeamDashboard.tsx           ← NOWY: główna strona
 ├── hooks/
-│   └── useDealsTeamProspects.ts         ← NOWY: CRUD dla prospects
-└── components/
-    └── deals-team/                       ← NOWY folder
-        ├── index.ts                      ← eksporty
-        ├── TeamSelector.tsx              ← dropdown zespołów
-        ├── KanbanBoard.tsx               ← 4-kolumnowa tablica
-        ├── KanbanColumn.tsx              ← pojedyncza kolumna
-        ├── HotLeadCard.tsx               ← karta HOT
-        ├── TopLeadCard.tsx               ← karta TOP
-        ├── LeadCard.tsx                  ← karta LEAD
-        ├── ProspectCard.tsx              ← karta POSZUKIWANY
-        ├── AddContactDialog.tsx          ← dialog dodawania kontaktu
-        ├── AddProspectDialog.tsx         ← dialog dodawania prospectu
-        └── CreateTeamDialog.tsx          ← dialog tworzenia zespołu
+│   └── useWeeklyStatuses.ts                ← NOWY
+└── components/deals-team/
+    ├── WeeklyStatusPanel.tsx               ← NOWY
+    ├── WeeklyStatusForm.tsx                ← NOWY
+    ├── PromoteDialog.tsx                   ← NOWY
+    ├── ConvertProspectDialog.tsx           ← NOWY
+    ├── TopLeadCard.tsx                     ← MODYFIKACJA (state + dialog + teamId prop)
+    ├── LeadCard.tsx                        ← MODYFIKACJA (state + dialog + teamId prop)
+    ├── ProspectCard.tsx                    ← MODYFIKACJA (state + dialog + teamId prop)
+    ├── KanbanBoard.tsx                     ← MODYFIKACJA (przekazanie teamId do kart)
+    └── index.ts                            ← MODYFIKACJA (nowe eksporty)
+
+src/pages/
+    └── DealsTeamDashboard.tsx              ← MODYFIKACJA (przycisk statusów + panel)
 ```
 
 ## Przepływ danych
 
 ```text
 DealsTeamDashboard
-│
-├── useMyDealTeams() → lista zespołów użytkownika
-│   └── selectedTeamId (useState + localStorage)
-│
-├── TeamSelector
-│   ├── teams (z useMyDealTeams)
-│   └── stats (z useTeamContactStats)
+├── contactStats.overdue_count → Badge przy przycisku "Statusy"
+├── [📊 Statusy] → WeeklyStatusPanel
+│   ├── useOverdueContacts → lista wymagających
+│   ├── useWeeklyStatuses → lista złożonych
+│   └── [Dodaj status →] → WeeklyStatusForm
+│       └── useSubmitWeeklyStatus → INSERT
 │
 └── KanbanBoard (teamId)
-    ├── useTeamContacts(teamId) → filtr po category
-    │   ├── HOT → HotLeadCard[]
-    │   ├── TOP → TopLeadCard[]
-    │   └── LEAD → LeadCard[]
+    ├── TopLeadCard (contact, teamId)
+    │   └── [↑ do HOT] → PromoteDialog
+    │       └── useUpdateTeamContact (category='hot' + pola)
     │
-    └── useTeamProspects(teamId)
-        └── POSZUKIWANI → ProspectCard[]
+    ├── LeadCard (contact, teamId)
+    │   └── [↑ do TOP] → PromoteDialog
+    │       └── useUpdateTeamContact (category='top' + pola)
+    │
+    └── ProspectCard (prospect, teamId)
+        └── [Konwertuj] → ConvertProspectDialog
+            ├── (A) useAddContactToTeam + useConvertProspect
+            └── (B) INSERT contacts + useAddContactToTeam + useConvertProspect
 ```
 
 ## Sekcja techniczna
 
 ### Komponenty shadcn/ui używane
-- `Card`, `CardContent`, `CardHeader`, `CardTitle`
-- `Badge` (variant: default, secondary, destructive, outline)
-- `Button` (variant: default, ghost, outline; size: default, sm, icon)
-- `Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`
+- `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle` (WeeklyStatusPanel)
 - `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`
-- `Input`, `Textarea`, `Label`
-- `Tooltip`, `TooltipTrigger`, `TooltipContent`
-- `ScrollArea`
+- `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`
+- `Textarea`, `Input`, `Checkbox`
+- `Select`, `SelectTrigger`, `SelectContent`, `SelectItem`
+- `Popover`, `Calendar` (DatePicker)
+- `Button`, `Badge`, `ScrollArea`
 
-### Ikony lucide-react
-- `Users`, `Settings`, `Plus`, `Calendar`, `Search`
-- `ArrowUp`, `Flame`, `Star`, `FileText`
-- `User`, `Building2`, `Phone`, `Mail`, `Linkedin`
+### Obliczanie week_start
+```typescript
+import { startOfWeek, format } from 'date-fns';
 
-### Formatowanie dat
-```tsx
-import { format } from 'date-fns';
-import { pl } from 'date-fns/locale';
-
-format(new Date(date), 'dd MMM', { locale: pl })
+const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 ```
 
-### Responsywność
-```tsx
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+### Walidacja PromoteDialog
+```typescript
+// LEAD → TOP
+const canPromoteToTop = !!assignedTo && !!nextAction;
+
+// TOP → HOT  
+const canPromoteToHot = !!nextMeetingDate;
 ```
 
-### localStorage persistence
-```tsx
-const [selectedTeamId, setSelectedTeamId] = useState<string>(() => {
-  return localStorage.getItem('deals-team-selected') || '';
-});
-
-useEffect(() => {
-  if (selectedTeamId) {
-    localStorage.setItem('deals-team-selected', selectedTeamId);
-  }
-}, [selectedTeamId]);
-```
-
-### Placeholder dla przycisków promocji
-```tsx
-onClick={() => toast.info('Wkrótce — prompt 5.8')}
+### Rozszerzenie useConvertProspect
+```typescript
+// Dodatkowy parametr: newContactData (opcjonalny)
+interface ConvertProspectInput {
+  id: string;
+  teamId: string;
+  newContactData?: {
+    full_name: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    position?: string;
+  };
+}
 ```
 
 ## Guardrails
-- NIE modyfikuję istniejących stron (Dashboard, Pipeline, Contacts, Settings)
-- NIE modyfikuję istniejących hooków — tylko importuję i używam
-- NIE implementuję drag & drop — promocja tylko przez przyciski
-- Przyciski "↑ do HOT/TOP", "Konwertuj do LEAD" = placeholder z toast
-- Używam tylko shadcn/ui i lucide-react
-- Responsive grid: 1→2→4 kolumny
-
+- NIE modyfikuję istniejącej logiki hooków — tylko dodaję nowy hook `useWeeklyStatuses`
+- NIE zmieniam struktury KanbanBoard/KanbanColumn — tylko przekazuję props
+- NIE usuwam żadnego kodu z promptu 5.7 — tylko rozszerzam
+- WeeklyStatusForm używa react-hook-form + zod (jak ContactModal)
+- PromoteDialog: Select z członkami → `useTeamMembers(teamId)`
+- DatePicker z `pointer-events-auto` w Calendar (zgodnie z wytycznymi shadcn)
