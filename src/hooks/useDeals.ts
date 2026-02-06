@@ -394,3 +394,21 @@ export function useSeedDealStages() {
     },
   });
 }
+
+export function useMoveDeal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ dealId, stageId }: { dealId: string; stageId: string }) => {
+      const { error } = await supabase
+        .from('deals')
+        .update({ stage_id: stageId })
+        .eq('id', dealId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deals'] });
+    },
+  });
+}
