@@ -1,223 +1,208 @@
 
-# Sovra Chat — Edge Function (streaming) + Strona /sovra
+# Sovra Debrief — Edge Function + UI trybu debriefow
 
 ## Podsumowanie
 
-Budujemy glowny chat AI asystentki Sovra: Edge Function `sovra-chat` ze streaming response i pelnym kontekstem CRM, plus dedykowana strona `/sovra` z profesjonalnym UI czatu — historia sesji w sidebarze, streaming z migajacym kursorem, quick actions i kontekst z URL params.
+Dodajemy trzeci tryb Sovra — debrief spotkania. Uzytkownik opisuje co sie wydarzylo na spotkaniu (tekstem lub mowa), a Sovra analizuje notatke i generuje: podsumowanie, kluczowe punkty, decyzje, proponowane taski (do zatwierdzenia) i follow-upy. Calowsc integruje sie z kalendarza (quick action w popoverze) i projektami.
 
 ## Co sie zmieni
 
 | Zmiana | Plik / Zasob |
 |--------|-------------|
-| Nowa Edge Function | `supabase/functions/sovra-chat/index.ts` — streaming chat z kontekstem CRM |
-| Modyfikacja | `supabase/config.toml` — wpis dla sovra-chat |
-| Nowy hook | `src/hooks/useSovraChat.ts` — streaming, sesje, stan czatu |
-| Nowy hook | `src/hooks/useSovraSessions.ts` — lista historycznych sesji |
-| Nowa strona | `src/pages/Sovra.tsx` — pelny chat UI |
-| Modyfikacja | `src/App.tsx` — lazy route `/sovra` |
-| Modyfikacja | `src/components/layout/AppSidebar.tsx` — link "Sovra" w grupie AI |
-| Modyfikacja | `src/components/layout/Breadcrumbs.tsx` — label "Sovra" |
+| Nowa Edge Function | `supabase/functions/sovra-debrief/index.ts` |
+| Modyfikacja | `supabase/config.toml` — wpis dla sovra-debrief |
+| Nowy komponent | `src/components/sovra/SovraDebrief.tsx` — formularz + wyniki |
+| Nowy komponent | `src/components/sovra/SovraMorningBrief.tsx` — tryb briefu |
+| Nowy komponent | `src/components/sovra/SovraModeSelector.tsx` — przelacznik trybow |
+| Nowy hook | `src/hooks/useSovraDebrief.ts` — mutacja debriefu + tworzenie taskow |
+| Modyfikacja | `src/pages/Sovra.tsx` — dodanie trybow (chat / debrief / morning) |
+| Modyfikacja | `src/components/calendar/CalendarEventPopover.tsx` — przycisk "Debrief z Sovra" |
 
 ---
 
 ## Szczegoly techniczne
 
-### 1. Edge Function — sovra-chat
+### 1. Edge Function — sovra-debrief
 
-Streamingowa funkcja czatu z pelnym kontekstem projektow, zadan i kontaktow. Wzorowana na istniejacym `ai-chat/index.ts` (streaming proxy) i `sovra-morning-session/index.ts` (auth + rate limit + context).
+Funkcja non-streaming (standardowy request/response z JSON). Wzorowana na `sovra-morning-session` (auth, rate limit, AI gateway) ale z tool calling zamiast wolnego tekstu — wymuszamy ustrukturyzowany JSON output.
 
 **Flow:**
 
 ```text
 1. CORS + metoda POST
-2. Autentykacja: verifyAuth(req, serviceClient) z _shared/auth.ts
-3. Walidacja Zod:
-   - message: string min(1) max(2000)
-   - session_id: string uuid optional
-   - context_type: enum('general','project','contact','task') default 'general'
-   - context_id: string uuid optional
-4. Rate limit: Upstash Redis sliding window (10 wywolan / 1 min / director)
-   - Klucz: sovra-chat:{director_id}
-   - RATE_LIMIT_MAX = 10, RATE_LIMIT_WINDOW_MS = 60_000
-5. Pobranie danych kontekstowych (Promise.all):
-   A) directorInfo — imie i rola z directors
-   B) activeProjects — do 10 projektow (status new/in_progress/analysis)
-   C) recentTasks — do 15 zadan (nie done, sortowane po due_date)
-   D) Kontekst specyficzny:
-      - context_type='project': projekt + taski + notatki
-      - context_type='contact': kontakt + firma + profil
-      - context_type='task': zadanie + projekt + subtaski
-   E) conversationHistory — jesli session_id: pobierz content.messages z sovra_sessions (ostatnie 20)
-6. Budowa messages array:
-   [system_prompt, context_message, ...previousMessages, user_message]
-7. Wywolanie Lovable AI Gateway:
-   - URL: https://ai.gateway.lovable.dev/v1/chat/completions
-   - Model: google/gemini-2.5-flash
-   - stream: true
-   - temperature: 0.7
-8. Streaming proxy z zapisem sesji:
-   - Proxy body streamu do klienta
-   - Po zakonczeniu streamu: zapisz/aktualizuj sovra_sessions
-   - Session ID przesylany w custom headerze X-Sovra-Session-Id
-9. Obsluga bledow AI (429, 402, 500) — JSON error response
+2. Autentykacja: verifyAuth(req, serviceClient)
+3. Zod walidacja:
+   - raw_text: string min(10) max(5000)
+   - gcal_event_id: string optional
+   - gcal_calendar_id: string optional
+   - project_id: uuid optional
+   - contact_ids: array of uuid optional
+4. Rate limit: Upstash Redis (10 wywolan / 1h / director)
+   - Klucz: sovra-debrief:{director_id}
+5. Pobranie kontekstu (Promise.all):
+   A) directorInfo — imie z directors
+   B) Jesli gcal_event_id + gcal_calendar_id — pobierz event z Google Calendar API
+      (ten sam wzorzec co w sovra-morning-session: gcal_tokens -> access_token -> refresh jesli wygasly -> GET event)
+   C) Jesli project_id — pobierz projekt + recent tasks + members
+   D) Jesli contact_ids — pobierz kontakty z full_name, company, position
+6. Budowa promptu z kontekstem + raw_text
+7. Wywolanie Lovable AI Gateway (Gemini 2.5 Flash):
+   - Tool calling (nie stream) — wymuszenie zwrotu structured JSON
+   - Tool: analyze_debrief z parametrami: summary, key_points, decisions, action_items, follow_ups, meeting_sentiment, next_meeting_suggested, raw_note_cleaned
+   - tool_choice: { type: "function", function: { name: "analyze_debrief" } }
+8. Parsowanie tool call response
+9. Zapis do sovra_sessions: type='debrief', content = parsed result + raw_text
+10. Jesli project_id — INSERT do project_notes z source='sovra_debrief'
+11. Zwrot JSON response
 ```
 
-**System prompt (SOVRA_CHAT_SYSTEM_PROMPT):**
-Zdefiniowany jako stala. Instrukcje osobowosci Sovra: pewna siebie, konkretna, po polsku, uzywa imienia uzytkownika, max 300 slow, markdown oszczednie, sugeruje akcje (taski formatowane jako emoji + bold + priorytet + deadline), nie wymysla danych. Zgodny z treseq z promptu uzytkownika.
+**System prompt (SOVRA_DEBRIEF_SYSTEM_PROMPT):**
+Instrukcje do analizy surowych notatek ze spotkania. Kazdy ze Sovra generuje: summary (2-3 zdania), key_points, decisions, action_items (z title, description, priority, suggested_deadline, suggested_assignee_hint), follow_ups (z contact_name, action, urgency), meeting_sentiment, next_meeting_suggested, raw_note_cleaned (poprawione literowki, ustrukturyzowane).
 
-**Zapis sesji (saveSovraSession):**
-- Jesli `session_id` w request: pobierz istniejaca sesje, dodaj nowe wiadomosci do `content.messages`, UPDATE
-- Jesli brak `session_id`: INSERT nowa sesja type='chat', title generowany z pierwszej wiadomosci (pierwsze 50 znakow), content = `{ messages: [{role, content, timestamp}] }`
-- Zwracanie session_id przez header `X-Sovra-Session-Id` w response
+**Kluczowe roznice vs sovra-chat:**
+- Non-streaming (tool calling wymaga pelnej odpowiedzi)
+- Structured output przez tool calling (nie parsujemy wolnego tekstu JSON)
+- Zapis do project_notes jesli project_id podany
+- Rate limit 10/h (nie 10/min jak chat)
 
-**Rate limiting:**
-- Ta sama implementacja co w sovra-morning-session (Upstash REST API pipeline)
-- Inny klucz (`sovra-chat:`) i inne limity (10/min zamiast 3/h)
+**Response JSON:**
+```text
+{
+  session_id: string,
+  summary: string,
+  key_points: string[],
+  decisions: string[],
+  action_items: Array<{
+    title: string,
+    description: string,
+    priority: "critical" | "high" | "medium" | "low",
+    suggested_deadline: string | null,
+    suggested_assignee_hint: string
+  }>,
+  follow_ups: Array<{
+    contact_name: string,
+    action: string,
+    urgency: "high" | "medium" | "low"
+  }>,
+  meeting_sentiment: "positive" | "neutral" | "negative",
+  next_meeting_suggested: boolean,
+  raw_note_cleaned: string,
+  note_saved: boolean,
+  note_id: string | null
+}
+```
+
+**Fallback:** Jesli AI zwroci blad lub nieparsowalna odpowiedz — zwroc prosty fallback z samym raw_text jako summary i pustymi tablicami.
 
 ### 2. config.toml
 
 Nowy wpis:
 ```text
-[functions.sovra-chat]
+[functions.sovra-debrief]
 verify_jwt = false
 ```
 
-Zgodnie z wzorcem projektu — wszystkie funkcje maja `verify_jwt = false` i weryfikuja auth rucznie przez `verifyAuth()`.
+### 3. Hook useSovraDebrief (src/hooks/useSovraDebrief.ts)
 
-### 3. Hook useSovraChat (src/hooks/useSovraChat.ts)
+Dwie mutacje:
+- `useRunDebrief()` — wywoluje sovra-debrief Edge Function, zwraca parsed result
+- `useCreateDebriefTasks()` — tworzy wybrane taski w DB (INSERT do tasks, tak jak useCreateTask w useTasks.ts ale uproszczone — bezposredni insert z tenant_id, owner_id, assigned_to=director, project_id z kontekstu)
 
-Stan i logika czatu. Wzorowany na streamingu z `src/hooks/useAIChat.ts` i zarzadzaniu sesjami z `src/hooks/useRemekChat.ts`.
+Typ `DebriefResult` — mirror odpowiedzi Edge Function.
 
-**Eksporty:**
-- `messages: SovraMessage[]` — lista wiadomosci
-- `isStreaming: boolean` — czy trwa streaming
-- `sessionId: string | null` — aktualny ID sesji
-- `sendMessage(text, contextType?, contextId?)` — wysyla wiadomosc, streamuje odpowiedz
-- `loadSession(id)` — laduje historyczna sesje z sovra_sessions
-- `newSession()` — czysci wiadomosci, resetuje sessionId
-- `contextType / contextId` — aktualny kontekst (z URL params lub manualnie)
-- `setContext(type, id)` — ustawia kontekst
+### 4. Komponent SovraModeSelector (src/components/sovra/SovraModeSelector.tsx)
 
-**Typ SovraMessage:**
+Pill selector nad glownym obszarem:
+- Trzy opcje: "Chat" (💬), "Debrief" (📝), "Brief" (☀️)
+- Aktywny: bg-card shadow-sm rounded-md font-medium
+- Inactive: text-muted-foreground hover:text-foreground
+- Stan sterowany z Sovra.tsx
+
+### 5. Komponent SovraDebrief (src/components/sovra/SovraDebrief.tsx)
+
+Dwu-etapowy UI:
+
+**Etap 1 — Formularz:**
+- Heading "Debrief spotkania" + opis
+- Context selectors (opcjonalne):
+  - "Spotkanie z kalendarza" — Select z dzisiejszymi GCal eventami (useGCalEvents)
+  - "Projekt" — Select z aktywnymi projektami
+  - "Uczestnicy" — multi-select z wyszukiwaniem kontaktow CRM
+- Textarea min-h-[200px] z placeholderem opisujacym przykladowe notatki
+- Button "Analizuj z Sovra" — Sparkles icon, disabled jesli < 10 znakow
+
+**Etap 2 — Wyniki (po odpowiedzi, zastepuje formularz):**
+- Header: Sovra avatar + "Analiza Sovry" + sentiment badge (positive/neutral/negative)
+- Sekcja "Podsumowanie" — DataCard z summary
+- Sekcja "Kluczowe punkty" — lista z ikonami CheckCircle
+- Sekcja "Decyzje" — lista (tylko jesli decisions.length > 0)
+- Sekcja "Proponowane zadania" — KLUCZOWA:
+  - Kazdy action_item jako card z checkbox + title + description + priority badge + deadline
+  - User zaznacza checkboxy -> "Stworz zaznaczone" -> useCreateDebriefTasks -> INSERT do tasks
+  - Po stworzeniu: badge "Utworzono" na zielono + toast success
+- Sekcja "Follow-upy" — kazdy z contact_name + action + urgency badge + "Utworz reminder" button
+  - "Utworz reminder" -> INSERT do sovra_reminders z type='follow_up', scheduled_at = NOW + 1 dzien
+- Sekcja "Oczyszczona notatka" — collapsible z Collapsible component
+  - Jesli project_id: badge "Zapisano w projekcie [nazwa]"
+- Footer: "Nowy debrief" (reset) + "Otworz w chacie" (przelacz na chat z session_id)
+
+### 6. Komponent SovraMorningBrief (src/components/sovra/SovraMorningBrief.tsx)
+
+Tryb morning brief w /sovra:
+- Auto-trigger: wywolaj sovra-morning-session Edge Function (przez supabase.functions.invoke)
+- Loading: Sovra avatar z pulse + "Sovra przygotowuje Twoj poranny brief..."
+- Po zaladowaniu: brief wyswietlony jako markdown w DataCard
+- Pod briefem: statystyki (tasks today, overdue, events, projects)
+- Button "Kontynuuj w chacie" -> przelacz na chat z session_id briefu
+
+### 7. Modyfikacja Sovra.tsx
+
+Dodanie stanu `mode: 'chat' | 'debrief' | 'morning'` i parsowanie URL params:
+- `?mode=debrief&event=xxx&calendar=yyy` -> auto-set debrief z pre-fill eventem
+- `?context=project&id=xxx` -> zachowane jak dotychczas (chat z kontekstem)
+
+Layout:
 ```text
-{ role: 'user' | 'assistant', content: string, timestamp: Date }
++--------------------------------------------------+
+|  Sidebar  |  [ModeSelector: Chat | Debrief | Brief] |
+|           |  [Content based on mode]               |
+|           |  [Input (only in chat mode)]            |
++--------------------------------------------------+
 ```
 
-**Streaming:**
-- Fetch do `${VITE_SUPABASE_URL}/functions/v1/sovra-chat` z auth tokenem
-- SSE parsing identyczny jak w useAIChat.ts (line-by-line, handle CRLF, partial JSON, [DONE])
-- Odczyt `X-Sovra-Session-Id` z response headers po zakonczeniu streamu
-- Update ostatniej wiadomosci assistant w state (nie push nowej na kazdy chunk)
-- Error handling: 429 → toast "Limit wiadomosci", 402 → toast "Wymagana platnosc"
+- mode='chat': dotychczasowy SovraMessages + SovraInput (bez zmian)
+- mode='debrief': SovraDebrief component
+- mode='morning': SovraMorningBrief component
 
-### 4. Hook useSovraSessions (src/hooks/useSovraSessions.ts)
+### 8. Quick action w CalendarEventPopover
 
-Prosta lista sesji do sidebara.
+Dodanie przycisku "Debrief z Sovra" w popoverze wydarzenia GCal:
+- Ikona Sparkles, variant ghost, text-xs
+- onClick: navigate(`/sovra?mode=debrief&event=${gcalEventId}&calendar=${calendarId}`)
+- Wyswietlany tylko dla gcal_event (nie crm_task)
+- Umieszczony pod istniejacym "Otworz w Google Calendar"
 
-- useQuery `['sovra-sessions']`
-- SELECT id, type, title, started_at, tasks_created FROM sovra_sessions WHERE director_id = me ORDER BY started_at DESC LIMIT 50
-- Zwraca: `{ sessions: SovraSession[], isLoading }`
-- Typ SovraSession: `{ id, type, title, started_at, tasks_created }`
+### 9. Sekrety
 
-### 5. Strona Sovra (src/pages/Sovra.tsx)
-
-Pelny chat UI z historia sesji. Layout:
-
-```text
-+--------------------------------------------------+
-| [Hamburger] Sovra                         [badge] |
-+--------------------------------------------------+
-|  Sidebar (w-64)  |     Main Chat Area             |
-|  +-----------+   |                                |
-|  | Nowa rozm |   |  [Welcome screen / Messages]  |
-|  | Szukaj... |   |                                |
-|  +-----------+   |                                |
-|  | Sesja 1   |   |                                |
-|  | Sesja 2   |   |                                |
-|  | Sesja 3   |   |                                |
-|  +-----------+   |  [Context indicator]           |
-|                  |  [Input area + Send]            |
-+--------------------------------------------------+
-```
-
-**A) Left sidebar (w-64, desktop only):**
-- Header: "Sovra" text-lg font-bold + Button ghost Plus "Nowa rozmowa" (wywoluje newSession)
-- Lista sesji z useSovraSessions:
-  - Kazda: px-3 py-2 rounded-lg cursor-pointer hover:bg-muted
-  - Title: text-sm font-medium truncate
-  - Type badge: morning "Brief", chat "Chat", debrief "Debrief"
-  - Date: text-xs text-muted-foreground (format relative lub data)
-  - Active: bg-muted border border-border
-- Mobile: sidebar ukryty, dostepny jako Sheet z hamburger button
-
-**B) Main chat area:**
-- Welcome screen (gdy brak wiadomosci):
-  - Avatar Sovra: w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600, litera "S"
-  - Tytul: "Czesc, jestem Sovra" text-xl font-semibold
-  - Opis: "Twoja asystentka projektowa"
-  - Quick actions grid 2x2:
-    1. "Poranny brief" → auto-send "Wygeneruj moj poranny brief"
-    2. "Moje priorytety" → auto-send "Jakie sa moje priorytety na dzis?"
-    3. "Status projektow" → auto-send "Pokaz status moich projektow"
-    4. "Sugestie kontaktow" → auto-send "Kogo powinienem skontaktowac w tym tygodniu?"
-  - Kazdy: bg-card border rounded-xl p-4 hover:border-primary/30 hover:shadow-sm
-
-- Messages:
-  - User: flex justify-end, bubble bg-primary text-primary-foreground rounded-2xl rounded-br-md max-w-[70%]
-  - Sovra: flex justify-start gap-3, avatar (gradient violet-indigo "S") + bubble bg-card border rounded-2xl rounded-bl-md max-w-[70%]
-  - Sovra bubble: react-markdown rendering (prose prose-sm), oszczedny markdown
-  - Streaming cursor: w-1.5 h-4 bg-primary animate-pulse inline-block (widoczny gdy isStreaming i ostatnia wiadomosc assistant)
-  - Auto-scroll: useRef na koncu listy wiadomosci + scrollIntoView({ behavior: 'smooth' }) w useEffect na zmiane messages
-
-**C) Input area (border-t, sticky bottom):**
-- Textarea: auto-resize (min 1 linia, max 4), rounded-xl, focus:ring-primary
-- Placeholder: "Napisz do Sovry..."
-- Send button: bg-primary rounded-lg p-2, ikona Send
-- Enter = send, Shift+Enter = nowa linia
-- Disabled podczas streaming (button → Loader2 spinner)
-
-**D) Context indicator (nad inputem, opcjonalny):**
-- Jesli contextType ustawiony: bg-primary/5 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs
-- "Kontekst: Projekt [nazwa]" / "Kontekst: Kontakt [nazwa]" z X button do usuniecia
-- Ustawiany z URL params: `/sovra?context=project&id=xxx`
-- Pobranie nazwy encji przez dodatkowy useQuery
-
-### 6. Routing (App.tsx)
-
-- Nowy lazy import: `const Sovra = lazy(() => import("./pages/Sovra"));`
-- Nowy route w DirectorGuard: `<Route path="/sovra" element={<DirectorGuard><Sovra /></DirectorGuard>} />`
-- Umieszczony obok istniejacych route'ow AI
-
-### 7. Sidebar (AppSidebar.tsx)
-
-- Zmiana w grupie AI:
-  - Zastapienie "AI Chat" (url: /ai) przez "Sovra" (url: /sovra, icon: Sparkles)
-  - Zachowanie "Wyszukiwanie AI" (url: /search) bez zmian
-  - Stary route /ai nadal dziala (nie usuwamy go) — ale w nawigacji priorytet ma Sovra
-
-### 8. Breadcrumbs (Breadcrumbs.tsx)
-
-- Dodanie wpisu: `'sovra': 'Sovra'` w routeLabels
-
-## Sekrety
-
-Wszystkie wymagane sekrety juz sa skonfigurowane:
-- LOVABLE_API_KEY — Lovable AI Gateway
-- UPSTASH_REDIS_REST_URL i UPSTASH_REDIS_REST_TOKEN — rate limiting
+Wszystkie wymagane sekrety juz sa skonfigurowane — brak nowych:
+- LOVABLE_API_KEY
+- UPSTASH_REDIS_REST_URL / TOKEN
+- GOOGLE_CLIENT_ID / CLIENT_SECRET
 
 ## Bezpieczenstwo
 
 - Edge Function wymaga autentykacji (verifyAuth)
-- Tylko dyrektorzy maja dostep (userType === 'director')
-- Rate limit 10 wiadomosci/min/director
-- Dane CRM pobierane przez service role client z filtrami tenant_id
-- Zod walidacja inputu (max 2000 znakow)
-- Session ID zwracany przez header (nie w stream body) — unika problemu z parsowaniem
+- Rate limit 10/h/director
+- Zod walidacja inputu (raw_text max 5000 znakow)
+- Taski NIE sa tworzone automatycznie — user musi zatwierdzic kazdy
+- project_notes zapisywane tylko jesli user podal project_id
+- Dane CRM pobierane przez service role z filtrami tenant_id
 
 ## Co NIE zostanie zmienione
 
-- Edge Functions: ai-chat, remek-chat, sovra-morning-session — bez zmian
-- Strona /ai (AIChat.tsx) — bez zmian (nadal dostepna, ale sidebar prowadzi do /sovra)
-- Tabele sovra_sessions i sovra_reminders — juz istnieja, bez modyfikacji schematu
-- Hooki useAIChat, useRemekChat — bez zmian
-- Komponenty RemekChatWidget — bez zmian
+- sovra-chat Edge Function — bez zmian
+- sovra-morning-session Edge Function — bez zmian (reuse przez supabase.functions.invoke na froncie)
+- Tabele sovra_sessions, sovra_reminders — bez zmian schematu (wykorzystujemy istniejace kolumny)
+- Istniejace komponenty Sovra (SovraAvatar, SovraMessages, SovraInput, SovraWelcome, SovraSidebar) — bez zmian
+- Hook useSovraChat — bez zmian
+- Hook useSovraSessions — bez zmian
