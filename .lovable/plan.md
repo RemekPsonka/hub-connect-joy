@@ -1,162 +1,170 @@
 
-# Plan: Utworzenie tabeli Deals (Pipeline Sprzedażowy)
+# Plan: Moduł Deals (Pipeline Sprzedażowy) - UI
 
 ## Cel
-Dodanie systemu zarządzania szansami sprzedaży (deals) z etapami pipeline'u, śledzeniem wartości i powiązaniem z kontaktami/firmami.
+Stworzenie kompletnego interfejsu użytkownika dla zarządzania szansami sprzedaży (deals), zgodnie ze strukturą bazy danych już utworzoną w poprzednim kroku.
 
 ---
 
-## Krok 1: Utworzenie tabeli `deal_stages`
+## Przegląd struktury
 
-Najpierw potrzebujemy tabeli z etapami pipeline'u, do której odwołuje się `deals.stage_id`.
-
-```sql
-CREATE TABLE public.deal_stages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  position INTEGER NOT NULL DEFAULT 0,
-  color TEXT DEFAULT '#6366f1',
-  is_closed_won BOOLEAN DEFAULT false,
-  is_closed_lost BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(tenant_id, name)
-);
-
-CREATE INDEX idx_deal_stages_tenant ON deal_stages(tenant_id);
-CREATE INDEX idx_deal_stages_position ON deal_stages(tenant_id, position);
-```
-
----
-
-## Krok 2: Utworzenie tabeli `deals`
-
-Główna tabela przechowująca szanse sprzedaży zgodnie ze schematem podanym przez użytkownika:
-
-```sql
-CREATE TABLE public.deals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  contact_id UUID REFERENCES public.contacts(id) ON DELETE SET NULL,
-  company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL,
-  
-  title TEXT NOT NULL,
-  description TEXT,
-  value DECIMAL(15, 2) NOT NULL DEFAULT 0,
-  currency TEXT NOT NULL DEFAULT 'PLN',
-  
-  stage_id UUID NOT NULL REFERENCES public.deal_stages(id),
-  probability INTEGER NOT NULL DEFAULT 50 CHECK (probability >= 0 AND probability <= 100),
-  expected_close_date DATE,
-  
-  owner_id UUID REFERENCES public.directors(id),
-  source TEXT, -- 'inbound', 'outbound', 'referral', 'partner'
-  
-  status TEXT NOT NULL DEFAULT 'open', -- 'open', 'won', 'lost'
-  won_at TIMESTAMPTZ,
-  lost_reason TEXT,
-  
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  
-  CONSTRAINT deals_contact_or_company_required 
-    CHECK (contact_id IS NOT NULL OR company_id IS NOT NULL)
-);
-```
-
-**Indeksy dla wydajności:**
-```sql
-CREATE INDEX idx_deals_tenant ON deals(tenant_id);
-CREATE INDEX idx_deals_stage ON deals(stage_id);
-CREATE INDEX idx_deals_contact ON deals(contact_id);
-CREATE INDEX idx_deals_company ON deals(company_id);
-CREATE INDEX idx_deals_status ON deals(status);
-CREATE INDEX idx_deals_owner ON deals(owner_id);
-CREATE INDEX idx_deals_expected_close ON deals(expected_close_date);
+```text
+src/
+├── pages/
+│   ├── Deals.tsx                    # Strona główna listy deals
+│   └── DealDetail.tsx               # Szczegóły pojedynczego deal
+├── components/deals/
+│   ├── DealsHeader.tsx              # Nagłówek z filtrami i przyciskiem dodawania
+│   ├── DealsTable.tsx               # Tabela z listą deals (dostarczona przez użytkownika)
+│   ├── DealsKanban.tsx              # Widok Kanban (etapy jako kolumny)
+│   ├── DealCard.tsx                 # Karta deal w widoku Kanban
+│   ├── CreateDealModal.tsx          # Modal tworzenia nowego deal
+│   ├── DealStageBadge.tsx           # Badge z kolorem etapu
+│   └── DealActivitiesTimeline.tsx   # Timeline aktywności na deal
+└── hooks/
+    └── useDeals.ts                  # Hook z CRUD dla deals
 ```
 
 ---
 
-## Krok 3: Opcjonalna tabela `deal_activities`
+## Krok 1: Hook useDeals.ts
 
-Śledzenie historii zmian i notatek do deali:
+Nowy plik: `src/hooks/useDeals.ts`
 
-```sql
-CREATE TABLE public.deal_activities (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
-  activity_type TEXT NOT NULL, -- 'note', 'stage_change', 'value_change', 'call', 'email', 'meeting'
-  description TEXT,
-  old_value TEXT,
-  new_value TEXT,
-  created_by UUID REFERENCES public.directors(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+Funkcjonalności:
+- `useDeals(filters)` - lista deals z paginacją i filtrami
+- `useDeal(id)` - pojedynczy deal ze szczegółami
+- `useDealStages()` - etapy pipeline dla tenant
+- `useCreateDeal()` - mutacja tworzenia
+- `useUpdateDeal()` - mutacja aktualizacji
+- `useDeleteDeal()` - mutacja usuwania
+- `useDealActivities(dealId)` - historia aktywności
 
-CREATE INDEX idx_deal_activities_deal ON deal_activities(deal_id);
-CREATE INDEX idx_deal_activities_created_at ON deal_activities(created_at);
+Typy:
+```typescript
+export interface Deal {
+  id: string;
+  tenant_id: string;
+  contact_id: string | null;
+  company_id: string | null;
+  title: string;
+  description: string | null;
+  value: number;
+  currency: string;
+  stage_id: string;
+  probability: number;
+  expected_close_date: string | null;
+  owner_id: string | null;
+  source: string | null;
+  status: 'open' | 'won' | 'lost';
+  won_at: string | null;
+  lost_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  // Relacje
+  contact?: { id: string; full_name: string } | null;
+  company?: { id: string; name: string } | null;
+  stage?: DealStage | null;
+  owner?: { id: string; full_name: string } | null;
+}
+
+export interface DealStage {
+  id: string;
+  tenant_id: string;
+  name: string;
+  position: number;
+  color: string;
+  is_closed_won: boolean;
+  is_closed_lost: boolean;
+}
 ```
 
 ---
 
-## Krok 4: RLS (Row Level Security)
+## Krok 2: Strona Deals.tsx
 
-Zabezpieczenie dostępu do danych zgodnie z wzorcem multi-tenant:
+Nowy plik: `src/pages/Deals.tsx`
 
-```sql
-ALTER TABLE public.deal_stages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.deals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.deal_activities ENABLE ROW LEVEL SECURITY;
+Funkcjonalności:
+- Przełączanie widoku: Tabela / Kanban
+- Filtry: szukaj, etap, status, owner
+- Paginacja (w widoku tabeli)
+- Modal dodawania nowego deal
 
--- Deal stages - dostęp tylko dla swojego tenanta
-CREATE POLICY "tenant_access" ON public.deal_stages
-  FOR ALL USING (tenant_id = public.get_current_tenant_id());
+---
 
--- Deals - dostęp tylko dla swojego tenanta
-CREATE POLICY "tenant_access" ON public.deals
-  FOR ALL USING (tenant_id = public.get_current_tenant_id());
+## Krok 3: Komponenty UI
 
--- Deal activities - przez relację do deals
-CREATE POLICY "tenant_access" ON public.deal_activities
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.deals d 
-      WHERE d.id = deal_id 
-      AND d.tenant_id = public.get_current_tenant_id()
-    )
-  );
+### DealsHeader.tsx
+- Tytuł + badge z liczbą deals
+- Przycisk "Dodaj deal"
+- Przełącznik widoku (Tabela/Kanban)
+- Pole wyszukiwania
+- Filtr po etapie
+- Filtr po statusie
+
+### DealsTable.tsx (dostarczony przez użytkownika - do poprawy)
+Poprawki w kodzie:
+- Dodanie brakujących `<Table>` tagów
+- Obsługa pustego stanu
+- Paginacja
+
+### DealsKanban.tsx
+- Kolumny = etapy pipeline (z `useDealStages`)
+- Karty = deals w danym etapie
+- Drag & drop do zmiany etapu (opcjonalnie w przyszłości)
+
+### DealCard.tsx
+- Tytuł deal
+- Wartość (sformatowana waluta)
+- Kontakt/Firma
+- Prawdopodobieństwo jako pasek
+- Data zamknięcia
+
+### CreateDealModal.tsx
+- Formularz z polami:
+  - Tytuł (wymagany)
+  - Wartość + waluta
+  - Kontakt LUB Firma (przynajmniej jedno)
+  - Etap (dropdown)
+  - Prawdopodobieństwo (slider 0-100%)
+  - Oczekiwana data zamknięcia
+  - Źródło (select: inbound/outbound/referral/partner)
+  - Opis (textarea)
+
+### DealStageBadge.tsx
+- Badge z kolorem etapu
+- Nazwa etapu
+
+---
+
+## Krok 4: Strona DealDetail.tsx
+
+Nowy plik: `src/pages/DealDetail.tsx`
+
+Sekcje:
+- Nagłówek z tytułem i statusem
+- Karty KPI: Wartość, Prawdopodobieństwo, Oczekiwany przychód
+- Info o kontakcie/firmie (linki)
+- Edycja inline pól
+- Timeline aktywności
+- Przyciski: "Wygrany", "Przegrany", "Edytuj", "Usuń"
+
+---
+
+## Krok 5: Routing w App.tsx
+
+Dodanie nowych route:
+```typescript
+<Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />
+<Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
 ```
 
 ---
 
-## Krok 5: Trigger dla `updated_at`
+## Krok 6: Seed domyślnych etapów
 
-Automatyczna aktualizacja znacznika czasu:
-
-```sql
-CREATE TRIGGER update_deals_updated_at
-  BEFORE UPDATE ON public.deals
-  FOR EACH ROW
-  EXECUTE FUNCTION public.update_updated_at_column();
-```
-
----
-
-## Krok 6: Domyślne etapy pipeline'u
-
-Funkcja do tworzenia standardowych etapów dla nowego tenanta:
-
-```sql
--- Wstawienie domyślnych etapów (można uruchomić ręcznie lub przez trigger)
--- Przykład dla istniejącego tenanta:
-INSERT INTO public.deal_stages (tenant_id, name, position, color, is_closed_won, is_closed_lost) VALUES
-  ('<tenant_id>', 'Lead', 0, '#94a3b8', false, false),
-  ('<tenant_id>', 'Kwalifikacja', 1, '#3b82f6', false, false),
-  ('<tenant_id>', 'Propozycja', 2, '#8b5cf6', false, false),
-  ('<tenant_id>', 'Negocjacje', 3, '#f59e0b', false, false),
-  ('<tenant_id>', 'Zamknięty - Wygrany', 4, '#22c55e', true, false),
-  ('<tenant_id>', 'Zamknięty - Przegrany', 5, '#ef4444', false, true);
-```
+Przed użyciem modułu, tenant potrzebuje etapów pipeline. Wywołamy funkcję `seed_deal_stages_for_tenant` dla istniejącego tenanta.
 
 ---
 
@@ -164,23 +172,28 @@ INSERT INTO public.deal_stages (tenant_id, name, position, color, is_closed_won,
 
 | Plik | Akcja |
 |------|-------|
-| `supabase/migrations/..._create_deals.sql` | **Migracja** - schemat bazy |
+| `src/hooks/useDeals.ts` | **Utworzyć** - hook CRUD |
+| `src/pages/Deals.tsx` | **Utworzyć** - strona listy |
+| `src/pages/DealDetail.tsx` | **Utworzyć** - strona szczegółów |
+| `src/components/deals/DealsHeader.tsx` | **Utworzyć** |
+| `src/components/deals/DealsTable.tsx` | **Utworzyć** (poprawiona wersja) |
+| `src/components/deals/DealsKanban.tsx` | **Utworzyć** |
+| `src/components/deals/DealCard.tsx` | **Utworzyć** |
+| `src/components/deals/CreateDealModal.tsx` | **Utworzyć** |
+| `src/components/deals/DealStageBadge.tsx` | **Utworzyć** |
+| `src/components/deals/DealActivitiesTimeline.tsx` | **Utworzyć** |
+| `src/components/deals/index.ts` | **Utworzyć** - eksporty |
+| `src/App.tsx` | **Edytować** - dodać route |
+| `src/components/layout/AppSidebar.tsx` | **Edytować** - dodać link w menu |
 
 ---
 
-## Podsumowanie struktury
+## Efekt końcowy
 
-```text
-deal_stages                    deals                         deal_activities
-┌──────────────────┐          ┌──────────────────────┐       ┌────────────────────┐
-│ id (PK)          │          │ id (PK)              │       │ id (PK)            │
-│ tenant_id (FK)   │◄─────────│ stage_id (FK)        │◄──────│ deal_id (FK)       │
-│ name             │          │ tenant_id (FK)       │       │ activity_type      │
-│ position         │          │ contact_id (FK)  ────┼──► contacts│ description      │
-│ color            │          │ company_id (FK)  ────┼──► companies│ old_value        │
-│ is_closed_won    │          │ owner_id (FK)    ────┼──► directors│ new_value        │
-│ is_closed_lost   │          │ title, value, status │       │ created_by (FK)    │
-└──────────────────┘          └──────────────────────┘       └────────────────────┘
-```
-
-Po zatwierdzeniu utworzę migrację z kompletnym schematem.
+Po wdrożeniu:
+- Nowa pozycja "Deals" w sidebarze
+- Widok listy z tabelą i Kanbanem
+- Możliwość tworzenia, edycji, usuwania deals
+- Śledzenie etapów pipeline
+- Powiązanie z kontaktami i firmami
+- Historia aktywności
