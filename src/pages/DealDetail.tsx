@@ -139,7 +139,7 @@ export default function DealDetail() {
             </Badge>
           </div>
           {deal.stage && (
-            <DealStageBadge name={deal.stage.name} color={deal.stage.color} />
+            <DealStageBadge name={deal.stage.name} color={deal.stage.color || '#6366f1'} />
           )}
         </div>
 

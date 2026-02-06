@@ -30,7 +30,9 @@ import {
 import { useCreateDeal, DealStage } from '@/hooks/useDeals';
 import { useContacts } from '@/hooks/useContacts';
 import { useCompaniesList } from '@/hooks/useCompanies';
-import { Loader2 } from 'lucide-react';
+import { useMyDealTeams, useDealTeams } from '@/hooks/useDealTeams';
+import { useOwnerPanel } from '@/hooks/useOwnerPanel';
+import { Loader2, Users2 } from 'lucide-react';
 
 const formSchema = z.object({
   title: z.string().min(1, 'Tytuł jest wymagany'),
@@ -43,6 +45,7 @@ const formSchema = z.object({
   expected_close_date: z.string().optional(),
   source: z.string().optional(),
   description: z.string().optional(),
+  team_id: z.string().optional(),
 }).refine(
   (data) => data.contact_id || data.company_id,
   {
@@ -63,6 +66,13 @@ export function CreateDealModal({ open, onOpenChange, stages }: CreateDealModalP
   const createDeal = useCreateDeal();
   const { data: contactsData } = useContacts({ pageSize: 100 });
   const { data: companies = [] } = useCompaniesList();
+  const { isAdmin } = useOwnerPanel();
+  
+  // Admin widzi wszystkie zespoły, pozostali tylko swoje
+  const { data: myTeams = [] } = useMyDealTeams();
+  const { data: allTeams = [] } = useDealTeams();
+  const availableTeams = isAdmin ? allTeams : myTeams;
+  
   const [entityType, setEntityType] = useState<'contact' | 'company'>('contact');
 
   const defaultStage = stages.find((s) => s.position === 0) || stages[0];
@@ -80,6 +90,7 @@ export function CreateDealModal({ open, onOpenChange, stages }: CreateDealModalP
       expected_close_date: '',
       source: '',
       description: '',
+      team_id: '',
     },
   });
 
@@ -95,6 +106,7 @@ export function CreateDealModal({ open, onOpenChange, stages }: CreateDealModalP
       expected_close_date: values.expected_close_date || null,
       source: values.source || null,
       description: values.description || null,
+      team_id: values.team_id && values.team_id !== 'none' ? values.team_id : null,
     });
     form.reset();
     onOpenChange(false);
@@ -272,6 +284,48 @@ export function CreateDealModal({ open, onOpenChange, stages }: CreateDealModalP
                 </FormItem>
               )}
             />
+
+            {/* Team selection */}
+            {availableTeams.length > 0 && (
+              <FormField
+                control={form.control}
+                name="team_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Users2 className="h-4 w-4" />
+                      Zespół współpracy
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={isAdmin ? "Brak zespołu (tylko ja)" : "Wybierz zespół"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isAdmin && (
+                          <SelectItem value="none">
+                            <span className="text-muted-foreground">Brak zespołu (tylko ja)</span>
+                          </SelectItem>
+                        )}
+                        {availableTeams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: team.color }}
+                              />
+                              {team.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

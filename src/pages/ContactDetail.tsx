@@ -25,6 +25,7 @@ import { CompanyView } from '@/components/contacts/CompanyView';
 import { ContactOwnershipTab } from '@/components/contacts/ContactOwnershipTab';
 import { BITab } from '@/components/bi/BITab';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 
 // List of public email domains that should not enable company view
 const PUBLIC_EMAIL_DOMAINS = [
@@ -45,6 +46,7 @@ export default function ContactDetail() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { director, isAssistant } = useAuth();
+  const { isAdmin } = useOwnerPanel();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
@@ -52,8 +54,10 @@ export default function ContactDetail() {
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && !isAssistant) {
-      const validTabs = ['overview', 'bi', 'agent', 'ownership', 
-                         'needs-offers', 'consultations', 'history', 'tasks', 'notes'];
+      // Admin widzi wszystkie zakładki, pozostali tylko wybrane
+      const adminTabs = ['overview', 'bi', 'agent', 'ownership', 'needs-offers', 'consultations', 'history', 'tasks', 'notes'];
+      const directorTabs = ['overview', 'agent', 'ownership', 'needs-offers', 'consultations', 'history', 'tasks'];
+      const validTabs = isAdmin ? adminTabs : directorTabs;
       if (validTabs.includes(tabFromUrl)) {
         return tabFromUrl;
       }
@@ -138,14 +142,14 @@ export default function ContactDetail() {
           ) : (
             <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-9">
               <TabsTrigger value="overview">Przegląd</TabsTrigger>
-              <TabsTrigger value="bi">BI</TabsTrigger>
+              {isAdmin && <TabsTrigger value="bi">BI</TabsTrigger>}
               <TabsTrigger value="agent">Agent AI</TabsTrigger>
               <TabsTrigger value="ownership">Udziały</TabsTrigger>
               <TabsTrigger value="needs-offers">Potrzeby i Oferty</TabsTrigger>
               <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
               <TabsTrigger value="history">Historia</TabsTrigger>
               <TabsTrigger value="tasks">Zadania</TabsTrigger>
-              <TabsTrigger value="notes">Notatki</TabsTrigger>
+              {isAdmin && <TabsTrigger value="notes">Notatki</TabsTrigger>}
             </TabsList>
           )}
 
@@ -153,9 +157,11 @@ export default function ContactDetail() {
             <ContactOverviewTab contact={contact} />
           </TabsContent>
 
-          <TabsContent value="bi" className="mt-6">
-            <BITab contactId={contact.id} contactName={contact.full_name} />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="bi" className="mt-6">
+              <BITab contactId={contact.id} contactName={contact.full_name} />
+            </TabsContent>
+          )}
 
           <TabsContent value="agent" className="mt-6">
             <ContactAgentSection contactId={contact.id} contactName={contact.full_name} />
@@ -181,9 +187,11 @@ export default function ContactDetail() {
             <ContactTasksTab contactId={contact.id} />
           </TabsContent>
 
-          <TabsContent value="notes" className="mt-6">
-            <ContactNotesTab contact={contact} />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="notes" className="mt-6">
+              <ContactNotesTab contact={contact} />
+            </TabsContent>
+          )}
         </Tabs>
       ) : (
         <CompanyView contact={contact} />
