@@ -1,0 +1,33 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ContactConsultationsTab } from './ContactConsultationsTab';
+import { BITab } from '@/components/bi/BITab';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOwnerPanel } from '@/hooks/useOwnerPanel';
+
+interface MeetingsTabProps {
+  contactId: string;
+  contactName: string;
+}
+
+export function MeetingsTab({ contactId, contactName }: MeetingsTabProps) {
+  const { isAdmin } = useOwnerPanel();
+
+  return (
+    <Tabs defaultValue="consultations">
+      <TabsList className="mb-4">
+        <TabsTrigger value="consultations">Konsultacje</TabsTrigger>
+        {isAdmin && <TabsTrigger value="bi">Business Interview</TabsTrigger>}
+      </TabsList>
+
+      <TabsContent value="consultations">
+        <ContactConsultationsTab contactId={contactId} contactName={contactName} />
+      </TabsContent>
+
+      {isAdmin && (
+        <TabsContent value="bi">
+          <BITab contactId={contactId} contactName={contactName} />
+        </TabsContent>
+      )}
+    </Tabs>
+  );
+}
