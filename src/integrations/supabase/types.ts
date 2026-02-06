@@ -3664,6 +3664,97 @@ export type Database = {
           },
         ]
       }
+      nela_reminders: {
+        Row: {
+          channel: string
+          director_id: string
+          id: string
+          message: string
+          reference_id: string | null
+          reference_type: string | null
+          scheduled_at: string | null
+          sent_at: string | null
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          channel?: string
+          director_id: string
+          id?: string
+          message: string
+          reference_id?: string | null
+          reference_type?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          tenant_id: string
+          type: string
+        }
+        Update: {
+          channel?: string
+          director_id?: string
+          id?: string
+          message?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nela_reminders_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nela_sessions: {
+        Row: {
+          content: Json | null
+          director_id: string
+          ended_at: string | null
+          id: string
+          notes_created: number | null
+          started_at: string
+          tasks_created: number | null
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          content?: Json | null
+          director_id: string
+          ended_at?: string | null
+          id?: string
+          notes_created?: number | null
+          started_at?: string
+          tasks_created?: number | null
+          tenant_id: string
+          type: string
+        }
+        Update: {
+          content?: Json | null
+          director_id?: string
+          ended_at?: string | null
+          id?: string
+          notes_created?: number | null
+          started_at?: string
+          tasks_created?: number | null
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nela_sessions_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_preferences: {
         Row: {
           consultation_reminders: boolean | null
@@ -4162,6 +4253,339 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_comments: {
+        Row: {
+          content: string
+          created_at: string
+          director_id: string | null
+          id: string
+          task_id: string
+          tenant_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          director_id?: string | null
+          id?: string
+          task_id: string
+          tenant_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          director_id?: string | null
+          id?: string
+          task_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_comments_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_contacts: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          contact_id: string
+          id: string
+          project_id: string
+          role_in_project: string | null
+          tenant_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          contact_id: string
+          id?: string
+          project_id: string
+          role_in_project?: string | null
+          tenant_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          contact_id?: string
+          id?: string
+          project_id?: string
+          role_in_project?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_contacts_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_contacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_files: {
+        Row: {
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          project_id: string
+          tenant_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          project_id: string
+          tenant_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          project_id?: string
+          tenant_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_members: {
+        Row: {
+          assistant_id: string | null
+          director_id: string | null
+          id: string
+          joined_at: string
+          project_id: string
+          role: string
+          tenant_id: string
+        }
+        Insert: {
+          assistant_id?: string | null
+          director_id?: string | null
+          id?: string
+          joined_at?: string
+          project_id: string
+          role?: string
+          tenant_id: string
+        }
+        Update: {
+          assistant_id?: string | null
+          director_id?: string | null
+          id?: string
+          joined_at?: string
+          project_id?: string
+          role?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_notes: {
+        Row: {
+          contact_id: string | null
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          project_id: string
+          source: string
+          tenant_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id: string
+          source?: string
+          tenant_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id?: string
+          source?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_notes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_templates: {
+        Row: {
+          created_at: string
+          default_tasks: Json | null
+          description: string | null
+          id: string
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_tasks?: Json | null
+          description?: string | null
+          id?: string
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          default_tasks?: Json | null
+          description?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          status: string
+          template_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          status?: string
+          template_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          status?: string
+          template_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "project_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -4770,16 +5194,21 @@ export type Database = {
       }
       tasks: {
         Row: {
+          actual_hours: number | null
           assigned_to: string | null
           category_id: string | null
           consultation_id: string | null
           created_at: string | null
           description: string | null
           due_date: string | null
+          estimated_hours: number | null
           id: string
           owner_id: string | null
+          parent_task_id: string | null
           priority: string | null
+          project_id: string | null
           snoozed_until: string | null
+          sort_order: number | null
           source_task_id: string | null
           status: string | null
           task_type: string | null
@@ -4790,16 +5219,21 @@ export type Database = {
           workflow_step: string | null
         }
         Insert: {
+          actual_hours?: number | null
           assigned_to?: string | null
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
+          estimated_hours?: number | null
           id?: string
           owner_id?: string | null
+          parent_task_id?: string | null
           priority?: string | null
+          project_id?: string | null
           snoozed_until?: string | null
+          sort_order?: number | null
           source_task_id?: string | null
           status?: string | null
           task_type?: string | null
@@ -4810,16 +5244,21 @@ export type Database = {
           workflow_step?: string | null
         }
         Update: {
+          actual_hours?: number | null
           assigned_to?: string | null
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
+          estimated_hours?: number | null
           id?: string
           owner_id?: string | null
+          parent_task_id?: string | null
           priority?: string | null
+          project_id?: string | null
           snoozed_until?: string | null
+          sort_order?: number | null
           source_task_id?: string | null
           status?: string | null
           task_type?: string | null
@@ -4856,6 +5295,20 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
