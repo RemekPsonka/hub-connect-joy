@@ -1,136 +1,222 @@
 
 
-# Plan: Rozszerzenie tabeli deal_activities
+# Plan: Rozszerzenie polityk RLS dla tabel Deals
 
 ## Cel
-Rozszerzenie istniejącej tabeli `deal_activities` o kolumnę `details` (JSONB) oraz ujednolicenie typów aktywności zgodnie z nowym standardem.
+Zastąpienie generycznych polityk `FOR ALL` bardziej granularnymi politykami opartymi na rolach, zapewniającymi:
+- Izolację danych między tenantami
+- Kontrolę operacji INSERT/UPDATE/DELETE tylko dla uprawnionych użytkowników
 
 ---
 
-## Analiza różnic
+## Analiza obecnego stanu
 
-| Pole | Obecny schemat | Proponowany schemat | Decyzja |
-|------|----------------|---------------------|---------|
-| `id` | UUID | UUID | ✅ Bez zmian |
-| `deal_id` | UUID (FK do deals) | UUID (FK do deals) | ✅ Bez zmian |
-| `user_id` | ❌ Brak | UUID (FK do auth.users) | ⚠️ Używamy `created_by` (FK do directors) |
-| `activity_type` | TEXT | TEXT | ✅ Bez zmian (rozszerzyć typy) |
-| `description` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
-| `old_value` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
-| `new_value` | TEXT | ❌ Brak | **Zachować** (używane w kodzie) |
-| `details` | ❌ Brak | JSONB | **Dodać** (elastyczne dane) |
-| `created_by` | UUID (FK do directors) | ❌ Brak | **Zachować** (kompatybilność) |
-| `created_at` | TIMESTAMPTZ | TIMESTAMPTZ | ✅ Bez zmian |
+### Istniejące polityki (zbyt permisywne)
 
----
+| Tabela | Obecna polityka | Problem |
+|--------|-----------------|---------|
+| `deals` | `FOR ALL USING (tenant_id = get_current_tenant_id())` | Każdy użytkownik tenanta może wszystko |
+| `deal_stages` | `FOR ALL USING (tenant_id = get_current_tenant_id())` | Każdy użytkownik może zmieniać etapy |
+| `deal_products` | `FOR ALL USING/WITH CHECK (przez deals)` | Brak kontroli ról |
+| `deal_activities` | `FOR ALL USING (przez deals)` | Brak kontroli zapisu |
 
-## Powód zachowania istniejących kolumn
-
-Obecna implementacja w `src/hooks/useDeals.ts` używa kolumn:
-- `description` - opis aktywności
-- `old_value` / `new_value` - wartości przed/po zmianie
-- `created_by` - referencja do dyrektora (nie auth.users)
-
-Kolumna `details` JSONB zostanie dodana jako uzupełnienie dla elastycznych danych, które nie pasują do sztywnego schematu.
-
----
-
-## Krok 1: Migracja bazy danych
+### Dostępne funkcje pomocnicze
 
 ```sql
--- Dodanie kolumny details do istniejącej tabeli
-ALTER TABLE public.deal_activities
-ADD COLUMN IF NOT EXISTS details JSONB;
+-- Pobiera tenant_id aktualnego użytkownika
+public.get_current_tenant_id() → UUID
 
--- Indeks dla szybkiego wyszukiwania w JSONB
-CREATE INDEX IF NOT EXISTS idx_deal_activities_details 
-ON public.deal_activities USING GIN (details);
+-- Sprawdza czy user ma konkretną rolę w tenancie
+public.has_role(_user_id UUID, _tenant_id UUID, _role app_role) → BOOLEAN
+
+-- Sprawdza czy user jest adminem (owner/admin)
+public.is_tenant_admin(_user_id UUID, _tenant_id UUID) → BOOLEAN
+```
+
+Typy ról w `app_role`: `owner`, `admin`, `director`, `viewer`
+
+---
+
+## Krok 1: Migracja - usunięcie starych i dodanie nowych polityk
+
+### 1.1 Tabela `deals`
+
+```sql
+-- Usunięcie starej polityki
+DROP POLICY IF EXISTS "tenant_access" ON public.deals;
+
+-- SELECT - wszyscy w tenancie mogą widzieć
+CREATE POLICY "deals_select" ON public.deals
+  FOR SELECT
+  USING (tenant_id = public.get_current_tenant_id());
+
+-- INSERT - tylko użytkownicy z rolą (owner/admin/director)
+CREATE POLICY "deals_insert" ON public.deals
+  FOR INSERT
+  WITH CHECK (
+    tenant_id = public.get_current_tenant_id()
+    AND EXISTS (
+      SELECT 1 FROM public.directors 
+      WHERE user_id = auth.uid() 
+      AND tenant_id = public.get_current_tenant_id()
+    )
+  );
+
+-- UPDATE - tylko użytkownicy z rolą
+CREATE POLICY "deals_update" ON public.deals
+  FOR UPDATE
+  USING (tenant_id = public.get_current_tenant_id())
+  WITH CHECK (
+    tenant_id = public.get_current_tenant_id()
+    AND EXISTS (
+      SELECT 1 FROM public.directors 
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- DELETE - tylko admini
+CREATE POLICY "deals_delete" ON public.deals
+  FOR DELETE
+  USING (
+    tenant_id = public.get_current_tenant_id()
+    AND public.is_tenant_admin(auth.uid(), tenant_id)
+  );
+```
+
+### 1.2 Tabela `deal_stages`
+
+```sql
+DROP POLICY IF EXISTS "tenant_access" ON public.deal_stages;
+
+-- SELECT - wszyscy w tenancie
+CREATE POLICY "deal_stages_select" ON public.deal_stages
+  FOR SELECT
+  USING (tenant_id = public.get_current_tenant_id());
+
+-- INSERT/UPDATE/DELETE - tylko admini (konfiguracja pipeline)
+CREATE POLICY "deal_stages_modify" ON public.deal_stages
+  FOR ALL
+  USING (
+    tenant_id = public.get_current_tenant_id()
+    AND public.is_tenant_admin(auth.uid(), tenant_id)
+  )
+  WITH CHECK (
+    tenant_id = public.get_current_tenant_id()
+    AND public.is_tenant_admin(auth.uid(), tenant_id)
+  );
+```
+
+### 1.3 Tabela `deal_products`
+
+```sql
+DROP POLICY IF EXISTS "tenant_access" ON public.deal_products;
+
+-- SELECT - przez relację do deals
+CREATE POLICY "deal_products_select" ON public.deal_products
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+  );
+
+-- INSERT/UPDATE/DELETE - przez relację + sprawdzenie roli
+CREATE POLICY "deal_products_modify" ON public.deal_products
+  FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.directors 
+      WHERE user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+  );
+```
+
+### 1.4 Tabela `deal_activities`
+
+```sql
+DROP POLICY IF EXISTS "tenant_access" ON public.deal_activities;
+
+-- SELECT - przez relację do deals
+CREATE POLICY "deal_activities_select" ON public.deal_activities
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+  );
+
+-- INSERT - dyrektorzy mogą dodawać aktywności
+CREATE POLICY "deal_activities_insert" ON public.deal_activities
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.directors 
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- UPDATE/DELETE - tylko admini lub autor
+CREATE POLICY "deal_activities_modify" ON public.deal_activities
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.deals d 
+      WHERE d.id = deal_id 
+      AND d.tenant_id = public.get_current_tenant_id()
+    )
+    AND (
+      created_by = (SELECT id FROM public.directors WHERE user_id = auth.uid() LIMIT 1)
+      OR public.is_tenant_admin(auth.uid(), public.get_current_tenant_id())
+    )
+  );
 ```
 
 ---
 
-## Krok 2: Aktualizacja TypeScript interface
+## Podsumowanie zmian
 
-Plik: `src/hooks/useDeals.ts`
-
-Zmiana:
-```typescript
-export interface DealActivity {
-  id: string;
-  deal_id: string;
-  activity_type: string;
-  description: string | null;
-  old_value: string | null;
-  new_value: string | null;
-  details: Record<string, unknown> | null;  // NOWE
-  created_by: string | null;
-  created_at: string;
-  creator?: { id: string; full_name: string } | null;
-}
-```
+| Tabela | SELECT | INSERT | UPDATE | DELETE |
+|--------|--------|--------|--------|--------|
+| `deals` | Tenant | Director | Director | Admin |
+| `deal_stages` | Tenant | Admin | Admin | Admin |
+| `deal_products` | Tenant (via deal) | Director | Director | Director |
+| `deal_activities` | Tenant (via deal) | Director | Autor/Admin | Autor/Admin |
 
 ---
 
-## Krok 3: Aktualizacja hooka useCreateDealActivity
-
-Rozszerzenie mutacji o obsługę `details`:
-
-```typescript
-export function useCreateDealActivity() {
-  // ...
-  return useMutation({
-    mutationFn: async (activity: {
-      deal_id: string;
-      activity_type: string;
-      description?: string;
-      old_value?: string;
-      new_value?: string;
-      details?: Record<string, unknown>;  // NOWE
-    }) => {
-      // ...
-    },
-  });
-}
-```
-
----
-
-## Krok 4: Aktualizacja komponentu DealActivitiesTimeline
-
-Komponent może teraz wyświetlać dodatkowe dane z `details` dla typów aktywności, które tego wymagają.
-
----
-
-## Typy aktywności (ujednolicone)
-
-| Typ | Opis | Dane w details |
-|-----|------|----------------|
-| `created` | Deal utworzony | - |
-| `stage_change` | Zmiana etapu | `{ from_stage, to_stage }` |
-| `value_change` | Zmiana wartości | `{ from_value, to_value, currency }` |
-| `won` | Deal wygrany | `{ won_reason }` |
-| `lost` | Deal przegrany | `{ lost_reason }` |
-| `note` | Notatka dodana | - |
-| `call` | Rozmowa telefoniczna | `{ duration, outcome }` |
-| `email` | Email wysłany | `{ subject }` |
-| `meeting` | Spotkanie | `{ location, attendees }` |
-
----
-
-## Pliki do modyfikacji
+## Plik do utworzenia
 
 | Plik | Akcja |
 |------|-------|
-| Migracja SQL | **Utworzyć** - ALTER TABLE + indeks |
-| `src/hooks/useDeals.ts` | **Edytować** - rozszerzyć interface i hook |
-| `src/components/deals/DealActivitiesTimeline.tsx` | **Edytować** - obsługa details |
+| `supabase/migrations/[timestamp]_rls_deals_granular.sql` | **Utworzyć** |
 
 ---
 
 ## Korzyści
 
-- Elastyczna kolumna `details` JSONB dla dodatkowych danych
-- Zachowanie kompatybilności wstecznej z istniejącym kodem
-- Możliwość przechowywania dowolnych metadanych per aktywność
-- Indeks GIN dla szybkiego wyszukiwania w JSONB
+- Granularna kontrola dostępu oparta na rolach
+- Etapy pipeline mogą być zmieniane tylko przez adminów
+- Ochrona przed przypadkowym usunięciem danych przez nieuprawnionych
+- Aktywności mogą być edytowane tylko przez autora lub admina
 
