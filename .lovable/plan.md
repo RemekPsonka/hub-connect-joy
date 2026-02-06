@@ -1,168 +1,193 @@
 
-# Implementacja DealsAnalytics - Dashboard analityczny dla Pipeline
 
-## Cel
-Utworzenie komponentu `DealsAnalytics` z wizualizacją kluczowych metryk pipeline sprzedażowego, prognozą przychodów i funnel konwersji.
+# Plan wdrożenia zmian uprawnień i audytu
 
-## Analiza obecnego stanu
+## 1. Wzmocnienie polityki `deals_update` RLS
 
-### Co już istnieje:
-- **Strona `Deals.tsx`** - zawiera podstawowe metryki (Otwarte Deals, Wartość Pipeline, Średni Deal, Win Rate)
-- **Hook `useDeals`** - obsługuje filtrowanie po `status` (open/won/lost)
-- **Biblioteka `recharts`** - już zainstalowana i używana w `Analytics.tsx`
-- **Wzorzec UI** - ustalony w istniejącej stronie Analytics
-
-### Czego brakuje:
-- Komponent `DealsAnalytics` z rozbudowanymi wizualizacjami
-- Kalkulacja Weighted Pipeline (wartość × prawdopodobieństwo)
-- 6-miesięczna prognoza na podstawie `expected_close_date`
-- Funnel konwersji wg etapów
-
-## Nowy komponent
-
-### `src/components/deals/DealsAnalytics.tsx`
-
-Struktura:
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  Key Metrics (3 karty)                                      │
-│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│
-│  │ Weighted        │ │ Win Rate        │ │ Avg Days to     ││
-│  │ Pipeline        │ │ 67%             │ │ Close: 32 dni   ││
-│  │ 245 000 PLN     │ │ 12 won / 6 lost │ │                 ││
-│  └─────────────────┘ └─────────────────┘ └─────────────────┘│
-├─────────────────────────────────────────────────────────────┤
-│  6-Month Forecast (wykres słupkowy)                         │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ ▓▓▓ ▓▓▓▓ ▓▓ ▓▓▓▓▓ ▓▓▓ ▓▓▓▓                              ││
-│  │ Sty  Lut  Mar  Kwi   Maj  Cze                           ││
-│  └─────────────────────────────────────────────────────────┘│
-├─────────────────────────────────────────────────────────────┤
-│  Conversion Funnel (wykres lejkowy)                         │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │  Prospecting      ████████████████████ 45               ││
-│  │  Qualification    ████████████████ 32                   ││
-│  │  Proposal         ██████████ 18                         ││
-│  │  Negotiation      ██████ 12                             ││
-│  │  Won              ███ 8                                 ││
-│  └─────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────┘
+### Problem
+Obecna polityka `deals_update` pozwala **każdemu dyrektorowi** w tenant aktualizować **dowolny deal**:
+```sql
+-- Aktualna (zbyt luźna):
+USING (tenant_id = get_current_tenant_id())
+WITH CHECK (tenant_id = get_current_tenant_id() AND EXISTS(SELECT 1 FROM directors WHERE user_id = auth.uid()))
 ```
 
-## Szczegóły techniczne
+### Rozwiązanie
+Zastąpienie jej ściślejszą wersją, która pozwala na update tylko:
+- Adminowi tenant (może wszystko)
+- Właścicielowi deala (`owner_id`)
+- Członkowi zespołu przypisanego do deala (`team_id`)
 
-### Kalkulacje:
-
-1. **Weighted Pipeline**:
-   ```typescript
-   const weightedValue = openDeals.reduce((sum, deal) => 
-     sum + (deal.value * (deal.probability / 100)), 0);
-   ```
-
-2. **Win Rate**:
-   ```typescript
-   const winRate = wonDeals.length / (wonDeals.length + lostDeals.length) * 100;
-   ```
-
-3. **6-Month Forecast** - grupowanie deals wg `expected_close_date`:
-   ```typescript
-   const forecastData = useMemo(() => {
-     const months = [];
-     for (let i = 0; i < 6; i++) {
-       const month = new Date();
-       month.setMonth(month.getMonth() + i);
-       
-       const dealsThisMonth = openDeals.filter(deal => {
-         const closeDate = new Date(deal.expected_close_date);
-         return closeDate.getMonth() === month.getMonth() &&
-                closeDate.getFullYear() === month.getFullYear();
-       });
-       
-       months.push({
-         month: month.toLocaleDateString('pl-PL', { month: 'short' }),
-         expected: dealsThisMonth.reduce((sum, d) => 
-           sum + (d.value * d.probability / 100), 0),
-         deals: dealsThisMonth.length
-       });
-     }
-     return months;
-   }, [openDeals]);
-   ```
-
-4. **Conversion Funnel** - deals wg etapów + win/lost rate:
-   ```typescript
-   const conversionData = useMemo(() => {
-     return stages.map(stage => {
-       const dealsInStage = allDeals.filter(d => d.stage_id === stage.id);
-       const wonFromStage = wonDeals.filter(d => /* historycznie przeszły przez etap */);
-       return {
-         name: stage.name,
-         color: stage.color,
-         count: dealsInStage.length,
-         value: dealsInStage.reduce((sum, d) => sum + d.value, 0)
-       };
-     });
-   }, [allDeals, stages]);
-   ```
-
-### Importy:
-```typescript
-import { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useDeals, useDealStages } from '@/hooks/useDeals';
-import { 
-  BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, 
-  Legend, ResponsiveContainer, FunnelChart, Funnel
-} from 'recharts';
+```sql
+DROP POLICY IF EXISTS deals_update ON deals;
+CREATE POLICY deals_update ON deals FOR UPDATE TO authenticated
+USING (tenant_id = get_current_tenant_id())
+WITH CHECK (
+  tenant_id = get_current_tenant_id() AND (
+    is_tenant_admin(auth.uid(), tenant_id) OR
+    (team_id IS NULL AND owner_id = (SELECT id FROM directors WHERE user_id = auth.uid() LIMIT 1)) OR
+    (team_id IS NOT NULL AND is_deal_team_member(auth.uid(), team_id))
+  )
+);
 ```
 
-### Avg Days to Close:
-Kalkulacja średniego czasu zamknięcia na podstawie wygranych deals:
-```typescript
-const avgDaysToClose = useMemo(() => {
-  if (!wonDeals.length) return 0;
-  const totalDays = wonDeals.reduce((sum, deal) => {
-    const created = new Date(deal.created_at);
-    const won = new Date(deal.won_at!);
-    return sum + Math.round((won.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-  }, 0);
-  return Math.round(totalDays / wonDeals.length);
-}, [wonDeals]);
+---
+
+## 2. Formalizacja roli SGU w enumie `app_role`
+
+### Problem
+"SGU" funkcjonuje jako zespół w `deal_teams`, ale nie jako formalna rola systemowa. Rozszerzenie enum pozwoli na dedykowane uprawnienia.
+
+### Rozwiązanie
+
+**Krok 1: Rozszerzenie enumu**
+```sql
+ALTER TYPE app_role ADD VALUE 'sgu' AFTER 'director';
 ```
 
-## Integracja
+**Krok 2: Update hooków i UI**
+- `src/hooks/useOwnerPanel.ts`: dodanie `'sgu'` do typu `AppRole`
+- `src/pages/Owner.tsx`: dodanie labela "SGU" i badge variant
+- `src/components/owner/AddUserModal.tsx`: dodanie opcji SGU przy tworzeniu użytkownika
+- `supabase/functions/create-tenant-user/index.ts`: rozszerzenie walidacji Zod o `'sgu'`
 
-### Opcja A: Dodatkowa zakładka w DealsHeader
-Dodanie trzeciej zakładki "Analityka" obok Kanban i Tabela.
+**Krok 3: Funkcja sprawdzająca rolę SGU**
+```sql
+CREATE OR REPLACE FUNCTION has_role_sgu(_user_id uuid, _tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles
+    WHERE user_id = _user_id
+      AND tenant_id = _tenant_id
+      AND role = 'sgu'
+  )
+$$;
+```
 
-### Opcja B: Osobna strona
-Utworzenie `/deals/analytics` jako sub-route.
+---
 
-### Opcja C: Sekcja na stronie Deals (rekomendowane)
-Dodanie przełącznika lub sekcji na dole strony Deals, widocznej po kliknięciu "Pokaż analitykę".
+## 3. Implementacja audytu zmian ról
 
-## Pliki do utworzenia/modyfikacji
+### Problem
+Brak śladu audytowego przy zmianach ról użytkowników.
+
+### Rozwiązanie
+
+**Krok 1: Utworzenie tabeli audytu**
+```sql
+CREATE TABLE role_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  target_user_id uuid NOT NULL,
+  changed_by_user_id uuid NOT NULL,
+  action text NOT NULL, -- 'role_added', 'role_removed', 'role_changed'
+  old_role app_role,
+  new_role app_role,
+  details jsonb,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE role_audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY role_audit_log_select ON role_audit_log
+FOR SELECT TO authenticated
+USING (tenant_id = get_current_tenant_id() AND is_tenant_admin(auth.uid(), tenant_id));
+
+CREATE POLICY role_audit_log_insert ON role_audit_log
+FOR INSERT TO authenticated
+WITH CHECK (tenant_id = get_current_tenant_id() AND is_tenant_admin(auth.uid(), tenant_id));
+
+CREATE INDEX idx_role_audit_tenant ON role_audit_log(tenant_id);
+CREATE INDEX idx_role_audit_target ON role_audit_log(target_user_id);
+```
+
+**Krok 2: Trigger na tabeli `user_roles`**
+```sql
+CREATE OR REPLACE FUNCTION log_role_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO role_audit_log (tenant_id, target_user_id, changed_by_user_id, action, new_role)
+    VALUES (NEW.tenant_id, NEW.user_id, auth.uid(), 'role_added', NEW.role);
+  ELSIF TG_OP = 'UPDATE' AND OLD.role IS DISTINCT FROM NEW.role THEN
+    INSERT INTO role_audit_log (tenant_id, target_user_id, changed_by_user_id, action, old_role, new_role)
+    VALUES (NEW.tenant_id, NEW.user_id, auth.uid(), 'role_changed', OLD.role, NEW.role);
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO role_audit_log (tenant_id, target_user_id, changed_by_user_id, action, old_role)
+    VALUES (OLD.tenant_id, OLD.user_id, auth.uid(), 'role_removed', OLD.role);
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE TRIGGER trg_role_audit
+AFTER INSERT OR UPDATE OR DELETE ON user_roles
+FOR EACH ROW EXECUTE FUNCTION log_role_change();
+```
+
+**Krok 3: UI do przeglądania logów**
+
+Nowy komponent `src/components/owner/RoleAuditLog.tsx`:
+- Hook `useRoleAuditLog()` pobierający logi z tabeli
+- Tabela z kolumnami: Data, Użytkownik, Akcja, Poprzednia rola, Nowa rola, Zmienione przez
+
+Integracja w `src/pages/Owner.tsx`:
+- Nowa sekcja "Historia zmian ról" na końcu strony
+
+---
+
+## Pliki do modyfikacji
 
 | Plik | Operacja | Opis |
 |------|----------|------|
-| `src/components/deals/DealsAnalytics.tsx` | **Nowy** | Komponent z wykresami i metrykami |
-| `src/components/deals/index.ts` | Aktualizacja | Eksport nowego komponentu |
-| `src/pages/Deals.tsx` | Modyfikacja | Integracja komponentu (opcjonalnie) |
+| Migracja SQL | Nowa | Rozszerzenie enumu, tabela audytu, trigger, RLS |
+| `src/hooks/useOwnerPanel.ts` | Modyfikacja | Dodanie `'sgu'` do typu AppRole |
+| `src/pages/Owner.tsx` | Modyfikacja | Label i badge dla SGU |
+| `src/components/owner/AddUserModal.tsx` | Modyfikacja | Opcja SGU w select |
+| `supabase/functions/create-tenant-user/index.ts` | Modyfikacja | Walidacja SGU w Zod |
+| `src/hooks/useRoleAuditLog.ts` | Nowy | Hook do pobierania logów |
+| `src/components/owner/RoleAuditLog.tsx` | Nowy | UI wyświetlania logów |
 
-## Rozszerzenia na przyszłość
+---
 
-1. **Filtrowanie czasowe** - wybór zakresu dat (7d, 30d, 90d)
-2. **Eksport danych** - PDF/Excel z prognozami
-3. **Porównanie okresów** - trend vs poprzedni miesiąc
-4. **AI Insights** - automatyczne rekomendacje dla pipeline
+## Diagram struktury po zmianach
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  app_role (enum)                                             │
+│  ├── owner    → Pełne uprawnienia                           │
+│  ├── admin    → Zarządzanie użytkownikami + wszystkie deals │
+│  ├── sgu      → [NOWY] Dedykowana rola dla zespołów SGU     │
+│  └── director → Własne deals lub z przypisanych zespołów    │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│  deals RLS (UPDATE)                                          │
+│  ├── is_tenant_admin? → ✓ Może aktualizować                 │
+│  ├── owner_id = current_director? → ✓ Może aktualizować     │
+│  └── is_deal_team_member? → ✓ Może aktualizować             │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│  role_audit_log (tabela)                                     │
+│  ├── target_user_id, changed_by_user_id                     │
+│  ├── action: role_added | role_changed | role_removed       │
+│  └── old_role, new_role, created_at                         │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Efekt końcowy
 
-Dashboard analityczny pokazujący:
-- Ważoną wartość pipeline (realniejsza prognoza przychodów)
-- Współczynnik wygranych z liczbą won/lost
-- Średni czas zamknięcia deal
-- 6-miesięczną prognozę przychodów z wykresem
-- Funnel konwersji wg etapów pipeline
+1. **Bezpieczeństwo deals**: Dyrektor może edytować tylko deale, których jest właścicielem lub do których należy przez zespół
+2. **Formalna rola SGU**: Możliwość tworzenia użytkowników z dedykowaną rolą SGU w panelu zarządzania
+3. **Pełny audyt**: Każda zmiana roli jest logowana z informacją kto, kiedy i co zmienił
+
