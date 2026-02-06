@@ -1,272 +1,298 @@
 
 
-# Inteligentne sugestie kontaktow Sovra — pgvector semantic matching
+# Tygodniowy raport Sovra -- Edge Function + konfiguracja w Settings
 
 ## Podsumowanie
 
-Dodajemy system sugestii kontaktow oparty o pgvector: Sovra analizuje projekt, generuje embedding, wyszukuje semantycznie podobne kontakty z CRM i podaje rekomendacje z uzasadnieniem AI.
+Dodajemy automatyczny raport email generowany przez Sovre: Edge Function zbiera statystyki tygodnia (zadania, projekty, kontakty, aktywnosc), generuje podsumowanie AI (Gemini 2.5 Flash) i wysyla email HTML przez Resend. Konfiguracja raportow dostepna w Settings w zakladce Integracje.
 
-## Krytyczne roznice vs specyfikacja
+## Wazne ustalenia z analizy codebase
 
-Istniejacy system juz uzywa pgvector z **1536 wymiarami** (nie 768). 2112 z 2113 kontaktow juz ma embeddingi w kolumnie `profile_embedding`. Nowy kod musi byc z tym spojny — uzywa tych samych wymiarow i istniejacych danych.
-
-| Element | Spec uzytkownika | Rzeczywistosc |
-|---------|-----------------|---------------|
-| Wymiary wektora | 768 | **1536** (istniejace) |
-| Kolumna kontaktow | `embedding` | **`profile_embedding`** (istniejaca) |
-| Index kontaktow | IVFFlat do stworzenia | **HNSW juz istnieje** |
-| pgvector extension | Do wlaczenia | **Juz wlaczony** |
-| Embeddingi kontaktow | Do wygenerowania | **2112/2113 juz gotowe** |
-| Model | text-embedding-3-small 768D | **text-embedding-3-small 1536D** (domyslny) |
+| Element | Stan |
+|---------|------|
+| Tabela `sovra_report_config` | Nie istnieje -- wymaga migracji |
+| `RESEND_API_KEY` | **Nie skonfigurowany** -- fallback: zapis do `sovra_sessions` bez wysylki |
+| `FRONTEND_URL` | Skonfigurowany |
+| `contact_activity_log` | Istnieje (id, tenant_id, contact_id, activity_type, description, metadata, created_at) |
+| `sovra_sessions` | Istnieje (id, tenant_id, director_id, type, title, content, tasks_created, notes_created, started_at, ended_at, metadata) |
+| Kolumna kontaktow | `last_contact_date` (date), `relationship_strength` (integer) -- bez `relationship_health` |
+| Auth pattern | Identyczny jak `sovra-reminder-trigger`: service_role vs JWT |
+| Settings Integracje | Zakladka `integrations` z `GoogleCalendarSettings` -- dodamy pod spodem |
 
 ## Co sie zmieni
 
 | Zmiana | Plik / Zasob |
 |--------|-------------|
-| Nowa kolumna + funkcja SQL | Migracja DB |
-| Nowa Edge Function | `supabase/functions/sovra-suggest-contacts/index.ts` |
-| Nowa Edge Function | `supabase/functions/sovra-generate-embeddings/index.ts` |
-| Wpisy config | `supabase/config.toml` |
-| Nowy hook | `src/hooks/useSovraContactSuggestions.ts` |
-| Nowy komponent | `src/components/projects/SovraSuggestionsSection.tsx` |
-| Modyfikacja | `src/components/projects/ProjectContactsTab.tsx` |
-| Modyfikacja | `supabase/functions/sovra-chat/index.ts` (kontekst sugestii) |
+| Nowa tabela | Migracja: `sovra_report_config` + RLS |
+| Nowa Edge Function | `supabase/functions/sovra-weekly-report/index.ts` |
+| Wpis config | `supabase/config.toml` |
+| Nowy hook | `src/hooks/useSovraReportConfig.ts` |
+| Nowy komponent | `src/components/sovra/SovraReportSettings.tsx` |
+| Nowy komponent | `src/components/sovra/ReportPreviewModal.tsx` |
+| Modyfikacja | `src/pages/Settings.tsx` (dodanie sekcji w zakladce Integracje) |
 
 ---
 
 ## Szczegoly techniczne
 
-### 1. Migracja bazy danych (SQL)
+### 1. Migracja bazy danych
 
 ```text
-A) Dodanie kolumny embedding do projects:
-   ALTER TABLE projects ADD COLUMN IF NOT EXISTS embedding vector(1536);
-
-B) Index HNSW na projektach:
-   CREATE INDEX IF NOT EXISTS idx_projects_embedding 
-   ON projects USING hnsw (embedding vector_cosine_ops) 
-   WITH (m = 16, ef_construction = 64);
-
-C) Funkcja similarity search:
-   CREATE OR REPLACE FUNCTION match_contacts_by_project(
-     query_embedding vector(1536),     -- 1536D zeby pasowac do profile_embedding
-     match_tenant_id uuid,
-     match_threshold float DEFAULT 0.6,
-     match_count int DEFAULT 10,
-     exclude_ids uuid[] DEFAULT '{}'
-   )
-   RETURNS TABLE (
-     id uuid,
-     full_name text,
-     company text,
-     position text,
-     similarity float
-   )
-   LANGUAGE sql STABLE
-   AS $$
-     SELECT
-       c.id,
-       c.full_name,
-       c.company,
-       c.position,
-       1 - (c.profile_embedding <=> query_embedding) as similarity
-     FROM contacts c
-     WHERE c.tenant_id = match_tenant_id
-       AND c.profile_embedding IS NOT NULL
-       AND c.id != ALL(exclude_ids)
-       AND 1 - (c.profile_embedding <=> query_embedding) > match_threshold
-     ORDER BY c.profile_embedding <=> query_embedding
-     LIMIT match_count;
-   $$;
-```
-
-Uwaga: Funkcja uzywa `profile_embedding` (istniejaca kolumna 1536D) — NIE `embedding`.
-
-### 2. Edge Function — sovra-generate-embeddings
-
-Generuje embeddingi dla projektow (i opcjonalnie kontaktow bez embeddingu).
-
-```text
-A) Autoryzacja: verifyAuth(req) — tylko director
-B) Zod: { type: 'contacts' | 'projects' | 'single', record_id?: uuid }
-C) Dla type='projects':
-   - SELECT id, name, description, status FROM projects 
-     WHERE tenant_id = X AND embedding IS NULL LIMIT 50
-   - Dla kazdego: zbuduj tekst z name, description, status
-   - Pobierz tez nazwy kontaktow z project_contacts
-   - Batch call OpenAI text-embedding-3-small (1536D — domyslny bez parametru dimensions)
-   - UPDATE projects SET embedding = vector WHERE id = X
-D) Dla type='contacts':
-   - SELECT id FROM contacts WHERE tenant_id = X AND profile_embedding IS NULL LIMIT 50
-   - Dla kazdego wywolaj istniejacy generate-embedding (reuse logiki)
-   - LUB zbuduj tekst i batch call OpenAI (jak dla projektow)
-E) Dla type='single':
-   - record_id wymagane
-   - Wykryj czy to projekt (sprawdz w projects) czy kontakt
-   - Wygeneruj i zapisz embedding
-F) Rate limit: Upstash slidingWindow(5, '1m')
-G) Response: { processed: number, type: string }
-```
-
-### 3. Edge Function — sovra-suggest-contacts
-
-```text
-A) Autoryzacja: verifyAuth(req) — tylko director
-B) Rate limit: slidingWindow(10, '1m')
-C) Zod: { project_id: uuid, limit: int 1-20 default 5 }
-D) Pobierz projekt:
-   - SELECT id, name, description, embedding FROM projects WHERE id = X AND tenant_id = Y
-   - Pobierz istniejace kontakty: SELECT contact_id FROM project_contacts WHERE project_id = X
-E) Jesli projekt nie ma embedding:
-   - Zbuduj tekst: name + description + status + nazwy kontaktow
-   - Call OpenAI text-embedding-3-small (1536D)
-   - UPDATE projects SET embedding = vector
-F) Wywolaj match_contacts_by_project(embedding, tenant_id, 0.6, limit, exclude_ids)
-G) Jesli wyniki > 0, wzbogac z Lovable AI (gemini-2.5-flash):
-   - System prompt: "Dla kazdego kontaktu napisz 1 zdanie po polsku DLACZEGO ta osoba 
-     moze byc wartosciowa dla projektu. Odpowiedz JSON: [{contact_id, reason}]"
-   - Jesli AI call fail → zwroc sugestie BEZ reasons (graceful fallback)
-H) Merge reasons z similarity scores
-I) Response: {
-     project_id, 
-     suggestions: [{ contact_id, full_name, company, position, similarity, reason }]
-   }
-```
-
-### 4. config.toml — nowe wpisy
-
-```text
-[functions.sovra-generate-embeddings]
-verify_jwt = false
-
-[functions.sovra-suggest-contacts]
-verify_jwt = false
-```
-
-verify_jwt = false bo autoryzacja wewnetrzna (verifyAuth).
-
-### 5. Hook — useSovraContactSuggestions.ts
-
-```text
-Type ContactSuggestion:
-{
-  contact_id: string
-  full_name: string
-  company: string | null
-  position: string | null
-  similarity: number
-  reason: string | null
-}
-
-A) useSuggestContacts(projectId):
-   - queryKey: ['sovra-suggestions', projectId]
-   - enabled: !!projectId
-   - staleTime: 10 * 60 * 1000 (10 min cache)
-   - queryFn: invoke sovra-suggest-contacts edge function
-   - Zwraca: { suggestions, isLoading, error, refetch }
-
-B) useAddSuggestedContact():
-   - Reuse istniejacego useAddProjectContact z useProjects.ts
-   - Po dodaniu: invalidate ['sovra-suggestions', projectId] + ['project-contacts', projectId]
-   - role_in_project: 'Sugerowany przez Sovra'
-
-C) useDismissSuggestion():
-   - useState<Set<string>> — lokalne dismissed IDs
-   - Filtrowanie suggestions bez zapisywania w DB
-   - Reset po odmontowaniu komponentu
-
-D) useRegenerateEmbeddings():
-   - Mutation: invoke sovra-generate-embeddings z type='projects'
-   - onSuccess: invalidate ['sovra-suggestions'] + toast
-```
-
-### 6. Komponent — SovraSuggestionsSection.tsx
-
-Sekcja pod lista kontaktow projektu:
-
-```text
-A) Divider: Sparkles icon + "Sugestie Sovry" text-sm font-semibold text-violet-600
-
-B) Loading: 3x Skeleton pulse z Sparkles
-
-C) Lista sugestii (max 5):
-   - bg-gradient-to-r from-violet-50/50 to-transparent dark:from-violet-950/20
-   - rounded-xl p-4 mb-3 border border-violet-100 dark:border-violet-900/50
-   - Avatar z inicjalami
-   - full_name + company + position
-   - reason (italic, od Sovry)
-   - Similarity bar: Progress w-24 h-1.5 bg-violet-500 + "87% dopasowanie"
-   - Przyciski: "Dodaj" (primary) + "Pomin" (ghost)
-
-D) Po dodaniu: animacja znikania, kontakt pojawia sie w liscie powyzej
-
-E) Empty state: "Sovra nie znalazla pasujacych kontaktow"
-
-F) Brak embeddingu projektu: 
-   - Banner amber z info "Sovra musi przygotowac analize"
-   - Button "Przygotuj analize" → useRegenerateEmbeddings()
-```
-
-### 7. Modyfikacja ProjectContactsTab.tsx
-
-Dodanie SovraSuggestionsSection pod istniejaca liste kontaktow:
-
-```text
-return (
-  <>
-    <DataCard title="Kontakty projektu (X)">
-      {/* istniejaca lista kontaktow — BEZ ZMIAN */}
-    </DataCard>
-    
-    {/* Nowa sekcja sugestii */}
-    <SovraSuggestionsSection projectId={projectId} />
-  </>
+CREATE TABLE sovra_report_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  director_id uuid NOT NULL REFERENCES directors(id),
+  enabled boolean DEFAULT false,
+  frequency text DEFAULT 'weekly' CHECK (frequency IN ('daily', 'weekly')),
+  day_of_week int2 DEFAULT 1 CHECK (day_of_week BETWEEN 0 AND 6),
+  time_of_day time DEFAULT '08:00',
+  email_override text,
+  include_sections jsonb DEFAULT '["summary","tasks","projects","contacts","calendar"]',
+  last_sent_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(tenant_id, director_id)
 );
+
+ALTER TABLE sovra_report_config ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "sovra_report_config_own" ON sovra_report_config
+  FOR ALL USING (
+    tenant_id = get_current_tenant_id() 
+    AND director_id = get_current_director_id()
+  );
 ```
 
-Takze: obsluzyc przypadek gdy projectContacts jest puste — wyswietl empty state + sugestie pod spodem.
+### 2. Edge Function -- sovra-weekly-report
 
-### 8. Modyfikacja sovra-chat (kontekst sugestii)
-
-W `fetchCRMContext`, gdy `contextType === 'project'`:
+Wzorzec autoryzacji identyczny jak `sovra-reminder-trigger`:
 
 ```text
-// Po pobraniu project i projectTasks...
-// Dodaj top 3 sugestie kontaktow do specificContext:
+Sciezka A: service_role token (cron)
+  - Pobierz directorow z sovra_report_config WHERE enabled = true
+  - Dla kazdego sprawdz schedule:
+    - weekly: day_of_week = EXTRACT(DOW FROM NOW()) AND last_sent_at < CURRENT_DATE
+    - daily: last_sent_at < CURRENT_DATE
+  - Przetworz kazdego pasujacego
 
-const { data: suggestions } = await serviceClient
-  .rpc('match_contacts_by_project', {
-    query_embedding: project.embedding,   // moze byc null
-    match_tenant_id: tenantId,
-    match_threshold: 0.65,
-    match_count: 3,
-    exclude_ids: existingContactIds
-  });
-
-if (suggestions?.length > 0) {
-  specificContext += `\n\nSUGEROWANE KONTAKTY DLA PROJEKTU:
-${suggestions.map(s => `- ${s.full_name} (${s.position || ''} @ ${s.company || ''}) — dopasowanie: ${Math.round(s.similarity * 100)}%`).join('\n')}`;
-}
+Sciezka B: JWT token (manual preview z frontendu)
+  - verifyAuth(req) -> tylko ten director
+  - Pomin schedule check (generuj od razu)
+  - Zwroc preview_html w response
 ```
 
-Tylko jesli projekt ma embedding. Jesli nie — pomijamy (graceful).
+Zbieranie danych za okres (7 dni dla weekly, 1 dzien dla daily):
+
+```text
+1. tasks_completed: COUNT tasks WHERE status='done' AND updated_at >= period_start AND assigned_to = director_id
+2. tasks_created: COUNT tasks WHERE created_at >= period_start AND assigned_to = director_id
+3. tasks_overdue: tasks WHERE due_date < NOW() AND status NOT IN ('done','cancelled') AND assigned_to = director_id
+4. upcoming_deadlines: tasks WHERE due_date BETWEEN NOW() AND NOW()+7days AND status NOT IN ('done','cancelled')
+5. projects_active: projects WHERE owner_id = director_id AND status IN ('new','in_progress','analysis')
+6. Dla kazdego projektu: tasks done / tasks total (progress %)
+7. contacts_added: COUNT contacts WHERE created_at >= period_start AND tenant_id = X
+8. interactions: COUNT contact_activity_log WHERE created_at >= period_start AND tenant_id = X
+9. sovra_sessions: COUNT sovra_sessions WHERE started_at >= period_start AND director_id = X GROUP BY type
+10. sovra_reminders: COUNT sovra_reminders WHERE scheduled_at >= period_start AND director_id = X
+```
+
+Generowanie AI summary (Lovable AI -- Gemini 2.5 Flash):
+
+```text
+POST https://ai.lovable.dev/chat
+{
+  "model": "gemini-2.5-flash",
+  "messages": [{
+    "role": "system",
+    "content": "Jestes Sovra. Napisz krotkie podsumowanie tygodnia pracy (3-5 zdan) po polsku. 
+     Badz konkretna -- podaj liczby. Styl: profesjonalny, pozytywny ale rzeczowy. 
+     Jesli sa problemy (zaleglosci, brak aktywnosci) -- wspomnij taktownie. 
+     Zakoncz 1 zdaniem motywacji na przyszly tydzien."
+  }, {
+    "role": "user",
+    "content": JSON.stringify(stats)
+  }],
+  "temperature": 0.5
+}
+Authorization: Bearer LOVABLE_API_KEY
+```
+
+Email HTML -- inline styles, table-based layout (email-safe):
+
+```text
+- Max-width: 600px, table-based centering
+- Header: gradient violet->indigo, logo "S", tytul, okres
+- AI Summary: bg fioletowy, border-left, italic
+- Sekcja Zadania: 3 stat boxy (ukonczone/utworzone/zalegle), upcoming deadlines lista
+- Sekcja Projekty: kazdy z progress bar (table-based), X/Y zadan
+- Sekcja Kontakty: nowych X, interakcji Y
+- Sekcja Sovra: briefow X, chatow Y, debriefow Z, przypomnien N
+- Sekcja Przyszly tydzien: deadlines
+- Footer: "Wygenerowane przez Sovra", linki do Settings
+- Wszystkie sekcje warunkowo wg include_sections z config
+```
+
+Wysylka emaila:
+
+```text
+Jesli RESEND_API_KEY istnieje:
+  POST https://api.resend.com/emails
+  {
+    "from": "Sovra <sovra@domena>",
+    "to": [director.email LUB config.email_override],
+    "subject": "Sovra -- Twoj tydzien w liczbach (27 sty -- 2 lut 2026)",
+    "html": htmlContent
+  }
+
+Jesli BRAK RESEND_API_KEY:
+  - Zapisz raport do sovra_sessions (type='weekly_report')
+  - Loguj warning: "RESEND_API_KEY not configured, report saved but not sent"
+  - Nie rzucaj bledu -- preview nadal dziala
+```
+
+Po wyslaniu/zapisaniu:
+- UPDATE sovra_report_config SET last_sent_at = NOW()
+- INSERT sovra_sessions z type='weekly_report', content = { stats, ai_summary, html }
+
+Response:
+
+```text
+// Cron mode:
+{ reports_sent: number, reports_skipped: number }
+
+// Preview mode (JWT):
+{ preview_html: string, stats: {...} }
+```
+
+### 3. config.toml
+
+Nowy wpis:
+```text
+[functions.sovra-weekly-report]
+verify_jwt = false
+```
+
+### 4. Hook -- useSovraReportConfig.ts
+
+```text
+Type SovraReportConfig:
+{
+  id: string
+  enabled: boolean
+  frequency: 'daily' | 'weekly'
+  day_of_week: number
+  time_of_day: string
+  email_override: string | null
+  include_sections: string[]
+  last_sent_at: string | null
+}
+
+A) useReportConfig():
+   - queryKey: ['sovra-report-config']
+   - SELECT * FROM sovra_report_config WHERE director_id = me (via RLS)
+   - Zwraca: { config: SovraReportConfig | null, isLoading }
+
+B) useSaveReportConfig():
+   - Mutation: UPSERT sovra_report_config
+   - Potrzebuje tenant_id i director_id z useAuth()
+   - onConflict: (tenant_id, director_id)
+   - onSuccess: invalidate + showToast.success
+
+C) usePreviewReport():
+   - Mutation: fetch sovra-weekly-report Edge Function z JWT
+   - Zwraca: { preview_html: string }
+   - Brak toast na success -- otwieramy modal z previewem
+```
+
+### 5. SovraReportSettings.tsx
+
+Komponent Card w zakladce Integracje (pod GoogleCalendarSettings):
+
+```text
+A) Header: "Raporty Sovry" + Switch (enabled/disabled)
+
+B) Gdy disabled:
+   - Info text: "Wlacz automatyczne raporty email z podsumowaniem Twojej aktywnosci."
+   - Switch ON -> upsert config z enabled=true + domyslne wartosci
+
+C) Gdy enabled -- formularz:
+   - Frequency: dwa radio buttony w ramkach
+     - "Tygodniowo" + "Raport co tydzien w wybrany dzien"
+     - "Codziennie" + "Raport kazdego dnia rano"
+     - Aktywny: border-primary bg-primary/5
+
+   - Day of week (tylko gdy weekly):
+     - Select: Poniedzialek(1) ... Niedziela(0)
+     - Domyslnie: Poniedzialek
+
+   - Time: Input type="time" defaultValue="08:00"
+     - Helper: "Raport bedzie wysylany okolo tej godziny"
+
+   - Email override: Input z placeholder={director.email}
+     - Helper: "Domyslnie na Twoj email. Wpisz inny jesli chcesz wyslac gdzie indziej."
+
+   - Sekcje: Checkboxes
+     - "Podsumowanie AI" -- checked, disabled (zawsze wlaczone)
+     - "Zadania" -- default checked
+     - "Projekty" -- default checked
+     - "Kontakty" -- default checked
+     - "Kalendarz" -- default checked
+
+   - last_sent_at: jesli istnieje -> "Ostatni raport: 3 lut 2026, 08:05"
+
+   - Buttons: "Zapisz" primary + "Podglad raportu" outline z Sparkles icon
+
+D) Podglad: klik -> usePreviewReport() -> open ReportPreviewModal z preview_html
+```
+
+### 6. ReportPreviewModal.tsx
+
+```text
+- Dialog max-w-2xl
+- Header: "Podglad raportu email" + close button
+- Body: div z dangerouslySetInnerHTML={{ __html: previewHtml }}
+  - max-h-[70vh] overflow-y-auto
+  - Bezpieczne: HTML pochodzi z naszego wlasnego Edge Function
+- Footer: "Tak bedzie wygladal Twoj raport" text-xs text-muted-foreground
+```
+
+### 7. Settings.tsx -- modyfikacja
+
+W zakladce `integrations` (linia 643-645), dodanie pod GoogleCalendarSettings:
+
+```text
+<TabsContent value="integrations" className="space-y-6">
+  <GoogleCalendarSettings />
+  <SovraReportSettings />      {/* NOWE */}
+</TabsContent>
+```
+
+Import: `import { SovraReportSettings } from '@/components/sovra/SovraReportSettings';`
 
 ---
 
+## RESEND_API_KEY
+
+Klucz `RESEND_API_KEY` **nie jest skonfigurowany**. Edge Function obsluguje to gracefully:
+- Jesli brak klucza: raport generowany i zapisywany do `sovra_sessions`, ale nie wysylany emailem
+- Preview w UI dziala normalnie (nie wymaga Resend)
+- Uzytkownik moze pozniej dodac klucz aby wlaczyc wysylke
+
+Jesli chcesz wlaczyc wysylke emailowa, trzeba bedzie skonfigurowac klucz Resend.
+
 ## Bezpieczenstwo
 
-- Oba Edge Functions: autoryzacja wewnetrzna (verifyAuth) — tylko zalogowani directorzy
-- Wszystkie query filtruja po tenant_id — izolacja danych
-- exclude_ids w match function — nie sugeruje kontaktow juz w projekcie
-- Rate limit: 10/min suggest, 5/min embeddings (Upstash)
-- OpenAI API key i Lovable API key jako env vars — nie hardcoded
-- Fallback: jesli AI reasoning fail → sugestie bez reasons (nie blokuje flow)
+- Edge Function: autoryzacja wewnetrzna (service_role LUB JWT) -- brak publicznego dostepu
+- RLS na sovra_report_config: tylko wlasny director moze czytac/edytowac swoja konfiguracje
+- Filtracja po director_id/tenant_id we wszystkich query -- izolacja danych
+- last_sent_at guard: max 1 raport dziennie per director
+- dangerouslySetInnerHTML: tylko na HTML z wlasnego Edge Function (bezpieczne)
+- Email override: walidacja formatu na froncie (opcjonalna)
 
 ## Co NIE zostanie zmienione
 
-- Istniejace kontakty i ich profile_embedding (2112 rekordow) — uzywamy ich as-is
-- Edge Function generate-embedding — bez zmian (nadal obsluguje pojedyncze kontakty)
-- Edge Functions: sovra-chat (minimalna zmiana kontekstu), sovra-debrief, sovra-morning-session, sovra-reminder-trigger — bez zmian (poza kontekstem w chat)
-- Istniejacy search_all_hybrid — bez zmian
-- Inne strony/hooki/komponenty — bez zmian
+- Edge Functions: sovra-chat, sovra-debrief, sovra-morning-session, sovra-reminder-trigger, sovra-suggest-contacts, sovra-generate-embeddings -- bez zmian
+- Tabela sovra_reminders, sovra_sessions -- bez zmian schematu
+- Istniejace komponenty Settings -- bez zmian (GoogleCalendarSettings zachowany 1:1)
+- Inne strony/hooki -- bez zmian
 
