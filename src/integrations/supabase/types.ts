@@ -2887,6 +2887,67 @@ export type Database = {
           },
         ]
       }
+      gcal_tokens: {
+        Row: {
+          access_token: string
+          connected_email: string | null
+          created_at: string
+          director_id: string
+          expires_at: string
+          id: string
+          refresh_token: string
+          selected_calendars: Json | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          connected_email?: string | null
+          created_at?: string
+          director_id: string
+          expires_at: string
+          id?: string
+          refresh_token: string
+          selected_calendars?: Json | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          connected_email?: string | null
+          created_at?: string
+          director_id?: string
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          selected_calendars?: Json | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gcal_tokens_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gcal_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "gcal_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_meetings: {
         Row: {
           actual_participant_count: number | null
