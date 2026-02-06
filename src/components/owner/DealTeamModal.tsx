@@ -111,8 +111,8 @@ export function DealTeamModal({ isOpen, onClose, team }: DealTeamModalProps) {
 
   const isPending = createTeam.isPending || updateTeam.isPending;
 
-  // Get directors (users who have a director record)
-  const directors = users.filter(u => !u.roles.includes('owner') || users.length === 1);
+  // Get all users who can be team members (all directors in tenant)
+  const directors = users;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
