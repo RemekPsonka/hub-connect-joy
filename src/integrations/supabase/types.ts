@@ -673,6 +673,7 @@ export type Database = {
           logo_url: string | null
           name: string
           nip: string | null
+          notes: string | null
           parent_company_id: string | null
           phone: string | null
           pkd_codes: string[] | null
@@ -726,6 +727,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           nip?: string | null
+          notes?: string | null
           parent_company_id?: string | null
           phone?: string | null
           pkd_codes?: string[] | null
@@ -779,6 +781,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           nip?: string | null
+          notes?: string | null
           parent_company_id?: string | null
           phone?: string | null
           pkd_codes?: string[] | null
