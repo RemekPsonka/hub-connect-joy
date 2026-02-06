@@ -1,6 +1,7 @@
 export { DealsHeader, type ViewMode } from './DealsHeader';
 export { DealsTable } from './DealsTable';
 export { DealsKanban } from './DealsKanban';
+export { DealsAnalytics } from './DealsAnalytics';
 export { DealCard } from './DealCard';
 export { DealStageBadge } from './DealStageBadge';
 export { CreateDealModal } from './CreateDealModal';
