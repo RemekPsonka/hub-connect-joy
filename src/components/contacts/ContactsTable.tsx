@@ -2,14 +2,6 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2, Check } from 'lucide-react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -45,6 +37,7 @@ import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, useGenerateContactProfile, type ContactWithGroup } from '@/hooks/useContacts';
 
 const ROW_HEIGHT = 56;
+const CONTACTS_MIN_WIDTH = 1190;
 
 interface ContactsTableProps {
   contacts: ContactWithGroup[];
@@ -145,7 +138,6 @@ export function ContactsTable({
     }
   };
 
-  // Windowed pagination logic
   const getPageNumbers = (): (number | 'ellipsis')[] => {
     const pages: (number | 'ellipsis')[] = [];
     const delta = 2;
@@ -154,27 +146,22 @@ export function ContactsTable({
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
 
-    // Always show first page
     pages.push(1);
 
-    // Ellipsis after first page if needed
     if (page > 3 + delta) {
       pages.push('ellipsis');
     }
 
-    // Pages around current
     const start = Math.max(2, page - delta);
     const end = Math.min(totalPages - 1, page + delta);
     for (let i = start; i <= end; i++) {
       pages.push(i);
     }
 
-    // Ellipsis before last page if needed
     if (page < totalPages - 2 - delta) {
       pages.push('ellipsis');
     }
 
-    // Always show last page
     if (totalPages > 1) {
       pages.push(totalPages);
     }
@@ -239,152 +226,144 @@ export function ContactsTable({
 
       {/* Table */}
       <div className="border rounded-lg overflow-hidden">
-        {/* Sticky Header */}
-        <div className="bg-background border-b">
-          <table className="table-fixed w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[50px]">
-                  <Checkbox
-                    checked={selectedIds.length === contacts.length && contacts.length > 0}
-                    onCheckedChange={handleSelectAll}
-                  />
-                </th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 -ml-3"
-                    onClick={() => handleSort('full_name')}
-                  >
-                    Imię i nazwisko
-                    <ArrowUpDown className="h-4 w-4" />
-                  </Button>
-                </th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[150px]">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 -ml-3"
-                    onClick={() => handleSort('company')}
-                  >
-                    Firma
-                    <ArrowUpDown className="h-4 w-4" />
-                  </Button>
-                </th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[120px]">Stanowisko</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[130px]">Telefon prywatny</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[180px]">Email</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[100px]">Grupa</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[140px]">Profil AI</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[120px]">Siła relacji</th>
-              </tr>
-            </thead>
-          </table>
-        </div>
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: CONTACTS_MIN_WIDTH }}>
+            {/* Header */}
+            <div className="flex items-center border-b bg-muted/50 h-12 text-sm font-medium text-muted-foreground">
+              <div className="px-4 w-[50px] flex-shrink-0">
+                <Checkbox
+                  checked={selectedIds.length === contacts.length && contacts.length > 0}
+                  onCheckedChange={handleSelectAll}
+                />
+              </div>
+              <div className="px-4 w-[220px] flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 -ml-3"
+                  onClick={() => handleSort('full_name')}
+                >
+                  Imię i nazwisko
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="px-4 w-[180px] flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 -ml-3"
+                  onClick={() => handleSort('company')}
+                >
+                  Firma
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="px-4 w-[140px] flex-shrink-0">Stanowisko</div>
+              <div className="px-4 w-[150px] flex-shrink-0">Telefon prywatny</div>
+              <div className="px-4 w-[180px] flex-shrink-0">Email</div>
+              <div className="px-4 w-[100px] flex-shrink-0">Grupa</div>
+              <div className="px-4 w-[140px] flex-shrink-0">Profil AI</div>
+              <div className="px-4 w-[130px] flex-shrink-0">Siła relacji</div>
+            </div>
 
-        {/* Virtualized Body */}
-        <div
-          ref={parentRef}
-          className="overflow-auto"
-          style={{ maxHeight: 'calc(100vh - 350px)' }}
-        >
-          <table className="table-fixed w-full text-sm">
-            <tbody>
-              <tr style={{ height: virtualizer.getTotalSize() }}>
-                <td colSpan={9} className="p-0 relative">
-                  {virtualizer.getVirtualItems().map((virtualItem) => {
-                    const contact = contacts[virtualItem.index];
-                    return (
-                      <div
-                        key={contact.id}
-                        className="cursor-pointer hover:bg-muted/50 absolute w-full flex items-center border-b transition-colors"
-                        style={{
-                          height: ROW_HEIGHT,
-                          transform: `translateY(${virtualItem.start}px)`,
-                        }}
-                        onClick={() => navigate(`/contacts/${contact.id}`)}
-                      >
-                        <div className="p-4 w-[50px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selectedIds.includes(contact.id)}
-                            onCheckedChange={(checked) => handleSelectOne(contact.id, checked as boolean)}
-                          />
-                        </div>
-                        <div className="p-4 w-[200px] flex-shrink-0">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                                {getInitials(contact.full_name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="font-medium truncate">{contact.full_name}</span>
-                          </div>
-                        </div>
-                        <div className="p-4 w-[150px] flex-shrink-0 text-muted-foreground truncate">{contact.company || '-'}</div>
-                        <div className="p-4 w-[120px] flex-shrink-0 text-muted-foreground truncate">{contact.position || '-'}</div>
-                        <div className="p-4 w-[130px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {contact.phone ? (
-                            <a
-                              href={`tel:${contact.phone}`}
-                              className="text-primary hover:underline flex items-center gap-1"
-                            >
-                              <Phone className="h-3 w-3" />
-                              <span className="truncate">{contact.phone}</span>
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </div>
-                        <div className="p-4 w-[180px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {contact.email ? (
-                            <a
-                              href={`mailto:${contact.email}`}
-                              className="text-primary hover:underline flex items-center gap-1"
-                            >
-                              <Mail className="h-3 w-3" />
-                              <span className="truncate">{contact.email}</span>
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </div>
-                        <div className="p-4 w-[100px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <GroupBadge group={contact.contact_groups} />
-                        </div>
-                        <div className="p-4 w-[140px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {contact.profile_summary ? (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Check className="h-3 w-3 text-green-600" />
-                              Wygenerowano
-                            </span>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={generatingId === contact.id}
-                              onClick={(e) => handleGenerateProfile(e, contact.id)}
-                              className="gap-1"
-                            >
-                              {generatingId === contact.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Sparkles className="h-3 w-3" />
-                              )}
-                              Generuj AI
-                            </Button>
-                          )}
-                        </div>
-                        <div className="p-4 w-[120px] flex-shrink-0">
-                          <RelationshipStrengthBar value={contact.relationship_strength || 5} />
+            {/* Virtualized Body */}
+            <div
+              ref={parentRef}
+              className="overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 350px)' }}
+            >
+              <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((virtualItem) => {
+                  const contact = contacts[virtualItem.index];
+                  return (
+                    <div
+                      key={contact.id}
+                      className="flex items-center border-b cursor-pointer hover:bg-muted/50 absolute w-full transition-colors"
+                      style={{
+                        height: ROW_HEIGHT,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                      onClick={() => navigate(`/contacts/${contact.id}`)}
+                    >
+                      <div className="px-4 w-[50px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.includes(contact.id)}
+                          onCheckedChange={(checked) => handleSelectOne(contact.id, checked as boolean)}
+                        />
+                      </div>
+                      <div className="px-4 w-[220px] flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                              {getInitials(contact.full_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium truncate">{contact.full_name}</span>
                         </div>
                       </div>
-                    );
-                  })}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                      <div className="px-4 w-[180px] flex-shrink-0 text-muted-foreground truncate">{contact.company || '-'}</div>
+                      <div className="px-4 w-[140px] flex-shrink-0 text-muted-foreground truncate">{contact.position || '-'}</div>
+                      <div className="px-4 w-[150px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {contact.phone ? (
+                          <a
+                            href={`tel:${contact.phone}`}
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Phone className="h-3 w-3" />
+                            <span className="truncate">{contact.phone}</span>
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </div>
+                      <div className="px-4 w-[180px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {contact.email ? (
+                          <a
+                            href={`mailto:${contact.email}`}
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Mail className="h-3 w-3" />
+                            <span className="truncate">{contact.email}</span>
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </div>
+                      <div className="px-4 w-[100px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <GroupBadge group={contact.contact_groups} />
+                      </div>
+                      <div className="px-4 w-[140px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {contact.profile_summary ? (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Check className="h-3 w-3 text-green-600" />
+                            Wygenerowano
+                          </span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={generatingId === contact.id}
+                            onClick={(e) => handleGenerateProfile(e, contact.id)}
+                            className="gap-1"
+                          >
+                            {generatingId === contact.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3 w-3" />
+                            )}
+                            Generuj AI
+                          </Button>
+                        )}
+                      </div>
+                      <div className="px-4 w-[130px] flex-shrink-0">
+                        <RelationshipStrengthBar value={contact.relationship_strength || 5} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
