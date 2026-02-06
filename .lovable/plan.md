@@ -1,381 +1,330 @@
 
-# Plan: WeeklyStatusPanel + PromoteDialog + ConvertProspectDialog
+# Plan: TableView + TeamStats + TeamSettings + Polish
 
 ## Cel
-Utworzenie 4 komponentów operacyjnych do zarządzania statusami cotygodniowymi, awansowaniem kontaktów i konwersją prospektów oraz podpięcie przycisków na istniejących kartach.
+Finalizacja modułu Deals Team Dashboard przez dodanie widoku tabelarycznego, statystyk zespołu, panelu ustawień oraz poprawienie UX (loading states, empty states).
 
-## Stan obecny
+## Analiza obecnego stanu
 
-### Istniejące hooki (gotowe do użycia)
-- `useTeamContacts()` — kontakty z flagą `status_overdue`
-- `useTeamContactStats()` — statystyki z `overdue_count`
-- `useUpdateTeamContact()` — aktualizacja pól kontaktu (w tym `category`, `assigned_to`, `next_meeting_date`)
-- `useTeamMembers()` — lista członków zespołu do selectów
-- `useConvertProspect()` — placeholder do rozszerzenia
-- `useAddContactToTeam()` — dodawanie kontaktu do zespołu
+### Istniejące komponenty (prompty 5.7-5.8)
+- `DealsTeamDashboard.tsx` - strona glowna z placeholder dla widoku tabelarycznego
+- `KanbanBoard.tsx` + `KanbanColumn.tsx` - widok Kanban
+- Karty: `HotLeadCard`, `TopLeadCard`, `LeadCard`, `ProspectCard`
+- Dialogi: `CreateTeamDialog`, `AddContactDialog`, `AddProspectDialog`, `PromoteDialog`, `ConvertProspectDialog`
+- `WeeklyStatusPanel.tsx` + `WeeklyStatusForm.tsx`
+- `TeamSelector.tsx` - bez funkcjonalnosci ustawien
 
-### Brakujący hook (trzeba stworzyć)
-- `useWeeklyStatuses` — CRUD dla tabeli `deal_team_weekly_statuses`:
-  - `useWeeklyStatuses(teamId)` — statusy złożone w tym tygodniu
-  - `useOverdueContacts(teamId)` — kontakty HOT/TOP z `status_overdue = true`
-  - `useSubmitWeeklyStatus()` — wstawianie nowego statusu
+### Istniejace hooki
+- `useTeamContacts(teamId)` - kontakty dealowe z JOIN
+- `useTeamContactStats(teamId)` - statystyki obliczane z kontaktow
+- `useTeamProspects(teamId)` - poszukiwani
+- `useTeamMembers(teamId)` - czlonkowie zespolu
+- `useDirectorsByTenant()` - directorzy w tenancie
+- `useUpdateDealTeam()` - aktualizacja zespolu
+- `useAddTeamMember()`, `useRemoveTeamMember()`, `useUpdateMemberRole()` - zarzadzanie czlonkami
 
-### Istniejące karty z placeholder buttons
-- `TopLeadCard.tsx:21-23` — `toast.info('Wkrótce — prompt 5.8')`
-- `LeadCard.tsx:21-23` — `toast.info('Wkrótce — prompt 5.8')`
-- `ProspectCard.tsx:37-39` — `toast.info('Wkrótce — prompt 5.8')`
-
-### Schemat bazy `deal_team_weekly_statuses`
-```typescript
-{
-  id: string;
-  team_id: string;
-  team_contact_id: string;
-  tenant_id: string;
-  week_start: string;
-  status_summary: string;
-  next_steps: string | null;
-  blockers: string | null;
-  meeting_happened: boolean | null;
-  meeting_outcome: string | null;
-  category_recommendation: string | null;
-  reported_by: string;
-  created_at: string | null;
-}
-```
+### Biblioteki dostepne
+- `xlsx` - eksport do Excel
+- shadcn/ui - Table, Skeleton, Badge, Tabs, Sheet, Dialog
 
 ## Pliki do utworzenia
 
-### 1. Hook `src/hooks/useWeeklyStatuses.ts`
+### 1. `src/components/deals-team/TeamStats.tsx`
 
-Hook CRUD dla cotygodniowych statusów:
-
-| Funkcja | Opis |
-|---------|------|
-| `useWeeklyStatuses(teamId)` | Statusy złożone w bieżącym tygodniu |
-| `useOverdueContacts(teamId)` | Kontakty HOT/TOP z `status_overdue = true` |
-| `useSubmitWeeklyStatus()` | INSERT do `deal_team_weekly_statuses` |
-
-Szczegóły implementacji:
-- `week_start` obliczany automatycznie (poniedziałek bieżącego tygodnia)
-- `reported_by` = `director.id` z `useAuth()`
-- Po sukcesie invalidate: `['deal-team-contacts']`, `['weekly-statuses']`
-
-### 2. Panel `src/components/deals-team/WeeklyStatusPanel.tsx`
-
-Sheet (panel boczny) z dwoma sekcjami:
+4 karty statystyk wyswietlane NAD Kanbanem/tabela:
 
 ```text
-┌─────────────────────────────────────┐
-│ Cotygodniowe statusy          [✕]  │
-│ Tydzień: 03.02 - 09.02.2026        │
-├─────────────────────────────────────┤
-│ ⚠️ Wymagają statusu (4)            │
-│ 🔴 Jan Kowalski — HOT • 12 dni     │
-│    [Dodaj status →]                 │
-│ ...                                 │
-├─────────────────────────────────────┤
-│ ✅ Złożone w tym tygodniu (2)       │
-│ ✅ Maria Wiśniewska — "Spotkanie..."│
-└─────────────────────────────────────┘
++-------------------+-------------------+-------------------+-------------------+
+|   HOT Leads 🔥    |   TOP Leads ⭐   |   Leads 📋        |  Poszukiwani 🔍  |
+|       (3)         |       (5)         |       (8)         |       (2)         |
+| Wartosc: 150k PLN |  Gotowe do awansu |    W kolejce      | 1 skonwertowany   |
+| ⚠️ 1 bez statusu  |                   |                   |                   |
++-------------------+-------------------+-------------------+-------------------+
 ```
 
-Props:
-- `teamId: string`
-- `open: boolean`
-- `onOpenChange: (open: boolean) => void`
+**Dane**:
+- HOT/TOP/LEAD/overdue/total_value z `useTeamContactStats(teamId)`
+- Poszukiwani: `useTeamProspects(teamId)` - oblicz total i converted
 
-Logika:
-- `useOverdueContacts(teamId)` → sekcja "Wymagają statusu"
-- `useWeeklyStatuses(teamId)` → sekcja "Złożone w tym tygodniu"
-- Sortowanie: najdłużej bez statusu na górze
-- Stan `selectedContactId` do otwierania `WeeklyStatusForm`
+**Responsywnosc**:
+- Mobile: 2 kolumny (`grid-cols-2`)
+- Desktop: 4 kolumny (`lg:grid-cols-4`)
 
-### 3. Formularz `src/components/deals-team/WeeklyStatusForm.tsx`
+### 2. `src/components/deals-team/TableView.tsx`
 
-Dialog z formularzem react-hook-form + zod:
+Widok tabelaryczny z sortowaniem, filtrami i eksportem XLSX.
+
+**Kolumny**:
+| Kolumna | Zrodlo | Sortowalna |
+|---------|--------|------------|
+| Kontakt | contact.full_name | Tak |
+| Firma | contact.company | Tak |
+| Kategoria | category | Tak |
+| Status | status | Tak |
+| Priorytet | priority | Tak |
+| Odpowiedzialny | assigned_to → lookup | Tak |
+| Nast. akcja | next_action | Nie |
+| Nast. spotkanie | next_meeting_date | Tak |
+| Wartosc | estimated_value | Tak |
+| Ostatni status | last_status_update | Tak |
+
+**Filtry** (row nad tabela):
+- Kategoria (multi-select: HOT, TOP, LEAD)
+- Status (select: active, on_hold, won, lost)
+- Odpowiedzialny (select z czlonkow zespolu)
+- Priorytet (select: urgent, high, medium, low)
+- Toggle: Tylko przeterminowane
+
+**Sortowanie**:
+- Klikniecie naglowka → ASC → DESC → reset
+- Domyslne: priority DESC, category (hot first)
+
+**Eksport XLSX**:
+```typescript
+import { utils, writeFile } from 'xlsx';
+
+function exportToXlsx(filteredContacts: DealTeamContact[]) {
+  const data = filteredContacts.map(c => ({
+    'Kontakt': c.contact?.full_name || '',
+    'Firma': c.contact?.company || '',
+    'Kategoria': c.category.toUpperCase(),
+    // ... pozostale kolumny
+  }));
+  
+  const ws = utils.json_to_sheet(data);
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, 'Deals Team');
+  writeFile(wb, `deals-team-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  toast.success('Wyeksportowano do XLSX');
+}
+```
+
+### 3. `src/components/deals-team/TeamSettings.tsx`
+
+Sheet z ustawieniami zespolu - otwierany z ikony Settings przy TeamSelector.
+
+**Sekcje**:
+
+```text
++-------------------------------------+
+| Ustawienia zespolu            [X]  |
++-------------------------------------+
+| Nazwa zespolu                       |
+| [input: Zespol Sprzedazy A    ]    |
+|                                     |
+| Opis                                |
+| [textarea: Glowny zespol...   ]    |
+|                                     |
+| Kolor                               |
+| ● ● ● ● ● ● ● ● (8 predefiniowanych)|
+|                                     |
+| Dzien statusow                      |
+| [Poniedzialek ▼]                   |
+|                                     |
+| [Zapisz zmiany]                     |
++-------------------------------------+
+| Czlonkowie (4)                      |
+|                                     |
+| 👤 Jan Kowalski  [Leader ▼] [X]    |
+|    jan@firma.pl                     |
+| 👤 Anna Nowak    [Member ▼] [X]    |
++-------------------------------------+
+| Dodaj czlonka                       |
+| [Szukaj directora...] [+ Dodaj]    |
++-------------------------------------+
+```
+
+**Logika**:
+- Edycja nazwy/opisu/koloru: `useUpdateDealTeam()`
+- Zmiana roli: `useUpdateMemberRole()`
+- Usuniecie czlonka: `useRemoveTeamMember()` z potwierdzeniem
+- Dodanie czlonka: `useAddTeamMember()` + wyszukiwarka directorow
+
+**Wyszukiwarka directorow**:
+- Query: `useDirectorsByTenant()` + filtr local po full_name
+- Nie pokazuj tych ktorzy juz sa w zespole
+
+**Kolory preset**:
+```typescript
+const colorPresets = [
+  '#3B82F6', '#EF4444', '#10B981', '#F59E0B',
+  '#8B5CF6', '#EC4899', '#06B6D4', '#6366F1'
+];
+```
+
+## Modyfikacje istniejacych plikow
+
+### 1. `src/pages/DealsTeamDashboard.tsx`
+
+**Zmiany**:
+- Import `TeamStats`, `TableView`, `TeamSettings`
+- Dodanie state `showTeamSettings`
+- Przekazanie `onSettingsClick` do `TeamSelector`
+- Renderowanie `TeamStats` miedzy header a Kanban/tabela
+- Zamiana placeholder widoku tabelarycznego na `TableView`
+- Renderowanie `TeamSettings` Sheet
+
+### 2. `src/components/deals-team/TeamSelector.tsx`
+
+**Zmiany**:
+- Props: `onSettingsClick?: () => void` - juz jest, tylko wywolanie
+- Przycisk Settings juz istnieje, upewnic sie ze wywoluje callback
+
+### 3. `src/components/deals-team/KanbanColumn.tsx`
+
+**Zmiany**:
+- Dodanie empty state gdy `children` jest puste
+- Rozne komunikaty CTA dla kazdej kategorii
 
 ```typescript
-const weeklyStatusSchema = z.object({
-  statusSummary: z.string().min(10, 'Minimum 10 znaków'),
-  nextSteps: z.string().optional(),
-  blockers: z.string().optional(),
-  meetingHappened: z.boolean().default(false),
-  meetingOutcome: z.string().optional(),
-  categoryRecommendation: z.enum(['keep', 'promote', 'demote', 'close_won', 'close_lost']).default('keep'),
-});
+// Props: emptyMessage?: string
+// W ScrollArea gdy brak dzieci:
+{React.Children.count(children) === 0 && (
+  <p className="text-sm text-muted-foreground text-center py-4">
+    {emptyMessage || 'Brak elementow'}
+  </p>
+)}
 ```
-
-Props:
-- `teamContactId: string`
-- `teamId: string`
-- `contactName: string`
-- `contactCompany: string | null`
-- `open: boolean`
-- `onClose: () => void`
-
-Logika:
-- Sekcja "Wynik spotkania" widoczna tylko gdy `meetingHappened = true`
-- Po submit: `useSubmitWeeklyStatus()` z automatycznym `week_start` i `reported_by`
-- Błąd UNIQUE → `toast.error("Status na ten tydzień już istnieje")`
-
-### 4. Dialog `src/components/deals-team/PromoteDialog.tsx`
-
-Dialog awansowania LEAD → TOP lub TOP → HOT:
-
-```text
-LEAD → TOP wymaga:
-├── assigned_to (Select z członków zespołu) *
-├── next_action (Input) *
-├── next_action_date (DatePicker, opcjonalne)
-└── priority (Select, opcjonalne)
-
-TOP → HOT wymaga:
-├── next_meeting_date (DatePicker) *
-├── next_meeting_with (Select z członków, opcjonalne)
-├── estimated_value (Input number, opcjonalne)
-└── value_currency (Select PLN/EUR/USD, opcjonalne)
-```
-
-Props:
-- `contact: DealTeamContact`
-- `targetCategory: 'top' | 'hot'`
-- `teamId: string`
-- `open: boolean`
-- `onClose: () => void`
-
-Logika:
-- Dynamiczne renderowanie pól w zależności od `targetCategory`
-- `useTeamMembers(teamId)` dla selectów członków
-- Po submit: `useUpdateTeamContact()` z nowymi polami + zmianą kategorii
-- Walidacja: przycisk disabled gdy brak wymaganych pól
-
-### 5. Dialog `src/components/deals-team/ConvertProspectDialog.tsx`
-
-Dialog konwersji prospekta do LEAD z dwoma wariantami:
-
-**Wariant A** (prospect ma `contact_id`):
-```text
-✅ Kontakt już istnieje w CRM
-→ Tylko wybór kategorii docelowej
-→ Automatyczne powiązanie
-```
-
-**Wariant B** (prospect nie ma `contact_id`):
-```text
-⚠️ Kontakt nie istnieje w CRM
-→ Formularz z pre-filled danymi z prospekta:
-  - full_name ← prospect_name
-  - company ← prospect_company
-  - position ← prospect_position
-  - email ← prospect_email
-  - phone ← prospect_phone
-→ Utwórz kontakt CRM + dodaj do zespołu
-```
-
-Props:
-- `prospect: DealTeamProspect`
-- `teamId: string`
-- `open: boolean`
-- `onClose: () => void`
-
-Logika:
-- Sprawdzenie `prospect.contact_id` decyduje o wariancie
-- Wariant A: `useAddContactToTeam()` + `useConvertProspect()`
-- Wariant B: INSERT do `contacts` + `useAddContactToTeam()` + `useConvertProspect()`
-- Po sukcesie invalidate obu list
-
-## Modyfikacje istniejących plików
-
-### 1. `src/components/deals-team/TopLeadCard.tsx`
-
-Zmiana:
-- Dodanie state `showPromoteDialog`
-- Import i renderowanie `PromoteDialog`
-- Podmiana `handlePromote`:
-
-```typescript
-// Było:
-const handlePromote = () => toast.info('Wkrótce — prompt 5.8');
-
-// Będzie:
-const [showPromote, setShowPromote] = useState(false);
-// ... w JSX:
-<PromoteDialog
-  contact={contact}
-  targetCategory="hot"
-  teamId={teamId}
-  open={showPromote}
-  onClose={() => setShowPromote(false)}
-/>
-```
-
-**Wymaga dodania `teamId` do props komponentu!**
-
-### 2. `src/components/deals-team/LeadCard.tsx`
-
-Analogiczna zmiana jak TopLeadCard:
-- State `showPromoteDialog`
-- `PromoteDialog` z `targetCategory="top"`
-- Props: dodać `teamId`
-
-### 3. `src/components/deals-team/ProspectCard.tsx`
-
-Zmiana:
-- Dodanie state `showConvertDialog`
-- Import i renderowanie `ConvertProspectDialog`
-- Props: dodać `teamId`
 
 ### 4. `src/components/deals-team/KanbanBoard.tsx`
 
-Zmiana:
-- Przekazanie `teamId` do wszystkich kart:
+**Zmiany**:
+- Przekazanie `emptyMessage` do kazdej kolumny:
+  - HOT: "Brak HOT leadow. Awansuj kontakty z TOP"
+  - TOP: "Brak TOP leadow. Awansuj kontakty z LEAD"
+  - LEAD: "Brak leadow. Dodaj kontakty z CRM"
+  - POSZUKIWANI: "Brak poszukiwanych. Dodaj osobe/firme"
 
-```typescript
-// Było:
-<TopLeadCard key={contact.id} contact={contact} />
+### 5. `src/components/deals-team/index.ts`
 
-// Będzie:
-<TopLeadCard key={contact.id} contact={contact} teamId={teamId} />
-```
+**Zmiany**:
+- Eksport nowych komponentow: `TeamStats`, `TableView`, `TeamSettings`
 
-### 5. `src/pages/DealsTeamDashboard.tsx`
-
-Zmiany:
-- Import `WeeklyStatusPanel`
-- State `showWeeklyStatus`
-- Przycisk "📊 Statusy" w headerze z badge overdue
-
-```typescript
-const overdueCount = contactStats.overdue_count;
-
-// W header:
-<Button
-  variant="outline"
-  onClick={() => setShowWeeklyStatus(true)}
-  className="gap-2"
->
-  <BarChart3 className="h-4 w-4" />
-  Statusy
-  {overdueCount > 0 && (
-    <Badge variant="destructive" className="text-xs">
-      {overdueCount}
-    </Badge>
-  )}
-</Button>
-
-// Na końcu:
-<WeeklyStatusPanel
-  teamId={selectedTeamId}
-  open={showWeeklyStatus}
-  onOpenChange={setShowWeeklyStatus}
-/>
-```
-
-### 6. `src/components/deals-team/index.ts`
-
-Dodanie eksportów:
-```typescript
-export { WeeklyStatusPanel } from './WeeklyStatusPanel';
-export { WeeklyStatusForm } from './WeeklyStatusForm';
-export { PromoteDialog } from './PromoteDialog';
-export { ConvertProspectDialog } from './ConvertProspectDialog';
-```
-
-## Struktura plików (nowe + modyfikowane)
+## Struktura plikow
 
 ```text
-src/
-├── hooks/
-│   └── useWeeklyStatuses.ts                ← NOWY
-└── components/deals-team/
-    ├── WeeklyStatusPanel.tsx               ← NOWY
-    ├── WeeklyStatusForm.tsx                ← NOWY
-    ├── PromoteDialog.tsx                   ← NOWY
-    ├── ConvertProspectDialog.tsx           ← NOWY
-    ├── TopLeadCard.tsx                     ← MODYFIKACJA (state + dialog + teamId prop)
-    ├── LeadCard.tsx                        ← MODYFIKACJA (state + dialog + teamId prop)
-    ├── ProspectCard.tsx                    ← MODYFIKACJA (state + dialog + teamId prop)
-    ├── KanbanBoard.tsx                     ← MODYFIKACJA (przekazanie teamId do kart)
-    └── index.ts                            ← MODYFIKACJA (nowe eksporty)
+src/components/deals-team/
+├── TeamStats.tsx          ← NOWY
+├── TableView.tsx          ← NOWY
+├── TeamSettings.tsx       ← NOWY
+├── KanbanColumn.tsx       ← MODYFIKACJA (empty state)
+├── KanbanBoard.tsx        ← MODYFIKACJA (empty messages)
+├── index.ts               ← MODYFIKACJA (nowe eksporty)
+└── ... (pozostale bez zmian)
 
 src/pages/
-    └── DealsTeamDashboard.tsx              ← MODYFIKACJA (przycisk statusów + panel)
-```
-
-## Przepływ danych
-
-```text
-DealsTeamDashboard
-├── contactStats.overdue_count → Badge przy przycisku "Statusy"
-├── [📊 Statusy] → WeeklyStatusPanel
-│   ├── useOverdueContacts → lista wymagających
-│   ├── useWeeklyStatuses → lista złożonych
-│   └── [Dodaj status →] → WeeklyStatusForm
-│       └── useSubmitWeeklyStatus → INSERT
-│
-└── KanbanBoard (teamId)
-    ├── TopLeadCard (contact, teamId)
-    │   └── [↑ do HOT] → PromoteDialog
-    │       └── useUpdateTeamContact (category='hot' + pola)
-    │
-    ├── LeadCard (contact, teamId)
-    │   └── [↑ do TOP] → PromoteDialog
-    │       └── useUpdateTeamContact (category='top' + pola)
-    │
-    └── ProspectCard (prospect, teamId)
-        └── [Konwertuj] → ConvertProspectDialog
-            ├── (A) useAddContactToTeam + useConvertProspect
-            └── (B) INSERT contacts + useAddContactToTeam + useConvertProspect
+└── DealsTeamDashboard.tsx ← MODYFIKACJA (integracja)
 ```
 
 ## Sekcja techniczna
 
-### Komponenty shadcn/ui używane
-- `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle` (WeeklyStatusPanel)
-- `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`
-- `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`
-- `Textarea`, `Input`, `Checkbox`
-- `Select`, `SelectTrigger`, `SelectContent`, `SelectItem`
-- `Popover`, `Calendar` (DatePicker)
-- `Button`, `Badge`, `ScrollArea`
+### Komponenty shadcn/ui
+- `Table`, `TableHeader`, `TableRow`, `TableHead`, `TableBody`, `TableCell` (TableView)
+- `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle` (TeamSettings)
+- `Card`, `CardContent`, `CardHeader` (TeamStats)
+- `Skeleton` (loading states)
+- `Select`, `Checkbox`, `Input`, `Button`, `Badge`
+- `AlertDialog` (potwierdzenie usuniecia czlonka)
 
-### Obliczanie week_start
+### Sortowanie w TableView
 ```typescript
-import { startOfWeek, format } from 'date-fns';
+type SortConfig = {
+  column: string;
+  direction: 'asc' | 'desc' | null;
+};
 
-const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+const [sortConfig, setSortConfig] = useState<SortConfig>({
+  column: 'priority',
+  direction: 'desc'
+});
+
+const handleSort = (column: string) => {
+  setSortConfig(prev => {
+    if (prev.column !== column) return { column, direction: 'asc' };
+    if (prev.direction === 'asc') return { column, direction: 'desc' };
+    if (prev.direction === 'desc') return { column: '', direction: null };
+    return { column, direction: 'asc' };
+  });
+};
+
+// Ikona sortowania w naglowku:
+{sortConfig.column === 'name' && (
+  sortConfig.direction === 'asc' ? <ArrowUp /> : <ArrowDown />
+)}
 ```
 
-### Walidacja PromoteDialog
+### Filtrowanie w TableView
 ```typescript
-// LEAD → TOP
-const canPromoteToTop = !!assignedTo && !!nextAction;
+const [filters, setFilters] = useState({
+  categories: [] as DealCategory[],
+  status: '',
+  assignedTo: '',
+  priority: '',
+  overdueOnly: false,
+});
 
-// TOP → HOT  
-const canPromoteToHot = !!nextMeetingDate;
+const filteredContacts = useMemo(() => {
+  return contacts.filter(c => {
+    if (filters.categories.length > 0 && !filters.categories.includes(c.category)) return false;
+    if (filters.status && c.status !== filters.status) return false;
+    if (filters.assignedTo && c.assigned_to !== filters.assignedTo) return false;
+    if (filters.priority && c.priority !== filters.priority) return false;
+    if (filters.overdueOnly && !c.status_overdue) return false;
+    return true;
+  });
+}, [contacts, filters]);
 ```
 
-### Rozszerzenie useConvertProspect
+### Lookup assigned_to w TableView
 ```typescript
-// Dodatkowy parametr: newContactData (opcjonalny)
-interface ConvertProspectInput {
-  id: string;
-  teamId: string;
-  newContactData?: {
-    full_name: string;
-    company?: string;
-    email?: string;
-    phone?: string;
-    position?: string;
-  };
-}
+// Uzyj useTeamMembers(teamId) do mapy director_id → full_name
+const { data: members = [] } = useTeamMembers(teamId);
+const memberMap = useMemo(() => 
+  new Map(members.map(m => [m.director_id, m.director?.full_name || 'Nieznany'])),
+  [members]
+);
+
+// W kolumnie:
+{contact.assigned_to ? memberMap.get(contact.assigned_to) || '—' : '—'}
+```
+
+### Relative time dla last_status_update
+```typescript
+import { formatDistanceToNow } from 'date-fns';
+import { pl } from 'date-fns/locale';
+
+// W kolumnie:
+{contact.last_status_update ? (
+  contact.status_overdue ? (
+    <span className="text-destructive font-medium">
+      ⚠️ {formatDistanceToNow(new Date(contact.last_status_update), { locale: pl, addSuffix: true })}
+    </span>
+  ) : (
+    formatDistanceToNow(new Date(contact.last_status_update), { locale: pl, addSuffix: true })
+  )
+) : (
+  <span className="text-muted-foreground">Brak</span>
+)}
 ```
 
 ## Guardrails
-- NIE modyfikuję istniejącej logiki hooków — tylko dodaję nowy hook `useWeeklyStatuses`
-- NIE zmieniam struktury KanbanBoard/KanbanColumn — tylko przekazuję props
-- NIE usuwam żadnego kodu z promptu 5.7 — tylko rozszerzam
-- WeeklyStatusForm używa react-hook-form + zod (jak ContactModal)
-- PromoteDialog: Select z członkami → `useTeamMembers(teamId)`
-- DatePicker z `pointer-events-auto` w Calendar (zgodnie z wytycznymi shadcn)
+- NIE usuwam ani nie przebudowuje komponentow z promptow 5.7-5.8
+- NIE modyfikuje hookow - tylko importuje i uzywa
+- NIE tworze tabel SQL
+- Eksport XLSX: `import { utils, writeFile } from 'xlsx'`
+- TableView: filtry dzialaja na froncie (filtruj dane z useTeamContacts)
+- TeamSettings: wyszukiwarka directorow → `useDirectorsByTenant()` + filtr local
+- Skeleton loading: `import { Skeleton } from '@/components/ui/skeleton'`
+
+## Testy akceptacyjne
+
+1. Przelacznik widoku: Kanban ↔ Tabela dziala, oba widoki pokazuja te same dane
+2. TeamStats: 4 karty statystyk wyswietlaja poprawne liczby
+3. TableView: tabela renderuje wszystkie kontakty
+4. Sortowanie: klikniecie naglowka sortuje A-Z → Z-A → reset
+5. Filtry: filtr Kategoria = HOT → tylko HOT w tabeli
+6. Eksport XLSX: przycisk generuje plik .xlsx
+7. TeamSettings: edycja nazwy zespolu → TeamSelector odswierza nazwe
+8. TeamSettings: dodanie/usuniecie czlonka dziala
+9. Loading: skeleton loading widoczny przy ladowaniu
+10. Empty state: komunikaty CTA w pustych kolumnach
