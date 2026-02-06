@@ -1,199 +1,258 @@
 
-# Dashboard Redesign with Phase 0 Components
+
+# "Moj Dzien" (/my-day) -- Unified Daily View
 
 ## Overview
 
-Rebuild `src/pages/Dashboard.tsx` into a widget-based 12-column grid layout using exclusively the Phase 0 components (StatCard, DataCard, EmptyState, SkeletonCard). The page will use existing hooks for data fetching and lazy-load recharts for the activity chart.
+Create a new page at `/my-day` that combines today's tasks, overdue tasks, recent activity, a mini calendar, active projects, and quick actions into a single daily dashboard. Uses exclusively Phase 0 components (StatCard, DataCard, EmptyState, SkeletonCard).
 
 ## What changes
 
-- **1 file modified**: `src/pages/Dashboard.tsx` -- complete rewrite of the page layout and content
+- **1 new page**: `src/pages/MyDay.tsx`
+- **1 new hook**: `src/hooks/useMyDayData.ts` -- aggregates all queries for the page
+- **1 new component**: `src/components/my-day/MiniCalendar.tsx` -- simple grid-based monthly calendar
+- **2 files modified**: `src/App.tsx` (add route), `src/components/layout/AppSidebar.tsx` (add nav item)
 
-## Data Sources (existing hooks -- NOT modified)
+## Data Sources
 
-| Widget | Hook | Data |
-|--------|------|------|
-| StatCards | `useDashboardStats()` | total_contacts, pending_tasks, today_consultations, healthy/warning/critical contacts |
-| Activity Chart | `useContacts({ sortBy: 'created_at', sortOrder: 'desc' })` inline query | Last 7 days activity from direct Supabase query |
-| Upcoming Meetings | `useUpcomingConsultations(5)` from `useConsultations` | Next 5 scheduled consultations |
-| Active Projects | `useProjects()` | Filtered client-side to status IN (new, in_progress, analysis), limit 5 |
-| Recent Contacts | `useContacts({ sortBy: 'created_at', sortOrder: 'desc', pageSize: 5 })` | 5 most recent contacts |
+| Widget | Query | Table/Source |
+|--------|-------|-------------|
+| Tasks today | `tasks` WHERE `due_date = today` OR `status = 'in_progress'` | tasks |
+| Tasks overdue | `tasks` WHERE `due_date < today` AND `status NOT IN ('done','cancelled')` | tasks |
+| Tasks done today | `tasks` WHERE `status = 'done'` AND `updated_at >= today` | tasks |
+| Recent activity | `contact_activity_log` ORDER BY `created_at DESC` LIMIT 8 | contact_activity_log |
+| Active projects | `projects` WHERE `status IN ('new','in_progress','analysis')` | projects |
+| Days with tasks (calendar) | `tasks` WHERE `due_date BETWEEN month_start AND month_end` | tasks |
 
 ## Layout Structure
 
 ```text
-Desktop (grid-cols-12):
+Desktop (grid-cols-12, gap-6):
 
-+--------+--------+--------+--------+
-| StatCard| StatCard| StatCard| StatCard|
-| span-3 | span-3 | span-3 | span-3 |
-+--------+--------+--------+--------+
-| Activity Chart (recharts)  | Upcoming |
-| col-span-8                 | span-4   |
-+----------------------------+----------+
-| Projects in Progress       | Recent   |
-| col-span-6                 | Contacts |
-|                            | span-6   |
-+----------------------------+----------+
-
-Tablet (sm:grid-cols-6):
-- StatCards: span-3 each (2 per row)
-- Activity Chart: span-6 (full width)
-- Upcoming: span-6 (full width)
-- Projects: span-6
-- Recent Contacts: span-6
++-------------------------------------------+-------------------+
+| Greeting + 3 mini StatCards (inline flex)  |                   |
+| col-span-8                                |  Mini Calendar    |
++-------------------------------------------+  col-span-4       |
+| Zadania na dzis (DataCard)                |                   |
+| col-span-8                                +-------------------+
+|                                           | Moje projekty     |
++-------------------------------------------| col-span-4        |
+| Zaglegle (DataCard, conditional)          |                   |
+| col-span-8                                +-------------------+
+|                                           | Szybkie akcje     |
++-------------------------------------------| col-span-4        |
+| Ostatnia aktywnosc (DataCard)             |                   |
+| col-span-8                                +-------------------+
 
 Mobile (grid-cols-1):
 - Everything stacks vertically
+- Right column items appear after left column items
 ```
 
 ## Detailed Implementation
 
-### Welcome Section
+### Route + Sidebar
 
-Keep existing welcome header with director's first name and formatted date. Simplified layout -- no longer wrapped in extra divs.
+**App.tsx**: Add lazy import and route under DirectorGuard:
+```text
+const MyDay = lazy(() => import("./pages/MyDay"));
+// In routes:
+<Route path="/my-day" element={<DirectorGuard><MyDay /></DirectorGuard>} />
+```
 
-### Top Row -- 4 StatCards
+**AppSidebar.tsx**: Add to `overviewItems` array:
+```text
+{ title: 'Moj Dzien', url: '/my-day', icon: Sun }
+```
+`Sun` icon is already imported in AppSidebar.tsx (line 20) but unused. It will now be used.
 
-Each card uses the upgraded StatCard component with `color` prop:
+### Hook: useMyDayData (src/hooks/useMyDayData.ts)
 
-1. **Kontakty** -- icon: `Users`, value: `total_contacts`, color: `'blue'`, trend: computed from `new_contacts_30d` and `contacts_prev_30d` (percentage change)
-2. **Zadania w toku** -- icon: `CheckSquare`, value: `pending_tasks`, color: `'violet'`
-3. **Spotkania dzis** -- icon: `Calendar`, value: `today_consultations`, color: `'emerald'`
-4. **Srednia relacji** -- icon: `Heart`, value: computed health percentage from `healthy_contacts / (healthy + warning + critical) * 100`, formatted as `XX%`, color: `'amber'`
+A single hook that runs 5 parallel queries using `useQuery`:
 
-### Middle Row -- Activity Chart + Upcoming Meetings
+1. **tasksToday**: Fetches tasks where `due_date` equals today OR `status = 'in_progress'`, filtered by `owner_id` or `assigned_to` matching the current director. Ordered by priority DESC, due_date ASC.
 
-**Activity Chart (col-span-8)**:
-- DataCard with title "Aktywnosc tygodnia"
-- Action slot: a Select dropdown with options Tydzien/Miesiac/Kwartal (only Tydzien functional)
-- Body: Lazy-loaded recharts `LineChart` inside `Suspense` with `SkeletonCard variant="data" lines={6}` fallback
-- Chart data: Simple inline query fetching contact/task creation counts over last 7 days using `supabase.from('contacts').select('created_at')` with date filtering, grouped by day
-- Uses `ResponsiveContainer`, `Line`, `XAxis`, `YAxis`, `Tooltip`, `CartesianGrid`
-- Line color: violet-500 (`#8b5cf6`)
+2. **tasksOverdue**: Fetches tasks where `due_date < today` AND `status NOT IN ('done', 'cancelled')`, same ownership filter. Includes a `count` value.
 
-**Upcoming Meetings (col-span-4)**:
-- DataCard with title "Nadchodzace spotkania"
-- Body: List of up to 5 consultations from `useUpcomingConsultations(5)`
-- Each item: flex gap-3 with a violet dot indicator (`w-2 h-2 rounded-full bg-violet-500 mt-2`) + title (`text-sm font-medium`) + formatted time (`text-xs text-muted-foreground`)
-- Empty state: `EmptyState` with Calendar icon, "Brak spotkan", "Spokojny dzien!"
-- Footer: Link "Zobacz konsultacje" navigating to `/consultations`
+3. **tasksDoneToday**: Counts tasks where `status = 'done'` AND `updated_at >= today start`, same ownership filter. Returns count only.
 
-### Bottom Row -- Projects + Recent Contacts
+4. **recentActivity**: Fetches from `contact_activity_log` with `tenant_id` filter, joined with `contacts(id, full_name)`, ordered by `created_at DESC`, limit 8. Gracefully returns empty array on error (table might have no data).
 
-**Projects (col-span-6)**:
-- DataCard with title "Projekty w toku"
-- Action: Button ghost "Zobacz wszystkie" linking to `/projects`
-- Body: Up to 5 projects filtered client-side from `useProjects()` where status is `new`, `in_progress`, or `analysis`
-- Each item: flex justify-between items-center py-2 with bottom border
-  - Left: color dot (w-3 h-3 rounded-full, using project.color) + name (text-sm font-medium)
-  - Right: status badge using `getStatusConfig()`
-- Empty state: EmptyState with FolderOpen icon, "Brak projektow", actionLabel "Utworz projekt", onAction navigates to `/projects`
+5. **activeProjects**: Fetches from `projects` where `status IN ('new', 'in_progress', 'analysis')` with `tenant_id` filter, limit 5, ordered by `updated_at DESC`.
 
-**Recent Contacts (col-span-6)**:
-- DataCard with title "Ostatnio dodane kontakty"
-- Action: Button ghost "Wszyscy" linking to `/contacts`
-- Body: 5 most recent contacts from `useContacts({ sortBy: 'created_at', sortOrder: 'desc', pageSize: 5 })`
-- Each item: flex items-center gap-3 py-2 with bottom border
-  - Avatar circle (w-8 h-8 rounded-full bg-muted) with initials
-  - Name (text-sm font-medium) + company (text-xs text-muted-foreground)
-  - Right: relative time using `formatDistanceToNow` from date-fns ("2h temu")
+Return type:
+```text
+interface MyDayData {
+  tasksToday: TaskWithDetails[];
+  tasksOverdue: TaskWithDetails[];
+  tasksDoneTodayCount: number;
+  recentActivity: ActivityLogEntry[];
+  activeProjects: ProjectWithOwner[];
+  isLoading: boolean;
+}
+```
+
+All queries use `staleTime: 30 * 1000` (30 seconds) for responsiveness.
+
+### MiniCalendar Component (src/components/my-day/MiniCalendar.tsx)
+
+A simple div-grid based monthly calendar:
+
+- Props: `selectedDate?: Date`, `taskDates?: string[]` (array of 'yyyy-MM-dd' strings with tasks), `onDateSelect?: (date: Date) => void`
+- Header: month name + year with prev/next arrows (ChevronLeft/ChevronRight icons)
+- Day labels row: Pon, Wt, Sr, Czw, Pt, Sob, Ndz
+- Grid: 7 columns, up to 6 rows of day numbers
+- Today: `bg-violet-600 text-white rounded-full w-8 h-8`
+- Days with tasks: small dot indicator below the number (`w-1 h-1 bg-violet-400 rounded-full`)
+- Days outside current month: `text-muted-foreground/30`
+- Built purely with divs and date-fns helpers (`startOfMonth`, `endOfMonth`, `eachDayOfInterval`, `startOfWeek`, `endOfWeek`, `isSameDay`, `isSameMonth`)
+- No external calendar library
+
+### Page: MyDay.tsx (src/pages/MyDay.tsx)
+
+**Greeting Section** (col-span-8):
+- "Dzien dobry, [firstName]!" using `useAuth().director.full_name`
+- Formatted date using `toLocaleDateString('pl-PL', { weekday: 'long', ... })`
+- 3x inline mini stats in `flex gap-3`:
+  - "Na dzis" count (blue)
+  - "Zalegle" count (red if > 0, otherwise muted)
+  - "Ukonczone" count (emerald)
+- These are small custom div badges, NOT full StatCards (too large for inline)
+
+**Zadania na dzis** (col-span-8, DataCard):
+- title: "Zadania na dzis"
+- action: Button ghost "Wszystkie zadania" navigating to `/tasks`
+- Each task row: flex items-center gap-3 py-3 border-b border-border last:border-0
+  - Checkbox (Radix Checkbox) -- toggles task status between 'done' and 'pending' using existing `useUpdateTask` mutation with optimistic update
+  - Priority dot: w-2 h-2 rounded-full colored by priority (urgent/critical -> red-500, high -> amber-500, medium -> blue-500, low -> slate-300)
+  - Title: text-sm font-medium, when done -> line-through text-muted-foreground
+  - Right side: project name badge (if project_id exists, from joined data) `bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 text-xs px-2 py-0.5 rounded-full` + due time `text-xs text-muted-foreground`
+- Empty: EmptyState icon CheckCircle title "Wszystko zrobione!" description "Brak zadan na dzis. Czas na nowe wyzwania."
+
+**Zaglegle** (col-span-8, DataCard, CONDITIONAL):
+- Only rendered when `tasksOverdue.length > 0`
+- title: "Zaglegle" with badge `bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 rounded-full px-2 text-xs` showing count
+- className: `border-l-4 border-l-red-200 dark:border-l-red-800`
+- Same task row layout as "Zadania na dzis"
+- Shows overdue date relative ("3 dni temu")
+
+**Ostatnia aktywnosc** (col-span-8, DataCard):
+- title: "Ostatnia aktywnosc"
+- Each activity: flex items-center gap-3 py-2
+  - Icon based on `activity_type`: UserPlus for 'created', MessageSquare for 'note_added', Phone for 'call', default Activity icon
+  - Description text: text-sm text-foreground (from `description` field)
+  - Relative time: text-xs text-muted-foreground
+- Empty: EmptyState icon Activity title "Brak aktywnosci" description "Aktywnosc pojawi sie tu automatycznie."
+
+**Mini Calendar** (col-span-4):
+- DataCard wrapping MiniCalendar component
+- `taskDates` prop populated from a separate lightweight query that fetches task due_dates for the displayed month
+
+**Moje projekty** (col-span-4, DataCard):
+- title: "Moje projekty"
+- Each project: flex items-center gap-2 py-2
+  - Color dot (w-3 h-3 rounded-full, project.color)
+  - Name text-sm font-medium truncate
+  - Tasks progress not included (would require additional query per project -- too expensive)
+- Footer: Button ghost "Wszystkie projekty" -> /projects
+- Empty: EmptyState icon FolderOpen title "Brak projektow"
+
+**Szybkie akcje** (col-span-4, DataCard):
+- title: "Szybkie akcje"
+- Grid grid-cols-2 gap-2 with 4 buttons:
+  - "Nowe zadanie" -- Button outline, Plus icon, opens TaskModal (imported from existing component)
+  - "Nowy kontakt" -- Button outline, UserPlus icon, navigates to /contacts (opens ContactModal via state)
+  - "Nowy projekt" -- Button outline, FolderPlus icon, opens NewProjectDialog (imported from existing component)
+  - "AI Chat" -- Button outline with violet accent styling, Bot icon, navigates to /ai
 
 ### Loading State
 
 When `isLoading` is true:
-- Top row: 4x `SkeletonCard variant="stat"`
-- Middle left: `SkeletonCard variant="data" lines={6}` with col-span-8
-- Middle right: `SkeletonCard variant="list" lines={5}` with col-span-4
-- Bottom: 2x `SkeletonCard variant="data" lines={5}` with col-span-6 each
+- Left column: greeting with skeleton name + 3 skeleton mini stat badges + 2x SkeletonCard variant="list" lines={5}
+- Right column: SkeletonCard variant="data" (calendar placeholder) + 2x SkeletonCard variant="list" lines={3}
 
-### Empty State (no contacts)
+### Checkbox Optimistic Update
 
-When `total_contacts === 0` and not loading, show a full-width DataCard with EmptyState (same as current behavior but styled consistently).
+Uses existing `useUpdateTask` from `src/hooks/useTasks.ts`:
+```text
+const updateTask = useUpdateTask();
+
+const handleToggleTask = (task: Task) => {
+  updateTask.mutate({
+    id: task.id,
+    status: task.status === 'done' ? 'pending' : 'done',
+  });
+};
+```
+
+React Query will automatically invalidate and refetch the task lists, providing near-instant feedback.
 
 ## Technical Details
 
-### Recharts lazy loading
+### Task query for "today" tasks
 
 ```text
-const LazyLineChart = lazy(() =>
-  import('recharts').then((m) => ({ default: m.LineChart }))
-);
-// Additional named exports loaded alongside:
-// ResponsiveContainer, Line, XAxis, YAxis, Tooltip, CartesianGrid
-// These will be imported via a wrapper component that's lazy-loaded as a whole
+const today = format(new Date(), 'yyyy-MM-dd');
+
+// Tasks for today
+const { data } = await supabase
+  .from('tasks')
+  .select('*, task_contacts(contact_id, contacts(id, full_name))')
+  .or(`due_date.eq.${today},status.eq.in_progress`)
+  .or(`owner_id.eq.${directorId},assigned_to.eq.${directorId}`)
+  .not('status', 'in', '("cancelled")')
+  .order('priority', { ascending: false })
+  .order('due_date', { ascending: true });
 ```
 
-To avoid issues with multiple named exports, the chart will be extracted into a small inline component `ActivityChart` defined within Dashboard.tsx (not a separate file), and the entire recharts import block will be inside that component. The lazy boundary wraps this inline component.
+Note: Priority sorting will need client-side reordering since Supabase doesn't know the priority weight. The hook will sort client-side using the same `priorityOrder` map from useTasks.
 
-### Activity data query
-
-A simple `useQuery` inside the Dashboard component:
+### Activity log query
 
 ```text
-useQuery({
-  queryKey: ['dashboard-activity-7d', tenantId],
-  queryFn: async () => {
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const d = subDays(new Date(), 6 - i);
-      return format(d, 'yyyy-MM-dd');
-    });
-
-    const { data: contacts } = await supabase
-      .from('contacts')
-      .select('created_at')
-      .eq('tenant_id', tenantId)
-      .gte('created_at', days[0]);
-
-    const { data: tasks } = await supabase
-      .from('tasks')
-      .select('created_at')
-      .eq('tenant_id', tenantId)
-      .gte('created_at', days[0]);
-
-    return days.map(day => ({
-      day: format(new Date(day), 'EEE', { locale: pl }),
-      kontakty: contacts?.filter(c => c.created_at?.startsWith(day)).length || 0,
-      zadania: tasks?.filter(t => t.created_at?.startsWith(day)).length || 0,
-    }));
-  },
-  enabled: !!tenantId,
-  staleTime: 5 * 60 * 1000,
-});
+const { data } = await supabase
+  .from('contact_activity_log')
+  .select('*, contacts:contact_id(id, full_name)')
+  .eq('tenant_id', tenantId)
+  .order('created_at', { ascending: false })
+  .limit(8);
 ```
 
-### Health score computation
+### Calendar task dates query
 
 ```text
-const total = (healthy_contacts || 0) + (warning_contacts || 0) + (critical_contacts || 0);
-const healthPercent = total > 0 ? Math.round(((healthy_contacts || 0) / total) * 100) : 0;
+const { data } = await supabase
+  .from('tasks')
+  .select('due_date')
+  .eq('tenant_id', tenantId)
+  .gte('due_date', monthStart)
+  .lte('due_date', monthEnd)
+  .not('status', 'eq', 'cancelled');
+
+// Extract unique dates
+const taskDates = [...new Set(data?.map(t => t.due_date).filter(Boolean))];
 ```
 
-### Contacts trend computation
+### Imports for MyDay.tsx
 
-```text
-const prevCount = dashboardStats?.contacts_prev_30d || 0;
-const newCount = dashboardStats?.new_contacts_30d || 0;
-const trendValue = prevCount > 0 ? Math.round(((newCount - prevCount) / prevCount) * 100) : 0;
-```
-
-### Imports
-
-- `useAuth`, `useDashboardStats`, `useUpcomingConsultations`, `useProjects`, `useContacts` -- existing hooks
-- `StatCard`, `DataCard`, `EmptyState`, `SkeletonCard` -- Phase 0 components
-- `Button` -- from shadcn
-- `Users, CheckSquare, Calendar, Heart, FolderOpen, UserPlus` -- Lucide icons
-- `useNavigate` -- react-router-dom
-- `formatDistanceToNow, subDays, format` -- date-fns
-- `lazy, Suspense, useState` -- React
-- `useQuery` -- tanstack/react-query
-- `supabase` -- integrations client
+- `useAuth` from contexts
+- `useMyDayData` from hooks
+- `useUpdateTask` from hooks/useTasks
+- `StatCard, DataCard, EmptyState, SkeletonCard` from components/ui
+- `Button, Checkbox` from shadcn
+- `TaskModal` from components/tasks/TaskModal
+- `NewProjectDialog` from components/projects/NewProjectDialog
+- `MiniCalendar` from components/my-day/MiniCalendar
+- Lucide icons: `Sun, CheckCircle, AlertTriangle, Clock, Plus, UserPlus, FolderPlus, Bot, Activity, MessageSquare, Phone`
+- `format, formatDistanceToNow` from date-fns
+- `pl` locale
 
 ### What is NOT changed
 
-- No hooks modified
-- No other pages modified
-- No new components created (chart is inline)
-- No database changes
-- Existing dashboard sub-components (QuickActions, RelationshipAlerts, etc.) are no longer imported but their files remain untouched for potential future use
-- AppSidebar, HeaderBar, ErrorBoundary untouched
+- No existing pages modified (Dashboard, Tasks, Projects remain untouched)
+- No existing hooks modified
+- No database changes (contact_activity_log already exists)
+- No new dependencies
+- AppSidebar only gets one new entry in overviewItems array
+- App.tsx only gets one new lazy import + route
+
