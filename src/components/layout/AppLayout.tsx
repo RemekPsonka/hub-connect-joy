@@ -5,6 +5,7 @@ import { HeaderBar } from './HeaderBar';
 import { ReportBugButton } from '@/components/bugs/ReportBugButton';
 import { RemekChatWidget } from '@/components/remek/RemekChatWidget';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { SovraReminderAutoTrigger } from '@/components/sovra/SovraReminderAutoTrigger';
 
 export function AppLayout() {
   return (
@@ -26,6 +27,7 @@ export function AppLayout() {
       
       <RemekChatWidget />
       <ReportBugButton />
+      <SovraReminderAutoTrigger />
     </SidebarProvider>
   );
 }

@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.sovra-debrief]
 verify_jwt = false
+
+[functions.sovra-reminder-trigger]
+verify_jwt = false
