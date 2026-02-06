@@ -124,7 +124,7 @@ export function DealsTable({
                   {deal.stage && (
                     <DealStageBadge
                       name={deal.stage.name}
-                      color={deal.stage.color}
+                      color={deal.stage.color || '#6366f1'}
                     />
                   )}
                 </TableCell>

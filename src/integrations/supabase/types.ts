@@ -2145,6 +2145,97 @@ export type Database = {
           },
         ]
       }
+      deal_team_members: {
+        Row: {
+          created_at: string | null
+          director_id: string
+          id: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          director_id: string
+          id?: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string | null
+          director_id?: string
+          id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_members_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_teams: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_teams_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_teams_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_teams_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           company_id: string | null
@@ -2160,6 +2251,7 @@ export type Database = {
           source: string | null
           stage_id: string
           status: string
+          team_id: string | null
           tenant_id: string
           title: string
           updated_at: string
@@ -2180,6 +2272,7 @@ export type Database = {
           source?: string | null
           stage_id: string
           status?: string
+          team_id?: string | null
           tenant_id: string
           title: string
           updated_at?: string
@@ -2200,6 +2293,7 @@ export type Database = {
           source?: string | null
           stage_id?: string
           status?: string
+          team_id?: string | null
           tenant_id?: string
           title?: string
           updated_at?: string
@@ -2233,6 +2327,13 @@ export type Database = {
             columns: ["stage_id"]
             isOneToOne: false
             referencedRelation: "deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
           {
@@ -4810,6 +4911,10 @@ export type Database = {
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
+      is_deal_team_member: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_sales_representative: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin:
         | { Args: never; Returns: boolean }

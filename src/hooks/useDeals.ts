@@ -19,6 +19,15 @@ export interface DealStage {
   updated_at: string;
 }
 
+export interface DealStageMinimal {
+  id: string;
+  name: string;
+  position: number;
+  color: string | null;
+  is_closed_won: boolean | null;
+  is_closed_lost: boolean | null;
+}
+
 export interface Deal {
   id: string;
   tenant_id: string;
@@ -32,6 +41,7 @@ export interface Deal {
   probability: number;
   expected_close_date: string | null;
   owner_id: string | null;
+  team_id: string | null;
   source: string | null;
   status: 'open' | 'won' | 'lost';
   won_at: string | null;
@@ -41,8 +51,9 @@ export interface Deal {
   // Relations
   contact?: { id: string; full_name: string } | null;
   company?: { id: string; name: string } | null;
-  stage?: DealStage | null;
+  stage?: DealStageMinimal | null;
   owner?: { id: string; full_name: string } | null;
+  team?: { id: string; name: string; color: string } | null;
 }
 
 export interface DealActivity {
@@ -78,6 +89,7 @@ export interface DealInsert {
   probability?: number;
   expected_close_date?: string | null;
   owner_id?: string | null;
+  team_id?: string | null;
   source?: string | null;
   description?: string | null;
 }
@@ -92,6 +104,7 @@ export interface DealUpdate {
   probability?: number;
   expected_close_date?: string | null;
   owner_id?: string | null;
+  team_id?: string | null;
   source?: string | null;
   description?: string | null;
   status?: 'open' | 'won' | 'lost';
@@ -148,7 +161,8 @@ export function useDeals(filters: DealsFilters = {}) {
           contact:contacts(id, full_name),
           company:companies(id, name),
           stage:deal_stages(id, name, position, color, is_closed_won, is_closed_lost),
-          owner:directors(id, full_name)
+          owner:directors(id, full_name),
+          team:deal_teams(id, name, color)
         `, { count: 'exact' })
         .eq('tenant_id', tenantId);
 
@@ -201,7 +215,8 @@ export function useDeal(id: string | undefined) {
           contact:contacts(id, full_name, email, phone, company),
           company:companies(id, name),
           stage:deal_stages(id, name, position, color, is_closed_won, is_closed_lost),
-          owner:directors(id, full_name)
+          owner:directors(id, full_name),
+          team:deal_teams(id, name, color)
         `)
         .eq('id', id)
         .eq('tenant_id', tenantId)
@@ -258,7 +273,8 @@ export function useCreateDeal() {
           contact:contacts(id, full_name),
           company:companies(id, name),
           stage:deal_stages(id, name, position, color, is_closed_won, is_closed_lost),
-          owner:directors(id, full_name)
+          owner:directors(id, full_name),
+          team:deal_teams(id, name, color)
         `)
         .single();
 
@@ -290,7 +306,8 @@ export function useUpdateDeal() {
           contact:contacts(id, full_name),
           company:companies(id, name),
           stage:deal_stages(id, name, position, color, is_closed_won, is_closed_lost),
-          owner:directors(id, full_name)
+          owner:directors(id, full_name),
+          team:deal_teams(id, name, color)
         `)
         .single();
 
