@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useContactAssignments, useUpdateAssignment } from '@/hooks/useDealsTeamAssignments';
+import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import type { DealTeamContact } from '@/types/dealTeam';
 
 interface HotLeadCardProps {
@@ -17,6 +19,16 @@ interface HotLeadCardProps {
 export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
   const { data: assignments = [] } = useContactAssignments(contact.id);
   const updateAssignment = useUpdateAssignment();
+  const { data: members = [] } = useTeamMembers(teamId);
+
+  const memberMap = useMemo(
+    () => new Map(members.map((m) => [m.director_id, m.director?.full_name || 'Nieznany'])),
+    [members]
+  );
+
+  const meetingWithName = contact.next_meeting_with
+    ? memberMap.get(contact.next_meeting_with) || null
+    : null;
 
   return (
     <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
@@ -59,8 +71,8 @@ export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
             <span>
               {format(new Date(contact.next_meeting_date), 'dd MMM', { locale: pl })}
             </span>
-            {contact.next_meeting_with && (
-              <span className="truncate">z {contact.next_meeting_with}</span>
+            {meetingWithName && (
+              <span className="truncate">z {meetingWithName}</span>
             )}
           </div>
         )}
