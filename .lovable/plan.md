@@ -1,236 +1,255 @@
 
 
-# Plan: Typy TypeScript + Hooki: useDealsTeam + useDealsTeamContacts
+# Plan: UI — Strona DealsTeamDashboard + TeamSelector + KanbanBoard + Karty kontaktów + Routing
 
 ## Cel
-Utworzenie warstwy danych React dla modułu Deal Teams: plik typów TypeScript oraz 2 hooki z React Query do zarządzania zespołami i kontaktami dealowymi.
+Utworzenie głównego widoku UI modułu "Zespół Deals" — strona `/deals-team` z 4-kolumnowym Kanbanem (HOT, TOP, LEAD, POSZUKIWANI), selektorem zespołu i kartami kontaktów.
 
-## Analiza istniejącego kodu
+## Stan obecny
 
-### Wzorce z projektu
-Przeanalizowano `useContacts.ts` i `useDealTeams.ts`:
-- Import: `useQuery`, `useMutation`, `useQueryClient` z `@tanstack/react-query`
-- Import: `supabase` z `@/integrations/supabase/client`
-- Import: `useAuth` z `@/contexts/AuthContext`
-- Import: `toast` z `sonner`
-- Pattern: `tenantId = director?.tenant_id || assistant?.tenant_id`
-- Pattern: `enabled: !!tenantId && !!directorId`
-- Pattern: `staleTime: 5 * 60 * 1000` dla stabilnych danych
+### Istniejące hooki (gotowe do użycia)
+- `useDealTeams.ts` — `useMyDealTeams()`, `useCreateDealTeam()`
+- `useDealsTeamMembers.ts` — `useTeamMembers()`, `useDirectorsByTenant()`
+- `useDealsTeamContacts.ts` — `useTeamContacts()`, `useTeamContactStats()`, `useAddContactToTeam()`, `usePromoteContact()`
 
-### Istniejący hook `useDealTeams.ts`
-Już zawiera podstawowe operacje na zespołach:
-- `useDealTeams()` — wszystkie zespoły w tenant
-- `useMyDealTeams()` — zespoły zalogowanego directora
-- `useCreateDealTeam()` / `useUpdateDealTeam()` / `useDeleteDealTeam()`
-- `useDealTeamWithMembers()` — zespół z członkami
+### Brakujące hooki (trzeba utworzyć)
+- `useDealsTeamProspects.ts` — brak, trzeba dodać dla kolumny POSZUKIWANI
+- Typy w `src/types/dealTeam.ts` są kompletne
 
-**Wniosek**: Nie duplikujemy tego hooka — rozszerzamy o brakujące funkcje członków.
+### Istniejące wzorce w projekcie
+- Strona `Deals.tsx` — wzorzec dla głównej strony z Kanbanem i statystykami
+- `DealsKanban.tsx` — wzorzec dla tablicy Kanban (bez drag & drop w nowym module)
+- `AppSidebar.tsx` — sekcja "Sieć" zawiera wpis "Deals" — tam dodamy "Zespół Deals"
+- `App.tsx` — routing z `DirectorGuard`, lazy loading
 
 ## Pliki do utworzenia
 
-### 1. `src/types/dealTeam.ts` — Typy TypeScript
+### 1. Hook dla prospektów: `src/hooks/useDealsTeamProspects.ts`
 
-Definiuje union types i interfejsy dla całego modułu Deal Teams:
+Brakujący hook do obsługi tabeli `deal_team_prospects`:
 
+| Funkcja | Opis |
+|---------|------|
+| `useTeamProspects(teamId)` | Lista prospektów zespołu |
+| `useCreateProspect()` | Dodanie nowego poszukiwanego |
+| `useUpdateProspect()` | Edycja danych |
+| `useConvertProspect()` | Konwersja do LEAD (placeholder) |
+
+### 2. Strona główna: `src/pages/DealsTeamDashboard.tsx`
+
+Layout strony:
 ```text
-UNION TYPES:
-├── DealTeamRole: 'leader' | 'member' | 'viewer'
-├── DealCategory: 'hot' | 'top' | 'lead'
-├── DealContactStatus: 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified'
-├── DealPriority: 'low' | 'medium' | 'high' | 'urgent'
-├── ProspectStatus: 'searching' | 'found_connection' | 'intro_sent' | ...
-├── AssignmentStatus: 'pending' | 'in_progress' | 'done' | 'cancelled'
-└── CategoryRecommendation: 'keep' | 'promote' | 'demote' | 'close_won' | 'close_lost'
-
-INTERFACES:
-├── DealTeamContact — kontakt dealowy z JOINami (contact, assigned_director)
-├── DealTeamContactStats — zagregowane statystyki zespołu
-├── DealTeamProspect — poszukiwany kontakt
-├── DealTeamWeeklyStatus — cotygodniowy raport
-├── DealTeamAssignment — zadanie operacyjne
-└── DealTeamActivityLogEntry — wpis w logu aktywności
+┌─────────────────────────────────────────────────────────────┐
+│ [TeamSelector ▼]  [⚙️ Ustawienia]  [📊│📋 Widok]           │
+├─────────────────────────────────────────────────────────────┤
+│                     KanbanBoard                             │
+│  HOT 🔥  │  TOP ⭐  │  LEAD 📋  │  POSZUKIWANI 🔍          │
+│  (3)     │  (5)     │  (8)      │  (2)                      │
+│ [Card]   │ [Card]   │ [Card]    │ [Card]                    │
+│ [Card]   │ [Card]   │ [Card]    │ [Card]                    │
+│ [+Dodaj] │ [+Dodaj] │ [+Dodaj]  │ [+Szukaj]                 │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2. `src/hooks/useDealsTeamMembers.ts` — Zarządzanie członkami
+Logika:
+- `selectedTeamId` w `useState` + persystencja `localStorage('deals-team-selected')`
+- Pusty stan z CTA "Utwórz pierwszy zespół" gdy brak zespołów
+- Przełącznik widoku Kanban/Tabela (Tabela = placeholder)
+- Użycie `useMyDealTeams()`, `useTeamContacts()`, `useTeamContactStats()`
 
-Rozszerzenie funkcjonalności członków (nie duplikujemy istniejącego `useDealTeams.ts`):
+### 3. Selektor zespołu: `src/components/deals-team/TeamSelector.tsx`
 
-```text
-QUERIES:
-├── useTeamMembers(teamId) — członkowie z JOIN directors
-└── useDirectorsByTenant() — wszyscy directors do wyboru
+Dropdown z shadcn/ui Select:
+- Lista zespołów użytkownika z kolorowym wskaźnikiem
+- Badge z liczbą HOT i przeterminowanych
+- Przycisk ustawień zespołu (ikona Settings)
 
-MUTATIONS:
-├── useAddTeamMember() — dodaj directora do zespołu
-├── useRemoveTeamMember() — soft delete (is_active = false)
-└── useUpdateMemberRole() — zmiana roli (leader/member/viewer)
+### 4. Tablica Kanban: `src/components/deals-team/KanbanBoard.tsx`
+
+4 kolumny w CSS grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`):
+
+| Kolumna | Kolor | Dane | Przycisk |
+|---------|-------|------|----------|
+| HOT LEAD 🔥 | red | `category='hot'` | + Dodaj |
+| TOP LEAD ⭐ | amber | `category='top'` | + Dodaj |
+| LEAD 📋 | blue | `category='lead'` | + Dodaj |
+| POSZUKIWANI 🔍 | purple | prospects | + Szukaj |
+
+Wewnętrzny komponent `KanbanColumn`:
+- Nagłówek z ikoną, nazwą, ilością, sumą wartości (HOT)
+- Kolorowy border-top (2px)
+- `max-height` z `overflow-y-auto` dla scroll
+- Karty posortowane: priority DESC, next_action_date ASC
+
+### 5. Karty kontaktów
+
+**HotLeadCard.tsx** — najbogatsza karta:
+- Imię + link do kontaktu + firma + stanowisko
+- Status badge + wskaźnik cotygodniowy (zielona/czerwona kropka)
+- Najbliższe spotkanie (ikona kalendarza + data)
+- Następna akcja (tło muted + termin)
+- Wartość szacunkowa (zielony tekst)
+- Border-left 4px czerwony
+
+**TopLeadCard.tsx** — uproszczona:
+- Imię + firma
+- Następna akcja
+- Wskaźnik cotygodniowy
+- Priority badge
+- Przycisk "↑ do HOT" → `toast.info("Wkrótce — prompt 5.8")`
+
+**LeadCard.tsx** — minimalna:
+- Imię + firma
+- Priority badge (kolorowy)
+- Notatka (1 linia, truncate)
+- Przycisk "↑ do TOP" → placeholder
+
+**ProspectCard.tsx** — karta poszukiwanego:
+- Nazwa osoby/firmy (pogrubiona)
+- Stanowisko
+- "Dla: {requested_by}" + "Szuka: {assigned_to}"
+- Mini-stepper statusu (searching → found → intro → meeting → converted)
+- Priority badge
+- Przycisk "Konwertuj do LEAD" → placeholder
+
+### 6. Dialogi
+
+**AddContactDialog.tsx**:
+- Wyszukiwarka kontaktów CRM (ilike na full_name)
+- Select kategorii (pre-filled z kolumny)
+- Select priorytetu
+- Przycisk "Dodaj" → `useAddContactToTeam()`
+
+**AddProspectDialog.tsx**:
+- Pola: imię/nazwa, firma, stanowisko, email, LinkedIn, telefon, notatki
+- Select "Dla kogo szukamy" (członkowie zespołu)
+- Select "Kto szuka" (członkowie zespołu)
+- Priorytet, deadline
+- Przycisk "Dodaj" → `useCreateProspect()`
+
+**CreateTeamDialog.tsx**:
+- Nazwa zespołu
+- Opis (opcjonalnie)
+- Kolor (color picker lub preset)
+- Przycisk "Utwórz" → `useCreateDealTeam()`
+
+### 7. Routing i Sidebar
+
+**App.tsx** — nowa trasa:
+```tsx
+const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
+
+<Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
 ```
 
-### 3. `src/hooks/useDealsTeamContacts.ts` — Kontakty dealowe
-
-Główny hook do zarządzania kontaktami w zespole:
-
-```text
-QUERIES:
-├── useTeamContacts(teamId, category?) — lista z JOIN contacts
-├── useTeamContact(id) — pojedynczy kontakt
-└── useTeamContactStats(teamId) — statystyki (obliczane z danych)
-
-MUTATIONS:
-├── useAddContactToTeam() — dodaj kontakt CRM do zespołu
-├── useUpdateTeamContact() — edycja pól (category, status, assigned_to, ...)
-├── useRemoveContactFromTeam() — DELETE rekordu
-└── usePromoteContact() — zmiana kategorii z walidacją
+**AppSidebar.tsx** — nowy wpis w sekcji "Sieć":
+```tsx
+const networkNavigationItems = [
+  { title: 'Sieć kontaktów', url: '/network', icon: Network },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+  { title: 'Deals', url: '/deals', icon: TrendingUp },
+  { title: 'Zespół Deals', url: '/deals-team', icon: Users },  // ← NOWY
+];
 ```
-
-## Szczegóły implementacji
-
-### Typ `DealTeamContact` z JOINami
-
-```typescript
-export interface DealTeamContact {
-  id: string;
-  team_id: string;
-  contact_id: string;
-  tenant_id: string;
-  category: DealCategory;
-  status: DealContactStatus;
-  assigned_to: string | null;
-  priority: DealPriority;
-  // ... pozostałe pola z tabeli
-  status_overdue: boolean;
-  
-  // JOIN z contacts
-  contact?: {
-    id: string;
-    full_name: string;
-    company: string | null;
-    position: string | null;
-    email: string | null;
-    phone: string | null;
-    city: string | null;
-  };
-  
-  // JOIN z directors (assigned_to)
-  assigned_director?: {
-    id: string;
-    full_name: string;
-  };
-}
-```
-
-### Query `useTeamContacts`
-
-```typescript
-const { data } = await supabase
-  .from('deal_team_contacts')
-  .select(`
-    *,
-    contact:contacts(id, full_name, company, position, email, phone, city)
-  `)
-  .eq('team_id', teamId)
-  .not('status', 'in', '("won","lost","disqualified")');
-
-// Uwaga: JOIN z directors przez FK logiczne może nie działać
-// Alternatywa: pobierz assigned_director osobno lub rozwiąż z listy członków
-```
-
-### Statystyki obliczane z danych
-
-```typescript
-export function useTeamContactStats(teamId: string) {
-  const { data: contacts = [] } = useTeamContacts(teamId);
-  
-  const stats = useMemo(() => ({
-    hot_count: contacts.filter(c => c.category === 'hot').length,
-    top_count: contacts.filter(c => c.category === 'top').length,
-    lead_count: contacts.filter(c => c.category === 'lead').length,
-    overdue_count: contacts.filter(c => c.status_overdue).length,
-    total_value: contacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
-    upcoming_meetings: contacts.filter(c => 
-      c.next_meeting_date && new Date(c.next_meeting_date) > new Date()
-    ).length,
-  }), [contacts]);
-  
-  return stats;
-}
-```
-
-### Mutacja `usePromoteContact` z walidacją
-
-```typescript
-export function usePromoteContact() {
-  return useMutation({
-    mutationFn: async ({ id, newCategory }: { id: string; newCategory: DealCategory }) => {
-      // Pobierz aktualny kontakt
-      const { data: contact } = await supabase
-        .from('deal_team_contacts')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      // Walidacja wymaganych pól
-      if (newCategory === 'top' && !contact.assigned_to) {
-        throw new Error('Promocja do TOP wymaga przypisania osoby odpowiedzialnej');
-      }
-      if (newCategory === 'hot' && !contact.next_meeting_date) {
-        throw new Error('Promocja do HOT wymaga zaplanowanego spotkania');
-      }
-      
-      // Aktualizacja kategorii
-      const { error } = await supabase
-        .from('deal_team_contacts')
-        .update({ category: newCategory })
-        .eq('id', id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts'] });
-      toast.success('Kategoria została zmieniona');
-    },
-  });
-}
-```
-
-## Query Keys
-
-```text
-deal-team-members     : ['deal-team-members', teamId]
-deal-team-contacts    : ['deal-team-contacts', teamId, category || 'all']
-deal-team-contact     : ['deal-team-contact', id]
-tenant-directors      : ['tenant-directors', tenantId]
-```
-
-## Cache Invalidation
-
-| Mutacja | Invalidate |
-|---------|------------|
-| useAddTeamMember | `['deal-team-members', teamId]` |
-| useRemoveTeamMember | `['deal-team-members', teamId]` |
-| useUpdateMemberRole | `['deal-team-members', teamId]` |
-| useAddContactToTeam | `['deal-team-contacts', teamId]` |
-| useUpdateTeamContact | `['deal-team-contacts']`, `['deal-team-contact', id]` |
-| useRemoveContactFromTeam | `['deal-team-contacts', teamId]` |
-| usePromoteContact | `['deal-team-contacts', teamId]` |
 
 ## Struktura plików
 
 ```text
 src/
-├── types/
-│   └── dealTeam.ts              ← NOWY: typy i interfejsy
-└── hooks/
-    ├── useDealTeams.ts          ← ISTNIEJĄCY (nie modyfikujemy)
-    ├── useDealsTeamMembers.ts   ← NOWY: zarządzanie członkami
-    └── useDealsTeamContacts.ts  ← NOWY: kontakty dealowe
+├── pages/
+│   └── DealsTeamDashboard.tsx           ← NOWY: główna strona
+├── hooks/
+│   └── useDealsTeamProspects.ts         ← NOWY: CRUD dla prospects
+└── components/
+    └── deals-team/                       ← NOWY folder
+        ├── index.ts                      ← eksporty
+        ├── TeamSelector.tsx              ← dropdown zespołów
+        ├── KanbanBoard.tsx               ← 4-kolumnowa tablica
+        ├── KanbanColumn.tsx              ← pojedyncza kolumna
+        ├── HotLeadCard.tsx               ← karta HOT
+        ├── TopLeadCard.tsx               ← karta TOP
+        ├── LeadCard.tsx                  ← karta LEAD
+        ├── ProspectCard.tsx              ← karta POSZUKIWANY
+        ├── AddContactDialog.tsx          ← dialog dodawania kontaktu
+        ├── AddProspectDialog.tsx         ← dialog dodawania prospectu
+        └── CreateTeamDialog.tsx          ← dialog tworzenia zespołu
 ```
 
-## Guardrails ✓
-- NIE modyfikuję istniejącego `useDealTeams.ts`
-- NIE tworzę komponentów UI ani stron
-- NIE tworzę migracji SQL
-- Użycie `useAuth()` do pobrania `director.id` i `director.tenant_id`
-- Obsługa błędów przez `toast.error()` w `onError`
-- Fallback dla JOIN directors przez FK logiczne (rozwiązanie po stronie klienta)
+## Przepływ danych
+
+```text
+DealsTeamDashboard
+│
+├── useMyDealTeams() → lista zespołów użytkownika
+│   └── selectedTeamId (useState + localStorage)
+│
+├── TeamSelector
+│   ├── teams (z useMyDealTeams)
+│   └── stats (z useTeamContactStats)
+│
+└── KanbanBoard (teamId)
+    ├── useTeamContacts(teamId) → filtr po category
+    │   ├── HOT → HotLeadCard[]
+    │   ├── TOP → TopLeadCard[]
+    │   └── LEAD → LeadCard[]
+    │
+    └── useTeamProspects(teamId)
+        └── POSZUKIWANI → ProspectCard[]
+```
+
+## Sekcja techniczna
+
+### Komponenty shadcn/ui używane
+- `Card`, `CardContent`, `CardHeader`, `CardTitle`
+- `Badge` (variant: default, secondary, destructive, outline)
+- `Button` (variant: default, ghost, outline; size: default, sm, icon)
+- `Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`
+- `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`
+- `Input`, `Textarea`, `Label`
+- `Tooltip`, `TooltipTrigger`, `TooltipContent`
+- `ScrollArea`
+
+### Ikony lucide-react
+- `Users`, `Settings`, `Plus`, `Calendar`, `Search`
+- `ArrowUp`, `Flame`, `Star`, `FileText`
+- `User`, `Building2`, `Phone`, `Mail`, `Linkedin`
+
+### Formatowanie dat
+```tsx
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
+
+format(new Date(date), 'dd MMM', { locale: pl })
+```
+
+### Responsywność
+```tsx
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+```
+
+### localStorage persistence
+```tsx
+const [selectedTeamId, setSelectedTeamId] = useState<string>(() => {
+  return localStorage.getItem('deals-team-selected') || '';
+});
+
+useEffect(() => {
+  if (selectedTeamId) {
+    localStorage.setItem('deals-team-selected', selectedTeamId);
+  }
+}, [selectedTeamId]);
+```
+
+### Placeholder dla przycisków promocji
+```tsx
+onClick={() => toast.info('Wkrótce — prompt 5.8')}
+```
+
+## Guardrails
+- NIE modyfikuję istniejących stron (Dashboard, Pipeline, Contacts, Settings)
+- NIE modyfikuję istniejących hooków — tylko importuję i używam
+- NIE implementuję drag & drop — promocja tylko przez przyciski
+- Przyciski "↑ do HOT/TOP", "Konwertuj do LEAD" = placeholder z toast
+- Używam tylko shadcn/ui i lucide-react
+- Responsive grid: 1→2→4 kolumny
 
