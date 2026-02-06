@@ -22,6 +22,7 @@ import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { NavLink } from '@/components/NavLink';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Sidebar,
   SidebarContent,
@@ -66,6 +67,33 @@ const assistantNavigationItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users },
 ];
 
+function NavItem({ item }: { item: { title: string; url: string; icon: typeof Settings } }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild tooltip={item.title}>
+        <NavLink
+          to={item.url}
+          end={item.url === '/'}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          activeClassName="bg-primary/15 text-sidebar-primary font-medium border-l-2 border-sidebar-primary -ml-[2px]"
+        >
+          <item.icon className="h-4 w-4 shrink-0" />
+          <span>{item.title}</span>
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function GroupLabel({ children, isCollapsed }: { children: string; isCollapsed: boolean }) {
+  if (isCollapsed) return null;
+  return (
+    <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-sidebar-foreground/40 px-3 mb-1 font-medium">
+      {children}
+    </SidebarGroupLabel>
+  );
+}
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
@@ -84,248 +112,96 @@ export function AppSidebar() {
     ? assistant?.full_name 
     : director?.full_name;
 
+  const initials = userName
+    ?.split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
   // Buduj listę elementów administracyjnych
   const adminItems: Array<{ title: string; url: string; icon: typeof Settings }> = [];
+  adminItems.push({ title: 'Ustawienia', url: '/settings', icon: Settings });
   
-  // Ustawienia dla wszystkich (oprócz asystentów)
-  if (!isAssistant) {
-    adminItems.push({ title: 'Ustawienia', url: '/settings', icon: Settings });
-  } else {
-    // Asystenci mają ustawienia w swojej nawigacji
-    adminItems.push({ title: 'Ustawienia', url: '/settings', icon: Settings });
-  }
-  
-  // Przedstawiciele handlowi, Zgłoszenia błędów i Zarządzanie tylko dla adminów
   if (isAdmin) {
     adminItems.push({ title: 'Przedstawiciele', url: '/representatives', icon: UserCog });
     adminItems.push({ title: 'Zgłoszenia', url: '/bug-reports', icon: Bug });
     adminItems.push({ title: 'Zarządzanie', url: '/owner', icon: Shield });
   }
   
-  // Superadmin
   if (isSuperadmin) {
     adminItems.push({ title: 'Superadmin', url: '/superadmin', icon: Building2 });
   }
 
-  // Dla asystenta - inna nawigacja
-  if (isAssistant) {
-    return (
-      <Sidebar collapsible="icon">
-        <SidebarHeader className="border-b border-sidebar-border">
-          <div className="flex items-center gap-2 px-2 py-3">
-            <Network className="h-6 w-6 text-primary shrink-0" />
-            {!isCollapsed && (
-              <span className="font-bold text-primary whitespace-nowrap">
-                Network Assistant
-              </span>
-            )}
-          </div>
-          
-          {!isCollapsed && userName && (
-            <div className="px-2 pb-3 space-y-0.5">
-              <p className="text-sm font-medium text-foreground">
-                Witaj, {userName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {getUserRole()}
-              </p>
-            </div>
-          )}
-        </SidebarHeader>
-        
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {assistantNavigationItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild tooltip={item.title}>
-                      <NavLink
-                        to={item.url}
-                        end={item.url === '/'}
-                        className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                        activeClassName="bg-sidebar-accent text-primary font-medium"
-                      >
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        
-        <SidebarFooter className="border-t border-sidebar-border">
-          {!isCollapsed && (
-            <SidebarGroupLabel className="text-xs text-muted-foreground px-2 py-1">
-              Administracja
-            </SidebarGroupLabel>
-          )}
-          <SidebarMenu>
-            {adminItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild tooltip={item.title}>
-                  <NavLink
-                    to={item.url}
-                    className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                    activeClassName="bg-sidebar-accent text-primary font-medium"
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.title}</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-          
-          {!isCollapsed && (
-            <p className="text-xs text-muted-foreground text-center py-2">
-              © 2025 Network Assistant
-            </p>
-          )}
-        </SidebarFooter>
-      </Sidebar>
-    );
-  }
+  const navGroups = isAssistant
+    ? [{ label: 'Menu', items: assistantNavigationItems }]
+    : [
+        { label: 'CRM', items: crmNavigationItems },
+        { label: 'AI & Analiza', items: aiNavigationItems },
+        { label: 'Sieć', items: networkNavigationItems },
+      ];
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-3">
-          <Network className="h-6 w-6 text-primary shrink-0" />
+    <Sidebar collapsible="icon" className="border-r-0">
+      {/* Logo area */}
+      <SidebarHeader className="border-b border-sidebar-border px-3 py-4">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+            <Network className="h-4.5 w-4.5 text-sidebar-primary" />
+          </div>
           {!isCollapsed && (
-            <span className="font-bold text-primary whitespace-nowrap">
+            <span className="font-bold text-sidebar-foreground text-sm whitespace-nowrap">
               Network Assistant
             </span>
           )}
         </div>
-        
-        {!isCollapsed && userName && (
-          <div className="px-2 pb-3 space-y-0.5">
-            <p className="text-sm font-medium text-foreground">
-              Witaj, {userName}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {getUserRole()}
-            </p>
-          </div>
-        )}
       </SidebarHeader>
       
-      <SidebarContent>
-        {/* CRM */}
-        <SidebarGroup>
-          {!isCollapsed && (
-            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
-              CRM
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {crmNavigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === '/'}
-                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                      activeClassName="bg-sidebar-accent text-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* AI & Analiza */}
-        <SidebarGroup>
-          {!isCollapsed && (
-            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
-              AI & Analiza
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {aiNavigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                      activeClassName="bg-sidebar-accent text-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Sieć & Sprzedaż */}
-        <SidebarGroup>
-          {!isCollapsed && (
-            <SidebarGroupLabel className="text-xs text-muted-foreground px-2">
-              Sieć
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {networkNavigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                      activeClassName="bg-sidebar-accent text-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="px-2 py-3 scrollbar-thin">
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label} className="mb-2">
+            <GroupLabel isCollapsed={isCollapsed}>{group.label}</GroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavItem key={item.title} item={item} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       
-      {/* Sekcja administracyjna na dole */}
-      <SidebarFooter className="border-t border-sidebar-border">
+      {/* Footer — admin + user info */}
+      <SidebarFooter className="border-t border-sidebar-border px-2 py-3">
         {!isCollapsed && adminItems.length > 0 && (
-          <p className="text-xs text-muted-foreground font-medium px-3 pt-2 pb-1">
+          <p className="text-[11px] uppercase tracking-wider text-sidebar-foreground/40 px-3 mb-1 font-medium">
             Administracja
           </p>
         )}
-        <SidebarMenu>
+        <SidebarMenu className="space-y-0.5">
           {adminItems.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild tooltip={item.title}>
-                <NavLink
-                  to={item.url}
-                  className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
-                  activeClassName="bg-sidebar-accent text-primary font-medium"
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.title}</span>
-                </NavLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <NavItem key={item.title} item={item} />
           ))}
         </SidebarMenu>
         
-        {!isCollapsed && (
-          <p className="text-xs text-muted-foreground text-center py-2">
-            © 2025 Network Assistant
-          </p>
+        {/* User info */}
+        {!isCollapsed && userName && (
+          <div className="flex items-center gap-2.5 px-3 pt-3 mt-2 border-t border-sidebar-border">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-xs font-medium">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {userName}
+              </p>
+              <p className="text-[11px] text-sidebar-foreground/50">
+                {getUserRole()}
+              </p>
+            </div>
+          </div>
         )}
       </SidebarFooter>
     </Sidebar>
