@@ -5075,6 +5075,137 @@ export type Database = {
         }
         Relationships: []
       }
+      sovra_reminders: {
+        Row: {
+          channel: string | null
+          director_id: string
+          id: string
+          message: string
+          priority: string | null
+          read_at: string | null
+          reference_id: string | null
+          reference_type: string | null
+          scheduled_at: string
+          sent_at: string | null
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          channel?: string | null
+          director_id: string
+          id?: string
+          message: string
+          priority?: string | null
+          read_at?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          scheduled_at: string
+          sent_at?: string | null
+          tenant_id: string
+          type: string
+        }
+        Update: {
+          channel?: string | null
+          director_id?: string
+          id?: string
+          message?: string
+          priority?: string | null
+          read_at?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sovra_reminders_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sovra_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sovra_sessions: {
+        Row: {
+          content: Json | null
+          director_id: string
+          ended_at: string | null
+          id: string
+          metadata: Json | null
+          notes_created: number | null
+          started_at: string | null
+          tasks_created: number | null
+          tenant_id: string
+          title: string | null
+          type: string
+        }
+        Insert: {
+          content?: Json | null
+          director_id: string
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          notes_created?: number | null
+          started_at?: string | null
+          tasks_created?: number | null
+          tenant_id: string
+          title?: string | null
+          type: string
+        }
+        Update: {
+          content?: Json | null
+          director_id?: string
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          notes_created?: number | null
+          started_at?: string | null
+          tasks_created?: number | null
+          tenant_id?: string
+          title?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sovra_sessions_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sovra_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       superadmins: {
         Row: {
           created_at: string
