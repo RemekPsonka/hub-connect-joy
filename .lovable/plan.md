@@ -1,208 +1,198 @@
 
-# Sovra Debrief — Edge Function + UI trybu debriefow
 
-## Podsumowanie
+# Sovra jako prawdziwy asystent — tool calling z akcjami CRM
 
-Dodajemy trzeci tryb Sovra — debrief spotkania. Uzytkownik opisuje co sie wydarzylo na spotkaniu (tekstem lub mowa), a Sovra analizuje notatke i generuje: podsumowanie, kluczowe punkty, decyzje, proponowane taski (do zatwierdzenia) i follow-upy. Calowsc integruje sie z kalendarza (quick action w popoverze) i projektami.
+## Problem
+
+Sovra odpowiada "nie moge tworzyc zadan" bo system prompt jawnie zabrania jej wykonywania akcji, a Edge Function nie ma zdefiniowanych narzedzi (tools). Sovra jest teraz zwyklym czatem bez mozliwosci dzialania w systemie.
+
+## Rozwiazanie
+
+Dodajemy **tool calling** do Edge Function `sovra-chat`. Gemini bedzie moglo wywolywac funkcje (tworzenie zadan, zapisywanie notatek, zmiana statusow), a Edge Function wykona te operacje na bazie danych i zwroci wynik do AI, ktore nastepnie potwierdzi akcje uzytkownikowi w odpowiedzi.
 
 ## Co sie zmieni
 
-| Zmiana | Plik / Zasob |
-|--------|-------------|
-| Nowa Edge Function | `supabase/functions/sovra-debrief/index.ts` |
-| Modyfikacja | `supabase/config.toml` — wpis dla sovra-debrief |
-| Nowy komponent | `src/components/sovra/SovraDebrief.tsx` — formularz + wyniki |
-| Nowy komponent | `src/components/sovra/SovraMorningBrief.tsx` — tryb briefu |
-| Nowy komponent | `src/components/sovra/SovraModeSelector.tsx` — przelacznik trybow |
-| Nowy hook | `src/hooks/useSovraDebrief.ts` — mutacja debriefu + tworzenie taskow |
-| Modyfikacja | `src/pages/Sovra.tsx` — dodanie trybow (chat / debrief / morning) |
-| Modyfikacja | `src/components/calendar/CalendarEventPopover.tsx` — przycisk "Debrief z Sovra" |
+| Zmiana | Plik |
+|--------|------|
+| Dodanie tool calling + executory | `supabase/functions/sovra-chat/index.ts` |
+| Wyswietlanie akcji w czacie | `src/components/sovra/SovraMessages.tsx` |
+| Typ wiadomosci z akcjami | `src/hooks/useSovraChat.ts` |
+
+**Zaden nowy plik nie jest tworzony.** Zmieniamy tylko 3 istniejace pliki.
 
 ---
 
 ## Szczegoly techniczne
 
-### 1. Edge Function — sovra-debrief
+### 1. Edge Function — sovra-chat (glowne zmiany)
 
-Funkcja non-streaming (standardowy request/response z JSON). Wzorowana na `sovra-morning-session` (auth, rate limit, AI gateway) ale z tool calling zamiast wolnego tekstu — wymuszamy ustrukturyzowany JSON output.
+#### A) Nowy system prompt
 
-**Flow:**
+Zamiana ograniczenia "NIE wykonujesz akcji" na instrukcje uzycia narzedzi:
 
 ```text
-1. CORS + metoda POST
-2. Autentykacja: verifyAuth(req, serviceClient)
-3. Zod walidacja:
-   - raw_text: string min(10) max(5000)
-   - gcal_event_id: string optional
-   - gcal_calendar_id: string optional
-   - project_id: uuid optional
-   - contact_ids: array of uuid optional
-4. Rate limit: Upstash Redis (10 wywolan / 1h / director)
-   - Klucz: sovra-debrief:{director_id}
-5. Pobranie kontekstu (Promise.all):
-   A) directorInfo — imie z directors
-   B) Jesli gcal_event_id + gcal_calendar_id — pobierz event z Google Calendar API
-      (ten sam wzorzec co w sovra-morning-session: gcal_tokens -> access_token -> refresh jesli wygasly -> GET event)
-   C) Jesli project_id — pobierz projekt + recent tasks + members
-   D) Jesli contact_ids — pobierz kontakty z full_name, company, position
-6. Budowa promptu z kontekstem + raw_text
-7. Wywolanie Lovable AI Gateway (Gemini 2.5 Flash):
-   - Tool calling (nie stream) — wymuszenie zwrotu structured JSON
-   - Tool: analyze_debrief z parametrami: summary, key_points, decisions, action_items, follow_ups, meeting_sentiment, next_meeting_suggested, raw_note_cleaned
-   - tool_choice: { type: "function", function: { name: "analyze_debrief" } }
-8. Parsowanie tool call response
-9. Zapis do sovra_sessions: type='debrief', content = parsed result + raw_text
-10. Jesli project_id — INSERT do project_notes z source='sovra_debrief'
-11. Zwrot JSON response
+MOZLIWOSCI NARZEDZI:
+- Mozesz TWORZYC zadania — uzyj narzedzia create_task
+- Mozesz ZAPISYWAC notatki projektowe — uzyj narzedzia add_project_note
+- Mozesz ZMIENIAC STATUS zadania — uzyj narzedzia update_task_status
+- Mozesz ZMIENIAC STATUS projektu — uzyj narzedzia update_project_status
+
+ZASADY UZYWANIA NARZEDZI:
+- Kiedy user prosi o stworzenie zadania — STWORZ JE od razu, nie pytaj o potwierdzenie
+- Kiedy user mowi "dodaj notatke do projektu X" — ZAPISZ JA
+- Kiedy user mowi "zmien status na done" — ZMIEN od razu
+- Po wykonaniu akcji — potwierdz co zrobiles krotkim komunikatem
+- Mozesz wywolac wiele narzedzi naraz (np. 3 taski na raz)
+- Jesli brakuje kluczowych danych do akcji (np. nie wiesz do ktorego projektu) — ZAPYTAJ usera
 ```
 
-**System prompt (SOVRA_DEBRIEF_SYSTEM_PROMPT):**
-Instrukcje do analizy surowych notatek ze spotkania. Kazdy ze Sovra generuje: summary (2-3 zdania), key_points, decisions, action_items (z title, description, priority, suggested_deadline, suggested_assignee_hint), follow_ups (z contact_name, action, urgency), meeting_sentiment, next_meeting_suggested, raw_note_cleaned (poprawione literowki, ustrukturyzowane).
+#### B) Definicja 4 narzedzi (tools array)
 
-**Kluczowe roznice vs sovra-chat:**
-- Non-streaming (tool calling wymaga pelnej odpowiedzi)
-- Structured output przez tool calling (nie parsujemy wolnego tekstu JSON)
-- Zapis do project_notes jesli project_id podany
-- Rate limit 10/h (nie 10/min jak chat)
-
-**Response JSON:**
 ```text
-{
-  session_id: string,
-  summary: string,
-  key_points: string[],
-  decisions: string[],
-  action_items: Array<{
-    title: string,
-    description: string,
-    priority: "critical" | "high" | "medium" | "low",
-    suggested_deadline: string | null,
-    suggested_assignee_hint: string
-  }>,
-  follow_ups: Array<{
-    contact_name: string,
-    action: string,
-    urgency: "high" | "medium" | "low"
-  }>,
-  meeting_sentiment: "positive" | "neutral" | "negative",
-  next_meeting_suggested: boolean,
-  raw_note_cleaned: string,
-  note_saved: boolean,
-  note_id: string | null
+1. create_task
+   - title: string (wymagane)
+   - description: string (opcjonalne)
+   - priority: enum [low, medium, high, urgent] (default: medium)
+   - due_date: string YYYY-MM-DD (opcjonalne)
+   - project_id: string UUID (opcjonalne — jesli kontekst projektu aktywny, uzyj go)
+   - status: enum [pending, in_progress] (default: pending)
+
+2. add_project_note
+   - project_id: string UUID (wymagane)
+   - content: string (wymagane)
+
+3. update_task_status
+   - task_id: string UUID (wymagane)
+   - status: enum [pending, in_progress, done, cancelled] (wymagane)
+
+4. update_project_status
+   - project_id: string UUID (wymagane)
+   - status: enum [new, analysis, in_progress, waiting, done, cancelled] (wymagane)
+```
+
+#### C) Flow z tool calling (kluczowa zmiana architektury)
+
+Obecny flow: request -> AI -> stream response -> save session
+
+Nowy flow z petla tool calling:
+```text
+1. Wyslij wiadomosc do AI z tools
+2. AI odpowiada z tool_calls LUB content
+3. Jesli tool_calls:
+   a) Wykonaj kazdy tool call na bazie danych (INSERT/UPDATE)
+   b) Zbierz wyniki w tablicy tool results
+   c) Dodaj assistant message (z tool_calls) + tool results do messages
+   d) Wyslij PONOWNIE do AI (bez stream) z pelna historia
+   e) AI generuje finalna odpowiedz tekstowa potwierdzajaca akcje
+4. Streamuj finalna odpowiedz do klienta
+5. Zapisz sesje z informacja o wykonanych akcjach
+```
+
+**Wazne:** Pierwszy call do AI jest **non-streaming** (bo musi zwrocic tool_calls JSON), dopiero finalny call po wykonaniu narzedzi jest **streaming**.
+
+#### D) Funkcje executory (wewnatrz Edge Function)
+
+```text
+executeCreateTask(serviceClient, tenantId, directorId, args):
+  - INSERT do tasks z: tenant_id, title, description, priority, due_date, project_id, 
+    owner_id=directorId, assigned_to=directorId, status, visibility='private'
+  - Zwraca: { success: true, task_id: uuid, title: string }
+
+executeAddProjectNote(serviceClient, tenantId, directorId, args):
+  - Weryfikacja: projekt nalezy do tenanta
+  - INSERT do project_notes z: tenant_id, project_id, content, created_by=directorId, source='sovra_chat'
+  - Zwraca: { success: true, note_id: uuid }
+
+executeUpdateTaskStatus(serviceClient, tenantId, args):
+  - Weryfikacja: task nalezy do tenanta
+  - UPDATE tasks SET status=args.status WHERE id=args.task_id AND tenant_id=tenantId
+  - Zwraca: { success: true, task_id, new_status }
+
+executeUpdateProjectStatus(serviceClient, tenantId, args):
+  - Weryfikacja: projekt nalezy do tenanta
+  - UPDATE projects SET status=args.status WHERE id=args.project_id AND tenant_id=tenantId
+  - Zwraca: { success: true, project_id, new_status }
+```
+
+Kazdy executor:
+- Weryfikuje tenant_id (bezpieczenstwo — user nie moze modyfikowac cudzych danych)
+- Uzywa service role client (RLS bypass)
+- Zwraca wynik jako string JSON (tool result)
+- Opakowuje w try/catch z fallbackiem
+
+#### E) Aktualizacja zapisu sesji
+
+Po zakonczeniu streamu:
+- Zapisz `tasks_created` = liczba wywolanych create_task
+- Zapisz `notes_created` = liczba wywolanych add_project_note
+- Dodaj informacje o wykonanych akcjach do `metadata` sesji
+
+#### F) Wyslanie informacji o akcjach do klienta
+
+Przed streamem finalnej odpowiedzi, wyslij specjalny SSE event z listą wykonanych akcji:
+
+```text
+data: {"type":"tool_results","actions":[{"tool":"create_task","result":{"task_id":"...","title":"..."}}]}
+```
+
+Frontend rozpozna ten event i wyswietli "activity bubbles" w czacie.
+
+### 2. Frontend — SovraMessages.tsx
+
+Nowy typ wiadomosci: `tool_results`. Wyswietlany jako mini-kafelki miedzy wiadomosciami:
+
+```text
++-------------------------------------------+
+|  [CheckSquare] Utworzono zadanie:          |
+|  "Przygotowac oferte dla ABC"             |
++-------------------------------------------+
+|  [FileText] Zapisano notatke w projekcie  |
+|  "Wieze obserwacyjne"                     |
++-------------------------------------------+
+```
+
+Styl: bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 rounded-lg px-3 py-2 text-xs — zwiezle, nie dominujace nad czatem.
+
+Ikony:
+- create_task -> CheckSquare + "Utworzono zadanie: [title]"
+- add_project_note -> FileText + "Zapisano notatke w projekcie"
+- update_task_status -> ArrowRight + "Zmieniono status zadania na: [status]"
+- update_project_status -> FolderOpen + "Zmieniono status projektu na: [status]"
+
+### 3. Frontend — useSovraChat.ts
+
+Rozszerzenie typu `SovraMessage` o nowe pole:
+
+```text
+SovraMessage {
+  role: 'user' | 'assistant' | 'tool_results'
+  content: string
+  timestamp: Date
+  actions?: Array<{ tool: string, result: Record<string, unknown> }>
 }
 ```
 
-**Fallback:** Jesli AI zwroci blad lub nieparsowalna odpowiedz — zwroc prosty fallback z samym raw_text jako summary i pustymi tablicami.
+Parsing streamu — nowy handler dla `"type":"tool_results"` SSE event:
+- Odczytaj listę akcji
+- Wstaw wiadomosc typu `tool_results` przed finalna odpowiedzia assistant
+- Invalidacja query cache dla `['tasks']`, `['project-notes']`, `['projects']` po zakonczeniu streamu (zeby inne widoki odswieza dane)
 
-### 2. config.toml
-
-Nowy wpis:
-```text
-[functions.sovra-debrief]
-verify_jwt = false
-```
-
-### 3. Hook useSovraDebrief (src/hooks/useSovraDebrief.ts)
-
-Dwie mutacje:
-- `useRunDebrief()` — wywoluje sovra-debrief Edge Function, zwraca parsed result
-- `useCreateDebriefTasks()` — tworzy wybrane taski w DB (INSERT do tasks, tak jak useCreateTask w useTasks.ts ale uproszczone — bezposredni insert z tenant_id, owner_id, assigned_to=director, project_id z kontekstu)
-
-Typ `DebriefResult` — mirror odpowiedzi Edge Function.
-
-### 4. Komponent SovraModeSelector (src/components/sovra/SovraModeSelector.tsx)
-
-Pill selector nad glownym obszarem:
-- Trzy opcje: "Chat" (💬), "Debrief" (📝), "Brief" (☀️)
-- Aktywny: bg-card shadow-sm rounded-md font-medium
-- Inactive: text-muted-foreground hover:text-foreground
-- Stan sterowany z Sovra.tsx
-
-### 5. Komponent SovraDebrief (src/components/sovra/SovraDebrief.tsx)
-
-Dwu-etapowy UI:
-
-**Etap 1 — Formularz:**
-- Heading "Debrief spotkania" + opis
-- Context selectors (opcjonalne):
-  - "Spotkanie z kalendarza" — Select z dzisiejszymi GCal eventami (useGCalEvents)
-  - "Projekt" — Select z aktywnymi projektami
-  - "Uczestnicy" — multi-select z wyszukiwaniem kontaktow CRM
-- Textarea min-h-[200px] z placeholderem opisujacym przykladowe notatki
-- Button "Analizuj z Sovra" — Sparkles icon, disabled jesli < 10 znakow
-
-**Etap 2 — Wyniki (po odpowiedzi, zastepuje formularz):**
-- Header: Sovra avatar + "Analiza Sovry" + sentiment badge (positive/neutral/negative)
-- Sekcja "Podsumowanie" — DataCard z summary
-- Sekcja "Kluczowe punkty" — lista z ikonami CheckCircle
-- Sekcja "Decyzje" — lista (tylko jesli decisions.length > 0)
-- Sekcja "Proponowane zadania" — KLUCZOWA:
-  - Kazdy action_item jako card z checkbox + title + description + priority badge + deadline
-  - User zaznacza checkboxy -> "Stworz zaznaczone" -> useCreateDebriefTasks -> INSERT do tasks
-  - Po stworzeniu: badge "Utworzono" na zielono + toast success
-- Sekcja "Follow-upy" — kazdy z contact_name + action + urgency badge + "Utworz reminder" button
-  - "Utworz reminder" -> INSERT do sovra_reminders z type='follow_up', scheduled_at = NOW + 1 dzien
-- Sekcja "Oczyszczona notatka" — collapsible z Collapsible component
-  - Jesli project_id: badge "Zapisano w projekcie [nazwa]"
-- Footer: "Nowy debrief" (reset) + "Otworz w chacie" (przelacz na chat z session_id)
-
-### 6. Komponent SovraMorningBrief (src/components/sovra/SovraMorningBrief.tsx)
-
-Tryb morning brief w /sovra:
-- Auto-trigger: wywolaj sovra-morning-session Edge Function (przez supabase.functions.invoke)
-- Loading: Sovra avatar z pulse + "Sovra przygotowuje Twoj poranny brief..."
-- Po zaladowaniu: brief wyswietlony jako markdown w DataCard
-- Pod briefem: statystyki (tasks today, overdue, events, projects)
-- Button "Kontynuuj w chacie" -> przelacz na chat z session_id briefu
-
-### 7. Modyfikacja Sovra.tsx
-
-Dodanie stanu `mode: 'chat' | 'debrief' | 'morning'` i parsowanie URL params:
-- `?mode=debrief&event=xxx&calendar=yyy` -> auto-set debrief z pre-fill eventem
-- `?context=project&id=xxx` -> zachowane jak dotychczas (chat z kontekstem)
-
-Layout:
-```text
-+--------------------------------------------------+
-|  Sidebar  |  [ModeSelector: Chat | Debrief | Brief] |
-|           |  [Content based on mode]               |
-|           |  [Input (only in chat mode)]            |
-+--------------------------------------------------+
-```
-
-- mode='chat': dotychczasowy SovraMessages + SovraInput (bez zmian)
-- mode='debrief': SovraDebrief component
-- mode='morning': SovraMorningBrief component
-
-### 8. Quick action w CalendarEventPopover
-
-Dodanie przycisku "Debrief z Sovra" w popoverze wydarzenia GCal:
-- Ikona Sparkles, variant ghost, text-xs
-- onClick: navigate(`/sovra?mode=debrief&event=${gcalEventId}&calendar=${calendarId}`)
-- Wyswietlany tylko dla gcal_event (nie crm_task)
-- Umieszczony pod istniejacym "Otworz w Google Calendar"
-
-### 9. Sekrety
-
-Wszystkie wymagane sekrety juz sa skonfigurowane — brak nowych:
-- LOVABLE_API_KEY
-- UPSTASH_REDIS_REST_URL / TOKEN
-- GOOGLE_CLIENT_ID / CLIENT_SECRET
+---
 
 ## Bezpieczenstwo
 
-- Edge Function wymaga autentykacji (verifyAuth)
-- Rate limit 10/h/director
-- Zod walidacja inputu (raw_text max 5000 znakow)
-- Taski NIE sa tworzone automatycznie — user musi zatwierdzic kazdy
-- project_notes zapisywane tylko jesli user podal project_id
-- Dane CRM pobierane przez service role z filtrami tenant_id
+- Kazdy executor weryfikuje `tenant_id` — uzytkownik nie moze modyfikowac danych innego tenanta
+- Uzycie service role client jest ok — juz tak dziala cala Edge Function
+- Rate limit bez zmian (10/min) — zapobiega masowemu tworzeniu taskow
+- Zod walidacja inputu bez zmian (max 2000 znakow)
+- Executor nie tworzy danych w tabelach systemowych (auth, storage itp.)
 
 ## Co NIE zostanie zmienione
 
-- sovra-chat Edge Function — bez zmian
-- sovra-morning-session Edge Function — bez zmian (reuse przez supabase.functions.invoke na froncie)
-- Tabele sovra_sessions, sovra_reminders — bez zmian schematu (wykorzystujemy istniejace kolumny)
-- Istniejace komponenty Sovra (SovraAvatar, SovraMessages, SovraInput, SovraWelcome, SovraSidebar) — bez zmian
-- Hook useSovraChat — bez zmian
-- Hook useSovraSessions — bez zmian
+- Edge Function `sovra-debrief` — bez zmian (ma wlasny flow zatwierdzania taskow)
+- Edge Function `sovra-morning-session` — bez zmian
+- Istniejace hooki `useSovraSessions`, `useSovraDebrief` — bez zmian
+- Komponenty `SovraDebrief`, `SovraMorningBrief`, `SovraSidebar`, `SovraWelcome`, `SovraInput` — bez zmian
+- Strona `Sovra.tsx` — bez zmian
+- Inne Edge Functions — bez zmian
+
