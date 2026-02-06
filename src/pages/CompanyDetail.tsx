@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/breadcrumb";
 import { useCompany } from '@/hooks/useCompanies';
 import { CompanyProfileHeader } from '@/components/companies/CompanyProfileHeader';
-import { CompanyAnalysisViewer } from '@/components/company';
-import { CompanyContactsList } from '@/components/companies/CompanyContactsList';
-import { CapitalGroupViewer } from '@/components/company/CapitalGroupViewer';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
+import { CompanyRegistryCard } from '@/components/companies/CompanyRegistryCard';
+import { CompanyContactsMini } from '@/components/companies/CompanyContactsMini';
+import { CompanyQuickStats } from '@/components/companies/CompanyQuickStats';
+import { CompanyNotesPanel } from '@/components/companies/CompanyNotesPanel';
+
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: company, isLoading, error } = useCompany(id);
 
   if (isLoading) {
@@ -38,10 +39,8 @@ export default function CompanyDetail() {
     );
   }
 
-  const aiAnalysis = company.ai_analysis as Record<string, unknown> | null;
-
   return (
-    <div className="container max-w-6xl py-6 space-y-6">
+    <div className="container max-w-7xl py-6 space-y-6">
       <Breadcrumb className="mb-4">
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -60,46 +59,21 @@ export default function CompanyDetail() {
 
       <CompanyProfileHeader company={company} />
 
-      {/* Tabs */}
-      <Tabs defaultValue="analysis" className="w-full">
-        <TabsList>
-          <TabsTrigger value="analysis">Analiza AI</TabsTrigger>
-          <TabsTrigger value="capital-group">Grupa kapitałowa</TabsTrigger>
-          <TabsTrigger value="contacts">Kontakty</TabsTrigger>
-        </TabsList>
+      {/* SPLIT VIEW */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* LEFT COLUMN — tabs with all content */}
+        <div className="flex-1 lg:w-[65%] min-w-0">
+          <CompanyFlatTabs company={company} />
+        </div>
 
-        <TabsContent value="analysis" className="mt-6">
-          {company.company_analysis_status === 'completed' && aiAnalysis ? (
-            <CompanyAnalysisViewer
-              analysis={aiAnalysis}
-              confidenceScore={company.analysis_confidence_score || 0.5}
-              missingSections={company.analysis_missing_sections || []}
-              dataSources={company.analysis_data_sources as Record<string, unknown> | undefined}
-            />
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>Brak pełnej analizy AI dla tej firmy.</p>
-              <p className="text-sm mt-2">
-                Uruchom analizę z poziomu nagłówka profilu firmy.
-              </p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="capital-group" className="mt-6">
-          <CapitalGroupViewer 
-            company={{
-              id: company.id,
-              name: company.name,
-              logo_url: company.logo_url
-            }} 
-          />
-        </TabsContent>
-
-        <TabsContent value="contacts" className="mt-6">
-          <CompanyContactsList companyId={company.id} />
-        </TabsContent>
-      </Tabs>
+        {/* RIGHT COLUMN — sticky sidebar */}
+        <aside className="lg:w-[35%] space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <CompanyRegistryCard company={company} />
+          <CompanyContactsMini companyId={company.id} />
+          <CompanyQuickStats company={company} />
+          <CompanyNotesPanel company={company} />
+        </aside>
+      </div>
     </div>
   );
 }

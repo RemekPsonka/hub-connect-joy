@@ -35,6 +35,7 @@ import { StructureVisualization } from '@/components/structure';
 import { RenewalTimeline } from '@/components/renewal';
 import { LiabilityDNAPanel } from '@/components/liability';
 import { ExposureManager } from '@/components/exposure';
+import { CompanyContactsList } from '@/components/companies/CompanyContactsList';
 import type { Company } from './CompanyPipelineController';
 import type { CompanyAnalysis } from './types';
 
@@ -81,6 +82,7 @@ export function CompanyFlatTabs({
     { id: 'affiliations', label: 'Powiązania', icon: Network, always: hasAnalysis },
     { id: 'locations', label: 'Lokalizacje', icon: MapPin, always: hasAnalysis },
     { id: 'projects', label: 'Realizacje', icon: Briefcase, always: hasAnalysis },
+    { id: 'contacts', label: 'Kontakty', icon: Users, always: true },
   ];
 
   // Filter to show only tabs with data (except Sources which is always shown)
@@ -208,6 +210,10 @@ export function CompanyFlatTabs({
           </TabsContent>
         </>
       )}
+
+      <TabsContent value="contacts" className="mt-0">
+        <CompanyContactsList companyId={company.id} />
+      </TabsContent>
     </Tabs>
   );
 }
