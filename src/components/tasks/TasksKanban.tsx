@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { TaskTypeBadge } from './TaskTypeBadge';
 import { TaskPriorityBadge } from './TaskPriorityBadge';
+import { KanbanInlineCreate } from './KanbanInlineCreate';
 import { Link2, Calendar, GripVertical } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -235,6 +236,9 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
                   Upuść tutaj
                 </div>
               )}
+
+              {/* Inline create */}
+              <KanbanInlineCreate status={column.id} />
             </div>
           </div>
         );

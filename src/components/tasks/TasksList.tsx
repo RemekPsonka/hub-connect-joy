@@ -20,9 +20,11 @@ interface TasksListProps {
   tasks: TaskWithDetails[];
   onTaskClick: (task: TaskWithDetails) => void;
   onStatusChange: (taskId: string, completed: boolean) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (taskId: string) => void;
 }
 
-export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps) {
+export function TasksList({ tasks, onTaskClick, onStatusChange, selectedIds, onToggleSelect }: TasksListProps) {
   const navigate = useNavigate();
  
    const parentRef = useRef<HTMLDivElement>(null);
@@ -66,22 +68,30 @@ export function TasksList({ tasks, onTaskClick, onStatusChange }: TasksListProps
           : task.status;
         const isCompleted = effectiveStatus === 'completed';
 
-        return (
-          <Card
-             key={virtualItem.key}
-             className={`cursor-pointer hover:shadow-md transition-shadow absolute left-0 right-0 ${
-              isCompleted ? 'opacity-60' : ''
-            }`}
-             style={{
-               transform: `translateY(${virtualItem.start}px)`,
-             }}
-            onClick={() => onTaskClick(task)}
-          >
+         return (
+           <Card
+              key={virtualItem.key}
+              className={`cursor-pointer hover:shadow-md transition-shadow absolute left-0 right-0 ${
+               isCompleted ? 'opacity-60' : ''
+             } ${selectedIds?.has(task.id) ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
+              style={{
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+             onClick={() => onTaskClick(task)}
+           >
             <CardContent className="p-4">
               <div className="flex items-start gap-4">
+                {onToggleSelect && (
+                  <Checkbox
+                    checked={selectedIds?.has(task.id) || false}
+                    onClick={(e) => e.stopPropagation()}
+                    onCheckedChange={() => onToggleSelect(task.id)}
+                    className="mt-1"
+                  />
+                )}
                 <Checkbox
                   checked={isCompleted}
-                  disabled={!!isCrossTask} // Disable for cross-tasks - status is automatic
+                  disabled={!!isCrossTask}
                   onClick={(e) => e.stopPropagation()}
                   onCheckedChange={(checked) => {
                     if (!isCrossTask) {

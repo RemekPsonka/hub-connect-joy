@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { TasksHeader } from '@/components/tasks/TasksHeader';
 import { TasksList } from '@/components/tasks/TasksList';
 import { TasksKanban } from '@/components/tasks/TasksKanban';
 import { TaskModal } from '@/components/tasks/TaskModal';
-import { CrossTaskDetail } from '@/components/tasks/CrossTaskDetail';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { BulkTaskActions } from '@/components/tasks/BulkTaskActions';
 import { useTasks, usePendingTasksCount, useUpdateTask, type TasksFilters, type TaskWithDetails } from '@/hooks/useTasks';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +16,9 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: tasks = [], isLoading } = useTasks(filters);
   const { data: pendingCount = 0 } = usePendingTasksCount();
@@ -51,6 +55,22 @@ export default function Tasks() {
     setIsModalOpen(true);
   };
 
+  const handleToggleSelect = useCallback((taskId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -60,7 +80,7 @@ export default function Tasks() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <TasksHeader
         filters={filters}
         onFiltersChange={setFilters}
@@ -70,11 +90,21 @@ export default function Tasks() {
         pendingCount={pendingCount}
       />
 
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <BulkTaskActions
+          selectedIds={Array.from(selectedIds)}
+          onClearSelection={handleClearSelection}
+        />
+      )}
+
       {view === 'list' ? (
         <TasksList
           tasks={tasks}
           onTaskClick={handleTaskClick}
           onStatusChange={handleStatusChange}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
         />
       ) : (
         <TasksKanban
@@ -91,7 +121,7 @@ export default function Tasks() {
       />
 
       {selectedTask && (
-        <CrossTaskDetail
+        <TaskDetailSheet
           open={isDetailOpen}
           onOpenChange={setIsDetailOpen}
           task={selectedTask}
