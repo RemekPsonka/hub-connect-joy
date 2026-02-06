@@ -21,6 +21,7 @@ import {
   Users2,
   FolderKanban,
   Sun,
+  Sparkles,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -73,6 +74,7 @@ const salesItems = [
 
 // AI
 const aiItems = [
+  { title: 'Sovra', url: '/sovra', icon: Sparkles },
   { title: 'AI Chat', url: '/ai', icon: MessageSquare },
   { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
 ];

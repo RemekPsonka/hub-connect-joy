@@ -137,3 +137,6 @@ verify_jwt = false
 
 [functions.gcal-events]
 verify_jwt = false
+
+[functions.sovra-chat]
+verify_jwt = false
