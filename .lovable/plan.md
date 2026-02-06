@@ -1,153 +1,199 @@
 
+# Dashboard Redesign with Phase 0 Components
 
-# ErrorBoundary Enhancement + Standardized Toast Notifications
+## Overview
 
-## Current Situation
+Rebuild `src/pages/Dashboard.tsx` into a widget-based 12-column grid layout using exclusively the Phase 0 components (StatCard, DataCard, EmptyState, SkeletonCard). The page will use existing hooks for data fetching and lazy-load recharts for the activity chart.
 
-### ErrorBoundary
-The `ErrorBoundary` at `src/components/ErrorBoundary.tsx` is already a well-built class component with:
-- Error logging to Supabase `error_logs` table
-- Fallback UI with "Sprobuj ponownie", "Strona glowna", "Zglos blad" actions
-- Collapsible error details (dev-only stack traces)
-- `withErrorBoundary` HOC helper
+## What changes
 
-It is used in two places:
-- `src/App.tsx` -- wraps the entire app (top-level catch-all)
-- `src/App.tsx` -- wraps the `<Network />` route specifically
+- **1 file modified**: `src/pages/Dashboard.tsx` -- complete rewrite of the page layout and content
 
-However, `AppLayout.tsx` does NOT wrap the `<Outlet />` with ErrorBoundary, meaning page-level crashes still bubble up to the top-level boundary and lose the sidebar/header context.
+## Data Sources (existing hooks -- NOT modified)
 
-### Toast Notifications
-- Sonner is the primary toast library (~100 files import `toast` from `sonner`)
-- Radix UI Toast (`use-toast`) also exists but is secondary
-- No wrapper/utility -- every file imports `toast` directly from `sonner`
-- No standardized styling for success/error/warning/info types
+| Widget | Hook | Data |
+|--------|------|------|
+| StatCards | `useDashboardStats()` | total_contacts, pending_tasks, today_consultations, healthy/warning/critical contacts |
+| Activity Chart | `useContacts({ sortBy: 'created_at', sortOrder: 'desc' })` inline query | Last 7 days activity from direct Supabase query |
+| Upcoming Meetings | `useUpcomingConsultations(5)` from `useConsultations` | Next 5 scheduled consultations |
+| Active Projects | `useProjects()` | Filtered client-side to status IN (new, in_progress, analysis), limit 5 |
+| Recent Contacts | `useContacts({ sortBy: 'created_at', sortOrder: 'desc', pageSize: 5 })` | 5 most recent contacts |
 
-## Changes Summary
-
-- **1 file modified**: `src/components/layout/AppLayout.tsx` -- wrap Outlet with ErrorBoundary
-- **1 file created**: `src/lib/toast.ts` -- standardized toast wrapper
-- **0 files modified** on ErrorBoundary itself -- it already meets all requirements
-
----
-
-## Detailed Changes
-
-### 1. ErrorBoundary -- NO changes needed
-
-The existing component already satisfies every requirement from the prompt:
-- Class component with proper error boundary lifecycle
-- Fallback UI with AlertTriangle icon, "Cos poszlo nie tak" heading, description
-- "Sprobuj ponownie" button (resets error state)
-- "Strona glowna" button (navigates to `/`)
-- Dev-only collapsible error details with stack trace
-- `fallbackComponent` prop for custom fallbacks
-- Supabase error logging
-- `withErrorBoundary` HOC
-
-No modifications are necessary.
-
-### 2. Toast Wrapper (`src/lib/toast.ts`) -- NEW file
-
-Create a standardized toast API that wraps Sonner's `toast()` function:
+## Layout Structure
 
 ```text
-showToast.success(message)   -> green accent, CheckCircle icon, 4s auto-dismiss
-showToast.error(message, details?) -> red accent, XCircle icon, 8s auto-dismiss, optional subtitle
-showToast.warning(message)   -> amber accent, AlertTriangle icon, 6s auto-dismiss
-showToast.info(message)      -> blue accent, Info icon, 4s auto-dismiss
-showToast.loading(message)   -> spinner, returns toast ID for later dismiss/update
+Desktop (grid-cols-12):
+
++--------+--------+--------+--------+
+| StatCard| StatCard| StatCard| StatCard|
+| span-3 | span-3 | span-3 | span-3 |
++--------+--------+--------+--------+
+| Activity Chart (recharts)  | Upcoming |
+| col-span-8                 | span-4   |
++----------------------------+----------+
+| Projects in Progress       | Recent   |
+| col-span-6                 | Contacts |
+|                            | span-6   |
++----------------------------+----------+
+
+Tablet (sm:grid-cols-6):
+- StatCards: span-3 each (2 per row)
+- Activity Chart: span-6 (full width)
+- Upcoming: span-6 (full width)
+- Projects: span-6
+- Recent Contacts: span-6
+
+Mobile (grid-cols-1):
+- Everything stacks vertically
 ```
 
-Implementation approach:
-- Import `toast` from `sonner`
-- Use `toast.custom()` or `toast()` with `className` and `description` props
-- Each method renders a custom React element with the icon + styled left border
-- `showToast.loading` returns the toast ID so callers can do `toast.dismiss(id)` or `toast.success(message, { id })`
+## Detailed Implementation
 
-This is purely additive -- existing `toast()` calls throughout the app continue to work unchanged.
+### Welcome Section
 
-### 3. AppLayout Integration (`src/components/layout/AppLayout.tsx`) -- MODIFY
+Keep existing welcome header with director's first name and formatted date. Simplified layout -- no longer wrapped in extra divs.
 
-Wrap the `<Outlet />` inside the content area with an ErrorBoundary:
+### Top Row -- 4 StatCards
 
-Before:
-```text
-<main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
-  <Outlet />
-</main>
-```
+Each card uses the upgraded StatCard component with `color` prop:
 
-After:
-```text
-<main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
-  <ErrorBoundary>
-    <Outlet />
-  </ErrorBoundary>
-</main>
-```
+1. **Kontakty** -- icon: `Users`, value: `total_contacts`, color: `'blue'`, trend: computed from `new_contacts_30d` and `contacts_prev_30d` (percentage change)
+2. **Zadania w toku** -- icon: `CheckSquare`, value: `pending_tasks`, color: `'violet'`
+3. **Spotkania dzis** -- icon: `Calendar`, value: `today_consultations`, color: `'emerald'`
+4. **Srednia relacji** -- icon: `Heart`, value: computed health percentage from `healthy_contacts / (healthy + warning + critical) * 100`, formatted as `XX%`, color: `'amber'`
 
-This means page-level errors will be caught inside the layout, preserving the sidebar and header. The top-level ErrorBoundary in `App.tsx` remains as a final catch-all.
+### Middle Row -- Activity Chart + Upcoming Meetings
+
+**Activity Chart (col-span-8)**:
+- DataCard with title "Aktywnosc tygodnia"
+- Action slot: a Select dropdown with options Tydzien/Miesiac/Kwartal (only Tydzien functional)
+- Body: Lazy-loaded recharts `LineChart` inside `Suspense` with `SkeletonCard variant="data" lines={6}` fallback
+- Chart data: Simple inline query fetching contact/task creation counts over last 7 days using `supabase.from('contacts').select('created_at')` with date filtering, grouped by day
+- Uses `ResponsiveContainer`, `Line`, `XAxis`, `YAxis`, `Tooltip`, `CartesianGrid`
+- Line color: violet-500 (`#8b5cf6`)
+
+**Upcoming Meetings (col-span-4)**:
+- DataCard with title "Nadchodzace spotkania"
+- Body: List of up to 5 consultations from `useUpcomingConsultations(5)`
+- Each item: flex gap-3 with a violet dot indicator (`w-2 h-2 rounded-full bg-violet-500 mt-2`) + title (`text-sm font-medium`) + formatted time (`text-xs text-muted-foreground`)
+- Empty state: `EmptyState` with Calendar icon, "Brak spotkan", "Spokojny dzien!"
+- Footer: Link "Zobacz konsultacje" navigating to `/consultations`
+
+### Bottom Row -- Projects + Recent Contacts
+
+**Projects (col-span-6)**:
+- DataCard with title "Projekty w toku"
+- Action: Button ghost "Zobacz wszystkie" linking to `/projects`
+- Body: Up to 5 projects filtered client-side from `useProjects()` where status is `new`, `in_progress`, or `analysis`
+- Each item: flex justify-between items-center py-2 with bottom border
+  - Left: color dot (w-3 h-3 rounded-full, using project.color) + name (text-sm font-medium)
+  - Right: status badge using `getStatusConfig()`
+- Empty state: EmptyState with FolderOpen icon, "Brak projektow", actionLabel "Utworz projekt", onAction navigates to `/projects`
+
+**Recent Contacts (col-span-6)**:
+- DataCard with title "Ostatnio dodane kontakty"
+- Action: Button ghost "Wszyscy" linking to `/contacts`
+- Body: 5 most recent contacts from `useContacts({ sortBy: 'created_at', sortOrder: 'desc', pageSize: 5 })`
+- Each item: flex items-center gap-3 py-2 with bottom border
+  - Avatar circle (w-8 h-8 rounded-full bg-muted) with initials
+  - Name (text-sm font-medium) + company (text-xs text-muted-foreground)
+  - Right: relative time using `formatDistanceToNow` from date-fns ("2h temu")
+
+### Loading State
+
+When `isLoading` is true:
+- Top row: 4x `SkeletonCard variant="stat"`
+- Middle left: `SkeletonCard variant="data" lines={6}` with col-span-8
+- Middle right: `SkeletonCard variant="list" lines={5}` with col-span-4
+- Bottom: 2x `SkeletonCard variant="data" lines={5}` with col-span-6 each
+
+### Empty State (no contacts)
+
+When `total_contacts === 0` and not loading, show a full-width DataCard with EmptyState (same as current behavior but styled consistently).
 
 ## Technical Details
 
-### Toast wrapper API (src/lib/toast.ts)
-
-The wrapper uses Sonner's `toast()` with custom JSX rendering:
+### Recharts lazy loading
 
 ```text
-import { toast } from 'sonner';
-import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
-
-export const showToast = {
-  success: (message: string) => {
-    toast(message, {
-      icon: <CheckCircle className="h-5 w-5 text-emerald-500" />,
-      duration: 4000,
-      className: 'border-l-4 border-l-emerald-500',
-    });
-  },
-  error: (message: string, details?: string) => {
-    toast(message, {
-      icon: <XCircle className="h-5 w-5 text-red-500" />,
-      duration: 8000,
-      description: details,
-      className: 'border-l-4 border-l-red-500',
-    });
-  },
-  warning: (message: string) => {
-    toast(message, {
-      icon: <AlertTriangle className="h-5 w-5 text-amber-500" />,
-      duration: 6000,
-      className: 'border-l-4 border-l-amber-500',
-    });
-  },
-  info: (message: string) => {
-    toast(message, {
-      icon: <Info className="h-5 w-5 text-blue-500" />,
-      duration: 4000,
-      className: 'border-l-4 border-l-blue-500',
-    });
-  },
-  loading: (message: string) => {
-    return toast.loading(message);
-  },
-};
+const LazyLineChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.LineChart }))
+);
+// Additional named exports loaded alongside:
+// ResponsiveContainer, Line, XAxis, YAxis, Tooltip, CartesianGrid
+// These will be imported via a wrapper component that's lazy-loaded as a whole
 ```
 
-### Sonner configuration update
+To avoid issues with multiple named exports, the chart will be extracted into a small inline component `ActivityChart` defined within Dashboard.tsx (not a separate file), and the entire recharts import block will be inside that component. The lazy boundary wraps this inline component.
 
-The existing Sonner `<Toaster>` in `src/components/ui/sonner.tsx` may need a small props addition for `position="bottom-right"` and `visibleToasts={3}` to match the spec. This is a minor one-line change.
+### Activity data query
+
+A simple `useQuery` inside the Dashboard component:
+
+```text
+useQuery({
+  queryKey: ['dashboard-activity-7d', tenantId],
+  queryFn: async () => {
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = subDays(new Date(), 6 - i);
+      return format(d, 'yyyy-MM-dd');
+    });
+
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('created_at')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', days[0]);
+
+    const { data: tasks } = await supabase
+      .from('tasks')
+      .select('created_at')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', days[0]);
+
+    return days.map(day => ({
+      day: format(new Date(day), 'EEE', { locale: pl }),
+      kontakty: contacts?.filter(c => c.created_at?.startsWith(day)).length || 0,
+      zadania: tasks?.filter(t => t.created_at?.startsWith(day)).length || 0,
+    }));
+  },
+  enabled: !!tenantId,
+  staleTime: 5 * 60 * 1000,
+});
+```
+
+### Health score computation
+
+```text
+const total = (healthy_contacts || 0) + (warning_contacts || 0) + (critical_contacts || 0);
+const healthPercent = total > 0 ? Math.round(((healthy_contacts || 0) / total) * 100) : 0;
+```
+
+### Contacts trend computation
+
+```text
+const prevCount = dashboardStats?.contacts_prev_30d || 0;
+const newCount = dashboardStats?.new_contacts_30d || 0;
+const trendValue = prevCount > 0 ? Math.round(((newCount - prevCount) / prevCount) * 100) : 0;
+```
+
+### Imports
+
+- `useAuth`, `useDashboardStats`, `useUpcomingConsultations`, `useProjects`, `useContacts` -- existing hooks
+- `StatCard`, `DataCard`, `EmptyState`, `SkeletonCard` -- Phase 0 components
+- `Button` -- from shadcn
+- `Users, CheckSquare, Calendar, Heart, FolderOpen, UserPlus` -- Lucide icons
+- `useNavigate` -- react-router-dom
+- `formatDistanceToNow, subDays, format` -- date-fns
+- `lazy, Suspense, useState` -- React
+- `useQuery` -- tanstack/react-query
+- `supabase` -- integrations client
 
 ### What is NOT changed
-- No pages modified
+
 - No hooks modified
-- No existing `toast()` calls changed anywhere
-- ErrorBoundary.tsx untouched (already complete)
+- No other pages modified
+- No new components created (chart is inline)
 - No database changes
-
-### Files summary
-- 1 new file: `src/lib/toast.ts`
-- 1 modified: `src/components/layout/AppLayout.tsx` (add ErrorBoundary around Outlet)
-- 1 modified: `src/components/ui/sonner.tsx` (add position + visibleToasts props)
-
+- Existing dashboard sub-components (QuickActions, RelationshipAlerts, etc.) are no longer imported but their files remain untouched for potential future use
+- AppSidebar, HeaderBar, ErrorBoundary untouched
