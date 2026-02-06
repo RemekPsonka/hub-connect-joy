@@ -131,3 +131,9 @@ verify_jwt = false
 
 [functions.remek-chat]
 verify_jwt = false
+
+[functions.gcal-auth]
+verify_jwt = false
+
+[functions.gcal-events]
+verify_jwt = false
