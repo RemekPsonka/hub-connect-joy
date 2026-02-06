@@ -18,6 +18,7 @@ import {
   BarChart3,
   Users2,
   FolderKanban,
+  Sun,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -38,30 +39,44 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 
-// CRM - główne funkcje operacyjne
-const crmNavigationItems = [
+// OVERVIEW
+const overviewItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+];
+
+// CRM
+const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Firmy', url: '/contacts', icon: Building2 }, // filtered by companies
+  { title: 'Sieć kontaktów', url: '/network', icon: Network },
+];
+
+// PROJEKTY
+const projectItems = [
   { title: 'Projekty', url: '/projects', icon: FolderKanban },
+  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
   { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound },
-  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
 ];
 
-// AI & Analiza
-const aiNavigationItems = [
-  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
-  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
-  { title: 'Dopasowania', url: '/matches', icon: Handshake },
-  { title: 'Analityka', url: '/analytics', icon: BarChart3 },
-];
-
-// Sieć & Sprzedaż
-const networkNavigationItems = [
-  { title: 'Sieć kontaktów', url: '/network', icon: Network },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+// SPRZEDAŻ
+const salesItems = [
   { title: 'Deals', url: '/deals', icon: TrendingUp },
   { title: 'Zespół Deals', url: '/deals-team', icon: Users2 },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake },
+];
+
+// AI
+const aiItems = [
+  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
+  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
+];
+
+// SYSTEM
+const systemItems = [
+  { title: 'Analityka', url: '/analytics', icon: BarChart3 },
+  { title: 'Ustawienia', url: '/settings', icon: Settings },
 ];
 
 // Nawigacja dla asystenta - ograniczona
@@ -76,8 +91,8 @@ function NavItem({ item }: { item: { title: string; url: string; icon: typeof Se
         <NavLink
           to={item.url}
           end={item.url === '/'}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-          activeClassName="bg-primary/15 text-sidebar-primary font-medium border-l-2 border-sidebar-primary -ml-[2px]"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150"
+          activeClassName="bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]"
         >
           <item.icon className="h-4 w-4 shrink-0" />
           <span>{item.title}</span>
@@ -90,7 +105,7 @@ function NavItem({ item }: { item: { title: string; url: string; icon: typeof Se
 function GroupLabel({ children, isCollapsed }: { children: string; isCollapsed: boolean }) {
   if (isCollapsed) return null;
   return (
-    <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-sidebar-foreground/40 px-3 mb-1 font-medium">
+    <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/35 px-3 mb-1 font-semibold">
       {children}
     </SidebarGroupLabel>
   );
@@ -121,16 +136,13 @@ export function AppSidebar() {
     .slice(0, 2)
     .toUpperCase() || '?';
 
-  // Buduj listę elementów administracyjnych
+  // Admin items
   const adminItems: Array<{ title: string; url: string; icon: typeof Settings }> = [];
-  adminItems.push({ title: 'Ustawienia', url: '/settings', icon: Settings });
-  
   if (isAdmin) {
     adminItems.push({ title: 'Przedstawiciele', url: '/representatives', icon: UserCog });
     adminItems.push({ title: 'Zgłoszenia', url: '/bug-reports', icon: Bug });
     adminItems.push({ title: 'Zarządzanie', url: '/owner', icon: Shield });
   }
-  
   if (isSuperadmin) {
     adminItems.push({ title: 'Superadmin', url: '/superadmin', icon: Building2 });
   }
@@ -138,21 +150,24 @@ export function AppSidebar() {
   const navGroups = isAssistant
     ? [{ label: 'Menu', items: assistantNavigationItems }]
     : [
-        { label: 'CRM', items: crmNavigationItems },
-        { label: 'AI & Analiza', items: aiNavigationItems },
-        { label: 'Sieć', items: networkNavigationItems },
+        { label: 'Overview', items: overviewItems },
+        { label: 'CRM', items: crmItems },
+        { label: 'Projekty', items: projectItems },
+        { label: 'Sprzedaż', items: salesItems },
+        { label: 'AI', items: aiItems },
+        { label: 'System', items: systemItems },
       ];
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       {/* Logo area */}
-      <SidebarHeader className="border-b border-sidebar-border px-3 py-4">
+      <SidebarHeader className="border-b border-sidebar-border px-3 h-14 flex items-center">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
             <Network className="h-4.5 w-4.5 text-sidebar-primary" />
           </div>
           {!isCollapsed && (
-            <span className="font-bold text-sidebar-foreground text-sm whitespace-nowrap">
+            <span className="font-bold text-sidebar-foreground text-sm whitespace-nowrap tracking-tight">
               Network Assistant
             </span>
           )}
@@ -161,12 +176,12 @@ export function AppSidebar() {
       
       <SidebarContent className="px-2 py-3 scrollbar-thin">
         {navGroups.map((group) => (
-          <SidebarGroup key={group.label} className="mb-2">
+          <SidebarGroup key={group.label} className="mb-1">
             <GroupLabel isCollapsed={isCollapsed}>{group.label}</GroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">
                 {group.items.map((item) => (
-                  <NavItem key={item.title} item={item} />
+                  <NavItem key={item.title + item.url} item={item} />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -176,33 +191,39 @@ export function AppSidebar() {
       
       {/* Footer — admin + user info */}
       <SidebarFooter className="border-t border-sidebar-border px-2 py-3">
-        {!isCollapsed && adminItems.length > 0 && (
-          <p className="text-[11px] uppercase tracking-wider text-sidebar-foreground/40 px-3 mb-1 font-medium">
-            Administracja
-          </p>
+        {adminItems.length > 0 && (
+          <>
+            {!isCollapsed && (
+              <p className="text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/35 px-3 mb-1 font-semibold">
+                Admin
+              </p>
+            )}
+            <SidebarMenu className="space-y-0.5 mb-2">
+              {adminItems.map((item) => (
+                <NavItem key={item.title} item={item} />
+              ))}
+            </SidebarMenu>
+          </>
         )}
-        <SidebarMenu className="space-y-0.5">
-          {adminItems.map((item) => (
-            <NavItem key={item.title} item={item} />
-          ))}
-        </SidebarMenu>
         
         {/* User info */}
-        {!isCollapsed && userName && (
-          <div className="flex items-center gap-2.5 px-3 pt-3 mt-2 border-t border-sidebar-border">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-xs font-medium">
+        {userName && (
+          <div className={`flex items-center gap-2.5 px-3 pt-3 mt-1 border-t border-sidebar-border ${isCollapsed ? 'justify-center' : ''}`}>
+            <Avatar className="h-8 w-8 shrink-0">
+              <AvatarFallback className="bg-primary/20 text-sidebar-primary text-xs font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {userName}
-              </p>
-              <p className="text-[11px] text-sidebar-foreground/50">
-                {getUserRole()}
-              </p>
-            </div>
+            {!isCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {userName}
+                </p>
+                <p className="text-[11px] text-sidebar-foreground/40">
+                  {getUserRole()}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </SidebarFooter>
