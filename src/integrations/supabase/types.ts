@@ -1997,6 +1997,7 @@ export type Database = {
           created_by: string | null
           deal_id: string
           description: string | null
+          details: Json | null
           id: string
           new_value: string | null
           old_value: string | null
@@ -2007,6 +2008,7 @@ export type Database = {
           created_by?: string | null
           deal_id: string
           description?: string | null
+          details?: Json | null
           id?: string
           new_value?: string | null
           old_value?: string | null
@@ -2017,6 +2019,7 @@ export type Database = {
           created_by?: string | null
           deal_id?: string
           description?: string | null
+          details?: Json | null
           id?: string
           new_value?: string | null
           old_value?: string | null
