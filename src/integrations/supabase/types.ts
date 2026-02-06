@@ -4081,6 +4081,57 @@ export type Database = {
           },
         ]
       }
+      role_audit_log: {
+        Row: {
+          action: string
+          changed_by_user_id: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          new_role: Database["public"]["Enums"]["app_role"] | null
+          old_role: Database["public"]["Enums"]["app_role"] | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          changed_by_user_id: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          new_role?: Database["public"]["Enums"]["app_role"] | null
+          old_role?: Database["public"]["Enums"]["app_role"] | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          changed_by_user_id?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          new_role?: Database["public"]["Enums"]["app_role"] | null
+          old_role?: Database["public"]["Enums"]["app_role"] | null
+          target_user_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_audit_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "role_audit_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_representatives: {
         Row: {
           created_at: string | null
@@ -4909,6 +4960,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_role_sgu: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
       is_deal_team_member: {
@@ -5029,7 +5084,7 @@ export type Database = {
       unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
-      app_role: "owner" | "admin" | "director"
+      app_role: "owner" | "admin" | "director" | "sgu"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5157,7 +5212,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "admin", "director"],
+      app_role: ["owner", "admin", "director", "sgu"],
     },
   },
 } as const
