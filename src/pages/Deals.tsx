@@ -8,7 +8,8 @@ import {
   type ViewMode,
 } from '@/components/deals';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, RefreshCw, TrendingUp, Target, PiggyBank, Trophy } from 'lucide-react';
 
 export default function Deals() {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
@@ -28,6 +29,21 @@ export default function Deals() {
     page,
     pageSize: 20,
   });
+
+  // Stats queries
+  const { data: openDealsData } = useDeals({ status: 'open', pageSize: 1000 });
+  const { data: wonDealsData } = useDeals({ status: 'won', pageSize: 1000 });
+  const { data: lostDealsData } = useDeals({ status: 'lost', pageSize: 1000 });
+
+  const openDeals = openDealsData?.data || [];
+  const wonDeals = wonDealsData?.data || [];
+  const lostDeals = lostDealsData?.data || [];
+
+  const totalValue = openDeals.reduce((sum, deal) => sum + deal.value, 0);
+  const avgDealSize = openDeals.length ? totalValue / openDeals.length : 0;
+  const winRate = wonDeals.length + lostDeals.length > 0
+    ? Math.round((wonDeals.length / (wonDeals.length + lostDeals.length)) * 100)
+    : 0;
 
   // Reset page when filters change
   useEffect(() => {
@@ -61,6 +77,53 @@ export default function Deals() {
 
   return (
     <div className="space-y-6">
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Otwarte Deals</CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{openDeals.length}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Wartość Pipeline</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {totalValue.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Średni Deal</CardTitle>
+            <PiggyBank className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {avgDealSize.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+            <Trophy className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{winRate}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <DealsHeader
         totalCount={dealsData?.count || 0}
         search={search}
