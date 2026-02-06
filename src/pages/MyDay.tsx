@@ -26,6 +26,7 @@ import { TaskModal } from '@/components/tasks/TaskModal';
 import { NewProjectDialog } from '@/components/projects/NewProjectDialog';
 import { MiniCalendar } from '@/components/my-day/MiniCalendar';
 import { GCalTodayEvents } from '@/components/my-day/GCalTodayEvents';
+import { SovraRemindersCard } from '@/components/sovra/SovraRemindersCard';
 
 // Priority dot colors
 const priorityColors: Record<string, string> = {
@@ -316,6 +317,9 @@ export default function MyDay() {
 
           {/* Google Calendar events */}
           <GCalTodayEvents />
+
+          {/* Sovra reminders */}
+          <SovraRemindersCard />
 
           {/* Active projects */}
           <DataCard
