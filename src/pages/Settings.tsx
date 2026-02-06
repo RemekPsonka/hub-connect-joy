@@ -21,6 +21,7 @@ import { TaskCategoriesManager } from '@/components/settings/TaskCategoriesManag
 import { GroupRefreshPolicyEditor } from '@/components/settings/GroupRefreshPolicyEditor';
 import { DataExportSettings } from '@/components/settings/DataExportSettings';
 import { GoogleCalendarSettings } from '@/components/settings/GoogleCalendarSettings';
+import { SovraReportSettings } from '@/components/sovra/SovraReportSettings';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -642,6 +643,7 @@ export default function Settings() {
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="space-y-6">
           <GoogleCalendarSettings />
+          <SovraReportSettings />
         </TabsContent>
       </Tabs>
 
