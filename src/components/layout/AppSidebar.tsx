@@ -43,6 +43,7 @@ import {
 // OVERVIEW
 const overviewItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Mój Dzień', url: '/my-day', icon: Sun },
 ];
 
 // CRM

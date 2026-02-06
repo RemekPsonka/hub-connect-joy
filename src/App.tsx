@@ -45,6 +45,7 @@ const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
 const Deals = lazy(() => import("./pages/Deals"));
 const DealDetail = lazy(() => import("./pages/DealDetail"));
 const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
+const MyDay = lazy(() => import("./pages/MyDay"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -89,6 +90,7 @@ const App = () => (
                 <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
                   {/* Director-only routes */}
                   <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
+                  <Route path="/my-day" element={<DirectorGuard><MyDay /></DirectorGuard>} />
                   <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
                   <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
                   <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
