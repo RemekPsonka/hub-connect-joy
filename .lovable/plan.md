@@ -1,144 +1,223 @@
 
-
-# Sovra — Tabele bazy danych + Edge Function sovra-morning-session
+# Sovra Chat — Edge Function (streaming) + Strona /sovra
 
 ## Podsumowanie
 
-Tworzymy fundamenty AI asystentki Sovra: dwie tabele w bazie danych (`sovra_sessions` i `sovra_reminders`) oraz Edge Function `sovra-morning-session`, ktora generuje poranny brief AI z danymi CRM i Google Calendar.
+Budujemy glowny chat AI asystentki Sovra: Edge Function `sovra-chat` ze streaming response i pelnym kontekstem CRM, plus dedykowana strona `/sovra` z profesjonalnym UI czatu — historia sesji w sidebarze, streaming z migajacym kursorem, quick actions i kontekst z URL params.
 
 ## Co sie zmieni
 
 | Zmiana | Plik / Zasob |
 |--------|-------------|
-| Migracja SQL | Dwie nowe tabele: `sovra_sessions`, `sovra_reminders` z RLS + indeksy |
-| Nowa Edge Function | `supabase/functions/sovra-morning-session/index.ts` |
-| Modyfikacja | `supabase/config.toml` — wpis dla nowej funkcji |
+| Nowa Edge Function | `supabase/functions/sovra-chat/index.ts` — streaming chat z kontekstem CRM |
+| Modyfikacja | `supabase/config.toml` — wpis dla sovra-chat |
+| Nowy hook | `src/hooks/useSovraChat.ts` — streaming, sesje, stan czatu |
+| Nowy hook | `src/hooks/useSovraSessions.ts` — lista historycznych sesji |
+| Nowa strona | `src/pages/Sovra.tsx` — pelny chat UI |
+| Modyfikacja | `src/App.tsx` — lazy route `/sovra` |
+| Modyfikacja | `src/components/layout/AppSidebar.tsx` — link "Sovra" w grupie AI |
+| Modyfikacja | `src/components/layout/Breadcrumbs.tsx` — label "Sovra" |
+
+---
 
 ## Szczegoly techniczne
 
-### 1. Migracja SQL
+### 1. Edge Function — sovra-chat
 
-Tabele nie istnieja jeszcze w bazie — zostana utworzone od zera.
+Streamingowa funkcja czatu z pelnym kontekstem projektow, zadan i kontaktow. Wzorowana na istniejacym `ai-chat/index.ts` (streaming proxy) i `sovra-morning-session/index.ts` (auth + rate limit + context).
 
-**sovra_sessions** — przechowuje sesje AI (morning brief, evening debrief, chat):
-- `id`, `tenant_id` (FK tenants), `director_id` (FK directors)
-- `type` — CHECK ('morning', 'evening', 'debrief', 'chat')
-- `title` — tytul sesji (np. "Poranny brief - 2026-02-06")
-- `content` — jsonb z danymi sesji (brief_text, statystyki)
-- `tasks_created`, `notes_created` — liczniki akcji podjqtych w sesji
-- `started_at`, `ended_at` — timestamptz
-- `metadata` — jsonb z kontekstem (surowe dane uzyte do generowania)
-
-**sovra_reminders** — przypomnienia generowane przez Sovre:
-- `id`, `tenant_id` (FK tenants), `director_id` (FK directors)
-- `type` — CHECK ('contact', 'deadline', 'inactive_project', 'daily_summary', 'follow_up')
-- `reference_id`, `reference_type` — opcjonalne powiazanie z encja CRM
-- `message` — tresc przypomnienia
-- `scheduled_at` — kiedy wyslac, `sent_at` — kiedy wyslano, `read_at` — kiedy przeczytano
-- `channel` — CHECK ('app', 'email'), domyslnie 'app'
-- `priority` — CHECK ('low', 'normal', 'high'), domyslnie 'normal'
-
-Obie tabele z RLS: `tenant_id = get_current_tenant_id() AND director_id = get_current_director_id()`.
-Indeksy na `(director_id, type)` dla sesji i `(director_id, scheduled_at) WHERE sent_at IS NULL` dla reminders.
-
-### 2. Edge Function — sovra-morning-session
-
-Funkcja generujaca poranny brief AI. Flow:
+**Flow:**
 
 ```text
 1. CORS + metoda POST
-2. Autentykacja przez verifyAuth() z _shared/auth.ts
-3. Rate limit: Upstash Redis (3 wywolania/h/director)
-   - Sekrety UPSTASH_REDIS_REST_URL i UPSTASH_REDIS_REST_TOKEN juz sa skonfigurowane
-4. Pobranie imienia directora z tabeli directors
-5. Rownolegle (Promise.all) pobranie danych kontekstowych:
-   A) tasksToday — tasks WHERE due_date = TODAY, assigned_to = director_id, status != 'done'
-   B) tasksOverdue — tasks WHERE due_date < TODAY, status NOT IN ('done','cancelled')
-   C) activeProjects — projects WHERE status IN ('new','in_progress','analysis')
-      i (owner_id = director_id OR director_id w project_members)
-   D) todayEvents — gcal-events (jesli gcal_tokens istnieje), w przeciwnym razie []
-   E) unreadReminders — sovra_reminders WHERE sent_at IS NULL, scheduled_at <= NOW()
-   F) recentNotes — project_notes ORDER BY created_at DESC LIMIT 5
-   G) tasksDoneYesterday — tasks WHERE updated_at >= wczoraj, status = 'done'
-6. Budowa context string (structured plaintext, max ~4000 tokenow)
-7. Wywolanie Lovable AI Gateway (Gemini 2.5 Flash)
-8. Zapis sesji do sovra_sessions
-9. Oznaczenie reminders jako wyslane (sent_at = NOW)
-10. Zwrot JSON z brief + danymi
+2. Autentykacja: verifyAuth(req, serviceClient) z _shared/auth.ts
+3. Walidacja Zod:
+   - message: string min(1) max(2000)
+   - session_id: string uuid optional
+   - context_type: enum('general','project','contact','task') default 'general'
+   - context_id: string uuid optional
+4. Rate limit: Upstash Redis sliding window (10 wywolan / 1 min / director)
+   - Klucz: sovra-chat:{director_id}
+   - RATE_LIMIT_MAX = 10, RATE_LIMIT_WINDOW_MS = 60_000
+5. Pobranie danych kontekstowych (Promise.all):
+   A) directorInfo — imie i rola z directors
+   B) activeProjects — do 10 projektow (status new/in_progress/analysis)
+   C) recentTasks — do 15 zadan (nie done, sortowane po due_date)
+   D) Kontekst specyficzny:
+      - context_type='project': projekt + taski + notatki
+      - context_type='contact': kontakt + firma + profil
+      - context_type='task': zadanie + projekt + subtaski
+   E) conversationHistory — jesli session_id: pobierz content.messages z sovra_sessions (ostatnie 20)
+6. Budowa messages array:
+   [system_prompt, context_message, ...previousMessages, user_message]
+7. Wywolanie Lovable AI Gateway:
+   - URL: https://ai.gateway.lovable.dev/v1/chat/completions
+   - Model: google/gemini-2.5-flash
+   - stream: true
+   - temperature: 0.7
+8. Streaming proxy z zapisem sesji:
+   - Proxy body streamu do klienta
+   - Po zakonczeniu streamu: zapisz/aktualizuj sovra_sessions
+   - Session ID przesylany w custom headerze X-Sovra-Session-Id
+9. Obsluga bledow AI (429, 402, 500) — JSON error response
 ```
 
-**Rate limiting** — implementacja bez zewnetrznego importu Upstash SDK (Deno nie obsluguje @upstash/ratelimit przez skypack). Zamiast tego: prosta logika sliding window bezposrednio przez Upstash REST API:
-- GET klucza z Redis (lista timestampow)
-- Sprawdz ile wywolan w ostatniej godzinie
-- Jesli >= 3: zwroc 429
-- Jesli < 3: ZADD timestamp i kontynuuj
+**System prompt (SOVRA_CHAT_SYSTEM_PROMPT):**
+Zdefiniowany jako stala. Instrukcje osobowosci Sovra: pewna siebie, konkretna, po polsku, uzywa imienia uzytkownika, max 300 slow, markdown oszczednie, sugeruje akcje (taski formatowane jako emoji + bold + priorytet + deadline), nie wymysla danych. Zgodny z treseq z promptu uzytkownika.
 
-**Google Calendar events** — pobierane wewnetrznie przez ten sam mechanizm co gcal-events (bezposrednie wywolanie Google Calendar API z tokenem z gcal_tokens, z auto-refresh). NIE wywolujemy innej Edge Function — duplikujemy logike refreshowania tokena i fetchowania eventow wewnatrz tej funkcji, korzystajac z serwisowego klienta Supabase.
+**Zapis sesji (saveSovraSession):**
+- Jesli `session_id` w request: pobierz istniejaca sesje, dodaj nowe wiadomosci do `content.messages`, UPDATE
+- Jesli brak `session_id`: INSERT nowa sesja type='chat', title generowany z pierwszej wiadomosci (pierwsze 50 znakow), content = `{ messages: [{role, content, timestamp}] }`
+- Zwracanie session_id przez header `X-Sovra-Session-Id` w response
 
-**Lovable AI Gateway** — wywolanie:
-- URL: `https://ai.gateway.lovable.dev/v1/chat/completions`
-- Header: `Authorization: Bearer ${LOVABLE_API_KEY}`
-- Model: `google/gemini-2.5-flash`
-- Messages: system prompt SOVRA_MORNING_SYSTEM_PROMPT + user message z kontekstem
-- Bez streamingu (standardowy request/response)
+**Rate limiting:**
+- Ta sama implementacja co w sovra-morning-session (Upstash REST API pipeline)
+- Inny klucz (`sovra-chat:`) i inne limity (10/min zamiast 3/h)
 
-**System prompt** — zdefiniowany jako stala w pliku Edge Function. Instrukcje dla Sovra:
-- Styl: pewna siebie, konkretna, po polsku, uzywa imienia uzytkownika
-- Format: powitanie, podsumowanie wczoraj, priorytety na dzis (TOP 3), spotkania, zaleglosci, projekty, motywacja
-- Zasady: nie wymyslaj danych, logika dla piatku/poniedzialku, brak spotkan/zalegsosci = pozytywna informacja
-
-**Fallback** — gdy Gemini jest niedostepny lub zwroci blad:
-- Generowany jest prosty brief bez AI z surowymi danymi
-- Format: "Dzien dobry, [imie]. Nie udalem sie wygenerowac pelnego briefu..." + listy taskow/eventow
-- Sesja zapisywana z metadata.fallback = true
-
-**Response** — JSON:
-```text
-{
-  session_id: string,
-  brief: string,
-  data: {
-    tasks_today: array,
-    tasks_overdue: array,
-    events: array,
-    projects: array,
-    reminders_cleared: number
-  }
-}
-```
-
-### 3. config.toml
+### 2. config.toml
 
 Nowy wpis:
 ```text
-[functions.sovra-morning-session]
+[functions.sovra-chat]
 verify_jwt = false
 ```
 
-Uwaga: mimo ze plan mowi `verify_jwt = true`, w praktyce funkcja sama weryfikuje JWT przez `verifyAuth()` z _shared/auth.ts (ten sam wzorzec co wszystkie inne funkcje w projekcie). Ustawienie `verify_jwt = false` w config.toml jest zgodne z istniejacym wzorcem — kazda funkcja w projekcie ma `verify_jwt = false` i weryfikuje auth rucznie.
+Zgodnie z wzorcem projektu — wszystkie funkcje maja `verify_jwt = false` i weryfikuja auth rucznie przez `verifyAuth()`.
 
-### 4. Sekrety
+### 3. Hook useSovraChat (src/hooks/useSovraChat.ts)
 
-Wszystkie wymagane sekrety sa juz skonfigurowane:
-- `LOVABLE_API_KEY` — do Lovable AI Gateway (auto-provisioned)
-- `UPSTASH_REDIS_REST_URL` — do rate limitingu
-- `UPSTASH_REDIS_REST_TOKEN` — do rate limitingu
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — do refreshowania tokenow GCal
+Stan i logika czatu. Wzorowany na streamingu z `src/hooks/useAIChat.ts` i zarzadzaniu sesjami z `src/hooks/useRemekChat.ts`.
 
-Nie trzeba dodawac zadnych nowych sekretow.
+**Eksporty:**
+- `messages: SovraMessage[]` — lista wiadomosci
+- `isStreaming: boolean` — czy trwa streaming
+- `sessionId: string | null` — aktualny ID sesji
+- `sendMessage(text, contextType?, contextId?)` — wysyla wiadomosc, streamuje odpowiedz
+- `loadSession(id)` — laduje historyczna sesje z sovra_sessions
+- `newSession()` — czysci wiadomosci, resetuje sessionId
+- `contextType / contextId` — aktualny kontekst (z URL params lub manualnie)
+- `setContext(type, id)` — ustawia kontekst
+
+**Typ SovraMessage:**
+```text
+{ role: 'user' | 'assistant', content: string, timestamp: Date }
+```
+
+**Streaming:**
+- Fetch do `${VITE_SUPABASE_URL}/functions/v1/sovra-chat` z auth tokenem
+- SSE parsing identyczny jak w useAIChat.ts (line-by-line, handle CRLF, partial JSON, [DONE])
+- Odczyt `X-Sovra-Session-Id` z response headers po zakonczeniu streamu
+- Update ostatniej wiadomosci assistant w state (nie push nowej na kazdy chunk)
+- Error handling: 429 → toast "Limit wiadomosci", 402 → toast "Wymagana platnosc"
+
+### 4. Hook useSovraSessions (src/hooks/useSovraSessions.ts)
+
+Prosta lista sesji do sidebara.
+
+- useQuery `['sovra-sessions']`
+- SELECT id, type, title, started_at, tasks_created FROM sovra_sessions WHERE director_id = me ORDER BY started_at DESC LIMIT 50
+- Zwraca: `{ sessions: SovraSession[], isLoading }`
+- Typ SovraSession: `{ id, type, title, started_at, tasks_created }`
+
+### 5. Strona Sovra (src/pages/Sovra.tsx)
+
+Pelny chat UI z historia sesji. Layout:
+
+```text
++--------------------------------------------------+
+| [Hamburger] Sovra                         [badge] |
++--------------------------------------------------+
+|  Sidebar (w-64)  |     Main Chat Area             |
+|  +-----------+   |                                |
+|  | Nowa rozm |   |  [Welcome screen / Messages]  |
+|  | Szukaj... |   |                                |
+|  +-----------+   |                                |
+|  | Sesja 1   |   |                                |
+|  | Sesja 2   |   |                                |
+|  | Sesja 3   |   |                                |
+|  +-----------+   |  [Context indicator]           |
+|                  |  [Input area + Send]            |
++--------------------------------------------------+
+```
+
+**A) Left sidebar (w-64, desktop only):**
+- Header: "Sovra" text-lg font-bold + Button ghost Plus "Nowa rozmowa" (wywoluje newSession)
+- Lista sesji z useSovraSessions:
+  - Kazda: px-3 py-2 rounded-lg cursor-pointer hover:bg-muted
+  - Title: text-sm font-medium truncate
+  - Type badge: morning "Brief", chat "Chat", debrief "Debrief"
+  - Date: text-xs text-muted-foreground (format relative lub data)
+  - Active: bg-muted border border-border
+- Mobile: sidebar ukryty, dostepny jako Sheet z hamburger button
+
+**B) Main chat area:**
+- Welcome screen (gdy brak wiadomosci):
+  - Avatar Sovra: w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600, litera "S"
+  - Tytul: "Czesc, jestem Sovra" text-xl font-semibold
+  - Opis: "Twoja asystentka projektowa"
+  - Quick actions grid 2x2:
+    1. "Poranny brief" → auto-send "Wygeneruj moj poranny brief"
+    2. "Moje priorytety" → auto-send "Jakie sa moje priorytety na dzis?"
+    3. "Status projektow" → auto-send "Pokaz status moich projektow"
+    4. "Sugestie kontaktow" → auto-send "Kogo powinienem skontaktowac w tym tygodniu?"
+  - Kazdy: bg-card border rounded-xl p-4 hover:border-primary/30 hover:shadow-sm
+
+- Messages:
+  - User: flex justify-end, bubble bg-primary text-primary-foreground rounded-2xl rounded-br-md max-w-[70%]
+  - Sovra: flex justify-start gap-3, avatar (gradient violet-indigo "S") + bubble bg-card border rounded-2xl rounded-bl-md max-w-[70%]
+  - Sovra bubble: react-markdown rendering (prose prose-sm), oszczedny markdown
+  - Streaming cursor: w-1.5 h-4 bg-primary animate-pulse inline-block (widoczny gdy isStreaming i ostatnia wiadomosc assistant)
+  - Auto-scroll: useRef na koncu listy wiadomosci + scrollIntoView({ behavior: 'smooth' }) w useEffect na zmiane messages
+
+**C) Input area (border-t, sticky bottom):**
+- Textarea: auto-resize (min 1 linia, max 4), rounded-xl, focus:ring-primary
+- Placeholder: "Napisz do Sovry..."
+- Send button: bg-primary rounded-lg p-2, ikona Send
+- Enter = send, Shift+Enter = nowa linia
+- Disabled podczas streaming (button → Loader2 spinner)
+
+**D) Context indicator (nad inputem, opcjonalny):**
+- Jesli contextType ustawiony: bg-primary/5 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs
+- "Kontekst: Projekt [nazwa]" / "Kontekst: Kontakt [nazwa]" z X button do usuniecia
+- Ustawiany z URL params: `/sovra?context=project&id=xxx`
+- Pobranie nazwy encji przez dodatkowy useQuery
+
+### 6. Routing (App.tsx)
+
+- Nowy lazy import: `const Sovra = lazy(() => import("./pages/Sovra"));`
+- Nowy route w DirectorGuard: `<Route path="/sovra" element={<DirectorGuard><Sovra /></DirectorGuard>} />`
+- Umieszczony obok istniejacych route'ow AI
+
+### 7. Sidebar (AppSidebar.tsx)
+
+- Zmiana w grupie AI:
+  - Zastapienie "AI Chat" (url: /ai) przez "Sovra" (url: /sovra, icon: Sparkles)
+  - Zachowanie "Wyszukiwanie AI" (url: /search) bez zmian
+  - Stary route /ai nadal dziala (nie usuwamy go) — ale w nawigacji priorytet ma Sovra
+
+### 8. Breadcrumbs (Breadcrumbs.tsx)
+
+- Dodanie wpisu: `'sovra': 'Sovra'` w routeLabels
+
+## Sekrety
+
+Wszystkie wymagane sekrety juz sa skonfigurowane:
+- LOVABLE_API_KEY — Lovable AI Gateway
+- UPSTASH_REDIS_REST_URL i UPSTASH_REDIS_REST_TOKEN — rate limiting
 
 ## Bezpieczenstwo
 
-- RLS na obu tabelach — kazdy dyrektor widzi tylko swoje sesje i reminders
-- Rate limit 3/h/director zapobiega naduzywaniu AI
-- Tokeny Google nie sa przekazywane do Gemini — tylko nazwy eventow i czasy
 - Edge Function wymaga autentykacji (verifyAuth)
-- Context string jest truncowany do ~4000 tokenow
+- Tylko dyrektorzy maja dostep (userType === 'director')
+- Rate limit 10 wiadomosci/min/director
+- Dane CRM pobierane przez service role client z filtrami tenant_id
+- Zod walidacja inputu (max 2000 znakow)
+- Session ID zwracany przez header (nie w stream body) — unika problemu z parsowaniem
 
 ## Co NIE zostanie zmienione
 
-- Zadne istniejace Edge Functions (gcal-auth, gcal-events, ai-chat, remek-chat itd.)
-- Zadne pliki frontendowe (UI Sovra bedzie w kolejnym prompcie)
-- Zadne istniejace tabele w bazie danych
-- Hook useGoogleCalendar — bez zmian
-
+- Edge Functions: ai-chat, remek-chat, sovra-morning-session — bez zmian
+- Strona /ai (AIChat.tsx) — bez zmian (nadal dostepna, ale sidebar prowadzi do /sovra)
+- Tabele sovra_sessions i sovra_reminders — juz istnieja, bez modyfikacji schematu
+- Hooki useAIChat, useRemekChat — bez zmian
+- Komponenty RemekChatWidget — bez zmian
