@@ -245,7 +245,7 @@ export function PromoteDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {members.map((member) => (
-                      <SelectItem key={member.id} value={member.director?.full_name || member.director_id}>
+                      <SelectItem key={member.id} value={member.director_id}>
                         {member.director?.full_name || 'Nieznany'}
                       </SelectItem>
                     ))}
