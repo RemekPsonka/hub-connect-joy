@@ -2047,11 +2047,108 @@ export type Database = {
           },
         ]
       }
+      deal_history: {
+        Row: {
+          changed_by: string
+          created_at: string | null
+          deal_id: string
+          field_name: string
+          id: string
+          new_stage_id: string | null
+          new_value: string | null
+          old_stage_id: string | null
+          old_value: string | null
+          tenant_id: string
+        }
+        Insert: {
+          changed_by: string
+          created_at?: string | null
+          deal_id: string
+          field_name: string
+          id?: string
+          new_stage_id?: string | null
+          new_value?: string | null
+          old_stage_id?: string | null
+          old_value?: string | null
+          tenant_id: string
+        }
+        Update: {
+          changed_by?: string
+          created_at?: string | null
+          deal_id?: string
+          field_name?: string
+          id?: string
+          new_stage_id?: string | null
+          new_value?: string | null
+          old_stage_id?: string | null
+          old_value?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_history_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_history_new_stage_id_fkey"
+            columns: ["new_stage_id"]
+            isOneToOne: false
+            referencedRelation: "deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_history_new_stage_id_fkey"
+            columns: ["new_stage_id"]
+            isOneToOne: false
+            referencedRelation: "mv_deal_pipeline_stats"
+            referencedColumns: ["stage_id"]
+          },
+          {
+            foreignKeyName: "deal_history_old_stage_id_fkey"
+            columns: ["old_stage_id"]
+            isOneToOne: false
+            referencedRelation: "deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_history_old_stage_id_fkey"
+            columns: ["old_stage_id"]
+            isOneToOne: false
+            referencedRelation: "mv_deal_pipeline_stats"
+            referencedColumns: ["stage_id"]
+          },
+          {
+            foreignKeyName: "deal_history_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_history_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_products: {
         Row: {
           created_at: string
           deal_id: string
           description: string | null
+          discount_percent: number | null
           id: string
           name: string
           quantity: number
@@ -2062,6 +2159,7 @@ export type Database = {
           created_at?: string
           deal_id: string
           description?: string | null
+          discount_percent?: number | null
           id?: string
           name: string
           quantity?: number
@@ -2072,6 +2170,7 @@ export type Database = {
           created_at?: string
           deal_id?: string
           description?: string | null
+          discount_percent?: number | null
           id?: string
           name?: string
           quantity?: number
@@ -2553,6 +2652,7 @@ export type Database = {
       }
       deals: {
         Row: {
+          actual_close_date: string | null
           company_id: string | null
           contact_id: string | null
           created_at: string
@@ -2561,11 +2661,15 @@ export type Database = {
           expected_close_date: string | null
           id: string
           lost_reason: string | null
+          notes: string | null
           owner_id: string | null
+          priority: string | null
           probability: number
+          sort_order: number | null
           source: string | null
           stage_id: string
           status: string
+          tags: string[] | null
           team_id: string | null
           tenant_id: string
           title: string
@@ -2574,6 +2678,7 @@ export type Database = {
           won_at: string | null
         }
         Insert: {
+          actual_close_date?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -2582,11 +2687,15 @@ export type Database = {
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
+          notes?: string | null
           owner_id?: string | null
+          priority?: string | null
           probability?: number
+          sort_order?: number | null
           source?: string | null
           stage_id: string
           status?: string
+          tags?: string[] | null
           team_id?: string | null
           tenant_id: string
           title: string
@@ -2595,6 +2704,7 @@ export type Database = {
           won_at?: string | null
         }
         Update: {
+          actual_close_date?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -2603,11 +2713,15 @@ export type Database = {
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
+          notes?: string | null
           owner_id?: string | null
+          priority?: string | null
           probability?: number
+          sort_order?: number | null
           source?: string | null
           stage_id?: string
           status?: string
+          tags?: string[] | null
           team_id?: string | null
           tenant_id?: string
           title?: string
@@ -2643,6 +2757,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deal_stages"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "mv_deal_pipeline_stats"
+            referencedColumns: ["stage_id"]
           },
           {
             foreignKeyName: "deals_team_id_fkey"
@@ -5918,6 +6039,36 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_deal_pipeline_stats: {
+        Row: {
+          avg_value: number | null
+          deals_count: number | null
+          stage_color: string | null
+          stage_id: string | null
+          stage_name: string | null
+          stage_position: number | null
+          stage_probability: number | null
+          tenant_id: string | null
+          total_value: number | null
+          weighted_value: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_stages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_stages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_synonym: {
@@ -6078,6 +6229,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      refresh_deal_pipeline_stats: { Args: never; Returns: undefined }
       representative_can_access_contact: {
         Args: { _contact_id: string; _rep_id: string }
         Returns: boolean
