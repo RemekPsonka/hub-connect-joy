@@ -1,36 +1,35 @@
 
-# Naprawa problemu z dodawaniem użytkownika
+# Naprawa listy członków zespołu
 
 ## Problem
-Edge function `create-tenant-user` nie była wdrożona (błąd 404). Dodatkowo schemat walidacji Zod akceptuje tylko role `director` i `assistant`, podczas gdy frontend pozwala wybrać `admin`.
-
-## Co zostało już naprawione
-- Wdrożyłem edge function `create-tenant-user`
-
-## Co jeszcze trzeba naprawić
-Edge function musi akceptować również rolę `admin` w walidacji Zod:
+W modalu tworzenia zespołu deals brakuje Remka (ownera) na liście dostępnych członków. Filtr na linii 115 celowo wyklucza użytkowników z rolą `owner`:
 
 ```typescript
-// Obecna walidacja (linia 9 w create-tenant-user/index.ts):
-role: z.enum(["director", "assistant"], ...)
-
-// Potrzebna walidacja:
-role: z.enum(["director", "assistant", "admin"], ...)
+const directors = users.filter(u => !u.roles.includes('owner') || users.length === 1);
 ```
 
-## Pliki do modyfikacji
+## Rozwiązanie
+Usunięcie tego filtra - wszyscy użytkownicy w tenant powinni być dostępni do wyboru jako członkowie zespołu, w tym owner i admini.
+
+## Plik do modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| `supabase/functions/create-tenant-user/index.ts` | Rozszerzenie enum o `admin` |
+| `src/components/owner/DealTeamModal.tsx` | Usunięcie filtra wykluczającego ownera |
 
 ## Szczegóły zmiany
 
-W linii 9-11:
+**Przed (linia 114-115):**
 ```typescript
-role: z.enum(["director", "assistant", "admin"], { 
-  errorMap: () => ({ message: "Rola musi byc director, assistant lub admin" }) 
-}),
+// Get directors (users who have a director record)
+const directors = users.filter(u => !u.roles.includes('owner') || users.length === 1);
 ```
 
-Po tej zmianie będzie można dodawać użytkowników z dowolną z trzech ról.
+**Po:**
+```typescript
+// Get all users who can be team members (all directors in tenant)
+const directors = users;
+```
+
+## Efekt
+Po zmianie na liście członków zespołu pojawią się wszyscy użytkownicy w organizacji, w tym Remek (owner/admin).
