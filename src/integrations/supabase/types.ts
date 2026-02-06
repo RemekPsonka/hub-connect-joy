@@ -2145,6 +2145,81 @@ export type Database = {
           },
         ]
       }
+      deal_team_contacts: {
+        Row: {
+          assigned_to: string | null
+          category: string
+          category_changed_at: string | null
+          contact_id: string
+          created_at: string | null
+          deal_id: string | null
+          estimated_value: number | null
+          id: string
+          last_status_update: string | null
+          next_action: string | null
+          next_action_date: string | null
+          next_action_owner: string | null
+          next_meeting_date: string | null
+          next_meeting_with: string | null
+          notes: string | null
+          priority: string | null
+          status: string
+          status_overdue: boolean | null
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+          value_currency: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          category?: string
+          category_changed_at?: string | null
+          contact_id: string
+          created_at?: string | null
+          deal_id?: string | null
+          estimated_value?: number | null
+          id?: string
+          last_status_update?: string | null
+          next_action?: string | null
+          next_action_date?: string | null
+          next_action_owner?: string | null
+          next_meeting_date?: string | null
+          next_meeting_with?: string | null
+          notes?: string | null
+          priority?: string | null
+          status?: string
+          status_overdue?: boolean | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+          value_currency?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string
+          category_changed_at?: string | null
+          contact_id?: string
+          created_at?: string | null
+          deal_id?: string | null
+          estimated_value?: number | null
+          id?: string
+          last_status_update?: string | null
+          next_action?: string | null
+          next_action_date?: string | null
+          next_action_owner?: string | null
+          next_meeting_date?: string | null
+          next_meeting_with?: string | null
+          notes?: string | null
+          priority?: string | null
+          status?: string
+          status_overdue?: boolean | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+          value_currency?: string | null
+        }
+        Relationships: []
+      }
       deal_team_members: {
         Row: {
           created_at: string | null
