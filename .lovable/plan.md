@@ -1,199 +1,110 @@
 
-# Plan: Moduł Deals (Pipeline Sprzedażowy) - UI
+
+# Plan: Aktualizacja schematu tabeli deal_stages
 
 ## Cel
-Stworzenie kompletnego interfejsu użytkownika dla zarządzania szansami sprzedaży (deals), zgodnie ze strukturą bazy danych już utworzoną w poprzednim kroku.
+Rozszerzenie istniejącej tabeli `deal_stages` o dodatkowe pola i automatyczne tworzenie etapów dla nowych tenantów.
 
 ---
 
-## Przegląd struktury
+## Analiza różnic
 
-```text
-src/
-├── pages/
-│   ├── Deals.tsx                    # Strona główna listy deals
-│   └── DealDetail.tsx               # Szczegóły pojedynczego deal
-├── components/deals/
-│   ├── DealsHeader.tsx              # Nagłówek z filtrami i przyciskiem dodawania
-│   ├── DealsTable.tsx               # Tabela z listą deals (dostarczona przez użytkownika)
-│   ├── DealsKanban.tsx              # Widok Kanban (etapy jako kolumny)
-│   ├── DealCard.tsx                 # Karta deal w widoku Kanban
-│   ├── CreateDealModal.tsx          # Modal tworzenia nowego deal
-│   ├── DealStageBadge.tsx           # Badge z kolorem etapu
-│   └── DealActivitiesTimeline.tsx   # Timeline aktywności na deal
-└── hooks/
-    └── useDeals.ts                  # Hook z CRUD dla deals
+| Pole | Obecnie | Proponowane | Decyzja |
+|------|---------|-------------|---------|
+| `description` | ❌ | ✅ | Dodać |
+| `probability_default` | ❌ | ✅ | Dodać |
+| `is_active` | ❌ | ✅ | Dodać |
+| `updated_at` | ❌ | ✅ | Dodać |
+| `is_closed_won` | ✅ | ❌ | **Zachować** (używane w kodzie) |
+| `is_closed_lost` | ✅ | ❌ | **Zachować** (używane w kodzie) |
+| Trigger na `tenants` | ❌ | ✅ | Dodać |
+
+---
+
+## Krok 1: Migracja bazy danych
+
+```sql
+-- Dodanie nowych kolumn do deal_stages
+ALTER TABLE public.deal_stages
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS probability_default INTEGER DEFAULT 50,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Trigger dla updated_at
+CREATE TRIGGER update_deal_stages_updated_at
+  BEFORE UPDATE ON public.deal_stages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Funkcja tworzenia domyślnych etapów przy nowym tenancie
+CREATE OR REPLACE FUNCTION public.create_default_deal_stages()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.deal_stages 
+    (tenant_id, name, color, position, probability_default, is_closed_won, is_closed_lost) 
+  VALUES
+    (NEW.id, 'Lead', '#6366f1', 1, 10, false, false),
+    (NEW.id, 'Kwalifikacja', '#8b5cf6', 2, 25, false, false),
+    (NEW.id, 'Propozycja', '#ec4899', 3, 50, false, false),
+    (NEW.id, 'Negocjacje', '#f59e0b', 4, 75, false, false),
+    (NEW.id, 'Zamknięty - Wygrany', '#10b981', 5, 100, true, false),
+    (NEW.id, 'Zamknięty - Przegrany', '#ef4444', 6, 0, false, true);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger na tabeli tenants
+CREATE TRIGGER trigger_create_default_deal_stages
+  AFTER INSERT ON public.tenants
+  FOR EACH ROW
+  EXECUTE FUNCTION public.create_default_deal_stages();
 ```
 
 ---
 
-## Krok 1: Hook useDeals.ts
+## Krok 2: Aktualizacja typów TypeScript
 
-Nowy plik: `src/hooks/useDeals.ts`
+Plik: `src/hooks/useDeals.ts`
 
-Funkcjonalności:
-- `useDeals(filters)` - lista deals z paginacją i filtrami
-- `useDeal(id)` - pojedynczy deal ze szczegółami
-- `useDealStages()` - etapy pipeline dla tenant
-- `useCreateDeal()` - mutacja tworzenia
-- `useUpdateDeal()` - mutacja aktualizacji
-- `useDeleteDeal()` - mutacja usuwania
-- `useDealActivities(dealId)` - historia aktywności
-
-Typy:
 ```typescript
-export interface Deal {
-  id: string;
-  tenant_id: string;
-  contact_id: string | null;
-  company_id: string | null;
-  title: string;
-  description: string | null;
-  value: number;
-  currency: string;
-  stage_id: string;
-  probability: number;
-  expected_close_date: string | null;
-  owner_id: string | null;
-  source: string | null;
-  status: 'open' | 'won' | 'lost';
-  won_at: string | null;
-  lost_reason: string | null;
-  created_at: string;
-  updated_at: string;
-  // Relacje
-  contact?: { id: string; full_name: string } | null;
-  company?: { id: string; name: string } | null;
-  stage?: DealStage | null;
-  owner?: { id: string; full_name: string } | null;
-}
-
 export interface DealStage {
   id: string;
   tenant_id: string;
   name: string;
+  description: string | null;      // nowe
   position: number;
   color: string;
+  probability_default: number;      // nowe
+  is_active: boolean;               // nowe
   is_closed_won: boolean;
   is_closed_lost: boolean;
+  created_at: string;
+  updated_at: string;               // nowe
 }
 ```
 
 ---
 
-## Krok 2: Strona Deals.tsx
+## Krok 3: Usunięcie ręcznego seedowania
 
-Nowy plik: `src/pages/Deals.tsx`
-
-Funkcjonalności:
-- Przełączanie widoku: Tabela / Kanban
-- Filtry: szukaj, etap, status, owner
-- Paginacja (w widoku tabeli)
-- Modal dodawania nowego deal
+Ponieważ trigger automatycznie utworzy etapy dla nowego tenanta, funkcja `seed_deal_stages_for_tenant` może zostać zachowana jako backup dla istniejących tenantów bez etapów.
 
 ---
 
-## Krok 3: Komponenty UI
+## Podsumowanie zmian
 
-### DealsHeader.tsx
-- Tytuł + badge z liczbą deals
-- Przycisk "Dodaj deal"
-- Przełącznik widoku (Tabela/Kanban)
-- Pole wyszukiwania
-- Filtr po etapie
-- Filtr po statusie
-
-### DealsTable.tsx (dostarczony przez użytkownika - do poprawy)
-Poprawki w kodzie:
-- Dodanie brakujących `<Table>` tagów
-- Obsługa pustego stanu
-- Paginacja
-
-### DealsKanban.tsx
-- Kolumny = etapy pipeline (z `useDealStages`)
-- Karty = deals w danym etapie
-- Drag & drop do zmiany etapu (opcjonalnie w przyszłości)
-
-### DealCard.tsx
-- Tytuł deal
-- Wartość (sformatowana waluta)
-- Kontakt/Firma
-- Prawdopodobieństwo jako pasek
-- Data zamknięcia
-
-### CreateDealModal.tsx
-- Formularz z polami:
-  - Tytuł (wymagany)
-  - Wartość + waluta
-  - Kontakt LUB Firma (przynajmniej jedno)
-  - Etap (dropdown)
-  - Prawdopodobieństwo (slider 0-100%)
-  - Oczekiwana data zamknięcia
-  - Źródło (select: inbound/outbound/referral/partner)
-  - Opis (textarea)
-
-### DealStageBadge.tsx
-- Badge z kolorem etapu
-- Nazwa etapu
+| Plik / Zasób | Akcja |
+|--------------|-------|
+| Migracja SQL | **Utworzyć** - ALTER TABLE + trigger |
+| `src/hooks/useDeals.ts` | **Edytować** - rozszerzyć interface DealStage |
 
 ---
 
-## Krok 4: Strona DealDetail.tsx
+## Korzyści
 
-Nowy plik: `src/pages/DealDetail.tsx`
+- Nowe pola `description` i `probability_default` pozwalają na dokładniejszą konfigurację etapów
+- `is_active` umożliwia dezaktywację etapów bez usuwania
+- Automatyczny trigger przy tworzeniu tenanta eliminuje potrzebę ręcznego seedowania
+- Zachowanie `is_closed_won`/`is_closed_lost` zapewnia kompatybilność z istniejącym kodem
 
-Sekcje:
-- Nagłówek z tytułem i statusem
-- Karty KPI: Wartość, Prawdopodobieństwo, Oczekiwany przychód
-- Info o kontakcie/firmie (linki)
-- Edycja inline pól
-- Timeline aktywności
-- Przyciski: "Wygrany", "Przegrany", "Edytuj", "Usuń"
-
----
-
-## Krok 5: Routing w App.tsx
-
-Dodanie nowych route:
-```typescript
-<Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />
-<Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
-```
-
----
-
-## Krok 6: Seed domyślnych etapów
-
-Przed użyciem modułu, tenant potrzebuje etapów pipeline. Wywołamy funkcję `seed_deal_stages_for_tenant` dla istniejącego tenanta.
-
----
-
-## Pliki do utworzenia/modyfikacji
-
-| Plik | Akcja |
-|------|-------|
-| `src/hooks/useDeals.ts` | **Utworzyć** - hook CRUD |
-| `src/pages/Deals.tsx` | **Utworzyć** - strona listy |
-| `src/pages/DealDetail.tsx` | **Utworzyć** - strona szczegółów |
-| `src/components/deals/DealsHeader.tsx` | **Utworzyć** |
-| `src/components/deals/DealsTable.tsx` | **Utworzyć** (poprawiona wersja) |
-| `src/components/deals/DealsKanban.tsx` | **Utworzyć** |
-| `src/components/deals/DealCard.tsx` | **Utworzyć** |
-| `src/components/deals/CreateDealModal.tsx` | **Utworzyć** |
-| `src/components/deals/DealStageBadge.tsx` | **Utworzyć** |
-| `src/components/deals/DealActivitiesTimeline.tsx` | **Utworzyć** |
-| `src/components/deals/index.ts` | **Utworzyć** - eksporty |
-| `src/App.tsx` | **Edytować** - dodać route |
-| `src/components/layout/AppSidebar.tsx` | **Edytować** - dodać link w menu |
-
----
-
-## Efekt końcowy
-
-Po wdrożeniu:
-- Nowa pozycja "Deals" w sidebarze
-- Widok listy z tabelą i Kanbanem
-- Możliwość tworzenia, edycji, usuwania deals
-- Śledzenie etapów pipeline
-- Powiązanie z kontaktami i firmami
-- Historia aktywności
