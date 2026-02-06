@@ -2268,6 +2268,132 @@ export type Database = {
           },
         ]
       }
+      deal_team_prospects: {
+        Row: {
+          assigned_to: string | null
+          company_id: string | null
+          contact_id: string | null
+          converted_to_contact_id: string | null
+          created_at: string | null
+          found_via: string | null
+          id: string
+          intro_contact_id: string | null
+          priority: string | null
+          prospect_company: string | null
+          prospect_email: string | null
+          prospect_linkedin: string | null
+          prospect_name: string
+          prospect_notes: string | null
+          prospect_phone: string | null
+          prospect_position: string | null
+          requested_by: string
+          requested_for_reason: string | null
+          status: string
+          target_date: string | null
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          converted_to_contact_id?: string | null
+          created_at?: string | null
+          found_via?: string | null
+          id?: string
+          intro_contact_id?: string | null
+          priority?: string | null
+          prospect_company?: string | null
+          prospect_email?: string | null
+          prospect_linkedin?: string | null
+          prospect_name: string
+          prospect_notes?: string | null
+          prospect_phone?: string | null
+          prospect_position?: string | null
+          requested_by: string
+          requested_for_reason?: string | null
+          status?: string
+          target_date?: string | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          converted_to_contact_id?: string | null
+          created_at?: string | null
+          found_via?: string | null
+          id?: string
+          intro_contact_id?: string | null
+          priority?: string | null
+          prospect_company?: string | null
+          prospect_email?: string | null
+          prospect_linkedin?: string | null
+          prospect_name?: string
+          prospect_notes?: string | null
+          prospect_phone?: string | null
+          prospect_position?: string | null
+          requested_by?: string
+          requested_for_reason?: string | null
+          status?: string
+          target_date?: string | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      deal_team_weekly_statuses: {
+        Row: {
+          blockers: string | null
+          category_recommendation: string | null
+          created_at: string | null
+          id: string
+          meeting_happened: boolean | null
+          meeting_outcome: string | null
+          next_steps: string | null
+          reported_by: string
+          status_summary: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          week_start: string
+        }
+        Insert: {
+          blockers?: string | null
+          category_recommendation?: string | null
+          created_at?: string | null
+          id?: string
+          meeting_happened?: boolean | null
+          meeting_outcome?: string | null
+          next_steps?: string | null
+          reported_by: string
+          status_summary: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          week_start: string
+        }
+        Update: {
+          blockers?: string | null
+          category_recommendation?: string | null
+          created_at?: string | null
+          id?: string
+          meeting_happened?: boolean | null
+          meeting_outcome?: string | null
+          next_steps?: string | null
+          reported_by?: string
+          status_summary?: string
+          team_contact_id?: string
+          team_id?: string
+          tenant_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
       deal_teams: {
         Row: {
           color: string | null
