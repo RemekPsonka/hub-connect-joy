@@ -8,3 +8,7 @@ export { ProspectCard } from './ProspectCard';
 export { AddContactDialog } from './AddContactDialog';
 export { AddProspectDialog } from './AddProspectDialog';
 export { CreateTeamDialog } from './CreateTeamDialog';
+export { WeeklyStatusPanel } from './WeeklyStatusPanel';
+export { WeeklyStatusForm } from './WeeklyStatusForm';
+export { PromoteDialog } from './PromoteDialog';
+export { ConvertProspectDialog } from './ConvertProspectDialog';

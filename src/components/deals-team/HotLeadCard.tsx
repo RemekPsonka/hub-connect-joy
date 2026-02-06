@@ -8,9 +8,10 @@ import type { DealTeamContact } from '@/types/dealTeam';
 
 interface HotLeadCardProps {
   contact: DealTeamContact;
+  teamId: string;
 }
 
-export function HotLeadCard({ contact }: HotLeadCardProps) {
+export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
   return (
     <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
       <CardContent className="p-3 space-y-2">
@@ -38,7 +39,7 @@ export function HotLeadCard({ contact }: HotLeadCardProps) {
             </Badge>
             <div
               className={`w-2 h-2 rounded-full ${
-                contact.status_overdue ? 'bg-red-500' : 'bg-green-500'
+                contact.status_overdue ? 'bg-destructive' : 'bg-primary'
               }`}
               title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
             />

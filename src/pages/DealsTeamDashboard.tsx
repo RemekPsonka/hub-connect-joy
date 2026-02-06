@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { LayoutGrid, List, Users, Plus } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3 } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
-import { TeamSelector, KanbanBoard, CreateTeamDialog } from '@/components/deals-team';
+import { TeamSelector, KanbanBoard, CreateTeamDialog, WeeklyStatusPanel } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { toast } from 'sonner';
 
 type ViewMode = 'kanban' | 'table';
 
@@ -21,6 +21,7 @@ export default function DealsTeamDashboard() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
 
   // Get stats for selected team
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
@@ -50,8 +51,10 @@ export default function DealsTeamDashboard() {
   };
 
   const handleSettingsClick = () => {
-    toast.info('Ustawienia zespołu — wkrótce');
+    // Will be implemented in a future prompt
   };
+
+  const overdueCount = contactStats?.overdue_count || 0;
 
   // Loading state
   if (teamsLoading) {
@@ -107,6 +110,21 @@ export default function DealsTeamDashboard() {
         />
 
         <div className="flex items-center gap-2">
+          {/* Weekly Status Button */}
+          <Button
+            variant="outline"
+            onClick={() => setShowWeeklyStatus(true)}
+            className="gap-2"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Statusy</span>
+            {overdueCount > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {overdueCount}
+              </Badge>
+            )}
+          </Button>
+
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             <TabsList>
               <TabsTrigger value="kanban" className="gap-2">
@@ -143,6 +161,15 @@ export default function DealsTeamDashboard() {
         onOpenChange={setShowCreateTeam}
         onTeamCreated={handleTeamCreated}
       />
+
+      {/* Weekly Status Panel */}
+      {selectedTeamId && (
+        <WeeklyStatusPanel
+          teamId={selectedTeamId}
+          open={showWeeklyStatus}
+          onOpenChange={setShowWeeklyStatus}
+        />
+      )}
     </div>
   );
 }

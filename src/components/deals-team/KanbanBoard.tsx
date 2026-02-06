@@ -69,7 +69,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           onAdd={() => setAddContactCategory('hot')}
         >
           {hotContacts.map((contact) => (
-            <HotLeadCard key={contact.id} contact={contact} />
+            <HotLeadCard key={contact.id} contact={contact} teamId={teamId} />
           ))}
         </KanbanColumn>
 
@@ -82,7 +82,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           onAdd={() => setAddContactCategory('top')}
         >
           {topContacts.map((contact) => (
-            <TopLeadCard key={contact.id} contact={contact} />
+            <TopLeadCard key={contact.id} contact={contact} teamId={teamId} />
           ))}
         </KanbanColumn>
 
@@ -95,7 +95,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           onAdd={() => setAddContactCategory('lead')}
         >
           {leadContacts.map((contact) => (
-            <LeadCard key={contact.id} contact={contact} />
+            <LeadCard key={contact.id} contact={contact} teamId={teamId} />
           ))}
         </KanbanColumn>
 
@@ -109,7 +109,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           addButtonLabel="+ Szukaj"
         >
           {prospects.map((prospect) => (
-            <ProspectCard key={prospect.id} prospect={prospect} />
+            <ProspectCard key={prospect.id} prospect={prospect} teamId={teamId} />
           ))}
         </KanbanColumn>
       </div>
