@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, Children } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,7 @@ interface KanbanColumnProps {
   children: ReactNode;
   onAdd: () => void;
   addButtonLabel?: string;
+  emptyMessage?: string;
 }
 
 const colorClasses: Record<string, string> = {
@@ -33,7 +34,10 @@ export function KanbanColumn({
   children,
   onAdd,
   addButtonLabel = '+ Dodaj',
+  emptyMessage = 'Brak elementów',
 }: KanbanColumnProps) {
+  const hasChildren = Children.count(children) > 0;
+
   return (
     <div
       className={`bg-muted/30 rounded-lg border border-t-2 ${colorClasses[color] || 'border-t-primary'} flex flex-col min-h-[400px] max-h-[calc(100vh-280px)]`}
@@ -58,7 +62,13 @@ export function KanbanColumn({
 
       {/* Cards */}
       <ScrollArea className="flex-1 p-2">
-        <div className="space-y-2">{children}</div>
+        {hasChildren ? (
+          <div className="space-y-2">{children}</div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center p-4">
+            <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+          </div>
+        )}
       </ScrollArea>
 
       {/* Add button */}
