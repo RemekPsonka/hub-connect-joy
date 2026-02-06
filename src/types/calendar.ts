@@ -18,3 +18,18 @@ export interface GCalCalendar {
   accessRole: string;
   primary: boolean;
 }
+
+export interface CalendarItem {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  type: 'gcal_event' | 'crm_task';
+  color: string;
+  allDay: boolean;
+  location?: string;
+  status?: string;
+  htmlLink?: string;
+  calendarName?: string;
+  projectName?: string;
+}

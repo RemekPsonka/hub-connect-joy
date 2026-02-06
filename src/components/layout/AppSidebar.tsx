@@ -16,6 +16,7 @@ import {
   CalendarCheck,
   UsersRound,
   Handshake,
+  CalendarDays,
   BarChart3,
   Users2,
   FolderKanban,
@@ -44,6 +45,7 @@ import {
 const overviewItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Mój Dzień', url: '/my-day', icon: Sun },
+  { title: 'Kalendarz', url: '/calendar', icon: CalendarDays },
 ];
 
 // CRM
