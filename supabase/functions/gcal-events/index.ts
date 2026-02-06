@@ -8,11 +8,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const EventsSchema = z.object({
-  time_min: z.string(),
-  time_max: z.string(),
-  calendar_ids: z.array(z.string()).optional(),
-});
+const RequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("list-calendars") }),
+  z.object({
+    action: z.literal("get-events"),
+    time_min: z.string(),
+    time_max: z.string(),
+    calendar_ids: z.array(z.string()).optional(),
+  }),
+]);
 
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -56,7 +60,7 @@ Deno.serve(async (req) => {
   try {
     // 1. Validate body
     const body = await req.json();
-    const parsed = EventsSchema.safeParse(body);
+    const parsed = RequestSchema.safeParse(body);
     if (!parsed.success) {
       return jsonResponse(
         { error: "Validation error", details: parsed.error.format() },
@@ -118,50 +122,105 @@ Deno.serve(async (req) => {
       accessToken = refreshResult.accessToken!;
     }
 
-    // 5. Determine which calendars to fetch
-    const calendarIds: string[] =
-      parsed.data.calendar_ids && parsed.data.calendar_ids.length > 0
-        ? parsed.data.calendar_ids
-        : tokenRow.selected_calendars && (tokenRow.selected_calendars as string[]).length > 0
-        ? (tokenRow.selected_calendars as string[])
-        : ["primary"];
+    // 5. Route by action
+    const { data: requestData } = parsed;
 
-    // 6. Fetch events from each calendar
-    const allEvents: GCalEvent[] = [];
-    let calendarsSynced = 0;
-
-    // Fetch calendar list for names/colors
-    const calendarMap = await fetchCalendarList(accessToken);
-
-    for (const calendarId of calendarIds) {
-      try {
-        const events = await fetchCalendarEvents(
-          accessToken,
-          calendarId,
-          parsed.data.time_min,
-          parsed.data.time_max,
-          calendarMap
-        );
-        allEvents.push(...events);
-        calendarsSynced++;
-      } catch (e) {
-        console.warn(`Failed to fetch events for calendar ${calendarId}:`, e);
-      }
+    if (requestData.action === "list-calendars") {
+      return await handleListCalendars(accessToken);
     }
 
-    // 7. Sort chronologically
-    allEvents.sort((a, b) => {
-      const aTime = a.start.dateTime || a.start.date || "";
-      const bTime = b.start.dateTime || b.start.date || "";
-      return aTime.localeCompare(bTime);
-    });
-
-    return jsonResponse({ events: allEvents, calendars_synced: calendarsSynced });
+    // action === "get-events"
+    return await handleGetEvents(
+      accessToken,
+      requestData.time_min,
+      requestData.time_max,
+      requestData.calendar_ids,
+      tokenRow.selected_calendars as string[] | null
+    );
   } catch (error) {
     console.error("gcal-events error:", error);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
 });
+
+// ─── List calendars action ──────────────────────────────────────────
+async function handleListCalendars(accessToken: string) {
+  try {
+    const res = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("CalendarList API error:", res.status, errText);
+      return jsonResponse({ error: "Failed to fetch calendars" }, 502);
+    }
+
+    const data = await res.json();
+    const calendars = (data.items || []).map(
+      (cal: Record<string, unknown>) => ({
+        id: cal.id as string,
+        summary: (cal.summary as string) || (cal.id as string),
+        backgroundColor: (cal.backgroundColor as string) || "#4285f4",
+        accessRole: (cal.accessRole as string) || "reader",
+        primary: !!(cal.primary as boolean),
+      })
+    );
+
+    return jsonResponse({ calendars });
+  } catch (e) {
+    console.error("handleListCalendars error:", e);
+    return jsonResponse({ error: "Internal server error" }, 500);
+  }
+}
+
+// ─── Get events action ──────────────────────────────────────────────
+async function handleGetEvents(
+  accessToken: string,
+  timeMin: string,
+  timeMax: string,
+  requestCalendarIds: string[] | undefined,
+  storedSelectedCalendars: string[] | null
+) {
+  // Determine which calendars to fetch
+  const calendarIds: string[] =
+    requestCalendarIds && requestCalendarIds.length > 0
+      ? requestCalendarIds
+      : storedSelectedCalendars && storedSelectedCalendars.length > 0
+      ? storedSelectedCalendars
+      : ["primary"];
+
+  const allEvents: GCalEvent[] = [];
+  let calendarsSynced = 0;
+
+  // Fetch calendar list for names/colors
+  const calendarMap = await fetchCalendarList(accessToken);
+
+  for (const calendarId of calendarIds) {
+    try {
+      const events = await fetchCalendarEvents(
+        accessToken,
+        calendarId,
+        timeMin,
+        timeMax,
+        calendarMap
+      );
+      allEvents.push(...events);
+      calendarsSynced++;
+    } catch (e) {
+      console.warn(`Failed to fetch events for calendar ${calendarId}:`, e);
+    }
+  }
+
+  // Sort chronologically
+  allEvents.sort((a, b) => {
+    const aTime = a.start.dateTime || a.start.date || "";
+    const bTime = b.start.dateTime || b.start.date || "";
+    return aTime.localeCompare(bTime);
+  });
+
+  return jsonResponse({ events: allEvents, calendars_synced: calendarsSynced });
+}
 
 // ─── Refresh access token ────────────────────────────────────────────
 async function refreshAccessToken(
@@ -189,7 +248,6 @@ async function refreshAccessToken(
     if (!res.ok || !data.access_token) {
       console.error("Token refresh failed:", data);
 
-      // If user revoked access, clean up
       if (data.error === "invalid_grant") {
         await serviceClient
           .from("gcal_tokens")
@@ -211,7 +269,6 @@ async function refreshAccessToken(
       };
     }
 
-    // Update token in database
     const newExpiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
 
     await serviceClient
@@ -255,7 +312,6 @@ async function fetchCalendarList(
     console.warn("Failed to fetch calendar list:", e);
   }
 
-  // Ensure primary always has a fallback
   if (!map.has("primary")) {
     map.set("primary", { name: "Kalendarz główny", color: "#4285f4" });
   }
