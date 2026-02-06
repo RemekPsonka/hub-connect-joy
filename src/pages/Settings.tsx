@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield, Database, ListTodo, Download } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Settings as SettingsIcon, Brain, RefreshCw, CheckCircle, AlertCircle, Info, DollarSign, Tags, ClipboardCheck, Users, TrendingUp, Calendar, Shield, Database, ListTodo, Download, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -20,6 +20,7 @@ import { BatchKRSSyncController } from '@/components/company/BatchKRSSyncControl
 import { TaskCategoriesManager } from '@/components/settings/TaskCategoriesManager';
 import { GroupRefreshPolicyEditor } from '@/components/settings/GroupRefreshPolicyEditor';
 import { DataExportSettings } from '@/components/settings/DataExportSettings';
+import { GoogleCalendarSettings } from '@/components/settings/GoogleCalendarSettings';
 import { useContactGroups } from '@/hooks/useContactGroups';
 import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
@@ -40,6 +41,7 @@ interface MissingEmbeddings {
 export default function Settings() {
   const { user, isAssistant } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [stats, setStats] = useState<EmbeddingStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -287,7 +289,7 @@ export default function Settings() {
         <p className="text-muted-foreground">Zarządzaj ustawieniami aplikacji</p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs defaultValue={searchParams.get('tab') || 'general'} className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="general">Ogólne</TabsTrigger>
           <TabsTrigger value="tasks">
@@ -307,6 +309,10 @@ export default function Settings() {
           <TabsTrigger value="export">
             <Download className="h-4 w-4 mr-1" />
             Eksport danych
+          </TabsTrigger>
+          <TabsTrigger value="integrations">
+            <Plug className="h-4 w-4 mr-1" />
+            Integracje
           </TabsTrigger>
         </TabsList>
 
@@ -631,6 +637,11 @@ export default function Settings() {
         {/* Export Tab */}
         <TabsContent value="export" className="space-y-6">
           <DataExportSettings />
+        </TabsContent>
+
+        {/* Integrations Tab */}
+        <TabsContent value="integrations" className="space-y-6">
+          <GoogleCalendarSettings />
         </TabsContent>
       </Tabs>
 

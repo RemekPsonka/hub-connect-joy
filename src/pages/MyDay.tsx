@@ -25,6 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { NewProjectDialog } from '@/components/projects/NewProjectDialog';
 import { MiniCalendar } from '@/components/my-day/MiniCalendar';
+import { GCalTodayEvents } from '@/components/my-day/GCalTodayEvents';
 
 // Priority dot colors
 const priorityColors: Record<string, string> = {
@@ -312,6 +313,9 @@ export default function MyDay() {
               onMonthChange={handleMonthChange}
             />
           </DataCard>
+
+          {/* Google Calendar events */}
+          <GCalTodayEvents />
 
           {/* Active projects */}
           <DataCard
