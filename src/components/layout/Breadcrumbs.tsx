@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 const routeLabels: Record<string, string> = {
   '': 'Dashboard',
+  'my-day': 'Mój Dzień',
   'contacts': 'Kontakty',
   'companies': 'Firmy',
   'consultations': 'Konsultacje',
