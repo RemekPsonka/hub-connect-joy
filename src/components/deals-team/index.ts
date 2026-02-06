@@ -12,3 +12,6 @@ export { WeeklyStatusPanel } from './WeeklyStatusPanel';
 export { WeeklyStatusForm } from './WeeklyStatusForm';
 export { PromoteDialog } from './PromoteDialog';
 export { ConvertProspectDialog } from './ConvertProspectDialog';
+export { TeamStats } from './TeamStats';
+export { TableView } from './TableView';
+export { TeamSettings } from './TeamSettings';

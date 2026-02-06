@@ -67,6 +67,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           count={hotContacts.length}
           totalValue={hotTotalValue}
           onAdd={() => setAddContactCategory('hot')}
+          emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
         >
           {hotContacts.map((contact) => (
             <HotLeadCard key={contact.id} contact={contact} teamId={teamId} />
@@ -80,6 +81,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           color="amber"
           count={topContacts.length}
           onAdd={() => setAddContactCategory('top')}
+          emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
         >
           {topContacts.map((contact) => (
             <TopLeadCard key={contact.id} contact={contact} teamId={teamId} />
@@ -93,6 +95,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           color="blue"
           count={leadContacts.length}
           onAdd={() => setAddContactCategory('lead')}
+          emptyMessage="Brak leadów. Dodaj kontakty z CRM →"
         >
           {leadContacts.map((contact) => (
             <LeadCard key={contact.id} contact={contact} teamId={teamId} />
@@ -107,6 +110,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           count={prospects.length}
           onAdd={() => setShowAddProspect(true)}
           addButtonLabel="+ Szukaj"
+          emptyMessage="Brak poszukiwanych. Dodaj osobę/firmę do znalezienia →"
         >
           {prospects.map((prospect) => (
             <ProspectCard key={prospect.id} prospect={prospect} teamId={teamId} />

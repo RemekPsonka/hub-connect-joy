@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { LayoutGrid, List, Users, Plus, BarChart3 } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
-import { TeamSelector, KanbanBoard, CreateTeamDialog, WeeklyStatusPanel } from '@/components/deals-team';
+import {
+  TeamSelector,
+  KanbanBoard,
+  CreateTeamDialog,
+  WeeklyStatusPanel,
+  TeamStats,
+  TableView,
+  TeamSettings,
+} from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +30,7 @@ export default function DealsTeamDashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
+  const [showTeamSettings, setShowTeamSettings] = useState(false);
 
   // Get stats for selected team
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
@@ -51,7 +60,7 @@ export default function DealsTeamDashboard() {
   };
 
   const handleSettingsClick = () => {
-    // Will be implemented in a future prompt
+    setShowTeamSettings(true);
   };
 
   const overdueCount = contactStats?.overdue_count || 0;
@@ -61,6 +70,11 @@ export default function DealsTeamDashboard() {
     return (
       <div className="p-6 space-y-6">
         <div className="h-10 w-64 bg-muted animate-pulse rounded" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+          ))}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-96 bg-muted animate-pulse rounded-lg" />
@@ -144,15 +158,16 @@ export default function DealsTeamDashboard() {
         </div>
       </div>
 
+      {/* Stats - always visible when team selected */}
+      {selectedTeamId && <TeamStats teamId={selectedTeamId} />}
+
       {/* Content */}
       {selectedTeamId && viewMode === 'kanban' && (
         <KanbanBoard teamId={selectedTeamId} />
       )}
 
       {selectedTeamId && viewMode === 'table' && (
-        <div className="flex items-center justify-center min-h-[400px] border rounded-lg bg-muted/20">
-          <p className="text-muted-foreground">Widok tabelaryczny — wkrótce</p>
-        </div>
+        <TableView teamId={selectedTeamId} />
       )}
 
       {/* Create Team Dialog */}
@@ -168,6 +183,15 @@ export default function DealsTeamDashboard() {
           teamId={selectedTeamId}
           open={showWeeklyStatus}
           onOpenChange={setShowWeeklyStatus}
+        />
+      )}
+
+      {/* Team Settings */}
+      {selectedTeamId && (
+        <TeamSettings
+          teamId={selectedTeamId}
+          open={showTeamSettings}
+          onOpenChange={setShowTeamSettings}
         />
       )}
     </div>
