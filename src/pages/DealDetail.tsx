@@ -13,6 +13,7 @@ import {
   XCircle,
   Trash2,
   Loader2,
+  Users2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +37,7 @@ import {
   useDealActivities,
   useCreateDealActivity,
 } from '@/hooks/useDeals';
+import { useDealTeamWithMembers } from '@/hooks/useDealTeams';
 import { DealStageBadge, DealActivitiesTimeline, DealProductsCard } from '@/components/deals';
 
 export default function DealDetail() {
@@ -44,6 +46,7 @@ export default function DealDetail() {
 
   const { data: deal, isLoading } = useDeal(id);
   const { data: activities = [], isLoading: activitiesLoading } = useDealActivities(id);
+  const { data: teamDetails } = useDealTeamWithMembers(deal?.team_id);
   const updateDeal = useUpdateDeal();
   const deleteDeal = useDeleteDeal();
   const createActivity = useCreateDealActivity();
@@ -297,6 +300,30 @@ export default function DealDetail() {
               <div>
                 <p className="text-sm text-muted-foreground">Właściciel</p>
                 <p className="font-medium">{deal.owner.full_name}</p>
+              </div>
+            )}
+
+            {teamDetails && (
+              <div className="flex items-start gap-3">
+                <Users2 className="h-4 w-4 text-muted-foreground mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Zespół</p>
+                  <Badge
+                    variant="outline"
+                    style={{ borderColor: teamDetails.color, color: teamDetails.color }}
+                  >
+                    {teamDetails.name}
+                  </Badge>
+                  {teamDetails.members && teamDetails.members.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {teamDetails.members.map((m) => (
+                        <span key={m.id} className="text-sm text-muted-foreground">
+                          {m.director?.full_name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

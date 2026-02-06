@@ -248,3 +248,30 @@ export function useDeleteDealTeam() {
     },
   });
 }
+
+export function useDealTeamWithMembers(teamId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['deal_team', teamId],
+    queryFn: async () => {
+      if (!teamId) return null;
+
+      const { data, error } = await supabase
+        .from('deal_teams')
+        .select(`
+          *,
+          members:deal_team_members(
+            id,
+            director_id,
+            director:directors(id, full_name, email)
+          )
+        `)
+        .eq('id', teamId)
+        .single();
+
+      if (error) throw error;
+      return data as DealTeam;
+    },
+    enabled: !!teamId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
