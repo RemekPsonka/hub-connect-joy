@@ -1,298 +1,251 @@
 
-
-# Tygodniowy raport Sovra -- Edge Function + konfiguracja w Settings
+# Rozbudowa schematu Deals -- brakujace elementy
 
 ## Podsumowanie
 
-Dodajemy automatyczny raport email generowany przez Sovre: Edge Function zbiera statystyki tygodnia (zadania, projekty, kontakty, aktywnosc), generuje podsumowanie AI (Gemini 2.5 Flash) i wysyla email HTML przez Resend. Konfiguracja raportow dostepna w Settings w zakladce Integracje.
+Modul Deals jest juz **w duzym stopniu zaimplementowany**. Istnieja 4 z 5 proponowanych tabel, 6 etapow pipeline, RLS policies, triggery, oraz pelny frontend (Kanban, tabela, analityka, szczegoly, produkty). Plan koncentruje sie wylacznie na dodaniu **brakujacych elementow** do istniejacego schematu.
 
-## Wazne ustalenia z analizy codebase
+## Istniejacy stan vs specyfikacja
 
-| Element | Stan |
-|---------|------|
-| Tabela `sovra_report_config` | Nie istnieje -- wymaga migracji |
-| `RESEND_API_KEY` | **Nie skonfigurowany** -- fallback: zapis do `sovra_sessions` bez wysylki |
-| `FRONTEND_URL` | Skonfigurowany |
-| `contact_activity_log` | Istnieje (id, tenant_id, contact_id, activity_type, description, metadata, created_at) |
-| `sovra_sessions` | Istnieje (id, tenant_id, director_id, type, title, content, tasks_created, notes_created, started_at, ended_at, metadata) |
-| Kolumna kontaktow | `last_contact_date` (date), `relationship_strength` (integer) -- bez `relationship_health` |
-| Auth pattern | Identyczny jak `sovra-reminder-trigger`: service_role vs JWT |
-| Settings Integracje | Zakladka `integrations` z `GoogleCalendarSettings` -- dodamy pod spodem |
+| Element | Stan w DB | Spec uzytkownika | Wymagana zmiana |
+|---------|-----------|-------------------|-----------------|
+| `deal_stages` | Istnieje (6 etapow, `probability_default`, `is_closed_won/lost`, `is_active`) | `probability`, `is_won`, `is_lost`, `is_default` | Brak — nazwy inne ale funkcjonalnie identyczne |
+| `deals` | Istnieje (18 kolumn, `probability`, `status`, `team_id`) | `probability_override`, `priority`, `notes`, `tags`, `sort_order`, `actual_close_date` | Dodac 5 kolumn |
+| `deal_products` | Istnieje (`total_price` generated, `description`) | `discount_percent`, `tenant_id`, `notes` | Dodac `discount_percent`, przebudowac `total_price` |
+| `deal_activities` | Istnieje (`activity_type`, `description`, `old_value`, `new_value`, `details`) | `type`, `content`, `metadata` — inne nazwy | Brak — funkcjonalnie identyczne |
+| `deal_history` | NIE istnieje | Oddzielna tabela historii | Dodac tabele |
+| Trigger `log_deal_activity` | Istnieje — loguje stage/value/won/lost | `track_deal_stage_change` | Brak — juz pokryty |
+| Trigger auto-sum produktow | NIE istnieje | `update_deal_value_from_products` | Dodac trigger |
+| Trigger `updated_at` | Istnieje | Wymagany | Juz pokryty |
+| MV `mv_deal_pipeline_stats` | NIE istnieje | Dashboard pipeline stats | Dodac MV |
+| RLS policies | Istnieja (granularne per operacja) | Prostsze `FOR ALL` | Brak zmian — obecne sa lepsze |
+| Indexy | Brak dedykowanych | 6 indexow | Dodac indexy |
+| Edge Function `deal-setup` | Nie istnieje, ale `seed_deal_stages_for_tenant()` RPC istnieje | Inicjalizacja etapow | Brak — RPC juz dziala |
+| Frontend | Pelny (Kanban, tabela, analityka, detail, produkty) | --- | Brak zmian w ramach tego planu |
 
-## Co sie zmieni
+## Co zostanie zrobione
 
-| Zmiana | Plik / Zasob |
-|--------|-------------|
-| Nowa tabela | Migracja: `sovra_report_config` + RLS |
-| Nowa Edge Function | `supabase/functions/sovra-weekly-report/index.ts` |
-| Wpis config | `supabase/config.toml` |
-| Nowy hook | `src/hooks/useSovraReportConfig.ts` |
-| Nowy komponent | `src/components/sovra/SovraReportSettings.tsx` |
-| Nowy komponent | `src/components/sovra/ReportPreviewModal.tsx` |
-| Modyfikacja | `src/pages/Settings.tsx` (dodanie sekcji w zakladce Integracje) |
-
----
-
-## Szczegoly techniczne
-
-### 1. Migracja bazy danych
+### 1. Migracja SQL -- nowe kolumny na `deals`
 
 ```text
-CREATE TABLE sovra_report_config (
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS priority text DEFAULT 'medium';
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS tags text[];
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS sort_order int4 DEFAULT 0;
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS actual_close_date date;
+
+-- Walidacja priority
+ALTER TABLE deals ADD CONSTRAINT deals_priority_check 
+  CHECK (priority IN ('low', 'medium', 'high', 'critical'));
+```
+
+Kolumna `probability` juz istnieje i sluzy jako odpowiednik `probability_override` ze specyfikacji. Nie trzeba dodawac nowej kolumny — `probability` jest nadpisywana per deal i nadpisuje `probability_default` ze stage'a.
+
+### 2. Migracja SQL -- `discount_percent` na `deal_products`
+
+```text
+ALTER TABLE deal_products ADD COLUMN IF NOT EXISTS discount_percent numeric(5,2) DEFAULT 0;
+
+-- Przebudowa total_price aby uwzgledniac discount
+-- Najpierw usun stara wygenerowana kolumne
+ALTER TABLE deal_products DROP COLUMN IF EXISTS total_price;
+
+-- Dodaj nowa z discount
+ALTER TABLE deal_products ADD COLUMN total_price numeric(12,2) 
+  GENERATED ALWAYS AS (quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100)) STORED;
+```
+
+### 3. Migracja SQL -- tabela `deal_history`
+
+```text
+CREATE TABLE deal_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
-  director_id uuid NOT NULL REFERENCES directors(id),
-  enabled boolean DEFAULT false,
-  frequency text DEFAULT 'weekly' CHECK (frequency IN ('daily', 'weekly')),
-  day_of_week int2 DEFAULT 1 CHECK (day_of_week BETWEEN 0 AND 6),
-  time_of_day time DEFAULT '08:00',
-  email_override text,
-  include_sections jsonb DEFAULT '["summary","tasks","projects","contacts","calendar"]',
-  last_sent_at timestamptz,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE(tenant_id, director_id)
+  deal_id uuid NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+  changed_by uuid NOT NULL REFERENCES directors(id),
+  field_name text NOT NULL,
+  old_value text,
+  new_value text,
+  old_stage_id uuid REFERENCES deal_stages(id),
+  new_stage_id uuid REFERENCES deal_stages(id),
+  created_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE sovra_report_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deal_history ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "sovra_report_config_own" ON sovra_report_config
-  FOR ALL USING (
-    tenant_id = get_current_tenant_id() 
-    AND director_id = get_current_director_id()
-  );
+CREATE POLICY "deal_history_select" ON deal_history
+  FOR SELECT USING (tenant_id = get_current_tenant_id());
+
+CREATE POLICY "deal_history_insert" ON deal_history
+  FOR INSERT WITH CHECK (tenant_id = get_current_tenant_id());
+
+CREATE INDEX idx_deal_history_deal ON deal_history(deal_id);
+CREATE INDEX idx_deal_history_deal_created ON deal_history(deal_id, created_at DESC);
 ```
 
-### 2. Edge Function -- sovra-weekly-report
+Uwaga: `deal_activities` nadal istnieje i jest uzywany przez trigger `log_deal_activity` oraz caly frontend. `deal_history` to dodatkowa tabela do szczegoowego sledzenia zmian pol (nie tylko stage).
 
-Wzorzec autoryzacji identyczny jak `sovra-reminder-trigger`:
+### 4. Trigger -- auto-suma wartosci z produktow
 
 ```text
-Sciezka A: service_role token (cron)
-  - Pobierz directorow z sovra_report_config WHERE enabled = true
-  - Dla kazdego sprawdz schedule:
-    - weekly: day_of_week = EXTRACT(DOW FROM NOW()) AND last_sent_at < CURRENT_DATE
-    - daily: last_sent_at < CURRENT_DATE
-  - Przetworz kazdego pasujacego
+CREATE OR REPLACE FUNCTION update_deal_value_from_products()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE deals SET 
+    value = (
+      SELECT COALESCE(SUM(total_price), 0) 
+      FROM deal_products 
+      WHERE deal_id = COALESCE(NEW.deal_id, OLD.deal_id)
+    ),
+    updated_at = NOW()
+  WHERE id = COALESCE(NEW.deal_id, OLD.deal_id);
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public';
 
-Sciezka B: JWT token (manual preview z frontendu)
-  - verifyAuth(req) -> tylko ten director
-  - Pomin schedule check (generuj od razu)
-  - Zwroc preview_html w response
+CREATE TRIGGER trigger_update_deal_value
+  AFTER INSERT OR UPDATE OR DELETE ON deal_products
+  FOR EACH ROW
+  EXECUTE FUNCTION update_deal_value_from_products();
 ```
 
-Zbieranie danych za okres (7 dni dla weekly, 1 dzien dla daily):
+Ten trigger zastapi manualne klikniecie "Ustaw jako wartosc deal" w UI -- wartosc bedzie automatycznie synchronizowana.
+
+### 5. Trigger -- zapis do deal_history przy zmianach
 
 ```text
-1. tasks_completed: COUNT tasks WHERE status='done' AND updated_at >= period_start AND assigned_to = director_id
-2. tasks_created: COUNT tasks WHERE created_at >= period_start AND assigned_to = director_id
-3. tasks_overdue: tasks WHERE due_date < NOW() AND status NOT IN ('done','cancelled') AND assigned_to = director_id
-4. upcoming_deadlines: tasks WHERE due_date BETWEEN NOW() AND NOW()+7days AND status NOT IN ('done','cancelled')
-5. projects_active: projects WHERE owner_id = director_id AND status IN ('new','in_progress','analysis')
-6. Dla kazdego projektu: tasks done / tasks total (progress %)
-7. contacts_added: COUNT contacts WHERE created_at >= period_start AND tenant_id = X
-8. interactions: COUNT contact_activity_log WHERE created_at >= period_start AND tenant_id = X
-9. sovra_sessions: COUNT sovra_sessions WHERE started_at >= period_start AND director_id = X GROUP BY type
-10. sovra_reminders: COUNT sovra_reminders WHERE scheduled_at >= period_start AND director_id = X
+CREATE OR REPLACE FUNCTION track_deal_field_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_director_id uuid;
+BEGIN
+  SELECT id INTO v_director_id FROM directors WHERE user_id = auth.uid() LIMIT 1;
+  IF v_director_id IS NULL THEN
+    v_director_id := NEW.owner_id;
+  END IF;
+
+  -- Stage change
+  IF OLD.stage_id IS DISTINCT FROM NEW.stage_id THEN
+    INSERT INTO deal_history (tenant_id, deal_id, changed_by, field_name, old_value, new_value, old_stage_id, new_stage_id)
+    VALUES (
+      NEW.tenant_id, NEW.id, v_director_id, 'stage_id',
+      (SELECT name FROM deal_stages WHERE id = OLD.stage_id),
+      (SELECT name FROM deal_stages WHERE id = NEW.stage_id),
+      OLD.stage_id, NEW.stage_id
+    );
+  END IF;
+
+  -- Value change
+  IF OLD.value IS DISTINCT FROM NEW.value THEN
+    INSERT INTO deal_history (tenant_id, deal_id, changed_by, field_name, old_value, new_value)
+    VALUES (NEW.tenant_id, NEW.id, v_director_id, 'value', OLD.value::text, NEW.value::text);
+  END IF;
+
+  -- Status change
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    INSERT INTO deal_history (tenant_id, deal_id, changed_by, field_name, old_value, new_value)
+    VALUES (NEW.tenant_id, NEW.id, v_director_id, 'status', OLD.status, NEW.status);
+  END IF;
+
+  -- Priority change (nowe pole)
+  IF OLD.priority IS DISTINCT FROM NEW.priority THEN
+    INSERT INTO deal_history (tenant_id, deal_id, changed_by, field_name, old_value, new_value)
+    VALUES (NEW.tenant_id, NEW.id, v_director_id, 'priority', OLD.priority, NEW.priority);
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public';
+
+CREATE TRIGGER trigger_track_deal_fields
+  AFTER UPDATE ON deals
+  FOR EACH ROW
+  EXECUTE FUNCTION track_deal_field_changes();
 ```
 
-Generowanie AI summary (Lovable AI -- Gemini 2.5 Flash):
+Uwaga: istniejacy trigger `trigger_log_deal_activity` nadal dziala i zapisuje do `deal_activities`. Nowy trigger dodaje granularne wpisy do `deal_history`. Oba moga wspolistniec.
+
+### 6. Materialized View -- pipeline stats
 
 ```text
-POST https://ai.lovable.dev/chat
-{
-  "model": "gemini-2.5-flash",
-  "messages": [{
-    "role": "system",
-    "content": "Jestes Sovra. Napisz krotkie podsumowanie tygodnia pracy (3-5 zdan) po polsku. 
-     Badz konkretna -- podaj liczby. Styl: profesjonalny, pozytywny ale rzeczowy. 
-     Jesli sa problemy (zaleglosci, brak aktywnosci) -- wspomnij taktownie. 
-     Zakoncz 1 zdaniem motywacji na przyszly tydzien."
-  }, {
-    "role": "user",
-    "content": JSON.stringify(stats)
-  }],
-  "temperature": 0.5
-}
-Authorization: Bearer LOVABLE_API_KEY
+CREATE MATERIALIZED VIEW mv_deal_pipeline_stats AS
+SELECT
+  ds.tenant_id,
+  ds.id as stage_id,
+  ds.name as stage_name,
+  ds.position as stage_position,
+  ds.color as stage_color,
+  ds.probability_default as stage_probability,
+  COUNT(d.id) as deals_count,
+  COALESCE(SUM(d.value), 0) as total_value,
+  COALESCE(AVG(d.value), 0) as avg_value,
+  COALESCE(SUM(d.value * COALESCE(d.probability, ds.probability_default) / 100.0), 0) as weighted_value
+FROM deal_stages ds
+LEFT JOIN deals d ON d.stage_id = ds.id AND d.status = 'open'
+WHERE ds.is_active = true
+GROUP BY ds.tenant_id, ds.id, ds.name, ds.position, ds.color, ds.probability_default
+ORDER BY ds.position;
+
+CREATE UNIQUE INDEX idx_mv_deal_pipeline ON mv_deal_pipeline_stats(tenant_id, stage_id);
+
+CREATE OR REPLACE FUNCTION refresh_deal_pipeline_stats()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_deal_pipeline_stats;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public';
 ```
 
-Email HTML -- inline styles, table-based layout (email-safe):
+Uwaga: LEFT JOIN z warunkiem `d.status = 'open'` -- MV liczy tylko aktywne deale. Uzywa `probability_default` (istniejaca kolumna w `deal_stages`) i `probability` (istniejaca kolumna w `deals`).
+
+### 7. Indexy na istniejacych tabelach
 
 ```text
-- Max-width: 600px, table-based centering
-- Header: gradient violet->indigo, logo "S", tytul, okres
-- AI Summary: bg fioletowy, border-left, italic
-- Sekcja Zadania: 3 stat boxy (ukonczone/utworzone/zalegle), upcoming deadlines lista
-- Sekcja Projekty: kazdy z progress bar (table-based), X/Y zadan
-- Sekcja Kontakty: nowych X, interakcji Y
-- Sekcja Sovra: briefow X, chatow Y, debriefow Z, przypomnien N
-- Sekcja Przyszly tydzien: deadlines
-- Footer: "Wygenerowane przez Sovra", linki do Settings
-- Wszystkie sekcje warunkowo wg include_sections z config
+CREATE INDEX IF NOT EXISTS idx_deals_stage ON deals(stage_id);
+CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_id);
+CREATE INDEX IF NOT EXISTS idx_deals_contact ON deals(contact_id);
+CREATE INDEX IF NOT EXISTS idx_deals_company ON deals(company_id);
+CREATE INDEX IF NOT EXISTS idx_deals_close_date ON deals(expected_close_date);
+CREATE INDEX IF NOT EXISTS idx_deals_tenant_stage ON deals(tenant_id, stage_id);
+CREATE INDEX IF NOT EXISTS idx_deals_status ON deals(status);
+CREATE INDEX IF NOT EXISTS idx_deal_activities_deal ON deal_activities(deal_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deal_products_deal ON deal_products(deal_id);
 ```
-
-Wysylka emaila:
-
-```text
-Jesli RESEND_API_KEY istnieje:
-  POST https://api.resend.com/emails
-  {
-    "from": "Sovra <sovra@domena>",
-    "to": [director.email LUB config.email_override],
-    "subject": "Sovra -- Twoj tydzien w liczbach (27 sty -- 2 lut 2026)",
-    "html": htmlContent
-  }
-
-Jesli BRAK RESEND_API_KEY:
-  - Zapisz raport do sovra_sessions (type='weekly_report')
-  - Loguj warning: "RESEND_API_KEY not configured, report saved but not sent"
-  - Nie rzucaj bledu -- preview nadal dziala
-```
-
-Po wyslaniu/zapisaniu:
-- UPDATE sovra_report_config SET last_sent_at = NOW()
-- INSERT sovra_sessions z type='weekly_report', content = { stats, ai_summary, html }
-
-Response:
-
-```text
-// Cron mode:
-{ reports_sent: number, reports_skipped: number }
-
-// Preview mode (JWT):
-{ preview_html: string, stats: {...} }
-```
-
-### 3. config.toml
-
-Nowy wpis:
-```text
-[functions.sovra-weekly-report]
-verify_jwt = false
-```
-
-### 4. Hook -- useSovraReportConfig.ts
-
-```text
-Type SovraReportConfig:
-{
-  id: string
-  enabled: boolean
-  frequency: 'daily' | 'weekly'
-  day_of_week: number
-  time_of_day: string
-  email_override: string | null
-  include_sections: string[]
-  last_sent_at: string | null
-}
-
-A) useReportConfig():
-   - queryKey: ['sovra-report-config']
-   - SELECT * FROM sovra_report_config WHERE director_id = me (via RLS)
-   - Zwraca: { config: SovraReportConfig | null, isLoading }
-
-B) useSaveReportConfig():
-   - Mutation: UPSERT sovra_report_config
-   - Potrzebuje tenant_id i director_id z useAuth()
-   - onConflict: (tenant_id, director_id)
-   - onSuccess: invalidate + showToast.success
-
-C) usePreviewReport():
-   - Mutation: fetch sovra-weekly-report Edge Function z JWT
-   - Zwraca: { preview_html: string }
-   - Brak toast na success -- otwieramy modal z previewem
-```
-
-### 5. SovraReportSettings.tsx
-
-Komponent Card w zakladce Integracje (pod GoogleCalendarSettings):
-
-```text
-A) Header: "Raporty Sovry" + Switch (enabled/disabled)
-
-B) Gdy disabled:
-   - Info text: "Wlacz automatyczne raporty email z podsumowaniem Twojej aktywnosci."
-   - Switch ON -> upsert config z enabled=true + domyslne wartosci
-
-C) Gdy enabled -- formularz:
-   - Frequency: dwa radio buttony w ramkach
-     - "Tygodniowo" + "Raport co tydzien w wybrany dzien"
-     - "Codziennie" + "Raport kazdego dnia rano"
-     - Aktywny: border-primary bg-primary/5
-
-   - Day of week (tylko gdy weekly):
-     - Select: Poniedzialek(1) ... Niedziela(0)
-     - Domyslnie: Poniedzialek
-
-   - Time: Input type="time" defaultValue="08:00"
-     - Helper: "Raport bedzie wysylany okolo tej godziny"
-
-   - Email override: Input z placeholder={director.email}
-     - Helper: "Domyslnie na Twoj email. Wpisz inny jesli chcesz wyslac gdzie indziej."
-
-   - Sekcje: Checkboxes
-     - "Podsumowanie AI" -- checked, disabled (zawsze wlaczone)
-     - "Zadania" -- default checked
-     - "Projekty" -- default checked
-     - "Kontakty" -- default checked
-     - "Kalendarz" -- default checked
-
-   - last_sent_at: jesli istnieje -> "Ostatni raport: 3 lut 2026, 08:05"
-
-   - Buttons: "Zapisz" primary + "Podglad raportu" outline z Sparkles icon
-
-D) Podglad: klik -> usePreviewReport() -> open ReportPreviewModal z preview_html
-```
-
-### 6. ReportPreviewModal.tsx
-
-```text
-- Dialog max-w-2xl
-- Header: "Podglad raportu email" + close button
-- Body: div z dangerouslySetInnerHTML={{ __html: previewHtml }}
-  - max-h-[70vh] overflow-y-auto
-  - Bezpieczne: HTML pochodzi z naszego wlasnego Edge Function
-- Footer: "Tak bedzie wygladal Twoj raport" text-xs text-muted-foreground
-```
-
-### 7. Settings.tsx -- modyfikacja
-
-W zakladce `integrations` (linia 643-645), dodanie pod GoogleCalendarSettings:
-
-```text
-<TabsContent value="integrations" className="space-y-6">
-  <GoogleCalendarSettings />
-  <SovraReportSettings />      {/* NOWE */}
-</TabsContent>
-```
-
-Import: `import { SovraReportSettings } from '@/components/sovra/SovraReportSettings';`
 
 ---
 
-## RESEND_API_KEY
+## Czego NIE robimy
 
-Klucz `RESEND_API_KEY` **nie jest skonfigurowany**. Edge Function obsluguje to gracefully:
-- Jesli brak klucza: raport generowany i zapisywany do `sovra_sessions`, ale nie wysylany emailem
-- Preview w UI dziala normalnie (nie wymaga Resend)
-- Uzytkownik moze pozniej dodac klucz aby wlaczyc wysylke
-
-Jesli chcesz wlaczyc wysylke emailowa, trzeba bedzie skonfigurowac klucz Resend.
+| Element | Powod |
+|---------|-------|
+| Tworzenie `deal_stages` | Juz istnieje z 6 etapami |
+| Tworzenie `deals` | Juz istnieje z 18 kolumnami |
+| Tworzenie `deal_products` | Juz istnieje |
+| Tworzenie `deal_activities` | Juz istnieje |
+| Nowe RLS policies | Istniejace sa bardziej granularne i lepsze |
+| Edge Function `deal-setup` | RPC `seed_deal_stages_for_tenant` juz istnieje i dziala |
+| Modyfikacja frontendu | Poza zakresem tego kroku (schemat DB) |
+| Usuwanie istniejacych triggerow | `log_deal_activity` nadal potrzebny — frontend go uzywa |
 
 ## Bezpieczenstwo
 
-- Edge Function: autoryzacja wewnetrzna (service_role LUB JWT) -- brak publicznego dostepu
-- RLS na sovra_report_config: tylko wlasny director moze czytac/edytowac swoja konfiguracje
-- Filtracja po director_id/tenant_id we wszystkich query -- izolacja danych
-- last_sent_at guard: max 1 raport dziennie per director
-- dangerouslySetInnerHTML: tylko na HTML z wlasnego Edge Function (bezpieczne)
-- Email override: walidacja formatu na froncie (opcjonalna)
+- Nowa tabela `deal_history` ma RLS z `get_current_tenant_id()` -- izolacja tenantow
+- Trigger `update_deal_value_from_products` jest `SECURITY DEFINER` -- moze updateowac deals nawet gdy RLS blokuje bezposredni update (potrzebne bo trigger odpala sie w kontekscie INSERT na deal_products)
+- Trigger `track_deal_field_changes` jest `SECURITY DEFINER` z `SET search_path TO 'public'` -- bezpieczne wykonanie
+- Istniejace RLS policies na `deals`, `deal_stages`, `deal_products`, `deal_activities` -- bez zmian
 
-## Co NIE zostanie zmienione
+## Kolejnosc wykonania
 
-- Edge Functions: sovra-chat, sovra-debrief, sovra-morning-session, sovra-reminder-trigger, sovra-suggest-contacts, sovra-generate-embeddings -- bez zmian
-- Tabela sovra_reminders, sovra_sessions -- bez zmian schematu
-- Istniejace komponenty Settings -- bez zmian (GoogleCalendarSettings zachowany 1:1)
-- Inne strony/hooki -- bez zmian
+Jedna migracja SQL w nastepujacej kolejnosci:
 
+```text
+1. ALTER TABLE deals -- nowe kolumny + constraint
+2. ALTER TABLE deal_products -- discount_percent + przebudowa total_price
+3. CREATE TABLE deal_history + RLS + indexy
+4. CREATE FUNCTION + TRIGGER update_deal_value_from_products
+5. CREATE FUNCTION + TRIGGER track_deal_field_changes
+6. CREATE MATERIALIZED VIEW mv_deal_pipeline_stats + index + refresh function
+7. CREATE INDEX (indexy na istniejacych tabelach)
+```
+
+Wszystko w jednej migracji -- atomowe, rollback-safe.
