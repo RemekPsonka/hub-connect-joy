@@ -1,102 +1,153 @@
 
 
-# Upgrade Reusable Card Components to New Design Spec
+# ErrorBoundary Enhancement + Standardized Toast Notifications
 
 ## Current Situation
 
-All four components already exist in `src/components/ui/` and are actively used across ~15 files (Dashboard, Projects, ProjectDetail, Analytics, BugReports, Matches, etc.). The updates must be **backward-compatible** to avoid breaking existing pages.
+### ErrorBoundary
+The `ErrorBoundary` at `src/components/ErrorBoundary.tsx` is already a well-built class component with:
+- Error logging to Supabase `error_logs` table
+- Fallback UI with "Sprobuj ponownie", "Strona glowna", "Zglos blad" actions
+- Collapsible error details (dev-only stack traces)
+- `withErrorBoundary` HOC helper
+
+It is used in two places:
+- `src/App.tsx` -- wraps the entire app (top-level catch-all)
+- `src/App.tsx` -- wraps the `<Network />` route specifically
+
+However, `AppLayout.tsx` does NOT wrap the `<Outlet />` with ErrorBoundary, meaning page-level crashes still bubble up to the top-level boundary and lose the sidebar/header context.
+
+### Toast Notifications
+- Sonner is the primary toast library (~100 files import `toast` from `sonner`)
+- Radix UI Toast (`use-toast`) also exists but is secondary
+- No wrapper/utility -- every file imports `toast` directly from `sonner`
+- No standardized styling for success/error/warning/info types
 
 ## Changes Summary
 
-- 4 files modified (existing components upgraded)
-- 0 new files (components already exist, no barrel export file needed as direct imports are the project convention)
-- 0 pages modified (guardrail: no page changes)
+- **1 file modified**: `src/components/layout/AppLayout.tsx` -- wrap Outlet with ErrorBoundary
+- **1 file created**: `src/lib/toast.ts` -- standardized toast wrapper
+- **0 files modified** on ErrorBoundary itself -- it already meets all requirements
 
 ---
 
-## Component Updates
+## Detailed Changes
 
-### 1. StatCard (`src/components/ui/stat-card.tsx`)
+### 1. ErrorBoundary -- NO changes needed
 
-**What changes:**
-- Add `color` prop: `'violet' | 'blue' | 'emerald' | 'amber' | 'red'` (default: `'violet'`)
-- Add `label` as alias for `title` (keep `title` working for backward compat)
-- Icon container color maps to the `color` prop:
-  - `violet` -> `bg-violet-50 text-violet-600` / dark: `bg-violet-950/30 text-violet-400`
-  - `blue` -> `bg-blue-50 text-blue-600` / dark: `bg-blue-950/30 text-blue-400`
-  - `emerald` -> `bg-emerald-50 text-emerald-600` / dark variants
-  - `amber` -> `bg-amber-50 text-amber-600`
-  - `red` -> `bg-red-50 text-red-600`
-- Add `hover:shadow-md transition-shadow` to outer container
-- Keep existing props (`title`, `value`, `icon`, `loading`, `trend`, `className`) working unchanged
+The existing component already satisfies every requirement from the prompt:
+- Class component with proper error boundary lifecycle
+- Fallback UI with AlertTriangle icon, "Cos poszlo nie tak" heading, description
+- "Sprobuj ponownie" button (resets error state)
+- "Strona glowna" button (navigates to `/`)
+- Dev-only collapsible error details with stack trace
+- `fallbackComponent` prop for custom fallbacks
+- Supabase error logging
+- `withErrorBoundary` HOC
 
-**Backward compat:** `title` still works, `color` defaults to `'violet'` (currently uses `bg-primary/10` which is violet anyway).
+No modifications are necessary.
 
-### 2. DataCard (`src/components/ui/data-card.tsx`)
+### 2. Toast Wrapper (`src/lib/toast.ts`) -- NEW file
 
-**What changes:**
-- Add `isLoading` prop (optional boolean)
-- When `isLoading=true`, the body content is replaced with skeleton lines (3 animated pulse bars)
-- Keep all existing props (`title`, `description`, `action`, `children`, `footer`, `className`, `noPadding`) unchanged
+Create a standardized toast API that wraps Sonner's `toast()` function:
 
-**Backward compat:** Fully backward-compatible, `isLoading` is optional and defaults to `false`.
+```text
+showToast.success(message)   -> green accent, CheckCircle icon, 4s auto-dismiss
+showToast.error(message, details?) -> red accent, XCircle icon, 8s auto-dismiss, optional subtitle
+showToast.warning(message)   -> amber accent, AlertTriangle icon, 6s auto-dismiss
+showToast.info(message)      -> blue accent, Info icon, 4s auto-dismiss
+showToast.loading(message)   -> spinner, returns toast ID for later dismiss/update
+```
 
-### 3. EmptyState (`src/components/ui/empty-state.tsx`)
+Implementation approach:
+- Import `toast` from `sonner`
+- Use `toast.custom()` or `toast()` with `className` and `description` props
+- Each method renders a custom React element with the icon + styled left border
+- `showToast.loading` returns the toast ID so callers can do `toast.dismiss(id)` or `toast.success(message, { id })`
 
-**What changes:**
-- Add flat props `actionLabel` and `onAction` as alternatives to the current `action` object
-- Component checks both: if `action` object exists, use it; else if `actionLabel` + `onAction` exist, use those
-- Refine icon styling to `text-muted-foreground/40` (currently `text-muted-foreground`) for subtler look
-- Adjust padding from `py-16` to `py-12` per spec
+This is purely additive -- existing `toast()` calls throughout the app continue to work unchanged.
 
-**Backward compat:** The `action` object prop remains fully functional. New `actionLabel`/`onAction` props are additive.
+### 3. AppLayout Integration (`src/components/layout/AppLayout.tsx`) -- MODIFY
 
-### 4. SkeletonCard (`src/components/ui/skeleton-card.tsx`)
+Wrap the `<Outlet />` inside the content area with an ErrorBoundary:
 
-**What changes:**
-- Add `variant` prop: `'stat' | 'data' | 'list'` (default: `'data'`)
-- `variant='stat'`: Circle icon placeholder (w-10 h-10 rounded-lg) + large value bar (h-8 w-24) + small label bar (h-4 w-16)
-- `variant='data'`: Header bar (h-12 border-b) + body with `lines` x content bars -- similar to current but with header
-- `variant='list'`: Each line shows avatar circle (w-8 h-8 rounded-full) + text bar (flex-1 h-4)
-- Keep existing props (`height`, `className`, `lines`) working
+Before:
+```text
+<main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
+  <Outlet />
+</main>
+```
 
-**Backward compat:** Default variant is `'data'` which closely matches current behavior, so existing usages render the same way.
+After:
+```text
+<main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
+  <ErrorBoundary>
+    <Outlet />
+  </ErrorBoundary>
+</main>
+```
 
----
+This means page-level errors will be caught inside the layout, preserving the sidebar and header. The top-level ErrorBoundary in `App.tsx` remains as a final catch-all.
 
 ## Technical Details
 
-### Color mapping (StatCard)
+### Toast wrapper API (src/lib/toast.ts)
+
+The wrapper uses Sonner's `toast()` with custom JSX rendering:
 
 ```text
-const iconColorMap = {
-  violet: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
-  blue:   'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-  emerald:'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  amber:  'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-  red:    'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
+import { toast } from 'sonner';
+import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
+
+export const showToast = {
+  success: (message: string) => {
+    toast(message, {
+      icon: <CheckCircle className="h-5 w-5 text-emerald-500" />,
+      duration: 4000,
+      className: 'border-l-4 border-l-emerald-500',
+    });
+  },
+  error: (message: string, details?: string) => {
+    toast(message, {
+      icon: <XCircle className="h-5 w-5 text-red-500" />,
+      duration: 8000,
+      description: details,
+      className: 'border-l-4 border-l-red-500',
+    });
+  },
+  warning: (message: string) => {
+    toast(message, {
+      icon: <AlertTriangle className="h-5 w-5 text-amber-500" />,
+      duration: 6000,
+      className: 'border-l-4 border-l-amber-500',
+    });
+  },
+  info: (message: string) => {
+    toast(message, {
+      icon: <Info className="h-5 w-5 text-blue-500" />,
+      duration: 4000,
+      className: 'border-l-4 border-l-blue-500',
+    });
+  },
+  loading: (message: string) => {
+    return toast.loading(message);
+  },
 };
 ```
 
-### Loading skeleton (DataCard)
+### Sonner configuration update
 
-When `isLoading` is true, body renders:
-```text
-<div className="space-y-3 animate-pulse">
-  <div className="h-4 w-3/4 bg-muted rounded-md" />
-  <div className="h-4 w-1/2 bg-muted rounded-md" />
-  <div className="h-4 w-2/3 bg-muted rounded-md" />
-</div>
-```
-
-### No barrel export file
-
-The project convention is direct imports (e.g., `import { StatCard } from '@/components/ui/stat-card'`). All ~15 existing usage sites already use this pattern. Adding a barrel `index.ts` would be non-standard for this project, so it will be skipped.
+The existing Sonner `<Toaster>` in `src/components/ui/sonner.tsx` may need a small props addition for `position="bottom-right"` and `visibleToasts={3}` to match the spec. This is a minor one-line change.
 
 ### What is NOT changed
 - No pages modified
 - No hooks modified
+- No existing `toast()` calls changed anywhere
+- ErrorBoundary.tsx untouched (already complete)
 - No database changes
-- AppSidebar, HeaderBar, Breadcrumbs untouched
-- All existing component usages continue working without changes
+
+### Files summary
+- 1 new file: `src/lib/toast.ts`
+- 1 modified: `src/components/layout/AppLayout.tsx` (add ErrorBoundary around Outlet)
+- 1 modified: `src/components/ui/sonner.tsx` (add position + visibleToasts props)
 
