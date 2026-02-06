@@ -4,6 +4,9 @@ import { pl } from 'date-fns/locale';
 import { Calendar } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
+import { useContactAssignments, useUpdateAssignment } from '@/hooks/useDealsTeamAssignments';
 import type { DealTeamContact } from '@/types/dealTeam';
 
 interface HotLeadCardProps {
@@ -12,6 +15,9 @@ interface HotLeadCardProps {
 }
 
 export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
+  const { data: assignments = [] } = useContactAssignments(contact.id);
+  const updateAssignment = useUpdateAssignment();
+
   return (
     <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
       <CardContent className="p-3 space-y-2">
@@ -76,6 +82,40 @@ export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
         {contact.estimated_value && contact.estimated_value > 0 && (
           <div className="text-xs font-medium text-primary">
             {contact.estimated_value.toLocaleString('pl-PL')} {contact.value_currency}
+          </div>
+        )}
+
+        {/* Row 5: Mini task list */}
+        {assignments.length > 0 && (
+          <div className="space-y-1 pt-1 border-t">
+            {assignments.slice(0, 3).map((a) => (
+              <div key={a.id} className="flex items-center gap-1.5">
+                <Checkbox
+                  checked={a.status === 'done'}
+                  onCheckedChange={() =>
+                    updateAssignment.mutate({
+                      id: a.id,
+                      teamContactId: contact.id,
+                      status: a.status === 'done' ? 'pending' : 'done',
+                    })
+                  }
+                  className="h-3 w-3"
+                />
+                <span
+                  className={cn(
+                    'text-xs truncate',
+                    a.status === 'done' && 'line-through text-muted-foreground'
+                  )}
+                >
+                  {a.title}
+                </span>
+              </div>
+            ))}
+            {assignments.length > 3 && (
+              <p className="text-xs text-muted-foreground">
+                +{assignments.length - 3} więcej
+              </p>
+            )}
           </div>
         )}
       </CardContent>
