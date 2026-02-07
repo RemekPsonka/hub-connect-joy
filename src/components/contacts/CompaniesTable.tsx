@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown, Building2, Phone, Sparkles, Loader2, User } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { CompanyLogo } from '@/components/ui/CompanyLogo';
 import {
   Pagination,
   PaginationContent,
@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCompanyLogoUrl, useRegenerateCompanyAI, type CompanyWithTopContact } from '@/hooks/useCompanies';
+import { useRegenerateCompanyAI, type CompanyWithTopContact } from '@/hooks/useCompanies';
+import { usePreloadLogos } from '@/hooks/useCompanyLogo';
 
 const ROW_HEIGHT = 56;
 const COMPANIES_MIN_WIDTH = 960;
@@ -53,6 +54,8 @@ export function CompaniesTable({
   const navigate = useNavigate();
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const regenerateAI = useRegenerateCompanyAI();
+
+  usePreloadLogos(companies);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -173,7 +176,6 @@ export function CompaniesTable({
               <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((virtualItem) => {
                   const company = companies[virtualItem.index];
-                  const logoUrl = getCompanyLogoUrl(company.website);
                   return (
                     <div
                       key={company.id}
@@ -190,12 +192,7 @@ export function CompaniesTable({
                     >
                       <div className="px-4 w-[220px] flex-shrink-0">
                         <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            {logoUrl && <AvatarImage src={logoUrl} alt={company.name} />}
-                            <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-                              <Building2 className="h-4 w-4" />
-                            </AvatarFallback>
-                          </Avatar>
+                          <CompanyLogo companyName={company.name} website={company.website} size="md" />
                           <span className="font-medium truncate">{company.name}</span>
                         </div>
                       </div>

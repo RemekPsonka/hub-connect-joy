@@ -50,7 +50,7 @@ export interface Deal {
   updated_at: string;
   // Relations
   contact?: { id: string; full_name: string } | null;
-  company?: { id: string; name: string } | null;
+  company?: { id: string; name: string; website?: string | null } | null;
   stage?: DealStageMinimal | null;
   owner?: { id: string; full_name: string } | null;
   team?: { id: string; name: string; color: string } | null;
@@ -159,7 +159,7 @@ export function useDeals(filters: DealsFilters = {}) {
         .select(`
           *,
           contact:contacts(id, full_name),
-          company:companies(id, name),
+          company:companies(id, name, website),
           stage:deal_stages(id, name, position, color, is_closed_won, is_closed_lost),
           owner:directors(id, full_name),
           team:deal_teams(id, name, color)

@@ -14,9 +14,9 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { CompanyLogo } from '@/components/ui/CompanyLogo';
 import { CompanyModal } from '@/components/contacts/CompanyModal';
-import { useRegenerateCompanyAI, getCompanyLogoUrl, type Company } from '@/hooks/useCompanies';
+import { useRegenerateCompanyAI, type Company } from '@/hooks/useCompanies';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -35,7 +35,6 @@ export function CompanyProfileHeader({ company }: CompanyProfileHeaderProps) {
   const [editOpen, setEditOpen] = useState(false);
   const regenerateAI = useRegenerateCompanyAI();
 
-  const logoUrl = company.logo_url || getCompanyLogoUrl(company.website);
   
   const handleRegenerateAI = async () => {
     await regenerateAI.mutateAsync({
@@ -64,20 +63,13 @@ export function CompanyProfileHeader({ company }: CompanyProfileHeaderProps) {
           <div className="flex flex-col md:flex-row gap-6">
             {/* Logo */}
             <div className="flex-shrink-0">
-              <Avatar className="h-24 w-24 border-2">
-                {logoUrl && (
-                  <AvatarImage 
-                    src={logoUrl} 
-                    alt={company.name}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                )}
-                <AvatarFallback className="bg-muted text-2xl">
-                  <Building2 className="h-10 w-10 text-muted-foreground" />
-                </AvatarFallback>
-              </Avatar>
+              <CompanyLogo
+                companyName={company.name}
+                website={company.website}
+                logoUrl={company.logo_url}
+                size="lg"
+                className="h-24 w-24 text-2xl border-2"
+              />
             </div>
 
             {/* Info */}
