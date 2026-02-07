@@ -1,235 +1,180 @@
 
 
-# Izolacja danych -- RLS per dyrektor (kontakty, zadania, projekty)
+# Izolacja danych -- faza 2: firmy, dashboard, deals-team, sidebar
 
 ## Problem
 
-Obecne polityki RLS filtruja dane tylko po `tenant_id` (organizacji). Wszyscy dyrektorzy w tym samym tenancie (Remek, Pawel, Adam) widza **te same** kontakty, zadania i projekty. Powinni widziec tylko swoje.
+Po wdrozeniu izolacji kontaktow (director_id + contact_shares) pozostaly luki:
 
-## Stan obecny vs wymagany
+1. **Dashboard** -- Pawel widzi licznik "Kontakty 2088" (caly tenant zamiast swoich)
+2. **Firmy** -- Pawel widzi wszystkie 1530 firm (RLS filtruje tylko po tenant_id)
+3. **Deals Team** -- "Nieznany kontakt" zamiast ukrycia rekordu
+4. **Sidebar** -- Pawel widzi "Siec kontaktow", "Ofertowanie", "Dopasowania" (powinny byc ukryte)
 
-| Tabela | Obecne RLS | Wymagane RLS |
-|--------|-----------|-------------|
-| `contacts` | `tenant_id = get_current_tenant_id()` -- wszyscy widza wszystko | Tylko wlasne kontakty + udostepnione |
-| `tasks` | `owner_id = me OR assigned_to = me OR visibility IN ('team','public') OR owner_id IS NULL` | `owner_id = me OR assigned_to = me` (usunac fallback na NULL i team/public) |
-| `projects` | `tenant_id = get_current_tenant_id()` -- wszyscy widza wszystko | `owner_id = me OR member w project_members` |
-| `consultations` | `tenant_id = get_current_tenant_id()` | `director_id = me` |
-| `needs/offers` | `tenant_id = get_current_tenant_id()` | Przez kontakt -- jesli widze kontakt, widze jego needs/offers |
-| `deals` | Juz izolowane: `owner_id = me OR team_member` | Bez zmian -- juz OK |
+## Zmiany
 
-## Architektura rozwiazania
+### 1. RLS na companies -- izolacja przez kontakty
 
-### 1. Nowa kolumna `director_id` na `contacts`
-
-Dodanie kolumny `director_id uuid REFERENCES directors(id)` wskazujacej wlasciciela kontaktu. Wypelnienie na podstawie grup:
+Firma widoczna tylko jesli:
+- Uzytkownik jest adminem tenanta, LUB
+- Istnieje choc jeden kontakt w tej firmie, do ktorego uzytkownik ma dostep (can_access_contact)
 
 ```text
-Grupy Remka: "Czlonek CC Remek", "Kontakty biznesowe Remka" -> director_id = 98a271e8...
-Grupy Pawla: "Baza kontaktow Pawel", "Czlonek CC Pawel" -> director_id = f6133796...
-Wspolne (do Remka): "Baza kontaktow biznesowych" (1940), "Czlonek CC" (16), 
-                     "Czlonek CC Katowice" (12), "Inne" (0), "Poznany na CC" (6)
-                     -> director_id = 98a271e8... (Remek jako owner)
-Kontakty bez grupy: -> director_id = 98a271e8... (Remek jako owner)
-```
+DROP POLICY "Companies tenant access" ON companies;
 
-### 2. Nowa tabela `contact_shares`
-
-Tabela umozliwiajaca udostepnianie kontaktow miedzy dyrektorami:
-
-```text
-contact_shares (
-  id uuid PK,
-  tenant_id uuid NOT NULL,
-  contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  shared_with_director_id uuid NOT NULL REFERENCES directors(id),
-  shared_by_director_id uuid NOT NULL REFERENCES directors(id),
-  permission text DEFAULT 'read' CHECK ('read','write'),
-  created_at timestamptz
-  UNIQUE(contact_id, shared_with_director_id)
-)
-```
-
-### 3. Nowe RLS policies
-
-#### contacts -- SELECT
-
-```text
-Nowa polityka "contacts_director_isolation":
-  USING (
-    tenant_id = get_current_tenant_id()
-    AND (
-      -- Admin/Owner widzi wszystko w tenancie
-      is_tenant_admin(auth.uid(), tenant_id)
-      -- Dyrektor widzi swoje kontakty
-      OR director_id = get_current_director_id()
-      -- Dyrektor widzi udostepnione kontakty
-      OR EXISTS (SELECT 1 FROM contact_shares cs 
-                 WHERE cs.contact_id = contacts.id 
-                 AND cs.shared_with_director_id = get_current_director_id())
-      -- Kontakty bez wlasciciela (legacy) -- do owner/admin
-      OR director_id IS NULL
-    )
-  )
-```
-
-Istniejace polityki asystentow i przedstawicieli zostaja bez zmian -- dzialaja rownolegle.
-
-#### tasks -- SELECT
-
-```text
-Zaktualizowana polityka "Tasks visibility select":
-  USING (
+-- SELECT: admin lub ma dostep do kontaktu w firmie
+CREATE POLICY "companies_director_select" ON companies
+  FOR SELECT USING (
     tenant_id = get_current_tenant_id()
     AND (
       is_tenant_admin(auth.uid(), tenant_id)
-      OR owner_id = get_current_director_id()
-      OR assigned_to = get_current_director_id()
+      OR EXISTS (
+        SELECT 1 FROM contacts c 
+        WHERE c.company_id = companies.id 
+        AND can_access_contact(c.id)
+      )
     )
-  )
-  -- Usuniety: OR visibility IN ('team','public') OR owner_id IS NULL
-```
+  );
 
-#### projects -- SELECT
-
-```text
-Nowa polityka "projects_director_isolation":
-  USING (
+-- INSERT/UPDATE/DELETE: admin lub wlasciciel kontaktu w firmie
+CREATE POLICY "companies_director_modify" ON companies
+  FOR ALL USING (
     tenant_id = get_current_tenant_id()
     AND (
       is_tenant_admin(auth.uid(), tenant_id)
-      OR owner_id = get_current_director_id()
-      OR EXISTS (SELECT 1 FROM project_members pm 
-                 WHERE pm.project_id = projects.id 
-                 AND pm.director_id = get_current_director_id())
+      OR EXISTS (
+        SELECT 1 FROM contacts c 
+        WHERE c.company_id = companies.id 
+        AND c.director_id = get_current_director_id()
+      )
     )
-  )
-```
-
-#### consultations
-
-```text
-Zaktualizowana polityka:
-  USING (
+  ) WITH CHECK (
     tenant_id = get_current_tenant_id()
-    AND (
-      is_tenant_admin(auth.uid(), tenant_id)
-      OR director_id = get_current_director_id()
-    )
-  )
+  );
 ```
 
-### 4. Tabele potomne (needs, offers, contact_activity_log, contact_agent_memory)
+Efekt: Pawel widzi tylko firmy powiazane z kontaktami, ktore posiada lub ma udostepnione. Udostepnienie kontaktu = udostepnienie firmy automatycznie.
 
-Te tabele maja `contact_id` -- ich widocznosc bedzie **posrednia przez kontakty**. Zmiana podejscia:
+### 2. Dashboard stats -- per director
 
-```text
-Zamiast: tenant_id = get_current_tenant_id()
-Na: EXISTS (SELECT 1 FROM contacts c WHERE c.id = X.contact_id 
-    AND c.tenant_id = get_current_tenant_id()
-    AND (c.director_id = get_current_director_id() 
-         OR is_tenant_admin(auth.uid(), c.tenant_id)
-         OR EXISTS (SELECT 1 FROM contact_shares cs ...)))
-```
-
-Alternatywnie: uzyjemy funkcji `can_access_contact(contact_id)` aby uniknac powtarzania logiki.
-
-### 5. Funkcja pomocnicza `can_access_contact`
+Przebudowa funkcji `get_dashboard_stats()` aby liczyc dane per dyrektor (nie per tenant). Zamiast MV (ktory jest per tenant), funkcja bedzie liczyc "w locie":
 
 ```text
-CREATE FUNCTION can_access_contact(_contact_id uuid)
-RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM contacts c
-    WHERE c.id = _contact_id
-    AND c.tenant_id = get_current_tenant_id()
-    AND (
-      is_tenant_admin(auth.uid(), c.tenant_id)
-      OR c.director_id = get_current_director_id()
-      OR EXISTS (SELECT 1 FROM contact_shares cs 
-                 WHERE cs.contact_id = c.id 
-                 AND cs.shared_with_director_id = get_current_director_id())
-      OR c.director_id IS NULL
-    )
-  )
+CREATE OR REPLACE FUNCTION get_dashboard_stats()
+RETURNS TABLE(...) AS $$
+DECLARE
+  v_tenant_id UUID := get_current_tenant_id();
+  v_director_id UUID := get_current_director_id();
+  v_is_admin BOOLEAN;
+BEGIN
+  SELECT is_tenant_admin(auth.uid(), v_tenant_id) INTO v_is_admin;
+  
+  IF v_is_admin THEN
+    -- Admin widzi wszystko (jak dotychczas z MV)
+    RETURN QUERY SELECT ... FROM mv_dashboard_stats WHERE tenant_id = v_tenant_id;
+  ELSE
+    -- Dyrektor widzi tylko swoje dane
+    RETURN QUERY SELECT
+      (SELECT COUNT(*) FROM contacts c WHERE c.tenant_id = v_tenant_id 
+       AND c.is_active = true AND can_access_contact(c.id)) AS total_contacts,
+      (SELECT COUNT(*) FROM contacts c WHERE c.tenant_id = v_tenant_id 
+       AND c.is_active = true AND can_access_contact(c.id)
+       AND c.created_at >= NOW() - INTERVAL '30 days') AS new_contacts_30d,
+      -- ... analogicznie dla pozostalych metryk
+      (SELECT COUNT(*) FROM tasks tk WHERE tk.tenant_id = v_tenant_id 
+       AND tk.status = 'pending' 
+       AND (tk.owner_id = v_director_id OR tk.assigned_to = v_director_id)) AS pending_tasks,
+      -- ... itd
+      NOW() AS refreshed_at;
+  END IF;
+END;
 $$;
 ```
 
-### 6. UI -- przycisk "Udostepnij" na kontakcie
+Admin widzi globalne statystyki (szybko z MV). Dyrektor widzi tylko swoje (wolniej, ale poprawnie).
 
-W `ContactDetailHeader.tsx` dodamy przycisk "Udostepnij" otwierajacy dialog z lista dyrektorow. Po wybraniu -> INSERT do `contact_shares`.
+### 3. Deals Team -- ukrycie niedostepnych kontaktow
+
+W hookach `useTeamContacts` (src/hooks/useDealsTeamContacts.ts) dodac filtr po pobraniu kontaktow CRM:
+
+```text
+// Linia 64: Po zmapowaniu kontaktow, odfiltruj te bez dostepu
+return dealContacts
+  .map(dc => ({ ...dc, contact: contactMap.get(dc.contact_id) }))
+  .filter(dc => dc.contact !== undefined)  // <-- NOWE: ukryj "Nieznany kontakt"
+  as DealTeamContact[];
+```
+
+RLS na contacts juz blokuje SELECT -- wiec kontakty bez dostepu nie wracaja z query. Wystarczy odfilrowac rekordy gdzie contact jest undefined/null.
+
+Analogicznie w komponentach HotLeadCard, TopLeadCard, LeadCard -- jesli contact jest null, nie renderuj karty (dodatkowe zabezpieczenie).
+
+### 4. Sidebar -- ukrycie sekcji dla nie-adminow
+
+W `AppSidebar.tsx` przefiltruj elementy menu:
+
+```text
+// Zmiana w linii 53-57 (crmItems):
+const crmItems = [
+  { title: 'Kontakty', url: '/contacts', icon: Users },
+  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2 },
+  { title: 'Siec kontaktow', url: '/network', icon: Network, adminOnly: true },
+];
+
+// Zmiana w linii 68-73 (salesItems):
+const salesItems = [
+  { title: 'Deals', url: '/deals', icon: TrendingUp },
+  { title: 'Zespol Deals', url: '/deals-team', icon: Users2 },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
+];
+
+// W renderowaniu (linia 214):
+{group.items
+  .filter(item => !item.adminOnly || isAdmin)
+  .map(item => <NavItem key={...} item={item} />)}
+```
+
+### 5. Ochrona rout -- redirect dla nie-adminow
+
+W `App.tsx` dodac `AdminGuard` na chronione route:
+
+```text
+// Nowy komponent AdminGuard -- sprawdza isAdmin, redirect na /
+<Route path="/network" element={<AdminGuard><Network /></AdminGuard>} />
+<Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
+<Route path="/matches" element={<AdminGuard><Matches /></AdminGuard>} />
+```
+
+To zapobiega dostepowi przez bezposredni URL.
 
 ## Kolejnosc wykonania
 
 ```text
-Migracja SQL (atomowa):
-1. ALTER TABLE contacts ADD COLUMN director_id uuid REFERENCES directors(id)
-2. UPDATE contacts SET director_id = ... (na podstawie grup)
-3. CREATE TABLE contact_shares + RLS
-4. CREATE FUNCTION can_access_contact()
-5. DROP POLICY + CREATE POLICY na: contacts, tasks, projects, consultations
-6. Zaktualizuj policies na: needs, offers, contact_activity_log, contact_agent_memory
-7. CREATE INDEX na contacts(director_id), contact_shares(contact_id, shared_with_director_id)
-```
+SQL:
+1. Nowa polityka RLS na companies (SELECT + MODIFY)
+2. Przebudowa get_dashboard_stats() z logika per director
 
-```text
 Frontend:
-8. Hook useContactShares (udostepnianie)
-9. Przycisk "Udostepnij" w ContactDetailHeader
-10. Dialog wyboru dyrektora do udostepnienia
+3. AppSidebar.tsx -- adminOnly filter
+4. AdminGuard komponent + App.tsx routes
+5. useDealsTeamContacts.ts -- filtr null kontaktow
+6. HotLeadCard/TopLeadCard/LeadCard -- guard na null contact
 ```
 
-## Tabele dotykane zmianami RLS
-
-| Tabela | Zmiana |
-|--------|--------|
-| `contacts` | Nowa kolumna `director_id` + nowa polityka SELECT z izolacja |
-| `contact_shares` | Nowa tabela |
-| `tasks` | Zmiana polityki SELECT -- usunac fallback NULL i team/public |
-| `projects` | Nowa polityka SELECT -- owner_id lub project_members |
-| `consultations` | Zmiana polityki -- dodac director_id check |
-| `needs` | Zmiana polityki -- przez can_access_contact() |
-| `offers` | Zmiana polityki -- przez can_access_contact() |
-| `contact_activity_log` | Zmiana polityki -- przez can_access_contact() |
-| `contact_agent_memory` | Zmiana polityki -- przez can_access_contact() |
-| `business_interviews` | Zmiana polityki -- przez can_access_contact() |
-
-## Co NIE zostanie zmienione
+## Czego NIE robimy
 
 | Element | Powod |
 |---------|-------|
-| `deals` | Juz izolowane (owner_id + team_member) |
-| `deal_stages` | Konfiguracja per tenant -- poprawne |
-| `deal_activities/products` | Dziedzicza dostep przez deals -- poprawne |
-| Istniejace polityki asystentow | Dzialaja rownolegle -- bez zmian |
-| Istniejace polityki przedstawicieli | Dzialaja rownolegle -- bez zmian |
-| `companies` | Wspolne zasoby -- izolacja per tenant wystarczy |
+| Zmiana RLS na deals | Deals juz izolowane po owner_id/team_member -- poprawne |
+| Zmiana RLS na tasks | Juz zaktualizowane w poprzedniej migracji |
+| Nowa tabela | Nie potrzebna -- uzywamy istniejacych mechanizmow |
+| Zmiana contact_shares | Dziala poprawnie -- udostepnienie kontaktu = udostepnienie firmy przez can_access_contact |
 
 ## Bezpieczenstwo
 
-- Admin/Owner (`is_tenant_admin`) ZAWSZE widzi wszystkie dane w tenancie
-- Dyrektor widzi TYLKO swoje kontakty + udostepnione
-- SGU jest traktowany jak zwykly dyrektor -- widzi tylko swoje
-- Kontakty bez `director_id` (NULL) sa widoczne dla admina -- fallback bezpieczenstwa
-- `can_access_contact` jest SECURITY DEFINER -- bezpieczne wywolanie z RLS
-- `contact_shares` ma wlasne RLS -- kazdy widzi tylko udostepnienia do siebie
+- Companies RLS przez can_access_contact -- firma widoczna tylko jesli masz dostep do kontaktu w niej
+- Dashboard stats -- admin widzi globalnie, dyrektor tylko swoje
+- Route guard -- bezposredni URL do /network, /pipeline, /matches przekierowuje nie-adminow
+- Sidebar filter -- czysto kosmetyczne, ale wzmocnione route guardem
 
-## Dane do migracji (przypisanie kontaktow)
-
-```text
-Remek (98a271e8): 
-  - Grupy: "Czlonek CC Remek" (15), "Kontakty biznesowe Remka" (72)
-  - Wspolne (owner): "Baza kontaktow biznesowych" (1940), "Czlonek CC" (16), 
-    "Czlonek CC Katowice" (12), "Inne" (0), "Poznany na CC" (6)
-  - Kontakty bez grupy
-  Lacznie: ~2061
-
-Pawel (f6133796):
-  - Grupy: "Baza kontaktow Pawel" (0), "Czlonek CC Pawel" (0)
-  Lacznie: 0 (grupy puste)
-
-Adam (47700bf1):
-  - Brak przypisanych grup
-  Lacznie: 0
-```
