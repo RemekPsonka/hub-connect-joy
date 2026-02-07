@@ -1,171 +1,210 @@
 
 
-# useCompanyLogo -- cache localStorage + CompanyLogo komponent + integracja
+# Vitest + React Testing Library -- konfiguracja i unit testy
 
 ## Podsumowanie
 
-System cachowania logo firm w localStorage z Clearbit API. Obejmuje: utility do cache, hook useCompanyLogo, komponent CompanyLogo, batch preload, oraz integracje w 5 miejscach UI.
+Rozbudowa istniejacej infrastruktury testowej (vitest juz zainstalowany) o: brakujace utility (`formatCurrency`, `validations/deals`), mocki w setup, pliki testowe, i helper do renderowania z providerami.
 
-## Nowe pliki (3)
+## Stan obecny
+
+| Element | Status |
+|---------|--------|
+| `vitest` + `jsdom` + `@testing-library/react` + `@testing-library/jest-dom` | Zainstalowane w devDependencies |
+| `vitest.config.ts` | Istnieje -- potrzebuje dodania coverage config |
+| `src/test/setup.ts` | Istnieje -- ma matchMedia mock, brakuje Supabase i localStorage mocka |
+| `tsconfig.app.json` | OK -- ma `vitest/globals` |
+| `package.json` scripts | Ma `test` i `test:watch` -- dodac `test:coverage` |
+| `src/lib/formatCurrency.ts` | NIE ISTNIEJE -- trzeba stworzyc |
+| `src/lib/validations/deals.ts` | NIE ISTNIEJE -- trzeba stworzyc |
+| `@testing-library/user-event` | NIE zainstalowany -- dodac |
+
+## Nowe pliki (8)
 
 | Plik | Opis |
 |------|------|
-| `src/lib/logoCache.ts` | Utility: getCachedLogo, setCachedLogo, clearExpiredLogos, extractDomain, getLogoUrl |
-| `src/hooks/useCompanyLogo.ts` | Hook useCompanyLogo + usePreloadLogos (w jednym pliku) |
-| `src/components/ui/CompanyLogo.tsx` | Komponent z 3 stanami: logo / loading / inicjaly |
+| `src/lib/formatCurrency.ts` | Utility: formatCurrency(amount, currency) + formatCompactCurrency(amount, currency) |
+| `src/lib/validations/deals.ts` | Zod schemas: createDealSchema + updateDealSchema |
+| `src/lib/__tests__/formatCurrency.test.ts` | 6+ testow dla formatowania walut |
+| `src/lib/__tests__/logoCache.test.ts` | 8+ testow dla cache logo (extractDomain, get/set, clearExpired) |
+| `src/lib/__tests__/validations.test.ts` | 7+ testow dla Zod walidacji deals |
+| `src/hooks/__tests__/useCompanyLogo.test.ts` | 5+ testow dla hooka useCompanyLogo |
+| `src/test/utils.tsx` | renderWithProviders helper z QueryClientProvider |
+| (aktualizacja) `src/test/setup.ts` | Dodanie mockow Supabase + localStorage |
 
-## Modyfikowane pliki (5)
+## Modyfikowane pliki (3)
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/contacts/CompaniesTable.tsx` | Avatar -> CompanyLogo md, dodac usePreloadLogos |
-| `src/components/contacts/ContactsTable.tsx` | Dodac CompanyLogo sm obok nazwy firmy |
-| `src/components/companies/CompanyProfileHeader.tsx` | Avatar -> CompanyLogo lg (h-24 w-24) |
-| `src/components/deals/DealCard.tsx` | Building2 icon -> CompanyLogo sm obok firmy |
-| `src/hooks/useDeals.ts` | Rozszerzyc query: `company:companies(id, name, website)` |
-| `src/components/layout/AppLayout.tsx` | Dodac clearExpiredLogos() w useEffect przy mount |
+| `vitest.config.ts` | Dodanie sekcji coverage (v8 provider, include src/lib + src/hooks) |
+| `src/test/setup.ts` | Dodanie vi.mock dla Supabase client + localStorage mock |
+| `package.json` | Dodanie `test:coverage` script, dodanie `@testing-library/user-event` do devDependencies |
 
 ## Szczegoly techniczne
 
-### 1. logoCache.ts
+### 1. formatCurrency.ts -- nowy plik utility
 
 ```text
-LOGO_CACHE_PREFIX = 'logo_'
-LOGO_CACHE_TTL = 7 dni
+formatCurrency(amount: number | null | undefined, currency?: string): string
+  - null/undefined -> zwraca '—' (em dash)
+  - Intl.NumberFormat('pl-PL', { style: 'currency', currency })
+  - Domyslna waluta: 'PLN'
 
-getCachedLogo(domain) -> string | null | undefined
-  undefined = nie w cache, null = potwierdzony brak logo, string = URL
-
-setCachedLogo(domain, url | null)
-  try/catch -> przy pelnym storage wywoluje clearExpiredLogos()
-
-clearExpiredLogos()
-  Iteruje klucze z prefixem, usuwa expired i uszkodzone
-
-extractDomain(url) -> string | null
-  Obsluguje: "example.com", "https://example.com", "www.example.com"
-
-getLogoUrl(domain, size=64) -> string
-  Zwraca Clearbit URL
+formatCompactCurrency(amount: number | null | undefined, currency?: string): string
+  - >= 1_000_000 -> "1.5M PLN"
+  - >= 1_000 -> "50K PLN"
+  - < 1_000 -> "500 PLN"
+  - null/undefined -> '—'
 ```
 
-### 2. useCompanyLogo + usePreloadLogos
+### 2. validations/deals.ts -- Zod schemas
 
 ```text
-useCompanyLogo(companyName, websiteOrDomain):
-  1. extractDomain z websiteOrDomain
-  2. Sprawdz cache -> jesli w cache, uzyj natychmiast
-  3. Jesli nie -> new Image() probe
-     onload -> setCachedLogo(domain, url)
-     onerror -> setCachedLogo(domain, null)
-  4. Zwraca { logoUrl, isLoading, initials }
+createDealSchema:
+  title: z.string().min(1).max(200)
+  stage_id: z.string().uuid()
+  value: z.number().min(0).optional()
+  currency: z.enum(['PLN','EUR','USD','GBP','CHF']).default('PLN')
+  probability: z.number().min(0).max(100).optional()
+  contact_id: z.string().uuid().nullable().optional()
+  company_id: z.string().uuid().nullable().optional()
+  expected_close_date: z.string().nullable().optional()
+  description: z.string().nullable().optional()
+  source: z.string().nullable().optional()
+  priority: z.enum(['low','medium','high','urgent']).default('medium')
+  owner_id: z.string().uuid().nullable().optional()
+  team_id: z.string().uuid().nullable().optional()
 
-usePreloadLogos(companies):
-  - useEffect: batch preload max 20
-  - Filtruje juz cached
-  - new Image() fire-and-forget
+updateDealSchema:
+  id: z.string().uuid()
+  + partial z createDealSchema (all optional)
+  + status: z.enum(['open','won','lost']).optional()
+  + lost_reason: z.string().nullable().optional()
+  + probability_override: z.number().min(0).max(100).nullable().optional()
+  + won_at: z.string().nullable().optional()
 ```
 
-### 3. CompanyLogo komponent
+### 3. setup.ts -- rozszerzenie o mocki
 
 ```text
-Props: companyName, website?, logoUrl?, size ('sm'|'md'|'lg'), className?
-
-Rozmiary: sm=w-6 h-6, md=w-8 h-8, lg=w-10 h-10
-
-3 stany renderowania:
-  1. logoUrl -> <img> z onError fallback
-  2. isLoading -> animate-pulse placeholder
-  3. Fallback -> inicjaly w kolorowym tle
-
-Prop logoUrl (opcjonalny) -- jesli podany, uzywa bezposrednio
-(dla CompanyProfileHeader gdzie company.logo_url ma priorytet)
+Dodane:
+1. vi.mock('@/integrations/supabase/client') -- mock supabase.from(), auth, functions
+2. localStorage mock -- in-memory store z getItem, setItem, removeItem, clear, length, key
 ```
 
-### 4. CompaniesTable.tsx
+Istniejacy matchMedia mock zostaje bez zmian.
+
+### 4. vitest.config.ts -- coverage
 
 ```text
-- Usunac import getCompanyLogoUrl (nie uzywany w tym pliku po zmianie)
-- Dodac import CompanyLogo, usePreloadLogos
-- Dodac usePreloadLogos(companies) na poczatku komponentu
-- Linia 176: usunac const logoUrl = getCompanyLogoUrl(...)
-- Linie 193-198: zamienic Avatar blok na:
-  <CompanyLogo companyName={company.name} website={company.website} size="md" />
+Dodana sekcja test.coverage:
+  provider: 'v8'
+  reporter: ['text', 'html', 'lcov']
+  include: ['src/lib/**', 'src/hooks/**']
+  exclude: ['src/test/**', '**/*.d.ts']
 ```
 
-### 5. ContactsTable.tsx
+### 5. Testy formatCurrency (6 testow)
 
 ```text
-- Dodac import CompanyLogo
-- Linia 304: zamienic tekst firmy na:
-  <div className="... flex items-center gap-2">
-    {contact.company && <CompanyLogo companyName={contact.company} size="sm" />}
-    <span className="truncate">{contact.company || '-'}</span>
-  </div>
+- formatCurrency: formats PLN, returns dash for null, handles zero, handles decimals, supports EUR/USD/GBP
+- formatCompactCurrency: millions as M, thousands as K, small values normally
 ```
 
-Uwaga: Kontakty nie maja website w query -- CompanyLogo pokaze inicjaly (lepsze niz Building2 icon).
-
-### 6. CompanyProfileHeader.tsx
+### 6. Testy logoCache (8+ testow)
 
 ```text
-- Usunac import getCompanyLogoUrl z useCompanies
-- Usunac linia 38: const logoUrl = ...
-- Linie 67-80: zamienic Avatar h-24 na:
-  <CompanyLogo 
-    companyName={company.name}
-    website={company.website}
-    logoUrl={company.logo_url}
-    size="lg"
-    className="h-24 w-24 text-2xl"
-  />
+extractDomain:
+  - full URL -> domain
+  - bare domain -> domain
+  - strips www
+  - null/empty/undefined -> null
+  - invalid URL -> null
+
+logo cache:
+  - uncached -> undefined
+  - set + get -> URL
+  - null cached -> null
+  - expired -> undefined
+
+getLogoUrl:
+  - generates Clearbit URL with size
+  - defaults to 64
+
+clearExpiredLogos:
+  - removes expired, keeps fresh
+  - ignores non-logo keys
 ```
 
-company.logo_url (z bazy) ma priorytet przez prop logoUrl.
-
-### 7. DealCard.tsx
+### 7. Testy validations (7+ testow)
 
 ```text
-- Dodac import CompanyLogo
-- Linie 39-43: zamienic Building2 icon na:
-  <CompanyLogo companyName={deal.company.name} website={deal.company.website} size="sm" />
-  <span className="truncate">{deal.company.name}</span>
+createDealSchema:
+  - valid deal -> success
+  - empty title -> fail
+  - invalid currency -> fail
+  - negative value -> fail
+  - optional fields undefined -> success
+  - invalid UUID -> fail
+  - title >200 chars -> fail
+
+updateDealSchema:
+  - partial update with id -> success
+  - probability_override range -> fail/success
+  - lost_reason accepted
 ```
 
-### 8. useDeals.ts
+### 8. Testy useCompanyLogo (5 testow)
 
 ```text
-- Linia 53: rozszerzyc interface:
-  company?: { id: string; name: string; website?: string | null } | null;
-- Linia 162: rozszerzyc query:
-  company:companies(id, name, website),
+  - no website -> initials, logoUrl null, not loading
+  - single word -> correct initial
+  - multiple words -> 2 initials
+  - null name -> '?'
+  - cached logo -> immediate return
+  - cached null -> logoUrl null, not loading
 ```
 
-### 9. AppLayout.tsx
+### 9. test/utils.tsx
 
 ```text
-- Dodac import { useEffect } from 'react'
-- Dodac import { clearExpiredLogos } from '@/lib/logoCache'
-- Dodac wewnatrz AppLayout:
-  useEffect(() => { clearExpiredLogos(); }, []);
+createTestQueryClient() -- retry: false, gcTime: 0
+renderWithProviders(ui, options?) -- wraps in QueryClientProvider
+Export oba
+```
+
+## Kolejnosc wykonania
+
+```text
+1. Zainstaluj @testing-library/user-event (devDep)
+2. Zaktualizuj vitest.config.ts (coverage)
+3. Zaktualizuj package.json (test:coverage script)
+4. Zaktualizuj src/test/setup.ts (mocki)
+5. Stworz src/test/utils.tsx
+6. Stworz src/lib/formatCurrency.ts
+7. Stworz src/lib/validations/deals.ts
+8. Stworz src/lib/__tests__/formatCurrency.test.ts
+9. Stworz src/lib/__tests__/logoCache.test.ts
+10. Stworz src/lib/__tests__/validations.test.ts
+11. Stworz src/hooks/__tests__/useCompanyLogo.test.ts
+12. Uruchom testy -> weryfikacja all pass
 ```
 
 ## Czego NIE robimy
 
 | Element | Powod |
 |---------|-------|
-| ContactDetailHeader logo | Firma wyswietlana z danymi rejestrowymi (NIP, KRS) -- zmiana layoutu poza scope |
-| DealsTable logo | Tabela tekstowa -- zachowujemy prostote |
-| Usuwanie getCompanyLogoUrl z useCompanies.ts | Moze byc uzywany w innych miejscach -- backward compatibility |
-| Modyfikacja useContacts query | Kontakty nie maja JOIN do website firmy -- poza scope, inicjaly wystarczaja |
+| Modyfikacja istniejacego kodu zrodlowego | Tylko dodajemy pliki testowe + config |
+| Testy komponentow UI | Poza scope -- fokus na utils i hooks |
+| Testy hookov z Supabase (useDeals, useContacts) | Wymagaja integracyjnego podejscia -- poza scope |
+| Zmiana vite.config.ts | Vitest ma osobny config |
+| Testy E2E (Playwright) | Osobna inicjatywa |
 
 ## Zabezpieczenia
 
-- localStorage try/catch wszedzie (Safari private mode)
-- Image probe przez new Image() (nie fetch -- CORS)
-- Cache null dla firm bez logo (nie odpytuj ponownie)
-- Max 20 preload na batch
-- CompanyLogo nigdy nie crashuje -- najgorzej inicjaly
-- img onError w komponencie -- dodatkowy fallback
-- TTL 7 dni
+- Mock Supabase w setup -> zero prawdziwych zapytan do bazy
+- Mock localStorage -> zero efektow ubocznych
+- Kazdy test file niezalezny (beforeEach clear)
+- renderWithProviders z retry:false -> szybkie testy
+- Wszystko offline -- brak network requests
 
