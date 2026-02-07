@@ -1660,6 +1660,72 @@ export type Database = {
           },
         ]
       }
+      contact_shares: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          permission: string
+          shared_by_director_id: string
+          shared_with_director_id: string
+          tenant_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by_director_id: string
+          shared_with_director_id: string
+          tenant_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by_director_id?: string
+          shared_with_director_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_shares_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_shares_shared_by_director_id_fkey"
+            columns: ["shared_by_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_shares_shared_with_director_id_fkey"
+            columns: ["shared_with_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "contact_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           address: string | null
@@ -1669,6 +1735,7 @@ export type Database = {
           company_id: string | null
           company_verified_at: string | null
           created_at: string | null
+          director_id: string | null
           email: string | null
           email_secondary: string | null
           first_name: string | null
@@ -1707,6 +1774,7 @@ export type Database = {
           company_id?: string | null
           company_verified_at?: string | null
           created_at?: string | null
+          director_id?: string | null
           email?: string | null
           email_secondary?: string | null
           first_name?: string | null
@@ -1745,6 +1813,7 @@ export type Database = {
           company_id?: string | null
           company_verified_at?: string | null
           created_at?: string | null
+          director_id?: string | null
           email?: string | null
           email_secondary?: string | null
           first_name?: string | null
@@ -1781,6 +1850,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
             referencedColumns: ["id"]
           },
           {
@@ -6083,6 +6159,7 @@ export type Database = {
         Args: { p_contact_id: string }
         Returns: number
       }
+      can_access_contact: { Args: { _contact_id: string }; Returns: boolean }
       delete_synonym: { Args: { p_id: string }; Returns: boolean }
       expand_search_query: { Args: { p_query: string }; Returns: string[] }
       find_connection_path: {
