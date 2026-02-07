@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { Calendar, Building2, User } from 'lucide-react';
+import { Calendar, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { CompanyLogo } from '@/components/ui/CompanyLogo';
 import { Deal } from '@/hooks/useDeals';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +39,7 @@ export function DealCard({ deal }: DealCardProps) {
             </>
           ) : deal.company ? (
             <>
-              <Building2 className="h-3 w-3" />
+              <CompanyLogo companyName={deal.company.name} website={(deal.company as { website?: string | null }).website} size="sm" />
               <span className="truncate">{deal.company.name}</span>
             </>
           ) : null}

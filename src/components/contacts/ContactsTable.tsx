@@ -5,6 +5,7 @@ import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2,
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CompanyLogo } from '@/components/ui/CompanyLogo';
 import {
   Pagination,
   PaginationContent,
@@ -301,7 +302,12 @@ export function ContactsTable({
                           <span className="font-medium truncate">{contact.full_name}</span>
                         </div>
                       </div>
-                      <div className="px-4 w-[180px] flex-shrink-0 text-muted-foreground truncate">{contact.company || '-'}</div>
+                      <div className="px-4 w-[180px] flex-shrink-0 text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          {contact.company && <CompanyLogo companyName={contact.company} size="sm" />}
+                          <span className="truncate">{contact.company || '-'}</span>
+                        </div>
+                      </div>
                       <div className="px-4 w-[140px] flex-shrink-0 text-muted-foreground truncate">{contact.position || '-'}</div>
                       <div className="px-4 w-[150px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         {contact.phone ? (

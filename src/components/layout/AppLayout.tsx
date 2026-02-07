@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
@@ -6,8 +7,12 @@ import { ReportBugButton } from '@/components/bugs/ReportBugButton';
 import { RemekChatWidget } from '@/components/remek/RemekChatWidget';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SovraReminderAutoTrigger } from '@/components/sovra/SovraReminderAutoTrigger';
+import { clearExpiredLogos } from '@/lib/logoCache';
 
 export function AppLayout() {
+  useEffect(() => {
+    clearExpiredLogos();
+  }, []);
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
