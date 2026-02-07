@@ -1,180 +1,171 @@
 
 
-# Izolacja danych -- faza 2: firmy, dashboard, deals-team, sidebar
+# useCompanyLogo -- cache localStorage + CompanyLogo komponent + integracja
 
-## Problem
+## Podsumowanie
 
-Po wdrozeniu izolacji kontaktow (director_id + contact_shares) pozostaly luki:
+System cachowania logo firm w localStorage z Clearbit API. Obejmuje: utility do cache, hook useCompanyLogo, komponent CompanyLogo, batch preload, oraz integracje w 5 miejscach UI.
 
-1. **Dashboard** -- Pawel widzi licznik "Kontakty 2088" (caly tenant zamiast swoich)
-2. **Firmy** -- Pawel widzi wszystkie 1530 firm (RLS filtruje tylko po tenant_id)
-3. **Deals Team** -- "Nieznany kontakt" zamiast ukrycia rekordu
-4. **Sidebar** -- Pawel widzi "Siec kontaktow", "Ofertowanie", "Dopasowania" (powinny byc ukryte)
+## Nowe pliki (3)
 
-## Zmiany
+| Plik | Opis |
+|------|------|
+| `src/lib/logoCache.ts` | Utility: getCachedLogo, setCachedLogo, clearExpiredLogos, extractDomain, getLogoUrl |
+| `src/hooks/useCompanyLogo.ts` | Hook useCompanyLogo + usePreloadLogos (w jednym pliku) |
+| `src/components/ui/CompanyLogo.tsx` | Komponent z 3 stanami: logo / loading / inicjaly |
 
-### 1. RLS na companies -- izolacja przez kontakty
+## Modyfikowane pliki (5)
 
-Firma widoczna tylko jesli:
-- Uzytkownik jest adminem tenanta, LUB
-- Istnieje choc jeden kontakt w tej firmie, do ktorego uzytkownik ma dostep (can_access_contact)
+| Plik | Zmiana |
+|------|--------|
+| `src/components/contacts/CompaniesTable.tsx` | Avatar -> CompanyLogo md, dodac usePreloadLogos |
+| `src/components/contacts/ContactsTable.tsx` | Dodac CompanyLogo sm obok nazwy firmy |
+| `src/components/companies/CompanyProfileHeader.tsx` | Avatar -> CompanyLogo lg (h-24 w-24) |
+| `src/components/deals/DealCard.tsx` | Building2 icon -> CompanyLogo sm obok firmy |
+| `src/hooks/useDeals.ts` | Rozszerzyc query: `company:companies(id, name, website)` |
+| `src/components/layout/AppLayout.tsx` | Dodac clearExpiredLogos() w useEffect przy mount |
+
+## Szczegoly techniczne
+
+### 1. logoCache.ts
 
 ```text
-DROP POLICY "Companies tenant access" ON companies;
+LOGO_CACHE_PREFIX = 'logo_'
+LOGO_CACHE_TTL = 7 dni
 
--- SELECT: admin lub ma dostep do kontaktu w firmie
-CREATE POLICY "companies_director_select" ON companies
-  FOR SELECT USING (
-    tenant_id = get_current_tenant_id()
-    AND (
-      is_tenant_admin(auth.uid(), tenant_id)
-      OR EXISTS (
-        SELECT 1 FROM contacts c 
-        WHERE c.company_id = companies.id 
-        AND can_access_contact(c.id)
-      )
-    )
-  );
+getCachedLogo(domain) -> string | null | undefined
+  undefined = nie w cache, null = potwierdzony brak logo, string = URL
 
--- INSERT/UPDATE/DELETE: admin lub wlasciciel kontaktu w firmie
-CREATE POLICY "companies_director_modify" ON companies
-  FOR ALL USING (
-    tenant_id = get_current_tenant_id()
-    AND (
-      is_tenant_admin(auth.uid(), tenant_id)
-      OR EXISTS (
-        SELECT 1 FROM contacts c 
-        WHERE c.company_id = companies.id 
-        AND c.director_id = get_current_director_id()
-      )
-    )
-  ) WITH CHECK (
-    tenant_id = get_current_tenant_id()
-  );
+setCachedLogo(domain, url | null)
+  try/catch -> przy pelnym storage wywoluje clearExpiredLogos()
+
+clearExpiredLogos()
+  Iteruje klucze z prefixem, usuwa expired i uszkodzone
+
+extractDomain(url) -> string | null
+  Obsluguje: "example.com", "https://example.com", "www.example.com"
+
+getLogoUrl(domain, size=64) -> string
+  Zwraca Clearbit URL
 ```
 
-Efekt: Pawel widzi tylko firmy powiazane z kontaktami, ktore posiada lub ma udostepnione. Udostepnienie kontaktu = udostepnienie firmy automatycznie.
-
-### 2. Dashboard stats -- per director
-
-Przebudowa funkcji `get_dashboard_stats()` aby liczyc dane per dyrektor (nie per tenant). Zamiast MV (ktory jest per tenant), funkcja bedzie liczyc "w locie":
+### 2. useCompanyLogo + usePreloadLogos
 
 ```text
-CREATE OR REPLACE FUNCTION get_dashboard_stats()
-RETURNS TABLE(...) AS $$
-DECLARE
-  v_tenant_id UUID := get_current_tenant_id();
-  v_director_id UUID := get_current_director_id();
-  v_is_admin BOOLEAN;
-BEGIN
-  SELECT is_tenant_admin(auth.uid(), v_tenant_id) INTO v_is_admin;
-  
-  IF v_is_admin THEN
-    -- Admin widzi wszystko (jak dotychczas z MV)
-    RETURN QUERY SELECT ... FROM mv_dashboard_stats WHERE tenant_id = v_tenant_id;
-  ELSE
-    -- Dyrektor widzi tylko swoje dane
-    RETURN QUERY SELECT
-      (SELECT COUNT(*) FROM contacts c WHERE c.tenant_id = v_tenant_id 
-       AND c.is_active = true AND can_access_contact(c.id)) AS total_contacts,
-      (SELECT COUNT(*) FROM contacts c WHERE c.tenant_id = v_tenant_id 
-       AND c.is_active = true AND can_access_contact(c.id)
-       AND c.created_at >= NOW() - INTERVAL '30 days') AS new_contacts_30d,
-      -- ... analogicznie dla pozostalych metryk
-      (SELECT COUNT(*) FROM tasks tk WHERE tk.tenant_id = v_tenant_id 
-       AND tk.status = 'pending' 
-       AND (tk.owner_id = v_director_id OR tk.assigned_to = v_director_id)) AS pending_tasks,
-      -- ... itd
-      NOW() AS refreshed_at;
-  END IF;
-END;
-$$;
+useCompanyLogo(companyName, websiteOrDomain):
+  1. extractDomain z websiteOrDomain
+  2. Sprawdz cache -> jesli w cache, uzyj natychmiast
+  3. Jesli nie -> new Image() probe
+     onload -> setCachedLogo(domain, url)
+     onerror -> setCachedLogo(domain, null)
+  4. Zwraca { logoUrl, isLoading, initials }
+
+usePreloadLogos(companies):
+  - useEffect: batch preload max 20
+  - Filtruje juz cached
+  - new Image() fire-and-forget
 ```
 
-Admin widzi globalne statystyki (szybko z MV). Dyrektor widzi tylko swoje (wolniej, ale poprawnie).
-
-### 3. Deals Team -- ukrycie niedostepnych kontaktow
-
-W hookach `useTeamContacts` (src/hooks/useDealsTeamContacts.ts) dodac filtr po pobraniu kontaktow CRM:
+### 3. CompanyLogo komponent
 
 ```text
-// Linia 64: Po zmapowaniu kontaktow, odfiltruj te bez dostepu
-return dealContacts
-  .map(dc => ({ ...dc, contact: contactMap.get(dc.contact_id) }))
-  .filter(dc => dc.contact !== undefined)  // <-- NOWE: ukryj "Nieznany kontakt"
-  as DealTeamContact[];
+Props: companyName, website?, logoUrl?, size ('sm'|'md'|'lg'), className?
+
+Rozmiary: sm=w-6 h-6, md=w-8 h-8, lg=w-10 h-10
+
+3 stany renderowania:
+  1. logoUrl -> <img> z onError fallback
+  2. isLoading -> animate-pulse placeholder
+  3. Fallback -> inicjaly w kolorowym tle
+
+Prop logoUrl (opcjonalny) -- jesli podany, uzywa bezposrednio
+(dla CompanyProfileHeader gdzie company.logo_url ma priorytet)
 ```
 
-RLS na contacts juz blokuje SELECT -- wiec kontakty bez dostepu nie wracaja z query. Wystarczy odfilrowac rekordy gdzie contact jest undefined/null.
-
-Analogicznie w komponentach HotLeadCard, TopLeadCard, LeadCard -- jesli contact jest null, nie renderuj karty (dodatkowe zabezpieczenie).
-
-### 4. Sidebar -- ukrycie sekcji dla nie-adminow
-
-W `AppSidebar.tsx` przefiltruj elementy menu:
+### 4. CompaniesTable.tsx
 
 ```text
-// Zmiana w linii 53-57 (crmItems):
-const crmItems = [
-  { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2 },
-  { title: 'Siec kontaktow', url: '/network', icon: Network, adminOnly: true },
-];
-
-// Zmiana w linii 68-73 (salesItems):
-const salesItems = [
-  { title: 'Deals', url: '/deals', icon: TrendingUp },
-  { title: 'Zespol Deals', url: '/deals-team', icon: Users2 },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
-  { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
-];
-
-// W renderowaniu (linia 214):
-{group.items
-  .filter(item => !item.adminOnly || isAdmin)
-  .map(item => <NavItem key={...} item={item} />)}
+- Usunac import getCompanyLogoUrl (nie uzywany w tym pliku po zmianie)
+- Dodac import CompanyLogo, usePreloadLogos
+- Dodac usePreloadLogos(companies) na poczatku komponentu
+- Linia 176: usunac const logoUrl = getCompanyLogoUrl(...)
+- Linie 193-198: zamienic Avatar blok na:
+  <CompanyLogo companyName={company.name} website={company.website} size="md" />
 ```
 
-### 5. Ochrona rout -- redirect dla nie-adminow
-
-W `App.tsx` dodac `AdminGuard` na chronione route:
+### 5. ContactsTable.tsx
 
 ```text
-// Nowy komponent AdminGuard -- sprawdza isAdmin, redirect na /
-<Route path="/network" element={<AdminGuard><Network /></AdminGuard>} />
-<Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
-<Route path="/matches" element={<AdminGuard><Matches /></AdminGuard>} />
+- Dodac import CompanyLogo
+- Linia 304: zamienic tekst firmy na:
+  <div className="... flex items-center gap-2">
+    {contact.company && <CompanyLogo companyName={contact.company} size="sm" />}
+    <span className="truncate">{contact.company || '-'}</span>
+  </div>
 ```
 
-To zapobiega dostepowi przez bezposredni URL.
+Uwaga: Kontakty nie maja website w query -- CompanyLogo pokaze inicjaly (lepsze niz Building2 icon).
 
-## Kolejnosc wykonania
+### 6. CompanyProfileHeader.tsx
 
 ```text
-SQL:
-1. Nowa polityka RLS na companies (SELECT + MODIFY)
-2. Przebudowa get_dashboard_stats() z logika per director
+- Usunac import getCompanyLogoUrl z useCompanies
+- Usunac linia 38: const logoUrl = ...
+- Linie 67-80: zamienic Avatar h-24 na:
+  <CompanyLogo 
+    companyName={company.name}
+    website={company.website}
+    logoUrl={company.logo_url}
+    size="lg"
+    className="h-24 w-24 text-2xl"
+  />
+```
 
-Frontend:
-3. AppSidebar.tsx -- adminOnly filter
-4. AdminGuard komponent + App.tsx routes
-5. useDealsTeamContacts.ts -- filtr null kontaktow
-6. HotLeadCard/TopLeadCard/LeadCard -- guard na null contact
+company.logo_url (z bazy) ma priorytet przez prop logoUrl.
+
+### 7. DealCard.tsx
+
+```text
+- Dodac import CompanyLogo
+- Linie 39-43: zamienic Building2 icon na:
+  <CompanyLogo companyName={deal.company.name} website={deal.company.website} size="sm" />
+  <span className="truncate">{deal.company.name}</span>
+```
+
+### 8. useDeals.ts
+
+```text
+- Linia 53: rozszerzyc interface:
+  company?: { id: string; name: string; website?: string | null } | null;
+- Linia 162: rozszerzyc query:
+  company:companies(id, name, website),
+```
+
+### 9. AppLayout.tsx
+
+```text
+- Dodac import { useEffect } from 'react'
+- Dodac import { clearExpiredLogos } from '@/lib/logoCache'
+- Dodac wewnatrz AppLayout:
+  useEffect(() => { clearExpiredLogos(); }, []);
 ```
 
 ## Czego NIE robimy
 
 | Element | Powod |
 |---------|-------|
-| Zmiana RLS na deals | Deals juz izolowane po owner_id/team_member -- poprawne |
-| Zmiana RLS na tasks | Juz zaktualizowane w poprzedniej migracji |
-| Nowa tabela | Nie potrzebna -- uzywamy istniejacych mechanizmow |
-| Zmiana contact_shares | Dziala poprawnie -- udostepnienie kontaktu = udostepnienie firmy przez can_access_contact |
+| ContactDetailHeader logo | Firma wyswietlana z danymi rejestrowymi (NIP, KRS) -- zmiana layoutu poza scope |
+| DealsTable logo | Tabela tekstowa -- zachowujemy prostote |
+| Usuwanie getCompanyLogoUrl z useCompanies.ts | Moze byc uzywany w innych miejscach -- backward compatibility |
+| Modyfikacja useContacts query | Kontakty nie maja JOIN do website firmy -- poza scope, inicjaly wystarczaja |
 
-## Bezpieczenstwo
+## Zabezpieczenia
 
-- Companies RLS przez can_access_contact -- firma widoczna tylko jesli masz dostep do kontaktu w niej
-- Dashboard stats -- admin widzi globalnie, dyrektor tylko swoje
-- Route guard -- bezposredni URL do /network, /pipeline, /matches przekierowuje nie-adminow
-- Sidebar filter -- czysto kosmetyczne, ale wzmocnione route guardem
+- localStorage try/catch wszedzie (Safari private mode)
+- Image probe przez new Image() (nie fetch -- CORS)
+- Cache null dla firm bez logo (nie odpytuj ponownie)
+- Max 20 preload na batch
+- CompanyLogo nigdy nie crashuje -- najgorzej inicjaly
+- img onError w komponencie -- dodatkowy fallback
+- TTL 7 dni
 
