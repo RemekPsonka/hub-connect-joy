@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { RemekWidgetProvider } from "@/contexts/RemekWidgetContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
+import { AdminGuard } from "@/components/auth/AdminGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
@@ -98,21 +99,21 @@ const App = () => (
                   <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
                   <Route path="/meetings" element={<DirectorGuard><Meetings /></DirectorGuard>} />
                   <Route path="/meetings/:id" element={<DirectorGuard><MeetingDetail /></DirectorGuard>} />
-                  <Route path="/matches" element={<DirectorGuard><Matches /></DirectorGuard>} />
+                  <Route path="/matches" element={<AdminGuard><Matches /></AdminGuard>} />
                   <Route 
                     path="/network" 
                     element={
-                      <DirectorGuard>
+                      <AdminGuard>
                         <ErrorBoundary>
                           <Suspense fallback={<NetworkFallback />}>
                             <Network />
                           </Suspense>
                         </ErrorBoundary>
-                      </DirectorGuard>
+                      </AdminGuard>
                     } 
                   />
                   <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
-                  <Route path="/pipeline" element={<DirectorGuard><PolicyPipeline /></DirectorGuard>} />
+                  <Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
                   <Route path="/projects" element={<DirectorGuard><Projects /></DirectorGuard>} />
                   <Route path="/projects/:id" element={<DirectorGuard><ProjectDetail /></DirectorGuard>} />
                   <Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />

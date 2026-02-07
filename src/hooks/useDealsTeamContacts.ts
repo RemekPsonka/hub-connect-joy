@@ -61,10 +61,12 @@ export function useTeamContacts(
       // Mapuj kontakty do deal contacts
       const contactMap = new Map(contacts?.map(c => [c.id, c]) || []);
       
-      return dealContacts.map(dc => ({
-        ...dc,
-        contact: contactMap.get(dc.contact_id),
-      })) as DealTeamContact[];
+      return dealContacts
+        .map(dc => ({
+          ...dc,
+          contact: contactMap.get(dc.contact_id),
+        }))
+        .filter(dc => dc.contact !== undefined) as DealTeamContact[];
     },
     enabled: !!teamId,
     staleTime: 2 * 60 * 1000, // 2 min - kontakty są bardziej dynamiczne
