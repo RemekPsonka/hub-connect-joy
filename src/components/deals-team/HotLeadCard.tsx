@@ -30,6 +30,9 @@ export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
     ? memberMap.get(contact.next_meeting_with) || null
     : null;
 
+  // Guard: don't render if contact data is missing (RLS filtered)
+  if (!contact.contact) return null;
+
   return (
     <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
       <CardContent className="p-3 space-y-2">

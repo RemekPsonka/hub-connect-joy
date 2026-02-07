@@ -22,6 +22,9 @@ const priorityColors: Record<string, string> = {
 export function TopLeadCard({ contact, teamId }: TopLeadCardProps) {
   const [showPromote, setShowPromote] = useState(false);
 
+  // Guard: don't render if contact data is missing (RLS filtered)
+  if (!contact.contact) return null;
+
   return (
     <>
       <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-shadow">

@@ -51,9 +51,9 @@ const overviewItems = [
 
 // CRM
 const crmItems = [
-  { title: 'Kontakty', url: '/contacts', icon: Users },
-  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2 },
-  { title: 'Sieć kontaktów', url: '/network', icon: Network },
+  { title: 'Kontakty', url: '/contacts', icon: Users, adminOnly: false },
+  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2, adminOnly: false },
+  { title: 'Sieć kontaktów', url: '/network', icon: Network, adminOnly: true },
 ];
 
 // PROJEKTY
@@ -66,10 +66,10 @@ const projectItems = [
 
 // SPRZEDAŻ
 const salesItems = [
-  { title: 'Deals', url: '/deals', icon: TrendingUp },
-  { title: 'Zespół Deals', url: '/deals-team', icon: Users2 },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase },
-  { title: 'Dopasowania', url: '/matches', icon: Handshake },
+  { title: 'Deals', url: '/deals', icon: TrendingUp, adminOnly: false },
+  { title: 'Zespół Deals', url: '/deals-team', icon: Users2, adminOnly: false },
+  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
+  { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
 ];
 
 // AI
@@ -211,7 +211,9 @@ export function AppSidebar() {
             <GroupLabel isCollapsed={isCollapsed}>{group.label}</GroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">
-                {group.items.map((item) => (
+                {group.items
+                  .filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin)
+                  .map((item) => (
                   <NavItem key={item.title + item.url} item={item} />
                 ))}
               </SidebarMenu>
