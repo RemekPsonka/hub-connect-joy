@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN team_id uuid REFERENCES public.deal_teams(id) ON DELETE SET NULL;
