@@ -1,142 +1,160 @@
 
-# Porządki: Sidebar CRM + Powiązanie zadań z projektami/klientami
+
+# Kontakty, Dyrektorzy i Zespoly w projekcie -- dodanie brakujacych funkcji
 
 ## Podsumowanie
 
-Dwie zmiany: (1) usunięcie duplikatu "Firmy" z menu CRM, (2) dodanie pola "Projekt" do formularza tworzenia/edycji zadań (TaskModal) -- tak aby z każdego widoku można było powiązać zadanie z projektem i klientem.
+Trzy brakujace funkcjonalnosci w widoku projektu:
+1. **Kontakty** -- brak przycisku "Dodaj kontakt" (jest tylko empty state + Sovra suggestions)
+2. **Czlonkowie (Dyrektorzy)** -- brak zakladki/sekcji do zarzadzania czlonkami zespolu projektowego
+3. **Zespoly Deals** -- brak mozliwosci przypisania zespolu deals do projektu
 
 ## Analiza obecnego stanu
 
-### Menu CRM
-- "Kontakty" `/contacts` i "Firmy" `/contacts?view=companies` prowadzą do tej samej strony -- przełącznik widoku jest już wbudowany w nagłówek Kontaktów (przyciski "Osoby" / "Firmy")
-- "Firmy" w menu jest zbędne
+### Kontakty projektu
+- `ProjectContactsTab` wyswietla liste kontaktow i pozwala usuwac, ale **nie ma przycisku "Dodaj kontakt"**
+- Hook `useAddProjectContact` istnieje i dziala
+- Komponent `ConnectionContactSelect` (searchable combobox z wirtualizacja) nadaje sie idealnie do wyboru kontaktu
+- Tabela `project_contacts` ma kolumny: `project_id`, `contact_id`, `role_in_project`, `tenant_id`, `added_by`
 
-### Zadania -- powiązania
+### Czlonkowie projektu (dyrektorzy)
+- Hooki `useProjectMembers`, `useAddProjectMember`, `useRemoveProjectMember` **istnieja i dzialaja**
+- Tabela `project_members` ma kolumny: `project_id`, `director_id`, `assistant_id`, `role`, `tenant_id`
+- `ProjectOverviewTab` wyswietla czlonkow read-only (Badge), ale **nie ma sekcji do dodawania/usuwania**
+- Hook `useDirectors` pobiera wszystkich dyrektorow w tenancie
+- Brak dedykowanego komponentu `ProjectMembersTab`
 
-| Widok | Kontakt | Projekt | Uwagi |
-|-------|---------|---------|-------|
-| Tasks page (TaskModal) | TAK (ConnectionContactSelect) | **NIE** | Brak pola project_id |
-| Contact detail (ContactTasksTab) | TAK (preselectedContactId) | **NIE** | |
-| Consultation (ConsultationTasksSection) | TAK (contact_id) | **NIE** | Osobna mutacja, nie używa TaskModal |
-| Project detail (ProjectTasksTab) | Tylko wyświetla | **NIE** (read-only) | Mówi "dodaj z widoku Zadania" |
-| Kanban inline create | NIE | TAK (prop) | Jedyne miejsce z project_id |
-| Task detail sheet | Wyświetla kontakty | Wyświetla link do projektu | Read-only |
-
-**Wniosek:** TaskModal nie ma pola "Projekt" -- to główny brak. Trzeba go dodać.
-
-### Strona Zadania -- filtrowanie
-Strona `/tasks` już ma rozbudowane filtry: status, typ, priorytet, projekt (ProjectFilterSelect), kontakt (TaskContactFilter), sortowanie. To jest OK.
+### Zespoly deals
+- Tabela `deal_teams` istnieje z kolumnami: `id`, `name`, `color`, `tenant_id`, `is_active`
+- Hook `useDealTeams` pobiera liste zespolow
+- **Tabela `projects` NIE MA kolumny `team_id`** -- potrzebna migracja
+- Brak UI do przypisania zespolu
 
 ## Zmiany do wykonania
 
-### 1. AppSidebar.tsx -- usunięcie "Firmy"
+### 1. Migracja bazy danych -- dodanie `team_id` do `projects`
 
-Usunąć linię 55:
-```text
-{ title: 'Firmy', url: '/contacts?view=companies', icon: Building2, adminOnly: false },
-```
-
-Po usunięciu sekcja CRM będzie miała:
-- Kontakty
-- Sieć kontaktów (admin only)
-
-Można też usunąć nieużywany import `Building2` z lucide (jeśli nie jest używany w adminItems -- sprawdzenie: jest używany w linii 178 dla Superadmin, więc import zostaje).
-
-### 2. TaskModal.tsx -- dodanie pola "Projekt"
-
-Dodać nowy state:
-```text
-const [projectId, setProjectId] = useState<string>('');
-```
-
-Dodać prop do TaskModal:
-```text
-preselectedProjectId?: string;
-```
-
-Dodać import `useProjects` z `@/hooks/useProjects`.
-
-Dodać Select "Projekt" w formularzu (po polu "Kontakt", przed "Priorytet"):
-```text
-<div className="space-y-2">
-  <Label>Projekt</Label>
-  <Select value={projectId || 'none'} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
-    <SelectTrigger>
-      <FolderKanban className="h-4 w-4 mr-2" />
-      <SelectValue placeholder="Wybierz projekt (opcjonalne)" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="none">Brak projektu</SelectItem>
-      {projects?.map(p => (
-        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-```
-
-W `useEffect` reset/load:
-- Nowe zadanie: `setProjectId(preselectedProjectId || '')`
-- Edycja: `setProjectId(task.project_id || '')`
-
-W `handleSubmit` -- przekazać `project_id` do mutacji:
-```text
-// Dla standard tasks:
-createTask.mutateAsync({
-  task: {
-    ...existing fields,
-    project_id: projectId || null,
-  },
-  ...
-});
-
-// Dla edycji:
-updateTask.mutateAsync({
-  ...existing fields,
-  project_id: projectId || null,
-});
-```
-
-Import `FolderKanban` z lucide-react.
-
-### 3. ProjectTasksTab.tsx -- dodanie przycisku "Dodaj zadanie"
-
-Obecnie wyświetla tylko tekst "Dodaj zadania z widoku Zadania". Zamiast tego dodać przycisk otwierający TaskModal z `preselectedProjectId`:
+Dodanie opcjonalnej kolumny `team_id` (FK do `deal_teams`) w tabeli `projects`:
 
 ```text
-- Import TaskModal, Button, Plus
-- Dodać state: isModalOpen
-- W empty state: przycisk "Dodaj zadanie" otwierający modal
-- W nagłówku karty: przycisk "+" otwierający modal
-- <TaskModal preselectedProjectId={projectId} />
+ALTER TABLE public.projects 
+  ADD COLUMN team_id uuid REFERENCES public.deal_teams(id) ON DELETE SET NULL;
 ```
 
-### 4. ConsultationTasksSection -- bez zmian
+### 2. ProjectContactsTab.tsx -- dodanie przycisku "Dodaj kontakt"
 
-Zadania z konsultacji mają swój własny uproszczony flow (inline input, nie dialog). Kontakt jest automatycznie przypisywany. Dodanie projektu tutaj byłoby nadmiarowe -- konsultacje nie są powiązane z projektami.
+Dodac przycisk "Dodaj kontakt" ktory otwiera dialog z `ConnectionContactSelect`:
+- W empty state: przycisk w `EmptyState` action
+- W widoku z lista: przycisk "+" w naglowku `DataCard`
+- Dialog z polem `ConnectionContactSelect` (excludeIds = juz przypisane kontakty) + opcjonalne pole "Rola w projekcie"
+- Po wybraniu kontaktu i kliknieciu "Dodaj" -- wywolanie `useAddProjectContact`
 
-## Pliki do modyfikacji
+### 3. ProjectMembersSection -- nowy komponent w zakladce Przeglad
+
+Dodanie sekcji "Zespol projektowy" do `ProjectOverviewTab` (zamiast obecnych Badge-ow read-only):
+- Wyswietlanie listy czlonkow z rolami (member/owner)
+- Przycisk "+" otwierajacy dialog z Select (lista dyrektorow z `useDirectors`, excludeIds = juz dodani)
+- Przycisk usuwania czlonka (ikona Trash2)
+- Wlasciciel projektu wyswietlany osobno (nie mozna go usunac)
+
+### 4. Pole "Zespol" w ProjectOverviewTab
+
+Dodanie pola "Zespol" w sekcji "Szczegoly" na `ProjectOverviewTab`:
+- Select z lista zespolow z `useDealTeams`
+- Wartosc "Brak zespolu" jako domyslna
+- Zmiana zapisuje sie przez `useUpdateProject` (po dodaniu team_id do schematu)
+- Wyswietlanie koloru zespolu jako kolorowa kropka obok nazwy
+
+### 5. Aktualizacja Zod schemas
+
+Rozszerzenie `ProjectCreateSchema` i `ProjectUpdateSchema` o pole `team_id`:
+```text
+team_id: z.string().uuid().optional().nullable()
+```
+
+## Pliki do modyfikacji/utworzenia
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/layout/AppSidebar.tsx` | Usunięcie "Firmy" z crmItems (linia 55) |
-| `src/components/tasks/TaskModal.tsx` | Dodanie pola "Projekt" (Select z listą projektów), nowy prop `preselectedProjectId`, logika w useEffect i handleSubmit |
-| `src/components/projects/ProjectTasksTab.tsx` | Dodanie przycisku "Dodaj zadanie" z TaskModal i preselectedProjectId |
+| Migracja SQL | Dodanie kolumny `team_id` do tabeli `projects` |
+| `src/components/projects/ProjectContactsTab.tsx` | Dodanie przycisku "Dodaj kontakt" z dialogiem i ConnectionContactSelect |
+| `src/components/projects/ProjectOverviewTab.tsx` | Rozbudowa sekcji czlonkow (dodawanie/usuwanie dyrektorow), dodanie pola "Zespol" w szczegolach |
+| `src/hooks/useProjects.ts` | Dodanie `team_id` do Zod schemas, aktualizacja select query o team |
+
+## Szczegoly techniczne
+
+### ProjectContactsTab -- dialog dodawania kontaktu
+
+```text
+Stan:
+  - isAddDialogOpen: boolean
+  - selectedContactId: string | null
+  - roleInProject: string (opcjonalne)
+
+Logika:
+  - excludeIds = projectContacts.map(pc => pc.contact_id)
+  - Po kliknieciu "Dodaj":
+    addContact.mutate({ projectId, contactId: selectedContactId, roleInProject })
+  - Reset stanu po sukcesie
+
+UI:
+  - Dialog z:
+    - ConnectionContactSelect (z excludeIds)
+    - Input "Rola w projekcie" (opcjonalne, placeholder "np. Decydent, Sponsor")
+    - Przyciski "Anuluj" / "Dodaj kontakt"
+```
+
+### ProjectOverviewTab -- sekcja czlonkow
+
+```text
+Obecne zachowanie: Badge z nazwiskiem + rola (read-only)
+Nowe zachowanie:
+  - Lista czlonkow z Avatar, nazwisko, rola, przycisk usun
+  - Przycisk "Dodaj czlonka" otwierajacy maly dialog/popover:
+    - Select z useDirectors() (exclude juz dodanych + owner)
+    - Select roli: "Czlonek" / "Obserwator"
+    - Przycisk "Dodaj"
+  - Wlasciciel (owner_id) wyswietlany na poczatku z Badge "Wlasciciel" (nie mozna usunac)
+```
+
+### ProjectOverviewTab -- pole Zespol
+
+```text
+W sekcji "Szczegoly" dodajemy wiersz:
+  <span>Zespol</span>
+  <Select value={project.team_id || 'none'} onValueChange={handleTeamChange}>
+    <SelectItem value="none">Brak zespolu</SelectItem>
+    {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+  </Select>
+
+handleTeamChange:
+  updateProject.mutate({ id: project.id, data: { team_id: value === 'none' ? null : value } })
+```
+
+### useProjects.ts -- rozszerzenie
+
+```text
+1. ProjectCreateSchema: dodac team_id: z.string().uuid().optional().nullable()
+2. useProject query: dodac team:deal_teams(id, name, color) do select
+3. useProjects query: dodac team:deal_teams(id, name, color) do select
+4. ProjectWithOwner type: dodac team?: { id: string; name: string; color: string } | null
+```
+
+## Kolejnosc wykonania
+
+```text
+1. Migracja SQL: ALTER TABLE projects ADD COLUMN team_id
+2. useProjects.ts: rozszerzenie Zod + query o team
+3. ProjectContactsTab.tsx: dodanie przycisku "Dodaj kontakt" z dialogiem
+4. ProjectOverviewTab.tsx: rozbudowa sekcji czlonkow + pole Zespol
+```
 
 ## Czego NIE robimy
 
-| Element | Powód |
+| Element | Powod |
 |---------|-------|
-| Modyfikacja TasksHeader/filtrów | Już mają filtr po projekcie i kontakcie -- działają poprawnie |
-| Dodanie projektu do ConsultationTasksSection | Konsultacje nie są powiązane z projektami |
-| Zmiana ContactTasksTab | Już ma preselectedContactId -- po dodaniu projektu do TaskModal, użytkownik będzie mógł wybrać projekt z listy |
-| Modyfikacja KanbanInlineCreate | Już obsługuje project_id -- działa poprawnie |
-| Usunięcie strony CompanyDetail | Strona firm jest nadal dostępna przez Kontakty -> zakładka Firmy |
+| Nowa zakladka "Zespol" w TabsList | Czlonkowie i zespol sa czescia Przegladu -- nie komplikujemy nawigacji |
+| Tworzenie nowych zespolow z poziomu projektu | Zespoly zarzadzane sa w module Deals |
+| Modyfikacja tabeli deal_teams | Istniejaca struktura wystarczy |
+| Dodanie team_members do projektu | Projekt ma czlonkow (project_members/directors), nie team_members |
 
-## Kolejność wykonania
-
-```text
-1. AppSidebar.tsx -- usunięcie "Firmy"
-2. TaskModal.tsx -- dodanie pola "Projekt" + prop preselectedProjectId
-3. ProjectTasksTab.tsx -- dodanie przycisku "Dodaj zadanie" z TaskModal
-```
