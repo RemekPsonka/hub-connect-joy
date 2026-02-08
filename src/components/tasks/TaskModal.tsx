@@ -21,9 +21,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Users, User, Share2 } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, User, Share2, FolderKanban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCreateTask, useCreateCrossTask, useUpdateTask } from '@/hooks/useTasks';
+import { useProjects } from '@/hooks/useProjects';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useTaskCategories, type TaskCategory } from '@/hooks/useTaskCategories';
 import { useDirectors } from '@/hooks/useDirectors';
@@ -46,13 +47,14 @@ interface TaskModalProps {
   onOpenChange: (open: boolean) => void;
   task?: TaskWithDetails | null;
   preselectedContactId?: string;
+  preselectedProjectId?: string;
   initialData?: TaskInitialData;
   onTaskCreated?: (taskId: string) => void;
 }
 
 type TaskType = 'standard' | 'cross' | 'group';
 
-export function TaskModal({ open, onOpenChange, task, preselectedContactId, initialData, onTaskCreated }: TaskModalProps) {
+export function TaskModal({ open, onOpenChange, task, preselectedContactId, preselectedProjectId, initialData, onTaskCreated }: TaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taskType, setTaskType] = useState<TaskType>('standard');
@@ -64,6 +66,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
   const [priority, setPriority] = useState('medium');
   const [status, setStatus] = useState('pending');
   const [dueDate, setDueDate] = useState<Date | undefined>();
+  const [projectId, setProjectId] = useState<string>('');
   
   // New fields for categories and assignment
   const [categoryId, setCategoryId] = useState<string>('');
@@ -73,6 +76,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
   const { data: categories = [] } = useTaskCategories();
   const { data: directors = [] } = useDirectors();
   const { data: currentDirector } = useCurrentDirector();
+  const { data: projects } = useProjects();
   
   const createTask = useCreateTask();
   const createCrossTask = useCreateCrossTask();
@@ -96,6 +100,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setCategoryId(task.category_id || 'none');
       setAssignedTo(task.assigned_to || 'self');
       setVisibility((task.visibility as 'private' | 'team') || 'private');
+      setProjectId(task.project_id || '');
 
       // Set contacts for existing task
       if (task.task_type === 'cross' && task.cross_tasks?.[0]) {
@@ -121,6 +126,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setCategoryId('');
       setAssignedTo('');
       setVisibility('private');
+      setProjectId(preselectedProjectId || '');
       // Set contactId for standard tasks
       if (initialData.taskType !== 'cross' && initialData.contactAId) {
         setContactId(initialData.contactAId);
@@ -141,8 +147,9 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
       setCategoryId('none');
       setAssignedTo('self');
       setVisibility('private');
+      setProjectId(preselectedProjectId || '');
     }
-  }, [task, preselectedContactId, initialData, open]);
+  }, [task, preselectedContactId, preselectedProjectId, initialData, open]);
 
   // Update visibility when category changes
   useEffect(() => {
@@ -186,6 +193,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
           category_id: categoryId || null,
           assigned_to: assignedTo || null,
           visibility: visibility,
+          project_id: projectId || null,
         });
         toast.success('Zadanie zaktualizowane');
       } else if (taskType === 'cross') {
@@ -214,6 +222,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
             priority,
             status,
             due_date: dueDate?.toISOString().split('T')[0],
+            project_id: projectId || null,
           },
           contactId: contactId || undefined,
           categoryId: categoryId === 'none' ? undefined : (categoryId || undefined),
@@ -431,6 +440,27 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, init
                 />
               </div>
             </>
+          )}
+
+          {/* Project selection */}
+          {!isEditing && (
+            <div className="space-y-2">
+              <Label>Projekt</Label>
+              <Select value={projectId || 'none'} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <div className="flex items-center">
+                    <FolderKanban className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="Wybierz projekt (opcjonalne)" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Brak projektu</SelectItem>
+                  {projects?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           {/* Priority, Status, Due Date */}

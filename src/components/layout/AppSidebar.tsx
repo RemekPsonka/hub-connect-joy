@@ -52,7 +52,6 @@ const overviewItems = [
 // CRM
 const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users, adminOnly: false },
-  { title: 'Firmy', url: '/contacts?view=companies', icon: Building2, adminOnly: false },
   { title: 'Sieć kontaktów', url: '/network', icon: Network, adminOnly: true },
 ];
 
