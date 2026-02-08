@@ -4859,6 +4859,7 @@ export type Database = {
           name: string
           owner_id: string
           status: string
+          team_id: string | null
           template_id: string | null
           tenant_id: string
           updated_at: string
@@ -4872,6 +4873,7 @@ export type Database = {
           name: string
           owner_id: string
           status?: string
+          team_id?: string | null
           template_id?: string | null
           tenant_id: string
           updated_at?: string
@@ -4885,6 +4887,7 @@ export type Database = {
           name?: string
           owner_id?: string
           status?: string
+          team_id?: string | null
           template_id?: string | null
           tenant_id?: string
           updated_at?: string
@@ -4895,6 +4898,13 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
           {

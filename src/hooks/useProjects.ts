@@ -17,6 +17,7 @@ export type ProjectTemplate = Tables<'project_templates'>;
 
 export type ProjectWithOwner = Project & {
   owner?: { id: string; full_name: string } | null;
+  team?: { id: string; name: string; color: string } | null;
 };
 
 // ─── Zod Schemas ────────────────────────────────────────
@@ -26,6 +27,7 @@ export const ProjectCreateSchema = z.object({
   status: z.enum(['new', 'analysis', 'in_progress', 'waiting', 'done', 'cancelled']).default('new'),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#7C3AED'),
   template_id: z.string().uuid().optional().nullable(),
+  team_id: z.string().uuid().optional().nullable(),
 });
 
 export const ProjectUpdateSchema = ProjectCreateSchema.partial();
@@ -62,7 +64,7 @@ export function useProjects(filters: ProjectsFilters = {}) {
     queryFn: async () => {
       let query = supabase
         .from('projects')
-        .select('*, owner:directors!projects_owner_id_fkey(id, full_name)')
+        .select('*, owner:directors!projects_owner_id_fkey(id, full_name), team:deal_teams(id, name, color)')
         .eq('tenant_id', tenantId!);
 
       if (filters.status && filters.status !== 'all') {
@@ -89,7 +91,7 @@ export function useProject(id: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-        .select('*, owner:directors!projects_owner_id_fkey(id, full_name)')
+        .select('*, owner:directors!projects_owner_id_fkey(id, full_name), team:deal_teams(id, name, color)')
         .eq('id', id!)
         .single();
       if (error) throw error;
