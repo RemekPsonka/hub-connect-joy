@@ -1,160 +1,160 @@
 
 
-# Kontakty, Dyrektorzy i Zespoly w projekcie -- dodanie brakujacych funkcji
+# Wanted Contacts -- Elastyczna Baza Poszukiwanych (Osoba i/lub Firma)
 
 ## Podsumowanie
 
-Trzy brakujace funkcjonalnosci w widoku projektu:
-1. **Kontakty** -- brak przycisku "Dodaj kontakt" (jest tylko empty state + Sovra suggestions)
-2. **Czlonkowie (Dyrektorzy)** -- brak zakladki/sekcji do zarzadzania czlonkami zespolu projektowego
-3. **Zespoly Deals** -- brak mozliwosci przypisania zespolu deals do projektu
+Centralna baza poszukiwanych z elastycznym formularzem:
+- **Tylko osoba**: "znany lekarz, prof. Kowalski" (bez firmy)
+- **Tylko firma**: "szef logistyki z firmy ABC, NIP 123456" (bez konkretnej osoby)
+- **Osoba + firma**: "Krzysztof Kowalski, CEO firmy ABC"
+- Dodatkowe pola tekstowe do opisu kontekstu
+- Widocznosc: creator-only + udostepnianie per dyrektor/zespol
+- AI podpowiada kontakty z CRM z tej samej branzy
 
-## Analiza obecnego stanu
+## Zmiana vs. poprzedni plan
 
-### Kontakty projektu
-- `ProjectContactsTab` wyswietla liste kontaktow i pozwala usuwac, ale **nie ma przycisku "Dodaj kontakt"**
-- Hook `useAddProjectContact` istnieje i dziala
-- Komponent `ConnectionContactSelect` (searchable combobox z wirtualizacja) nadaje sie idealnie do wyboru kontaktu
-- Tabela `project_contacts` ma kolumny: `project_id`, `contact_id`, `role_in_project`, `tenant_id`, `added_by`
+Jedyna roznica to elastycznosc formularza:
 
-### Czlonkowie projektu (dyrektorzy)
-- Hooki `useProjectMembers`, `useAddProjectMember`, `useRemoveProjectMember` **istnieja i dzialaja**
-- Tabela `project_members` ma kolumny: `project_id`, `director_id`, `assistant_id`, `role`, `tenant_id`
-- `ProjectOverviewTab` wyswietla czlonkow read-only (Badge), ale **nie ma sekcji do dodawania/usuwania**
-- Hook `useDirectors` pobiera wszystkich dyrektorow w tenancie
-- Brak dedykowanego komponentu `ProjectMembersTab`
+| Pole | Poprzednio | Teraz |
+|------|-----------|-------|
+| `person_name` | NOT NULL (wymagane) | NULLABLE (opcjonalne) |
+| `company_name` | opcjonalne | opcjonalne |
+| Walidacja | osoba wymagana | przynajmniej jedno: person_name LUB company_name |
+| `person_context` | brak | NOWE -- dodatkowy opis osoby ("znany lekarz", "ekspert od AI") |
+| `company_context` | brak | NOWE -- opis firmy/roli ("szef logistyki", "ktos z zarzadu") |
+| `search_context` | brak | NOWE -- dlaczego szukamy, dodatkowe informacje |
 
-### Zespoly deals
-- Tabela `deal_teams` istnieje z kolumnami: `id`, `name`, `color`, `tenant_id`, `is_active`
-- Hook `useDealTeams` pobiera liste zespolow
-- **Tabela `projects` NIE MA kolumny `team_id`** -- potrzebna migracja
-- Brak UI do przypisania zespolu
+## Architektura bazy danych
 
-## Zmiany do wykonania
+### Tabela `wanted_contacts`
 
-### 1. Migracja bazy danych -- dodanie `team_id` do `projects`
+| Kolumna | Typ | Opis |
+|---------|-----|------|
+| id | UUID PK | |
+| tenant_id | UUID NOT NULL FK | |
+| requested_by_contact_id | UUID NOT NULL FK → contacts | Kto szuka |
+| **person_name** | TEXT (nullable) | Imie i nazwisko (opcjonalne) |
+| person_position | TEXT | Stanowisko |
+| person_email | TEXT | Email |
+| person_phone | TEXT | Telefon |
+| person_linkedin | TEXT | LinkedIn |
+| **person_context** | TEXT | Opis osoby: "znany lekarz", "ekspert od AI" |
+| **company_name** | TEXT (nullable) | Nazwa firmy (opcjonalne) |
+| company_nip | TEXT | NIP |
+| company_regon | TEXT | REGON |
+| company_industry | TEXT | Branza |
+| company_id | UUID FK → companies | Jesli firma istnieje |
+| **company_context** | TEXT | Opis roli w firmie: "szef logistyki", "ktos z zarzadu" |
+| **search_context** | TEXT | Dlaczego szukamy, dodatkowy kontekst |
+| description | TEXT | Ogolny opis |
+| urgency | TEXT DEFAULT 'normal' | low/normal/high/critical |
+| status | TEXT DEFAULT 'active' | active/in_progress/fulfilled/cancelled |
+| matched_contact_id | UUID FK → contacts | Znaleziona osoba |
+| matched_by | UUID FK → directors | |
+| matched_at | TIMESTAMPTZ | |
+| created_by | UUID FK → directors | |
+| notes | TEXT | Notatki wewnetrzne |
+| created_at / updated_at / fulfilled_at | TIMESTAMPTZ | |
 
-Dodanie opcjonalnej kolumny `team_id` (FK do `deal_teams`) w tabeli `projects`:
+Walidacja triggerem: `person_name IS NOT NULL OR company_name IS NOT NULL` (przynajmniej jedno).
 
-```text
-ALTER TABLE public.projects 
-  ADD COLUMN team_id uuid REFERENCES public.deal_teams(id) ON DELETE SET NULL;
-```
+### Tabela `wanted_contact_shares`
 
-### 2. ProjectContactsTab.tsx -- dodanie przycisku "Dodaj kontakt"
+| Kolumna | Typ | Opis |
+|---------|-----|------|
+| id | UUID PK | |
+| tenant_id | UUID FK | |
+| wanted_contact_id | UUID FK → wanted_contacts ON DELETE CASCADE | |
+| shared_with_director_id | UUID FK → directors (nullable) | |
+| shared_with_team_id | UUID FK → deal_teams (nullable) | |
+| shared_by_director_id | UUID FK → directors | |
+| permission | TEXT DEFAULT 'read' | read / write |
+| created_at | TIMESTAMPTZ | |
 
-Dodac przycisk "Dodaj kontakt" ktory otwiera dialog z `ConnectionContactSelect`:
-- W empty state: przycisk w `EmptyState` action
-- W widoku z lista: przycisk "+" w naglowku `DataCard`
-- Dialog z polem `ConnectionContactSelect` (excludeIds = juz przypisane kontakty) + opcjonalne pole "Rola w projekcie"
-- Po wybraniu kontaktu i kliknieciu "Dodaj" -- wywolanie `useAddProjectContact`
+Walidacja triggerem: albo director albo team musi byc NOT NULL.
 
-### 3. ProjectMembersSection -- nowy komponent w zakladce Przeglad
+### RLS
 
-Dodanie sekcji "Zespol projektowy" do `ProjectOverviewTab` (zamiast obecnych Badge-ow read-only):
-- Wyswietlanie listy czlonkow z rolami (member/owner)
-- Przycisk "+" otwierajacy dialog z Select (lista dyrektorow z `useDirectors`, excludeIds = juz dodani)
-- Przycisk usuwania czlonka (ikona Trash2)
-- Wlasciciel projektu wyswietlany osobno (nie mozna go usunac)
+Funkcja `can_access_wanted_contact(wanted_id UUID)`:
+- admin tenanta → true
+- `created_by = get_current_director_id()` → true
+- bezposrednie udostepnienie w `wanted_contact_shares` → true
+- udostepnienie przez zespol (shares.team_id + deal_team_members.director_id) → true
 
-### 4. Pole "Zespol" w ProjectOverviewTab
+Polityki:
+- SELECT: `can_access_wanted_contact(id)`
+- INSERT: `created_by = get_current_director_id()`
+- UPDATE/DELETE: `created_by = get_current_director_id() OR is_tenant_admin()`
 
-Dodanie pola "Zespol" w sekcji "Szczegoly" na `ProjectOverviewTab`:
-- Select z lista zespolow z `useDealTeams`
-- Wartosc "Brak zespolu" jako domyslna
-- Zmiana zapisuje sie przez `useUpdateProject` (po dodaniu team_id do schematu)
-- Wyswietlanie koloru zespolu jako kolorowa kropka obok nazwy
+## Formularz tworzenia (WantedContactModal)
 
-### 5. Aktualizacja Zod schemas
+Elastyczny formularz z dwoma sekcjami:
 
-Rozszerzenie `ProjectCreateSchema` i `ProjectUpdateSchema` o pole `team_id`:
-```text
-team_id: z.string().uuid().optional().nullable()
-```
+**Sekcja 1: Kto szuka** (wymagane)
+- ConnectionContactSelect
 
-## Pliki do modyfikacji/utworzenia
+**Sekcja 2: Kogo szukamy** (przynajmniej jedno wypelnione)
+- Zakladki lub sekcje: "Osoba" / "Firma"
+- **Osoba** (opcjonalna):
+  - Imie i nazwisko
+  - Stanowisko
+  - Opis osoby (textarea, placeholder: "np. znany lekarz, ekspert od AI...")
+  - Email / Telefon / LinkedIn
+- **Firma** (opcjonalna):
+  - Nazwa firmy
+  - NIP (auto-lookup) / REGON
+  - Branza
+  - Opis roli w firmie (textarea, placeholder: "np. szef logistyki, ktos z zarzadu...")
+
+**Sekcja 3: Dodatkowe**
+- Kontekst poszukiwania (textarea: "dlaczego szukamy, co chcemy osiagnac")
+- Pilnosc (select)
+- Notatki wewnetrzne
+
+## Karta (WantedContactCard)
+
+Dynamiczny wyglad:
+- Jesli osoba: **bold imie** + opis osoby
+- Jesli firma: **firma** + NIP + branza + opis roli
+- Jesli oba: **imie** z firmy **firma**
+- Kto szuka (link)
+- Urgency/status badge
+- Przycisk "Znam te osobe!" + "Udostepnij"
+- AI sugestie (ta sama branza)
+
+## Pliki do utworzenia
+
+| Plik | Opis |
+|------|------|
+| Migracja SQL | Tabele + RLS + triggery walidacyjne + can_access_wanted_contact |
+| `src/hooks/useWantedContacts.ts` | CRUD + match + NIP lookup + AI sugestie + sharing |
+| `src/pages/WantedContacts.tsx` | Strona glowna z filtrami i statystykami |
+| `src/components/wanted/WantedContactModal.tsx` | Elastyczny formularz |
+| `src/components/wanted/WantedContactCard.tsx` | Karta z dynamicznym wyswietlaniem |
+| `src/components/wanted/MatchWantedDialog.tsx` | Dialog "Znam te osobe!" |
+| `src/components/wanted/ShareWantedDialog.tsx` | Dialog udostepniania |
+| `src/components/wanted/WantedAISuggestions.tsx` | AI sugestie z CRM |
+| `src/components/contacts/ContactWantedTab.tsx` | Zakladka w ContactDetail |
+
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| Migracja SQL | Dodanie kolumny `team_id` do tabeli `projects` |
-| `src/components/projects/ProjectContactsTab.tsx` | Dodanie przycisku "Dodaj kontakt" z dialogiem i ConnectionContactSelect |
-| `src/components/projects/ProjectOverviewTab.tsx` | Rozbudowa sekcji czlonkow (dodawanie/usuwanie dyrektorow), dodanie pola "Zespol" w szczegolach |
-| `src/hooks/useProjects.ts` | Dodanie `team_id` do Zod schemas, aktualizacja select query o team |
+| `src/components/layout/AppSidebar.tsx` | "Poszukiwani" w crmItems (ikona Target) |
+| `src/pages/ContactDetail.tsx` | Zakladka "Poszukiwani" |
+| `src/App.tsx` | Route `/wanted` |
 
-## Szczegoly techniczne
-
-### ProjectContactsTab -- dialog dodawania kontaktu
+## Kolejnosc
 
 ```text
-Stan:
-  - isAddDialogOpen: boolean
-  - selectedContactId: string | null
-  - roleInProject: string (opcjonalne)
-
-Logika:
-  - excludeIds = projectContacts.map(pc => pc.contact_id)
-  - Po kliknieciu "Dodaj":
-    addContact.mutate({ projectId, contactId: selectedContactId, roleInProject })
-  - Reset stanu po sukcesie
-
-UI:
-  - Dialog z:
-    - ConnectionContactSelect (z excludeIds)
-    - Input "Rola w projekcie" (opcjonalne, placeholder "np. Decydent, Sponsor")
-    - Przyciski "Anuluj" / "Dodaj kontakt"
+1. Migracja SQL (tabele + RLS + triggery + funkcja dostepu)
+2. useWantedContacts.ts (hook z CRUD, match, NIP lookup, sharing)
+3. WantedContactModal.tsx (elastyczny formularz)
+4. WantedContactCard.tsx + WantedAISuggestions.tsx
+5. MatchWantedDialog.tsx + ShareWantedDialog.tsx
+6. WantedContacts.tsx (strona glowna)
+7. ContactWantedTab.tsx
+8. AppSidebar + ContactDetail + App.tsx (nawigacja)
 ```
-
-### ProjectOverviewTab -- sekcja czlonkow
-
-```text
-Obecne zachowanie: Badge z nazwiskiem + rola (read-only)
-Nowe zachowanie:
-  - Lista czlonkow z Avatar, nazwisko, rola, przycisk usun
-  - Przycisk "Dodaj czlonka" otwierajacy maly dialog/popover:
-    - Select z useDirectors() (exclude juz dodanych + owner)
-    - Select roli: "Czlonek" / "Obserwator"
-    - Przycisk "Dodaj"
-  - Wlasciciel (owner_id) wyswietlany na poczatku z Badge "Wlasciciel" (nie mozna usunac)
-```
-
-### ProjectOverviewTab -- pole Zespol
-
-```text
-W sekcji "Szczegoly" dodajemy wiersz:
-  <span>Zespol</span>
-  <Select value={project.team_id || 'none'} onValueChange={handleTeamChange}>
-    <SelectItem value="none">Brak zespolu</SelectItem>
-    {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-  </Select>
-
-handleTeamChange:
-  updateProject.mutate({ id: project.id, data: { team_id: value === 'none' ? null : value } })
-```
-
-### useProjects.ts -- rozszerzenie
-
-```text
-1. ProjectCreateSchema: dodac team_id: z.string().uuid().optional().nullable()
-2. useProject query: dodac team:deal_teams(id, name, color) do select
-3. useProjects query: dodac team:deal_teams(id, name, color) do select
-4. ProjectWithOwner type: dodac team?: { id: string; name: string; color: string } | null
-```
-
-## Kolejnosc wykonania
-
-```text
-1. Migracja SQL: ALTER TABLE projects ADD COLUMN team_id
-2. useProjects.ts: rozszerzenie Zod + query o team
-3. ProjectContactsTab.tsx: dodanie przycisku "Dodaj kontakt" z dialogiem
-4. ProjectOverviewTab.tsx: rozbudowa sekcji czlonkow + pole Zespol
-```
-
-## Czego NIE robimy
-
-| Element | Powod |
-|---------|-------|
-| Nowa zakladka "Zespol" w TabsList | Czlonkowie i zespol sa czescia Przegladu -- nie komplikujemy nawigacji |
-| Tworzenie nowych zespolow z poziomu projektu | Zespoly zarzadzane sa w module Deals |
-| Modyfikacja tabeli deal_teams | Istniejaca struktura wystarczy |
-| Dodanie team_members do projektu | Projekt ma czlonkow (project_members/directors), nie team_members |
 
