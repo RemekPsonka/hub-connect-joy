@@ -7,6 +7,7 @@ import {
   Settings,
   Network,
   Search,
+  Target,
   Shield,
   Building2,
   Bug,
@@ -52,6 +53,7 @@ const overviewItems = [
 // CRM
 const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users, adminOnly: false },
+  { title: 'Poszukiwani', url: '/wanted', icon: Target, adminOnly: false },
   { title: 'Sieć kontaktów', url: '/network', icon: Network, adminOnly: true },
 ];
 

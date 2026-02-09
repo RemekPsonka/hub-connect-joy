@@ -6104,6 +6104,222 @@ export type Database = {
           },
         ]
       }
+      wanted_contact_shares: {
+        Row: {
+          created_at: string
+          id: string
+          permission: string
+          shared_by_director_id: string
+          shared_with_director_id: string | null
+          shared_with_team_id: string | null
+          tenant_id: string
+          wanted_contact_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by_director_id: string
+          shared_with_director_id?: string | null
+          shared_with_team_id?: string | null
+          tenant_id: string
+          wanted_contact_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by_director_id?: string
+          shared_with_director_id?: string | null
+          shared_with_team_id?: string | null
+          tenant_id?: string
+          wanted_contact_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wanted_contact_shares_shared_by_director_id_fkey"
+            columns: ["shared_by_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contact_shares_shared_with_director_id_fkey"
+            columns: ["shared_with_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contact_shares_shared_with_team_id_fkey"
+            columns: ["shared_with_team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contact_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "wanted_contact_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contact_shares_wanted_contact_id_fkey"
+            columns: ["wanted_contact_id"]
+            isOneToOne: false
+            referencedRelation: "wanted_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wanted_contacts: {
+        Row: {
+          company_context: string | null
+          company_id: string | null
+          company_industry: string | null
+          company_name: string | null
+          company_nip: string | null
+          company_regon: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          fulfilled_at: string | null
+          id: string
+          matched_at: string | null
+          matched_by: string | null
+          matched_contact_id: string | null
+          notes: string | null
+          person_context: string | null
+          person_email: string | null
+          person_linkedin: string | null
+          person_name: string | null
+          person_phone: string | null
+          person_position: string | null
+          requested_by_contact_id: string
+          search_context: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          urgency: string
+        }
+        Insert: {
+          company_context?: string | null
+          company_id?: string | null
+          company_industry?: string | null
+          company_name?: string | null
+          company_nip?: string | null
+          company_regon?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          matched_at?: string | null
+          matched_by?: string | null
+          matched_contact_id?: string | null
+          notes?: string | null
+          person_context?: string | null
+          person_email?: string | null
+          person_linkedin?: string | null
+          person_name?: string | null
+          person_phone?: string | null
+          person_position?: string | null
+          requested_by_contact_id: string
+          search_context?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          urgency?: string
+        }
+        Update: {
+          company_context?: string | null
+          company_id?: string | null
+          company_industry?: string | null
+          company_name?: string | null
+          company_nip?: string | null
+          company_regon?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          matched_at?: string | null
+          matched_by?: string | null
+          matched_contact_id?: string | null
+          notes?: string | null
+          person_context?: string | null
+          person_email?: string | null
+          person_linkedin?: string | null
+          person_name?: string | null
+          person_phone?: string | null
+          person_position?: string | null
+          requested_by_contact_id?: string
+          search_context?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          urgency?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wanted_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_matched_by_fkey"
+            columns: ["matched_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_matched_contact_id_fkey"
+            columns: ["matched_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_requested_by_contact_id_fkey"
+            columns: ["requested_by_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "wanted_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       mv_dashboard_stats: {
@@ -6170,6 +6386,10 @@ export type Database = {
         Returns: number
       }
       can_access_contact: { Args: { _contact_id: string }; Returns: boolean }
+      can_access_wanted_contact: {
+        Args: { p_wanted_id: string }
+        Returns: boolean
+      }
       delete_synonym: { Args: { p_id: string }; Returns: boolean }
       expand_search_query: { Args: { p_query: string }; Returns: string[] }
       find_connection_path: {
