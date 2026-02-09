@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,15 @@ interface ConnectionContactSelectProps {
   excludeIds?: string[];
 }
 
+function useDebounce(value: string, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
 export function ConnectionContactSelect({
   value,
   onChange,
@@ -41,39 +50,53 @@ export function ConnectionContactSelect({
 }: ConnectionContactSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const { director } = useAuth();
 
+  // Server-side search query
   const { data: contacts = [] } = useQuery({
-    queryKey: ['contacts-for-connection', director?.tenant_id],
+    queryKey: ['contacts-for-connection', director?.tenant_id, debouncedSearch],
     queryFn: async () => {
       if (!director?.tenant_id) return [];
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('contacts')
         .select('id, full_name, company')
         .eq('tenant_id', director.tenant_id)
         .eq('is_active', true)
         .order('full_name')
-        .limit(100);
+        .limit(50);
 
+      if (debouncedSearch.length >= 2) {
+        query = query.or(`full_name.ilike.%${debouncedSearch}%,company.ilike.%${debouncedSearch}%`);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as Contact[];
     },
-    enabled: !!director?.tenant_id,
+    enabled: !!director?.tenant_id && open,
+    staleTime: 30000,
+  });
+
+  // Separate query for the selected contact (to show name in button)
+  const { data: selectedContact } = useQuery({
+    queryKey: ['contact-selected', value],
+    queryFn: async () => {
+      if (!value) return null;
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('id, full_name, company')
+        .eq('id', value)
+        .single();
+      if (error) return null;
+      return data as Contact;
+    },
+    enabled: !!value,
     staleTime: 60000,
   });
 
-  const filteredContacts = contacts.filter((contact) => {
-    if (excludeIds.includes(contact.id)) return false;
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      contact.full_name.toLowerCase().includes(searchLower) ||
-      (contact.company?.toLowerCase().includes(searchLower) ?? false)
-    );
-  });
-
-  const selectedContact = contacts.find((c) => c.id === value);
+  const filteredContacts = contacts.filter((c) => !excludeIds.includes(c.id));
 
   const listRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -108,7 +131,11 @@ export function ConnectionContactSelect({
             onValueChange={setSearch}
           />
           <CommandList>
-            <CommandEmpty>Brak kontaktów</CommandEmpty>
+            <CommandEmpty>
+              {search.length > 0 && search.length < 2
+                ? 'Wpisz min. 2 znaki...'
+                : 'Brak kontaktów'}
+            </CommandEmpty>
             <div ref={listRef} className="max-h-[300px] overflow-auto">
               <CommandGroup>
                 <div
