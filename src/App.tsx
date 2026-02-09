@@ -49,6 +49,7 @@ const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
 const MyDay = lazy(() => import("./pages/MyDay"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Sovra = lazy(() => import("./pages/Sovra"));
+const WantedContacts = lazy(() => import("./pages/WantedContacts"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -119,6 +120,7 @@ const App = () => (
                   <Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />
                   <Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
                   <Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
+                  <Route path="/wanted" element={<DirectorGuard><WantedContacts /></DirectorGuard>} />
                   <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
                   <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
                   <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
