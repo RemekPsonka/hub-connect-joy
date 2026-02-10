@@ -1,54 +1,64 @@
 
 
-# Dodanie brakujących triggerów bazodanowych
+# Przypinanie i przesuwanie zadań między sekcjami
 
 ## Co zostanie zbudowane
 
-Trzy triggery bazodanowe zapewniające automatyzację workflow:
-
-1. **handle_recurring_task** -- po zmianie statusu zadania na `completed`, jeśli zadanie ma `recurrence_rule` (JSONB), automatycznie tworzy nowe zadanie z wyliczonym kolejnym `due_date`
-2. **on_task_comment_notify** -- po dodaniu komentarza do zadania, generuje powiadomienie dla właściciela zadania (i przypisanego)
-3. **on_task_status_notify** -- po zmianie statusu zadania, generuje powiadomienie dla właściciela i przypisanego
+1. **Dodawanie zadania bezpośrednio w sekcji** -- przycisk "+" przy nagłówku sekcji otwiera TaskModal z preselected `section_id`
+2. **Przenoszenie zadania między sekcjami** -- menu kontekstowe (DropdownMenu) na każdym zadaniu z opcją "Przenieś do sekcji" i listą dostępnych sekcji + "Bez sekcji"
+3. **Cross-section drag-and-drop** -- jeden globalny DndContext zamiast osobnych per sekcja, umożliwiający przeciąganie zadań między sekcjami i "Bez sekcji"
+4. **Reorder sekcji** -- drag-and-drop na nagłówkach sekcji (sortowanie kolejności sekcji)
 
 ---
 
 ## Szczegoly techniczne
 
-### Jedna migracja SQL z trzema funkcjami i triggerami:
+### Plik 1: `src/components/projects/ProjectTasksTab.tsx` (glowne zmiany)
 
-### 1. handle_recurring_task
+**A) Globalny DndContext zamiast wielu osobnych:**
+- Zamiana wielu `DndContext` (po jednym na sekcje) na jeden globalny `DndContext` obejmujacy wszystkie sekcje + "Bez sekcji"
+- Kazda sekcja i "Bez sekcji" to osobny `SortableContext` z unikalnymi droppable areas
+- W `onDragEnd`: jesli task zmienil sekcje -- update `section_id` + `sort_order`; jesli w tej samej -- tylko reorder
 
-- **Trigger:** AFTER UPDATE na `tasks`, warunek: `OLD.status != 'completed' AND NEW.status = 'completed' AND NEW.recurrence_rule IS NOT NULL`
-- **Logika funkcji:**
-  - Parsuje `recurrence_rule` JSONB (format: `{"frequency": "daily|weekly|monthly", "interval": 1}`)
-  - Wylicza nowy `due_date` na podstawie `NEW.due_date + interval`
-  - INSERT nowego zadania z tym samym `title`, `description`, `priority`, `project_id`, `section_id`, `owner_id`, `assigned_to`, `tenant_id`, `recurrence_rule`, nowym `due_date`, status `pending`
-  - Ustawia `source_task_id` na `NEW.id` (powiazanie z oryginalem)
+**B) Przycisk "+" dodawania zadania w sekcji:**
+- Nowy state: `addingToSectionId` -- gdy ustawiony, TaskModal otwiera sie z `preselectedSectionId`
+- Przycisk "+" obok badge z liczba zadan w naglowku sekcji
+- TaskModal otrzyma nowy prop `preselectedSectionId`
 
-### 2. on_task_comment_notify
+**C) Menu kontekstowe na zadaniu -- "Przeniesc do sekcji":**
+- Rozszerzenie `TaskRow` o prop `sections` i `onMoveToSection`
+- Dodanie `DropdownMenu` z ikonka `MoreHorizontal` na hover, zawierajacego:
+  - "Przeniesc do sekcji" -> submenu z lista sekcji + "Bez sekcji"
+- Wywolanie `updateTask.mutate({ id, section_id })` przy wyborze
 
-- **Trigger:** AFTER INSERT na `task_comments`
-- **Logika funkcji:**
-  - Pobiera zadanie (`task_id`) z tabeli `tasks`
-  - Generuje powiadomienia w `task_notifications` dla:
-    - `owner_id` zadania (jesli != autor komentarza)
-    - `assigned_to` zadania (jesli != autor i != owner)
-  - Typ: `comment_added`, tytul: "Nowy komentarz", wiadomosc: skrocona tresc komentarza
+### Plik 2: `src/components/tasks/TaskModal.tsx`
 
-### 3. on_task_status_notify
+- Nowy opcjonalny prop: `preselectedSectionId?: string`
+- Nowy state `sectionId` inicjalizowany z `preselectedSectionId`
+- Przy `createTask` -- przekazanie `section_id` w obiekcie task
 
-- **Trigger:** AFTER UPDATE na `tasks`, warunek: `OLD.status IS DISTINCT FROM NEW.status`
-- **Logika funkcji:**
-  - Generuje powiadomienia w `task_notifications` dla:
-    - `owner_id` (jesli istnieje i != aktualny uzytkownik)
-    - `assigned_to` (jesli istnieje, != owner, != aktualny uzytkownik)
-  - Typ: `status_changed`, tytul: "Zmiana statusu zadania", wiadomosc: "[tytul]: [stary status] -> [nowy status]"
+### Plik 3: `src/components/tasks/SortableTaskItem.tsx`
 
-### Wazne detale:
-- Funkcje uzywaja `SECURITY DEFINER` aby miec dostep do tabel niezaleznie od RLS
-- Wszystkie trzy triggery sa niezalezne od istniejacych (`auto_assign_task_trigger`, `log_task_changes_trigger`)
-- `owner_id` w tabeli `tasks` jest typu TEXT (UUID jako string) -- konieczne castowanie na UUID przy INSERT do `task_notifications.director_id`
+- Dodanie `data` do `useSortable` z informacja o `sectionId` (potrzebne do identyfikacji zrodlowej sekcji przy cross-section drag)
 
-## Pliki do zmiany
-1. Nowa migracja SQL (jedyna zmiana -- brak zmian w kodzie frontendu, poniewaz `useTaskNotifications.ts` juz obsluguje Realtime na tabeli `task_notifications`)
+### Plik 4: `src/hooks/useTasks.ts`
+
+- Upewnienie sie, ze `useUpdateTask` akceptuje `section_id` w typie `TaskUpdate` (powinno dzialac przez istniejacy typ z Supabase)
+
+---
+
+## Kolejnosc implementacji
+
+1. Modyfikacja `TaskRow` -- dodanie menu kontekstowego "Przeniesc do sekcji"
+2. Modyfikacja `ProjectTasksTab` -- globalny DndContext + przycisk "+" w sekcjach
+3. Modyfikacja `TaskModal` -- prop `preselectedSectionId`
+4. Aktualizacja `SortableTaskItem` -- przekazanie danych sekcji
+
+## Pliki do modyfikacji (3)
+1. `src/components/projects/ProjectTasksTab.tsx`
+2. `src/components/tasks/TaskModal.tsx`
+3. `src/components/tasks/SortableTaskItem.tsx`
+
+## Brak zmian w bazie danych
+Kolumna `section_id` juz istnieje w tabeli `tasks`. Funkcja `handleAssignSection` jest juz zdefiniowana w `ProjectTasksTab` ale nie podlaczona do UI.
 
