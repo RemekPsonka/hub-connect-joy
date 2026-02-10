@@ -1,44 +1,40 @@
 
-# Naprawa RLS policy dla tabeli meeting_prospects
+# Rozbudowa listy Prospecting -- filtry, konwersja z merge, usuwanie
 
-## Problem
-Polityki RLS na tabeli `meeting_prospects` uzywaja blednego zapytania:
-```sql
-tenant_id = (SELECT tenant_id FROM directors WHERE id = auth.uid())
-```
-Powinno byc `directors.user_id = auth.uid()` (bo `directors.id` to inny UUID niz `auth.uid()`). Przez to INSERT jest blokowany -- stad 0 rekordow w tabeli mimo poprawnego parsowania.
+## Zakres zmian
 
-Inne tabele (np. `deal_team_prospects`) uzywaja funkcji `get_current_tenant_id()` ktora poprawnie sprawdza `directors.user_id = auth.uid()` i obsluguje tez asystentow.
+### 1. Filtr wg zrodla (source_event) w `ProspectingList.tsx`
+- Dodanie drugiego selecta obok filtra statusu: "Zrodlo" z unikalnymi wartosciami `source_event` z danych
+- Opcja "Wszystkie zrodla" jako domyslna
+- Filtrowanie lokalne (dane juz sa pobrane)
 
-## Rozwiazanie
-Jedna migracja SQL -- usunac stare polityki i stworzyc nowe uzywajace `get_current_tenant_id()`, wzorowane na `deal_team_prospects`.
+### 2. Rozbudowa konwersji z wykrywaniem duplikatow w `ProspectingConvertDialog.tsx`
+- Przy otwarciu dialogu wyszukiwanie w tabeli `contacts` po `full_name` (ilike) i opcjonalnie `company`
+- Jesli znaleziono potencjalny duplikat -- wyswietlenie opcji:
+  - "Scal z istniejacym kontaktem" (uzywa ID istniejacego kontaktu, aktualizuje brakujace pola)
+  - "Utworz nowy kontakt" (obecna logika)
+- Przy scalaniu: aktualizacja kontaktu o brakujace dane (email, phone, linkedin) + dodanie do `deal_team_contacts` + oznaczenie prospekta jako skonwertowanego
 
-### Migracja SQL:
-```sql
--- Drop old broken policies
-DROP POLICY IF EXISTS "Tenant members can view meeting prospects" ON meeting_prospects;
-DROP POLICY IF EXISTS "Tenant members can insert meeting prospects" ON meeting_prospects;
-DROP POLICY IF EXISTS "Tenant members can update meeting prospects" ON meeting_prospects;
-DROP POLICY IF EXISTS "Tenant members can delete meeting prospects" ON meeting_prospects;
+### 3. Opcja usuwania -- juz istnieje
+- Usuwanie jest juz zaimplementowane w menu kontekstowym (ikona Trash2). Bez zmian.
 
--- Create corrected policies using get_current_tenant_id()
-CREATE POLICY "mp_select" ON meeting_prospects FOR SELECT
-  USING (tenant_id = get_current_tenant_id());
+## Pliki do modyfikacji
 
-CREATE POLICY "mp_insert" ON meeting_prospects FOR INSERT
-  WITH CHECK (tenant_id = get_current_tenant_id());
+| Plik | Zmiana |
+|------|--------|
+| `src/components/deals-team/ProspectingList.tsx` | Dodanie filtra zrodla (source_event) |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Wyszukiwanie duplikatow w contacts, opcja scalania |
 
-CREATE POLICY "mp_update" ON meeting_prospects FOR UPDATE
-  USING (tenant_id = get_current_tenant_id());
+## Szczegoly techniczne
 
-CREATE POLICY "mp_delete" ON meeting_prospects FOR DELETE
-  USING (tenant_id = get_current_tenant_id());
-```
+### ProspectingList.tsx
+- Nowy state: `sourceFilter` (string, default `'all'`)
+- Obliczenie unikalnych zrodel: `Array.from(new Set(prospects.map(p => p.source_event).filter(Boolean)))`
+- Drugi `Select` obok istniejacego filtra statusu
+- Filtrowanie: `filtered = prospects.filter(p => (statusFilter === 'all' || ...) && (sourceFilter === 'all' || p.source_event === sourceFilter))`
 
-## Zmiany w kodzie
-Brak -- jedynie migracja bazy danych. Kod frontendowy i edge function sa poprawne.
-
-## Pliki
-| Plik | Akcja |
-|------|-------|
-| Migracja SQL | Nowe polityki RLS |
+### ProspectingConvertDialog.tsx
+- `useEffect` przy otwarciu -- query do `contacts` z `ilike('full_name', '%name%')` + opcjonalnie `eq('company', company)`
+- Wyswietlenie listy znalezionych duplikatow z przyciskiem "Scal"
+- Tryb "merge": zamiast `insert` do contacts, robi `update` istniejacego kontaktu (uzupelnia puste pola) i uzywa jego ID do `deal_team_contacts`
+- Sprawdzenie czy kontakt nie jest juz w zespole (query `deal_team_contacts` po `contact_id` + `team_id`)
