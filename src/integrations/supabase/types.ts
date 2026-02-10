@@ -4915,6 +4915,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          auto_assign_mode: string | null
           color: string | null
           created_at: string
           description: string | null
@@ -4931,6 +4932,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_assign_mode?: string | null
           color?: string | null
           created_at?: string
           description?: string | null
@@ -4947,6 +4949,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_assign_mode?: string | null
           color?: string | null
           created_at?: string
           description?: string | null

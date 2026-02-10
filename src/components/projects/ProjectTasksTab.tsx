@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useProjectTasks } from '@/hooks/useProjects';
 import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -26,6 +26,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableTaskItem } from '@/components/tasks/SortableTaskItem';
+import { useTaskReorder, useSectionReorder } from '@/hooks/useTaskReorder';
 
 interface ProjectTasksTabProps {
   projectId: string;
@@ -70,6 +74,8 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const { data: sections = [] } = useTaskSections(projectId);
   const createSection = useCreateTaskSection();
   const deleteSection = useDeleteTaskSection();
+  const reorderTasks = useTaskReorder();
+  const reorderSections = useSectionReorder();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -79,6 +85,11 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [taskView, setTaskView] = useState<'list' | 'timeline'>('list');
   const updateTask = useUpdateTask();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const handleTaskClick = (task: TaskWithDetails) => {
     setSelectedTask(task);
@@ -243,20 +254,34 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                 </div>
 
                 {!isCollapsed && (
-                  <div className="divide-y divide-border pl-4">
-                    {sectionTasks.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-3 text-center">Brak zadań w sekcji</p>
-                    ) : (
-                      sectionTasks.map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          onClick={() => handleTaskClick(task)}
-                          onToggleStatus={(e) => handleStatusToggle(e, task)}
-                        />
-                      ))
-                    )}
-                  </div>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event: DragEndEvent) => {
+                    const { active, over } = event;
+                    if (!over || active.id === over.id) return;
+                    const items = sectionTasks.map((t) => t.id);
+                    const oldIdx = items.indexOf(active.id as string);
+                    const newIdx = items.indexOf(over.id as string);
+                    if (oldIdx === -1 || newIdx === -1) return;
+                    const newOrder = arrayMove(items, oldIdx, newIdx);
+                    reorderTasks.mutate(newOrder);
+                  }}>
+                    <SortableContext items={sectionTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                      <div className="divide-y divide-border pl-4">
+                        {sectionTasks.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-3 text-center">Brak zadań w sekcji</p>
+                        ) : (
+                          sectionTasks.map((task) => (
+                            <SortableTaskItem key={task.id} id={task.id}>
+                              <TaskRow
+                                task={task}
+                                onClick={() => handleTaskClick(task)}
+                                onToggleStatus={(e) => handleStatusToggle(e, task)}
+                              />
+                            </SortableTaskItem>
+                          ))
+                        )}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
             );
@@ -271,16 +296,30 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                   <Badge variant="secondary" className="text-xs">{unsectionedTasks.length}</Badge>
                 </div>
               )}
-              <div className="divide-y divide-border">
-                {unsectionedTasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    onClick={() => handleTaskClick(task)}
-                    onToggleStatus={(e) => handleStatusToggle(e, task)}
-                  />
-                ))}
-              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event: DragEndEvent) => {
+                const { active, over } = event;
+                if (!over || active.id === over.id) return;
+                const items = unsectionedTasks.map((t) => t.id);
+                const oldIdx = items.indexOf(active.id as string);
+                const newIdx = items.indexOf(over.id as string);
+                if (oldIdx === -1 || newIdx === -1) return;
+                const newOrder = arrayMove(items, oldIdx, newIdx);
+                reorderTasks.mutate(newOrder);
+              }}>
+                <SortableContext items={unsectionedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  <div className="divide-y divide-border">
+                    {unsectionedTasks.map((task) => (
+                      <SortableTaskItem key={task.id} id={task.id}>
+                        <TaskRow
+                          task={task}
+                          onClick={() => handleTaskClick(task)}
+                          onToggleStatus={(e) => handleStatusToggle(e, task)}
+                        />
+                      </SortableTaskItem>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
           )}
         </div>
