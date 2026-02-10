@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2, Sparkles, Check, X, CheckCheck, User, Building2, Upload, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { WantedCheckActions } from './WantedCheckActions';
 
 interface ParsedItem {
   person_name: string | null;
@@ -392,6 +393,18 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
                         )}
                       </div>
                     )}
+
+                    {/* Sprawdź w bazie / AI */}
+                    <WantedCheckActions
+                      personName={item.person_name || ''}
+                      companyName={item.company_name || ''}
+                      compact
+                      onEnrichResult={(result) => {
+                        if (result.position && !item.person_position) updateItem(item._id, 'person_position', result.position);
+                        if (result.summary) updateItem(item._id, 'person_context', result.summary);
+                        if (result.industry && !item.company_industry) updateItem(item._id, 'company_industry', result.industry);
+                      }}
+                    />
 
                     <div className="flex items-center gap-2">
                       <Select
