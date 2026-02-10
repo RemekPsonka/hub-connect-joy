@@ -1,75 +1,91 @@
 
-# Dodanie obslugi plikow do importu poszukiwanych
+# Sprawdzanie w bazie i uzupelnianie danych AI dla poszukiwanych
 
 ## Co sie zmieni
 
-Dialog "Importuj liste poszukiwanych" bedzie obslugiwac nie tylko wklejanie tekstu, ale rowniez wczytywanie plikow: zdjec (PNG/JPG), PDF, arkuszy Excel (XLSX/CSV). Uzytkownik wybiera plik lub wkleja tekst -- oba sposoby prowadza do tego samego kroku review z kartami.
+Na kartach poszukiwanych (zarowno w formularzu dodawania jak i w imporcie listy) pojawia sie dwa nowe przyciski:
+
+1. **"Sprawdz w bazie"** (ikona Database/Search) -- wyszukuje w tabeli `contacts` i `companies` osoby/firmy o podobnej nazwie. Jesli znajdzie -- pokazuje wyniki z mozliwoscia dopasowania.
+2. **"Uzupelnij dane AI"** (ikona Sparkles/Globe) -- wywoluje istniejaca edge function `enrich-person-data` (Perplexity + Firecrawl), zwraca uzupelnione dane i krotki opis osoby. Dane trafiaja do pol karty -- uzytkownik musi zatwierdzic.
 
 ## Zmiany w plikach
 
-### 1. `src/components/wanted/ImportWantedDialog.tsx`
+### 1. `src/components/wanted/WantedContactModal.tsx`
 
-- Dodac przycisk "Wczytaj plik" z ukrytym `<input type="file" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp" />`
-- Pokazac nazwe wczytanego pliku z mozliwoscia usuniecia
-- Przy analizie:
-  - CSV: `file.text()` -> wyslac jako `{ content, contentType: "csv" }`
-  - XLSX/XLS: uzyc biblioteki `xlsx` (juz zainstalowana) do konwersji na CSV -> wyslac jako `{ content, contentType: "csv" }`
-  - PDF: `file.text()` -> wyslac jako `{ content, contentType: "pdf" }`
-  - Obrazy (PNG/JPG/WEBP): konwersja do base64 przez `FileReader.readAsDataURL` -> wyslac jako `{ content, contentType: "image" }`
-- Przycisk "Analizuj z AI" aktywny gdy jest tekst LUB plik (+ wybrany requestedBy)
-- Nowe stanu: `uploadedFile: File | null`
-- Dodac ikone `Upload` z lucide-react
+- Dodac dwa przyciski w sekcji "Kogo szukamy":
+  - **"Sprawdz w bazie"**: wywoluje `check-duplicate-contact` z `person_name` (split na first/last) + `company_name`. Wyswietla wynik inline pod formularzem (alert z linkiem do kontaktu lub "nie znaleziono").
+  - **"Uzupelnij dane AI"**: wywoluje `enrich-person-data` z `first_name`, `last_name`, `company`. Wynik uzupelnia pola: `person_position`, `person_context`, `company_industry`. Pokazuje opis osoby w polu `person_context` lub nowym polu podgladu. Uzytkownik widzi zmiany i moze je edytowac przed zapisaniem.
+- Nowe stany: `isChecking`, `checkResult`, `isEnriching`, `enrichResult`
+- Wynik sprawdzenia bazy: zielony badge "Znaleziono: Jan Kowalski (ABC Sp. z o.o.)" z linkiem, lub szary "Nie znaleziono w bazie"
+- Wynik wzbogacania AI: pola formularza zostaja automatycznie wypelnione danymi z AI, toast "Uzupelniono dane z AI"
 
-### 2. `supabase/functions/parse-wanted-list/index.ts`
+### 2. `src/components/wanted/ImportWantedDialog.tsx`
 
-- Rozszerzyc o obsluge `contentType` w body (`"text" | "csv" | "pdf" | "image"`)
-- Dla `image`: uzyc multimodalnego promptu z `image_url` (ten sam pattern co w `parse-contacts-list`)
-- Dla `csv`/`pdf`: tekst trafia do user prompt jako dane do analizy
-- Dodac walidacje rozmiaru contentu (max 5MB)
-- System prompt bez zmian -- AI i tak rozpozna tabelaryczne dane
+- Na kazdej karcie review (etap 2) dodac dwa przyciski obok "Odrzuc"/"Zatwierdz":
+  - **"Sprawdz"** (ikona Search): ten sam mechanizm co wyzej
+  - **"AI"** (ikona Sparkles): wywoluje `enrich-person-data`, uzupelnia pola karty
+- Wyniki wyswietlane inline na karcie:
+  - Sprawdzenie bazy: maly alert pod kartą z wynikiem
+  - AI: pola karty aktualizowane automatycznie + description dodane do `person_context`
+- Nowe pola w `ReviewItem`: `_checkResult`, `_isChecking`, `_isEnriching`, `_enrichResult`
 
-## Uklad UI (etap input)
+### 3. Nowy komponent: `src/components/wanted/WantedCheckActions.tsx`
+
+Wspolny komponent z dwoma przyciskami (uzyty i w modalu i w imporcie):
+- Props: `personName`, `companyName`, `onCheckResult`, `onEnrichResult`, `isChecking`, `isEnriching`
+- Przycisk "Sprawdz w bazie": split `personName` na first/last, invoke `check-duplicate-contact`
+- Przycisk "Uzupelnij AI": invoke `enrich-person-data` z danymi
+- Wyswietlanie wynikow: inline pod przyciskami
+
+## Logika sprawdzania w bazie
 
 ```text
-Kto szuka *
-[select kontakt]
-
-Wklej liste lub wczytaj plik
-[textarea - wklej tekst...]
-
-[przycisk: Wczytaj plik (CSV, Excel, PDF, zdjecie)]
-[jesli plik: badge z nazwa pliku + X do usuniecia]
-
-Termin poszukiwania
-[select: miesiac / kwartal / rok / bez limitu]
-
-[Anuluj] [Analizuj z AI]
+1. Split person_name na first_name + last_name
+2. Invoke check-duplicate-contact({ contact: { first_name, last_name } })
+3. Jesli isDuplicate === true: pokazac dane existingContact (imie, firma, link)
+4. Jesli nie: szukac po company_name w tabeli companies (ilike)
+5. Wyswietlic wynik
 ```
 
-Jesli uzytkownik wkleil tekst I wczytal plik -- priorytet ma plik.
+## Logika uzupelniania AI
 
-## Szczegoly techniczne
-
-### Konwersja plikow (frontend)
-
-Wzorowane na istniejacym `useAIImport.ts` (linia 282-302):
-
-- CSV: `await file.text()`
-- XLSX: `XLSX.read(arrayBuffer)` -> `XLSX.utils.sheet_to_csv(sheet)`
-- PDF: `await file.text()` (tekst z PDF)
-- Obrazy: `FileReader.readAsDataURL(file)` -> base64 string
-
-### Edge function - obsluga image
-
-Dla `contentType === 'image'`, wiadomosc do AI bedzie miala format multimodalny:
-```json
-{
-  "role": "user",
-  "content": [
-    { "type": "text", "text": "prompt..." },
-    { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
-  ]
-}
+```text
+1. Invoke enrich-person-data({ first_name, last_name, company })
+2. Z odpowiedzi wyciagnac: position, bio (summary), industry
+3. Uzupelnic pola formularza:
+   - person_position <- enriched position (jesli puste)
+   - person_context <- enriched bio/summary
+   - company_industry <- enriched industry (jesli puste)
+4. Toast "Uzupelniono dane"
+5. Uzytkownik widzi zmiany i moze edytowac
 ```
 
-Ten sam pattern co w istniejacym `parse-contacts-list/index.ts` (linia 118-127).
+## Szczegoly UI
+
+### Przyciski na karcie (Import)
+```text
+[Sprawdz w bazie] [Uzupelnij AI]  ...  [Odrzuc] [Zatwierdz]
+```
+
+### Przyciski w modalu (Dodawanie)
+Dodane pod sekcja "Kogo szukamy", przed "Dodatkowe":
+```text
+[Sprawdz w naszej bazie]  [Uzupelnij dane AI]
+```
+
+### Wynik sprawdzenia (inline)
+- Znaleziono: zielony banner z imieniem i firma, link "Zobacz kontakt"
+- Nie znaleziono: szary tekst "Nie znaleziono podobnego kontaktu w bazie"
+
+### Wynik AI (inline)
+- Pola formularza zostaja zaktualizowane (podswietlenie zmian opcjonalne)
+- Krotki opis osoby wstawiony do `person_context`
+- Toast potwierdzajacy
+
+## Kolejnosc implementacji
+
+```text
+1. WantedCheckActions.tsx (wspolny komponent)
+2. WantedContactModal.tsx (integracja w formularzu dodawania)
+3. ImportWantedDialog.tsx (integracja na kartach review)
+```
