@@ -1,72 +1,44 @@
 
 
-# Reorganizacja zakladek OSOBA / FIRMA
+# Natychmiastowe odswiezanie danych po dodaniu
 
-## Cel
+## Problem
 
-Rozdzielic dane osobowe od firmowych. Widok OSOBA zawiera tylko informacje o relacji z osoba (Agent AI, spotkania, potrzeby, poszukiwani, zadania, historia). Widok FIRMA zawiera pelna karte firmy (CompanyView). W prawej kolumnie zostaja: notatki, zadania, mini-karta firmy, statystyki, siec LinkedIn i siec kontaktow.
+Po dodaniu zadania (lub innego elementu) na stronie projektu, kontaktu lub konsultacji dane nie pojawiaja sie od razu -- trzeba recznie odswiezyc strone. Przyczyna: mutacje (`useCreateTask`, `useCreateCrossTask`, `useUpdateTask`, bulk operations) nie invaliduja kluczy cache takich jak `project-tasks` i `consultation-tasks`.
 
-## Zmiany w `src/pages/ContactDetail.tsx`
+## Rozwiazanie
 
-### Nowy uklad zakladek w widoku OSOBA
+Dodac brakujace `invalidateQueries` do wszystkich mutacji w `src/hooks/useTasks.ts`, aby po kazdej zmianie zadania odswiezaly sie rowniez widoki powiazane z projektami i konsultacjami.
 
-Zamiast obecnych 7 zakladek (Firma, Spotkania, Potrzeby, Profil AI, Siec, Poszukiwani, Wiecej), nowe zakladki:
+## Zmiany w pliku `src/hooks/useTasks.ts`
 
-1. **Spotkania** (BI + Konsultacje -- bez zmian, `MeetingsTab`)
-2. **Potrzeby** (Potrzeby + Oferty -- `ContactNeedsOffersTab`)
-3. **Poszukiwani** (`ContactWantedTab`)
-4. **Profil AI** (Profil AI osoby -- bez zmian)
-5. **Wiecej** (Zadania, Udzialy, Historia, Przeglad)
+Dodac do `onSuccess` nastepujacych hookow:
 
-Usuniete z OSOBA:
-- Zakladka **Firma** (przeniesiona calkowicie do widoku FIRMA)
-- Zakladka **Siec** (przeniesiona do prawej kolumny)
+### 1. `useCreateTask` (linia ~470)
+Dodac:
+- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
+- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
 
-### Nowa prawa kolumna
+### 2. `useCreateCrossTask` (linia ~536)
+Dodac:
+- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
 
-Kolejnosc elementow w prawej kolumnie (sticky):
-1. Notatki (bez zmian, `ContactNotesPanel`)
-2. Zadania (bez zmian, `ContactTasksPanel`)
-3. Mini-karta firmy (bez zmian, `ContactCompanyCard`)
-4. Statystyki (bez zmian, `ContactQuickStats`)
-5. **Siec LinkedIn** (`LinkedInNetworkSection`) -- przeniesiona z zakladki Siec
-6. **Siec kontaktow** (`ContactConnectionsSection`) -- przeniesiona z zakladki Siec
+### 3. `useUpdateTask` (linia ~561)
+Dodac:
+- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
+- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
 
-### Widok FIRMA
+### 4. `useDeleteTask` (linia ~619)
+Dodac:
+- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
+- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
 
-Bez zmian -- nadal renderuje `CompanyView`.
+### 5. `useBulkUpdateTasks` (linia ~644)
+Dodac:
+- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
 
-### Domyslna zakladka
+### 6. `useCreateSubtask` (linia ~700)
+Juz ma `project-tasks` -- OK.
 
-Zmiana `getDefaultTab()`:
-- Domyslna zakladka: `meetings` (zamiast `company`)
-- Usunac `company` z listy validTabs
-- Dodac `wanted` do validTabs (juz jest)
+Lacznie: 1 plik, ~8 dodanych linii. Zadne nowe komponenty, zadne zmiany w edge functions.
 
-## Szczegoly techniczne
-
-### Zmiany w TabsList
-
-Obecne:
-```text
-Firma | Spotkania | Potrzeby | Profil AI | Siec | Poszukiwani | Wiecej
-```
-
-Nowe (5 zakladek zamiast 7):
-```text
-Spotkania | Potrzeby | Poszukiwani | Profil AI | Wiecej
-```
-
-Grid zmienia sie z `lg:grid-cols-7` na `lg:grid-cols-5`.
-
-### Przeniesienie sieci do prawej kolumny
-
-Komponenty `LinkedInNetworkSection` i `ContactConnectionsSection` przenoszone z `TabsContent value="network"` do prawej kolumny pod `ContactQuickStats`. Zachowuja te same propsy (`contactId`, `contactName`).
-
-### Zakladka "Wiecej"
-
-Obecna zakladka "Wiecej" zawiera Udzialy, Zadania, Historia, Przeglad. Bez zmian w jej zawartosci.
-
-## Podsumowanie zmian
-
-Modyfikowany jest tylko jeden plik: `src/pages/ContactDetail.tsx`. Zadne komponenty nie sa tworzone ani usuwane -- wszystko to przeniesienie istniejacych komponentow miedzy sekcjami.
