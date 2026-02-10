@@ -62,15 +62,17 @@ export default function ContactDetail() {
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && !isAssistant) {
-      const validTabs = ['company', 'meetings', 'needs-offers', 'profile-ai', 'network', 'wanted', 'more'];
+      const validTabs = ['meetings', 'needs-offers', 'wanted', 'profile-ai', 'more'];
       if (validTabs.includes(tabFromUrl)) {
         return tabFromUrl;
       }
       // Legacy compatibility
       if (tabFromUrl === 'consultations') return 'meetings';
       if (tabFromUrl === 'bi') return 'meetings';
+      if (tabFromUrl === 'company') return 'meetings';
+      if (tabFromUrl === 'network') return 'meetings';
     }
-    return 'company';
+    return 'meetings';
   };
 
   if (isLoading) {
@@ -155,29 +157,13 @@ export default function ContactDetail() {
 
               {/* TABY z resztą treści */}
               <Tabs defaultValue={getDefaultTab()} className="w-full">
-                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-7">
-                  <TabsTrigger value="company">Firma</TabsTrigger>
+                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-5">
                   <TabsTrigger value="meetings">Spotkania</TabsTrigger>
                   <TabsTrigger value="needs-offers">Potrzeby</TabsTrigger>
-                  <TabsTrigger value="profile-ai">Profil AI</TabsTrigger>
-                  <TabsTrigger value="network">Sieć</TabsTrigger>
                   <TabsTrigger value="wanted" className="gap-1"><Target className="h-3 w-3" />Poszukiwani</TabsTrigger>
+                  <TabsTrigger value="profile-ai">Profil AI</TabsTrigger>
                   <TabsTrigger value="more">Więcej</TabsTrigger>
                 </TabsList>
-
-                {/* Tab: Firma — pełna karta firmy */}
-                <TabsContent value="company" className="mt-6">
-                  {contact.companies ? (
-                    <CompanyView contact={contact} />
-                  ) : (
-                    <Card>
-                      <CardContent className="py-8 text-center">
-                        <Building className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground">Firma nie jest przypisana do tego kontaktu</p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </TabsContent>
 
                 {/* Tab: Spotkania — BI + Konsultacje */}
                 <TabsContent value="meetings" className="mt-6">
@@ -187,6 +173,11 @@ export default function ContactDetail() {
                 {/* Tab: Potrzeby i Oferty */}
                 <TabsContent value="needs-offers" className="mt-6">
                   <ContactNeedsOffersTab contactId={contact.id} />
+                </TabsContent>
+
+                {/* Tab: Poszukiwani */}
+                <TabsContent value="wanted" className="mt-6">
+                  <ContactWantedTab contactId={contact.id} />
                 </TabsContent>
 
                 {/* Tab: Profil AI osoby */}
@@ -246,20 +237,7 @@ export default function ContactDetail() {
                   </Card>
                 </TabsContent>
 
-                {/* Tab: Sieć — LinkedIn + Connections */}
-                <TabsContent value="network" className="mt-6">
-                  <div className="space-y-6">
-                    <LinkedInNetworkSection contactId={contact.id} contactName={contact.full_name} />
-                    <ContactConnectionsSection contactId={contact.id} contactName={contact.full_name} />
-                  </div>
-                </TabsContent>
-
-                {/* Tab: Poszukiwani */}
-                <TabsContent value="wanted" className="mt-6">
-                  <ContactWantedTab contactId={contact.id} />
-                </TabsContent>
-
-                {/* Tab: Więcej — Udziały + Historia + Zadania (pełny widok) */}
+                {/* Tab: Więcej — Udziały + Zadania + Historia + Przegląd */}
                 <TabsContent value="more" className="mt-6">
                   <Tabs defaultValue="ownership">
                     <TabsList className="mb-4">
@@ -300,6 +278,12 @@ export default function ContactDetail() {
 
               {/* Szybkie statystyki */}
               <ContactQuickStats contact={contact} />
+
+              {/* Sieć LinkedIn */}
+              <LinkedInNetworkSection contactId={contact.id} contactName={contact.full_name} />
+
+              {/* Sieć kontaktów */}
+              <ContactConnectionsSection contactId={contact.id} contactName={contact.full_name} />
             </div>
           </div>
         )
