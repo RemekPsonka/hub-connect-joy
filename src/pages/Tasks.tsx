@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { TasksHeader } from '@/components/tasks/TasksHeader';
 import { TasksList } from '@/components/tasks/TasksList';
+import { TasksTable } from '@/components/tasks/TasksTable';
 import { TasksKanban } from '@/components/tasks/TasksKanban';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
@@ -11,7 +12,7 @@ import { toast } from 'sonner';
 
 export default function Tasks() {
   const [filters, setFilters] = useState<TasksFilters>({});
-  const [view, setView] = useState<'list' | 'kanban'>('list');
+  const [view, setView] = useState<'list' | 'kanban' | 'table'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -100,6 +101,14 @@ export default function Tasks() {
 
       {view === 'list' ? (
         <TasksList
+          tasks={tasks}
+          onTaskClick={handleTaskClick}
+          onStatusChange={handleStatusChange}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+        />
+      ) : view === 'table' ? (
+        <TasksTable
           tasks={tasks}
           onTaskClick={handleTaskClick}
           onStatusChange={handleStatusChange}
