@@ -6191,6 +6191,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          expires_at: string | null
           fulfilled_at: string | null
           id: string
           matched_at: string | null
@@ -6220,6 +6221,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          expires_at?: string | null
           fulfilled_at?: string | null
           id?: string
           matched_at?: string | null
@@ -6249,6 +6251,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          expires_at?: string | null
           fulfilled_at?: string | null
           id?: string
           matched_at?: string | null

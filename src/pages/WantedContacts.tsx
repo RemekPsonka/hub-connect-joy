@@ -26,7 +26,8 @@ export default function WantedContacts() {
     active: items.filter((i) => i.status === 'active').length,
     inProgress: items.filter((i) => i.status === 'in_progress').length,
     fulfilled: items.filter((i) => i.status === 'fulfilled').length,
-  } : { active: 0, inProgress: 0, fulfilled: 0 };
+    expired: items.filter((i) => i.status === 'expired').length,
+  } : { active: 0, inProgress: 0, fulfilled: 0, expired: 0 };
 
   return (
     <div className="space-y-6">
@@ -47,10 +48,11 @@ export default function WantedContacts() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <Card><CardContent className="p-3 text-center"><p className="text-2xl font-bold text-primary">{stats.active}</p><p className="text-xs text-muted-foreground">Aktywne</p></CardContent></Card>
         <Card><CardContent className="p-3 text-center"><p className="text-2xl font-bold text-orange-500">{stats.inProgress}</p><p className="text-xs text-muted-foreground">W trakcie</p></CardContent></Card>
         <Card><CardContent className="p-3 text-center"><p className="text-2xl font-bold text-green-500">{stats.fulfilled}</p><p className="text-xs text-muted-foreground">Znalezione</p></CardContent></Card>
+        <Card><CardContent className="p-3 text-center"><p className="text-2xl font-bold text-muted-foreground">{stats.expired}</p><p className="text-xs text-muted-foreground">Wygasłe</p></CardContent></Card>
       </div>
 
       {/* Filters */}
@@ -67,6 +69,7 @@ export default function WantedContacts() {
             <SelectItem value="in_progress">W trakcie</SelectItem>
             <SelectItem value="fulfilled">Znalezione</SelectItem>
             <SelectItem value="cancelled">Anulowane</SelectItem>
+            <SelectItem value="expired">Wygasłe (archiwum)</SelectItem>
           </SelectContent>
         </Select>
         <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>

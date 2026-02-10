@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Building2, Target, Share2, Trash2 } from 'lucide-react';
+import { User, Building2, Target, Share2, Trash2, Clock } from 'lucide-react';
+import { format, differenceInDays, isPast } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { WantedContact, useDeleteWantedContact } from '@/hooks/useWantedContacts';
 import { MatchWantedDialog } from './MatchWantedDialog';
 import { ShareWantedDialog } from './ShareWantedDialog';
@@ -26,6 +28,7 @@ const statusLabels: Record<string, string> = {
   in_progress: 'W trakcie',
   fulfilled: 'Znaleziony',
   cancelled: 'Anulowany',
+  expired: 'Wygasły',
 };
 
 const urgencyLabels: Record<string, string> = {
@@ -48,8 +51,12 @@ export function WantedContactCard({ item }: { item: WantedContact }) {
     ? [item.person_position, item.person_context].filter(Boolean).join(' · ')
     : [item.company_context, item.company_industry].filter(Boolean).join(' · ');
 
+  const isExpired = item.status === 'expired' || (item.expires_at && isPast(new Date(item.expires_at)));
+  const daysLeft = item.expires_at ? differenceInDays(new Date(item.expires_at), new Date()) : null;
+  const isExpiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && !isExpired;
+
   return (
-    <Card className="hover:border-primary/30 transition-colors">
+    <Card className={`hover:border-primary/30 transition-colors ${isExpired ? 'opacity-60' : ''}`}>
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
@@ -76,6 +83,20 @@ export function WantedContactCard({ item }: { item: WantedContact }) {
           <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5 line-clamp-2">{item.search_context}</p>
         )}
 
+        {/* Expiration info */}
+        <div className="flex items-center gap-1.5 text-xs">
+          <Clock className={`h-3.5 w-3.5 ${isExpiringSoon ? 'text-orange-500' : isExpired ? 'text-destructive' : 'text-muted-foreground'}`} />
+          {item.expires_at ? (
+            <span className={isExpiringSoon ? 'text-orange-500 font-medium' : isExpired ? 'text-destructive' : 'text-muted-foreground'}>
+              {isExpired
+                ? `Wygasł ${format(new Date(item.expires_at), 'd MMM yyyy', { locale: pl })}`
+                : `Do: ${format(new Date(item.expires_at), 'd MMM yyyy', { locale: pl })}${isExpiringSoon ? ` (${daysLeft} dni)` : ''}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Bez limitu</span>
+          )}
+        </div>
+
         {/* Requester */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">
@@ -97,7 +118,7 @@ export function WantedContactCard({ item }: { item: WantedContact }) {
         )}
 
         {/* Actions */}
-        {item.status === 'active' && (
+        {item.status === 'active' && !isExpired && (
           <div className="flex items-center gap-2 pt-1 border-t">
             <Button size="sm" variant="outline" onClick={() => setMatchOpen(true)} className="gap-1.5 text-xs">
               <Target className="h-3.5 w-3.5" /> Znam tę osobę!
