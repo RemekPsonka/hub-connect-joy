@@ -28,7 +28,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { content } = body;
+    const { content, contentType = 'text' } = body;
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
       return new Response(
@@ -37,10 +37,19 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[parse-wanted-list] Parsing wanted contacts, content length: ${content.length}`);
+    // Validate size (5MB max)
+    if (content.length > 5 * 1024 * 1024) {
+      return new Response(
+        JSON.stringify({ error: "Zawartość jest za duża (max 5MB)" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[parse-wanted-list] Parsing wanted contacts, contentType: ${contentType}, length: ${content.length}`);
 
     const systemPrompt = `Jesteś ekspertem w rozpoznawaniu poszukiwanych kontaktów biznesowych z dowolnego tekstu.
 Użytkownik wkleja listę osób/firm, które chce znaleźć — mogą to być notatki ze spotkania, lista CSV, email, lub dowolny tekst.
+Dane mogą też pochodzić ze zdjęcia, PDF lub arkusza kalkulacyjnego.
 
 Twoim zadaniem jest wyodrębnić KAŻDĄ poszukiwaną osobę/firmę jako osobny element.
 
@@ -58,10 +67,10 @@ REGUŁY:
 
 WAŻNE: Zwróć TYLKO poprawny JSON, bez komentarzy.`;
 
-    const userPrompt = `Przeanalizuj poniższy tekst i wyodrębnij listę poszukiwanych kontaktów/firm.
+    const userTextPrompt = `Przeanalizuj poniższe dane i wyodrębnij listę poszukiwanych kontaktów/firm.
 
-TEKST:
-${content}
+${contentType === 'csv' ? 'DANE Z ARKUSZA (CSV):' : contentType === 'image' ? 'DANE ZE ZDJĘCIA (przeanalizuj obraz):' : 'TEKST:'}
+${contentType !== 'image' ? content : ''}
 
 Zwróć JSON:
 {
@@ -84,6 +93,20 @@ Zwróć JSON:
   }
 }`;
 
+    // Build messages array - multimodal for images
+    let userMessage: any;
+    if (contentType === 'image') {
+      userMessage = {
+        role: "user",
+        content: [
+          { type: "text", text: userTextPrompt },
+          { type: "image_url", image_url: { url: content } },
+        ],
+      };
+    } else {
+      userMessage = { role: "user", content: userTextPrompt };
+    }
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -94,7 +117,7 @@ Zwróć JSON:
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          userMessage,
         ],
         temperature: 0.1,
       }),

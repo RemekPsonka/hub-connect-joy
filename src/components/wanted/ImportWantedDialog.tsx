@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -13,7 +13,8 @@ import { ConnectionContactSelect } from '@/components/network/ConnectionContactS
 import { useCreateWantedContact } from '@/hooks/useWantedContacts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, Check, X, CheckCheck, User, Building2 } from 'lucide-react';
+import { Loader2, Sparkles, Check, X, CheckCheck, User, Building2, Upload, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ParsedItem {
   person_name: string | null;
@@ -51,6 +52,34 @@ const urgencyColors: Record<string, string> = {
   critical: 'bg-destructive/10 text-destructive',
 };
 
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const EXCEL_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+
+async function fileToPayload(file: File): Promise<{ content: string; contentType: string }> {
+  if (IMAGE_TYPES.includes(file.type)) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ content: reader.result as string, contentType: 'image' });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (EXCEL_TYPES.includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf);
+    const csvParts = wb.SheetNames.map(name => XLSX.utils.sheet_to_csv(wb.Sheets[name]));
+    return { content: csvParts.join('\n\n'), contentType: 'csv' };
+  }
+
+  if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+    return { content: await file.text(), contentType: 'csv' };
+  }
+
+  // PDF and other text-based
+  return { content: await file.text(), contentType: 'text' };
+}
+
 export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogProps) {
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
@@ -58,22 +87,45 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
   const [duration, setDuration] = useState('3months');
   const [isParsing, setIsParsing] = useState(false);
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const createWanted = useCreateWantedContact();
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Plik jest za duży (max 5MB)');
+      return;
+    }
+    setUploadedFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const hasInput = !!(rawText.trim() || uploadedFile);
+
   const handleParse = async () => {
-    if (!rawText.trim()) return;
+    if (!hasInput) return;
     setIsParsing(true);
 
     try {
+      let payload: { content: string; contentType: string };
+
+      if (uploadedFile) {
+        payload = await fileToPayload(uploadedFile);
+      } else {
+        payload = { content: rawText.trim(), contentType: 'text' };
+      }
+
       const { data, error } = await supabase.functions.invoke('parse-wanted-list', {
-        body: { content: rawText.trim() },
+        body: payload,
       });
 
       if (error) throw error;
 
       const parsed: ParsedItem[] = data?.items || [];
       if (parsed.length === 0) {
-        toast.warning('AI nie rozpoznało żadnych poszukiwanych kontaktów w tekście.');
+        toast.warning('AI nie rozpoznało żadnych poszukiwanych kontaktów.');
         setIsParsing(false);
         return;
       }
@@ -149,6 +201,7 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
       setItems([]);
       setRequestedBy(null);
       setDuration('3months');
+      setUploadedFile(null);
     }, 200);
   };
 
@@ -174,14 +227,50 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Wklej listę</Label>
+              <Label className="text-sm font-semibold">Wklej listę lub wczytaj plik</Label>
               <Textarea
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
                 placeholder={`Wklej dowolną listę, np.:\n\nJan Kowalski, CEO, ABC Sp. z o.o. — szukamy dostawcy IT\nAnna Nowak, dyrektor finansowy w branży medycznej\nFirma XYZ, NIP 1234567890, potrzebujemy pilnie kontaktu z zarządem`}
-                rows={8}
+                rows={6}
                 className="font-mono text-sm"
+                disabled={!!uploadedFile}
               />
+            </div>
+
+            {/* File upload */}
+            <div className="space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {uploadedFile ? (
+                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm truncate flex-1">{uploadedFile.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setUploadedFile(null)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  Wczytaj plik (CSV, Excel, PDF, zdjęcie)
+                </Button>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -201,7 +290,7 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
               <Button variant="outline" onClick={handleClose}>Anuluj</Button>
               <Button
                 onClick={handleParse}
-                disabled={!requestedBy || !rawText.trim() || isParsing}
+                disabled={!requestedBy || !hasInput || isParsing}
                 className="gap-1.5"
               >
                 {isParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -211,7 +300,6 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Actions bar */}
             {pendingItems.length > 0 && (
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
@@ -237,7 +325,6 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
               </div>
             )}
 
-            {/* Item cards */}
             <div className="space-y-3">
               {items.filter(it => it._status === 'pending').map((item) => (
                 <Card key={item._id} className="border">
@@ -343,7 +430,6 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
               ))}
             </div>
 
-            {/* Show approved/rejected summary */}
             {items.filter(it => it._status !== 'pending').length > 0 && pendingItems.length > 0 && (
               <div className="text-xs text-muted-foreground border-t pt-2">
                 {items.filter(it => it._status === 'approved').length > 0 && (
