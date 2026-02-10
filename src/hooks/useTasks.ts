@@ -472,6 +472,8 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
     },
   });
 }
@@ -538,6 +540,7 @@ export function useCreateCrossTask() {
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
     },
   });
 }
@@ -564,6 +567,8 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
     },
   });
 }
@@ -645,6 +650,8 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
     },
   });
 }
@@ -722,6 +729,7 @@ export function useBulkUpdateTasks() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
     },
   });
 }
