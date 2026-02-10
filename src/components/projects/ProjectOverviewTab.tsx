@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DataCard } from '@/components/ui/data-card';
+import { ProjectDashboardCharts } from '@/components/projects/ProjectDashboardCharts';
 import {
   useProjectMembers,
   useProjectTasks,
@@ -30,6 +31,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Users, CheckSquare, StickyNote, Calendar, Plus, Trash2 } from 'lucide-react';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -256,6 +258,11 @@ export function ProjectOverviewTab({ project }: ProjectOverviewTabProps) {
           )}
         </div>
       </DataCard>
+
+      {/* Dashboard Charts */}
+      <div className="md:col-span-2">
+        <ProjectDashboardCharts tasks={(tasks || []) as TaskWithDetails[]} />
+      </div>
 
       {/* Add member dialog */}
       <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
