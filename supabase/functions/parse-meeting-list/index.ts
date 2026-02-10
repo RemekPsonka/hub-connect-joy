@@ -3,7 +3,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -48,12 +48,20 @@ Rules:
 - Names should be in their original language
 - Be thorough - scan every page/section`;
 
-    // Use Lovable AI gateway (Gemini)
-    const aiResponse = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat-router`, {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "AI service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use Lovable AI gateway directly
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
