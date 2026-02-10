@@ -3,13 +3,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Plus, Target, Search } from 'lucide-react';
+import { Loader2, Plus, Target, Search, FileUp } from 'lucide-react';
 import { useWantedContacts } from '@/hooks/useWantedContacts';
 import { WantedContactCard } from '@/components/wanted/WantedContactCard';
 import { WantedContactModal } from '@/components/wanted/WantedContactModal';
+import { ImportWantedDialog } from '@/components/wanted/ImportWantedDialog';
 
 export default function WantedContacts() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [urgencyFilter, setUrgencyFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,9 +36,14 @@ export default function WantedContacts() {
           <Target className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">Poszukiwani</h1>
         </div>
-        <Button onClick={() => setModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Dodaj
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-1.5">
+            <FileUp className="h-4 w-4" /> Importuj listę
+          </Button>
+          <Button onClick={() => setModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Dodaj
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -86,6 +93,7 @@ export default function WantedContacts() {
       )}
 
       <WantedContactModal open={modalOpen} onOpenChange={setModalOpen} />
+      <ImportWantedDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }
