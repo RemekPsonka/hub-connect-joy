@@ -55,6 +55,9 @@ import { TaskLinkedMeetings } from './TaskLinkedMeetings';
 import { TaskComments } from './TaskComments';
 import { TaskLabelsManager } from './TaskLabelsManager';
 import { TaskDependencies } from './TaskDependencies';
+import { TaskTimeTracker } from './TaskTimeTracker';
+import { getRecurrenceLabel } from './RecurrenceSelector';
+import { Repeat } from 'lucide-react';
 
 interface TaskDetailSheetProps {
   open: boolean;
@@ -330,6 +333,20 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
           {/* Linked GCal meetings */}
           <TaskLinkedMeetings taskId={task.id} />
+
+          {/* Recurrence info */}
+          {(task as any).recurrence_rule && (
+            <>
+              <Separator />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Repeat className="h-3.5 w-3.5 text-primary" />
+                <span>{getRecurrenceLabel((task as any).recurrence_rule) || 'Cykliczne'}</span>
+              </div>
+            </>
+          )}
+
+          {/* Time Tracker */}
+          <TaskTimeTracker taskId={task.id} estimatedHours={(task as any).estimated_hours} />
 
           {/* Comments */}
           <TaskComments taskId={task.id} />

@@ -37,6 +37,13 @@ import {
   getReminderLink,
   type SovraReminder,
 } from '@/hooks/useSovraReminders';
+import {
+  useTaskNotifications,
+  useUnreadTaskNotifCount,
+  useMarkTaskNotifRead,
+  useMarkAllTaskNotifsRead,
+  type TaskNotification,
+} from '@/hooks/useTaskNotifications';
 import { cn } from '@/lib/utils';
 
 // ── Notification icon helper ──
@@ -207,6 +214,87 @@ function SovraTabContent() {
   );
 }
 
+// ── Tasks Tab Content ──
+function TasksTabContent() {
+  const navigate = useNavigate();
+  const { data: taskNotifs = [], isLoading } = useTaskNotifications(20);
+  const taskCount = useUnreadTaskNotifCount();
+  const markRead = useMarkTaskNotifRead();
+  const markAllRead = useMarkAllTaskNotifsRead();
+
+  const getTaskNotifIcon = (type: string) => {
+    switch (type) {
+      case 'comment_added':
+        return <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center shrink-0"><Bell className="h-4 w-4 text-blue-500" /></div>;
+      case 'status_changed':
+        return <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center shrink-0"><Check className="h-4 w-4 text-emerald-500" /></div>;
+      case 'assigned':
+        return <div className="w-8 h-8 rounded-full bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center shrink-0"><Users className="h-4 w-4 text-purple-500" /></div>;
+      case 'due_soon':
+      case 'overdue':
+        return <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center shrink-0"><Clock className="h-4 w-4 text-red-500" /></div>;
+      default:
+        return <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0"><Bell className="h-4 w-4 text-muted-foreground" /></div>;
+    }
+  };
+
+  const handleClick = (notif: TaskNotification) => {
+    markRead.mutate(notif.id);
+    if (notif.task_id) {
+      navigate(`/tasks?id=${notif.task_id}`);
+    }
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <span className="text-sm font-semibold">Powiadomienia zadań</span>
+        {taskCount > 0 && (
+          <Button variant="ghost" size="sm" className="text-xs h-7 text-primary" onClick={() => markAllRead.mutate()}>
+            <Check className="h-3 w-3 mr-1" />
+            Oznacz wszystkie
+          </Button>
+        )}
+      </div>
+      <ScrollArea className="max-h-[400px]">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : taskNotifs.length === 0 ? (
+          <div className="py-8 text-center">
+            <Bell className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+            <p className="text-sm text-muted-foreground">Brak powiadomień</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {taskNotifs.map((notif) => (
+              <button
+                key={notif.id}
+                onClick={() => handleClick(notif)}
+                className={cn(
+                  'w-full flex gap-3 px-4 py-3 hover:bg-muted/30 transition-colors text-left',
+                  !notif.read_at && 'bg-blue-50/50 dark:bg-blue-950/20'
+                )}
+              >
+                {getTaskNotifIcon(notif.type)}
+                <div className="flex-1 min-w-0">
+                  <p className={cn('text-sm', !notif.read_at && 'font-medium')}>{notif.title}</p>
+                  {notif.message && <p className="text-xs text-muted-foreground line-clamp-1">{notif.message}</p>}
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true, locale: pl })}
+                  </span>
+                </div>
+                {!notif.read_at && <span className="h-2 w-2 rounded-full bg-primary shrink-0 self-center" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  );
+}
+
 // ── Main Component ──
 export const NotificationBell = () => {
   const navigate = useNavigate();
@@ -219,7 +307,8 @@ export const NotificationBell = () => {
   } = useNotifications(10);
 
   const { count: sovraCount } = useUnreadReminders();
-  const totalCount = unreadCount + sovraCount;
+  const taskNotifCount = useUnreadTaskNotifCount();
+  const totalCount = unreadCount + sovraCount + taskNotifCount;
 
   const handleNotificationClick = (notification: typeof notifications[0]) => {
     markAsRead(notification.id);
@@ -241,14 +330,22 @@ export const NotificationBell = () => {
       </PopoverTrigger>
 
       <PopoverContent className="w-80 p-0" align="end">
-        <Tabs defaultValue={sovraCount > 0 ? 'sovra' : 'notifications'}>
+        <Tabs defaultValue={taskNotifCount > 0 ? 'tasks' : sovraCount > 0 ? 'sovra' : 'notifications'}>
           <div className="border-b border-border px-2 pt-2">
             <TabsList className="w-full h-8">
               <TabsTrigger value="notifications" className="flex-1 text-xs gap-1">
-                Powiadomienia
+                CRM
                 {unreadCount > 0 && (
                   <span className="ml-1 bg-red-500 text-white text-[10px] rounded-full px-1.5 min-w-[18px] inline-flex items-center justify-center">
                     {unreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="flex-1 text-xs gap-1">
+                Zadania
+                {taskNotifCount > 0 && (
+                  <span className="ml-1 bg-blue-500 text-white text-[10px] rounded-full px-1.5 min-w-[18px] inline-flex items-center justify-center">
+                    {taskNotifCount}
                   </span>
                 )}
               </TabsTrigger>
@@ -344,6 +441,11 @@ export const NotificationBell = () => {
                 Zobacz wszystkie
               </Button>
             </div>
+          </TabsContent>
+
+          {/* ── Tasks Tab ── */}
+          <TabsContent value="tasks" className="m-0">
+            <TasksTabContent />
           </TabsContent>
 
           {/* ── Sovra Tab ── */}

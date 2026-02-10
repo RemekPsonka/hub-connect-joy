@@ -62,6 +62,7 @@ const projectItems = [
   { title: 'Projekty', url: '/projects', icon: FolderKanban },
   { title: 'Zadania', url: '/tasks', icon: CheckSquare },
   { title: 'Moje zadania', url: '/my-tasks', icon: CheckSquare },
+  { title: 'Analityka zadań', url: '/tasks/analytics', icon: BarChart3 },
   { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound },
 ];

@@ -28,6 +28,8 @@ export const ProjectCreateSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#7C3AED'),
   template_id: z.string().uuid().optional().nullable(),
   team_id: z.string().uuid().optional().nullable(),
+  start_date: z.string().optional().nullable(),
+  due_date: z.string().optional().nullable(),
 });
 
 export const ProjectUpdateSchema = ProjectCreateSchema.partial();

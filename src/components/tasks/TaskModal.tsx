@@ -31,6 +31,7 @@ import { useDirectors } from '@/hooks/useDirectors';
 import { useCurrentDirector } from '@/hooks/useDirectors';
 import { toast } from 'sonner';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
+import { RecurrenceSelector, type RecurrenceRule } from './RecurrenceSelector';
 
 interface TaskInitialData {
   title?: string;
@@ -72,6 +73,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
   const [categoryId, setCategoryId] = useState<string>('');
   const [assignedTo, setAssignedTo] = useState<string>('');
   const [visibility, setVisibility] = useState<'private' | 'team'>('private');
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
   
   const { data: categories = [] } = useTaskCategories();
   const { data: directors = [] } = useDirectors();
@@ -101,6 +103,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setAssignedTo(task.assigned_to || 'self');
       setVisibility((task.visibility as 'private' | 'team') || 'private');
       setProjectId(task.project_id || '');
+      setRecurrenceRule((task as any).recurrence_rule || null);
 
       // Set contacts for existing task
       if (task.task_type === 'cross' && task.cross_tasks?.[0]) {
@@ -127,6 +130,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setAssignedTo('');
       setVisibility('private');
       setProjectId(preselectedProjectId || '');
+      setRecurrenceRule(null);
       // Set contactId for standard tasks
       if (initialData.taskType !== 'cross' && initialData.contactAId) {
         setContactId(initialData.contactAId);
@@ -148,6 +152,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setAssignedTo('self');
       setVisibility('private');
       setProjectId(preselectedProjectId || '');
+      setRecurrenceRule(null);
     }
   }, [task, preselectedContactId, preselectedProjectId, initialData, open]);
 
@@ -222,7 +227,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
             priority,
             status,
             due_date: dueDate?.toISOString().split('T')[0],
-            project_id: projectId || null,
+          project_id: projectId || null,
+          recurrence_rule: recurrenceRule as any,
           },
           contactId: contactId || undefined,
           categoryId: categoryId === 'none' ? undefined : (categoryId || undefined),
@@ -521,6 +527,11 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
               </Popover>
             </div>
           </div>
+
+          {/* Recurrence */}
+          {!isEditing && taskType === 'standard' && (
+            <RecurrenceSelector value={recurrenceRule} onChange={setRecurrenceRule} />
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-2">

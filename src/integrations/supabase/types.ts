@@ -4915,10 +4915,12 @@ export type Database = {
           color: string | null
           created_at: string
           description: string | null
+          due_date: string | null
           embedding: string | null
           id: string
           name: string
           owner_id: string
+          start_date: string | null
           status: string
           team_id: string | null
           template_id: string | null
@@ -4929,10 +4931,12 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          due_date?: string | null
           embedding?: string | null
           id?: string
           name: string
           owner_id: string
+          start_date?: string | null
           status?: string
           team_id?: string | null
           template_id?: string | null
@@ -4943,10 +4947,12 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          due_date?: string | null
           embedding?: string | null
           id?: string
           name?: string
           owner_id?: string
+          start_date?: string | null
           status?: string
           team_id?: string | null
           template_id?: string | null
@@ -5891,6 +5897,64 @@ export type Database = {
           },
         ]
       }
+      task_notifications: {
+        Row: {
+          created_at: string
+          director_id: string
+          id: string
+          message: string | null
+          read_at: string | null
+          task_id: string | null
+          tenant_id: string
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          director_id: string
+          id?: string
+          message?: string | null
+          read_at?: string | null
+          task_id?: string | null
+          tenant_id: string
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          director_id?: string
+          id?: string
+          message?: string | null
+          read_at?: string | null
+          task_id?: string | null
+          tenant_id?: string
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_notifications_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "task_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_sections: {
         Row: {
           color: string | null
@@ -5936,6 +6000,64 @@ export type Database = {
           },
           {
             foreignKeyName: "task_sections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_time_entries: {
+        Row: {
+          created_at: string
+          director_id: string
+          duration_minutes: number
+          ended_at: string | null
+          id: string
+          note: string | null
+          started_at: string
+          task_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          director_id: string
+          duration_minutes?: number
+          ended_at?: string | null
+          id?: string
+          note?: string | null
+          started_at: string
+          task_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          director_id?: string
+          duration_minutes?: number
+          ended_at?: string | null
+          id?: string
+          note?: string | null
+          started_at?: string
+          task_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_time_entries_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -6018,6 +6140,7 @@ export type Database = {
           parent_task_id: string | null
           priority: string | null
           project_id: string | null
+          recurrence_rule: Json | null
           section_id: string | null
           snoozed_until: string | null
           sort_order: number | null
@@ -6045,6 +6168,7 @@ export type Database = {
           parent_task_id?: string | null
           priority?: string | null
           project_id?: string | null
+          recurrence_rule?: Json | null
           section_id?: string | null
           snoozed_until?: string | null
           sort_order?: number | null
@@ -6072,6 +6196,7 @@ export type Database = {
           parent_task_id?: string | null
           priority?: string | null
           project_id?: string | null
+          recurrence_rule?: Json | null
           section_id?: string | null
           snoozed_until?: string | null
           sort_order?: number | null
