@@ -1,89 +1,108 @@
 
-# Nastepna iteracja: Fazy 2.4, 2.6, 3.5, 4.2, 5.1
+# Ostatnia iteracja: DnD sortowanie, Auto-assign, Raport PDF, Szablony projektow
 
 ## Co zostanie zbudowane
 
-### 1. Sledzenie czasu (Faza 2.6)
-Timer start/stop w TaskDetailSheet. Logowanie wpisow czasu z notatkami. Porownanie z estimated_hours.
+### 1. Drag-and-drop sortowanie zadań (Faza 6.1)
+Reorderowanie zadań w widoku listy projektu oraz subtasków w TaskDetailSheet za pomocą @dnd-kit (już zainstalowany). Po przeciągnięciu -- batch update `sort_order` w bazie.
 
-### 2. Powiadomienia zadaniowe (Faza 2.4)
-Trzecia zakladka "Zadania" w istniejacym NotificationBell. Automatyczne alerty przy komentarzach i zmianach statusu.
+### 2. Auto-assign (Faza 4.3)
+Nowa kolumna `auto_assign_mode` w tabeli `projects` + trigger DB na INSERT tasks. Gdy projekt ma włączony auto-assign, nowe zadanie jest automatycznie przypisywane do członka zespołu z najmniejszą liczbą aktywnych zadań. UI: przełącznik w ProjectOverviewTab.
 
-### 3. Zadania cykliczne (Faza 4.2)
-Kolumna recurrence_rule (JSONB) w tasks. Trigger DB tworzacy nowy egzemplarz po zakonczeniu. Selektor cyklicznosci w TaskModal.
+### 3. Raport projektu z eksportem PDF (Faza 5.3)
+Przycisk "Eksportuj PDF" w nagłówku ProjectDetail. Raport zawiera: dane projektu, postęp zadań, kamienie milowe, budżet czasu vs rzeczywisty, listę ryzyk (overdue, brak przypisania). Generowany przez jspdf (już zainstalowany).
 
-### 4. Dashboard analityczny zadan (Faza 5.1)
-Strona /tasks/analytics z wykresami trendu, statusow, priorytetow i obciazenia zespolu.
-
-### 5. Daty projektu (Faza 3.5)
-Kolumny start_date i due_date w projektach. Pasek postepu czasowego.
+### 4. Szablony projektów -- UI zarządzania (Faza 3.4)
+Interfejs tworzenia szablonów (nazwa + lista predefiniowanych sekcji/zadań zapisana w `template_data` JSONB -- kolumna już istnieje). Opcja "Utwórz z szablonu" w dialogu tworzenia projektu.
 
 ---
 
-## Szczegoly techniczne
+## Szczegóły techniczne
 
 ### Krok 1: Migracja bazy danych
 
-**Nowe tabele:**
-- task_notifications (id, task_id FK, director_id, type, title, message, read_at, tenant_id, created_at)
-- task_time_entries (id, task_id FK, director_id, started_at, ended_at, duration_minutes, note, tenant_id, created_at)
+Jedna migracja:
+- Kolumna `auto_assign_mode` (TEXT, nullable) w tabeli `projects` -- wartości: `round_robin`, `load_balance`, lub NULL (wyłączony)
+- Trigger `auto_assign_new_task` na INSERT do `tasks`: jeśli `project_id` jest ustawiony i projekt ma `auto_assign_mode`, przypisz `owner_id` do członka projektu z najmniejszą liczbą pending/in_progress zadań
 
-**Nowe kolumny:**
-- projects.start_date (DATE), projects.due_date (DATE)
-- tasks.recurrence_rule (JSONB)
+### Krok 2: Drag-and-drop sortowanie
 
-**Triggery:**
-- on_task_comment_notify -- INSERT na task_comments -> powiadomienie dla ownera
-- on_task_status_notify -- UPDATE tasks.status -> powiadomienie
-- handle_recurring_task -- completed + recurrence_rule -> nowe zadanie
+**Nowy hook: `useTaskReorder.ts`**
+- Funkcja `reorderTasks(taskIds: string[])` -- batch update `sort_order` w tabeli `tasks`
+- Optymistyczna aktualizacja w React Query cache
 
-**RLS:** tenant_id matching z JWT
-**Realtime:** task_notifications
+**Nowy komponent: `SortableTaskItem.tsx`**
+- Wrapper wokół `TaskRow` z `useSortable` z @dnd-kit/sortable
+- Obsługa stylu drag overlay
 
-### Krok 2: Time Tracking
-- Nowy hook useTaskTimeEntries.ts (CRUD, suma czasu)
-- Nowy komponent TaskTimeTracker.tsx (timer, lista wpisow, reczne dodawanie)
-- Integracja w TaskDetailSheet po komentarzach
+**Modyfikacja `ProjectTasksTab.tsx`:**
+- Owinięcie listy zadań w sekcjach w `DndContext` + `SortableContext`
+- Po zdarzeniu `onDragEnd` -- wywołanie `reorderTasks` z nową kolejnością
+- Sortowalne sekcje (zmiana `sort_order` sekcji)
 
-### Krok 3: Powiadomienia zadaniowe
-- Nowy hook useTaskNotifications.ts (query, realtime, mark read)
-- Modyfikacja NotificationBell.tsx -- trzecia zakladka "Zadania"
+**Modyfikacja `TaskDetailSheet.tsx`:**
+- Subtaski owiniete w DndContext dla zmiany kolejności
 
-### Krok 4: Zadania cykliczne
-- Nowy komponent RecurrenceSelector.tsx
-- Integracja w TaskModal.tsx i TaskDetailSheet.tsx
+### Krok 3: Auto-assign UI
 
-### Krok 5: Dashboard analityczny
-- Nowa strona TaskAnalytics.tsx (AreaChart, PieChart, BarChart)
-- Route /tasks/analytics w App.tsx
-- Link w AppSidebar.tsx
+**Modyfikacja `ProjectOverviewTab.tsx`:**
+- Nowa sekcja "Auto-assign" w karcie "Szczegóły"
+- Switch (włącz/wyłącz) + Select trybu (Round-robin / Load-balance)
+- Wywołanie `updateProject` z `auto_assign_mode`
 
-### Krok 6: Daty projektu
-- Aktualizacja useProjects.ts (start_date, due_date)
-- Sekcja dat w ProjectOverviewTab.tsx
-- Daty w naglowku ProjectDetail.tsx
+**Modyfikacja `useProjects.ts`:**
+- Dodanie `auto_assign_mode` do `ProjectCreateSchema`
+
+### Krok 4: Raport PDF
+
+**Nowy komponent: `ProjectReportExport.tsx`**
+- Przycisk "Eksportuj PDF"
+- Pobiera dane: projekt, zadania, kamienie milowe, czas (time entries)
+- Generuje PDF z jspdf + jspdf-autotable:
+  - Nagłówek z nazwą projektu i statusem
+  - Podsumowanie: liczba zadań, postęp, budżet czasu
+  - Tabela kamieni milowych
+  - Tabela zadań (tytuł, status, priorytet, termin, czas)
+  - Sekcja ryzyk: overdue tasks, zadania bez przypisania
+
+**Modyfikacja `ProjectDetail.tsx`:**
+- Przycisk eksportu w nagłówku (obok DropdownMenu)
+
+### Krok 5: Szablony projektów
+
+**Nowy hook: `useProjectTemplates.ts`**
+- CRUD na `project_templates` z `template_data` (JSONB)
+- Struktura template_data: `{ sections: [{ name, color, tasks: [{ title, priority, description }] }] }`
+- Funkcja `createProjectFromTemplate` -- tworzy projekt + sekcje + zadania
+
+**Nowy komponent: `ProjectTemplateManager.tsx`**
+- Lista istniejących szablonów
+- Dialog tworzenia/edycji szablonu (nazwa + definiowanie sekcji i zadań)
+- Przycisk usuwania szablonu
+
+**Modyfikacja dialogu tworzenia projektu:**
+- Opcjonalny Select "Utwórz z szablonu" -- po wyborze szablonu, automatyczne generowanie struktury
+
+## Nowe zależności npm
+- `@dnd-kit/sortable` -- potrzebne do SortableContext (core już zainstalowany, ale sortable nie)
 
 ## Pliki do utworzenia (5)
-1. src/hooks/useTaskTimeEntries.ts
-2. src/hooks/useTaskNotifications.ts
-3. src/components/tasks/TaskTimeTracker.tsx
-4. src/components/tasks/RecurrenceSelector.tsx
-5. src/pages/TaskAnalytics.tsx
+1. `src/hooks/useTaskReorder.ts`
+2. `src/hooks/useProjectTemplates.ts`
+3. `src/components/tasks/SortableTaskItem.tsx`
+4. `src/components/projects/ProjectReportExport.tsx`
+5. `src/components/projects/ProjectTemplateManager.tsx`
 
-## Pliki do modyfikacji (8)
-1. src/components/tasks/TaskDetailSheet.tsx
-2. src/components/tasks/TaskModal.tsx
-3. src/components/notifications/NotificationBell.tsx
-4. src/hooks/useProjects.ts
-5. src/components/projects/ProjectOverviewTab.tsx
-6. src/pages/ProjectDetail.tsx
-7. src/App.tsx
-8. src/components/layout/AppSidebar.tsx
+## Pliki do modyfikacji (5)
+1. `src/components/projects/ProjectTasksTab.tsx` -- DnD context dla zadań i sekcji
+2. `src/components/tasks/TaskDetailSheet.tsx` -- DnD dla subtasków
+3. `src/components/projects/ProjectOverviewTab.tsx` -- sekcja Auto-assign
+4. `src/pages/ProjectDetail.tsx` -- przycisk eksportu PDF
+5. `src/hooks/useProjects.ts` -- auto_assign_mode w schemacie
 
-## Kolejnosc
-1. Migracja DB
-2. Time Tracking (hook + komponent + integracja)
-3. Powiadomienia (hook + zakladka w NotificationBell)
-4. Recurring Tasks (selektor + integracja)
-5. Dashboard analityczny (strona + routing)
-6. Daty projektu (hook + UI)
+## Kolejność implementacji
+1. Migracja DB (auto_assign_mode + trigger)
+2. Drag-and-drop (hook + SortableTaskItem + integracja w ProjectTasksTab i TaskDetailSheet)
+3. Auto-assign UI (ProjectOverviewTab + useProjects)
+4. Raport PDF (ProjectReportExport + integracja w ProjectDetail)
+5. Szablony (useProjectTemplates + ProjectTemplateManager + integracja w dialogu tworzenia)
