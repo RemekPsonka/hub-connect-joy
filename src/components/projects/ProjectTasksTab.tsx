@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useProjectTasks } from '@/hooks/useProjects';
 import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CheckSquare, Plus, ChevronDown, ChevronRight, MoreHorizontal, Trash2, Pencil, List, GanttChart } from 'lucide-react';
+import { CheckSquare, Plus, ChevronDown, ChevronRight, MoreHorizontal, Trash2, List, GanttChart, ArrowRightLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { TaskModal } from '@/components/tasks/TaskModal';
@@ -18,27 +18,34 @@ import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
 import { useUpdateTask } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { TaskTimeline } from '@/components/tasks/TaskTimeline';
-import { useTaskSections, useCreateTaskSection, useDeleteTaskSection } from '@/hooks/useTaskSections';
+import { useTaskSections, useCreateTaskSection, useDeleteTaskSection, type TaskSection } from '@/hooks/useTaskSections';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { SortableTaskItem } from '@/components/tasks/SortableTaskItem';
-import { useTaskReorder, useSectionReorder } from '@/hooks/useTaskReorder';
+import { useTaskReorder } from '@/hooks/useTaskReorder';
 
 interface ProjectTasksTabProps {
   projectId: string;
 }
 
-function TaskRow({ task, onClick, onToggleStatus }: {
+function TaskRow({ task, onClick, onToggleStatus, sections, currentSectionId, onMoveToSection }: {
   task: TaskWithDetails;
   onClick: () => void;
   onToggleStatus: (e: React.MouseEvent) => void;
+  sections: TaskSection[];
+  currentSectionId: string | null;
+  onMoveToSection: (taskId: string, sectionId: string | null) => void;
 }) {
   return (
     <div
@@ -64,6 +71,44 @@ function TaskRow({ task, onClick, onToggleStatus }: {
       <div className="flex items-center gap-2 shrink-0">
         <TaskPriorityBadge priority={task.priority} />
         <TaskStatusBadge status={task.status || 'pending'} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Przenieś do sekcji
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {currentSectionId && (
+                  <DropdownMenuItem onClick={() => onMoveToSection(task.id, null)}>
+                    Bez sekcji
+                  </DropdownMenuItem>
+                )}
+                {currentSectionId && sections.length > 0 && <DropdownMenuSeparator />}
+                {sections
+                  .filter((s) => s.id !== currentSectionId)
+                  .map((section) => (
+                    <DropdownMenuItem key={section.id} onClick={() => onMoveToSection(task.id, section.id)}>
+                      <div className="h-2.5 w-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: section.color }} />
+                      {section.name}
+                    </DropdownMenuItem>
+                  ))}
+                {sections.filter((s) => s.id !== currentSectionId).length === 0 && !currentSectionId && (
+                  <p className="text-xs text-muted-foreground px-2 py-1.5">Brak sekcji</p>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -75,7 +120,6 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const createSection = useCreateTaskSection();
   const deleteSection = useDeleteTaskSection();
   const reorderTasks = useTaskReorder();
-  const reorderSections = useSectionReorder();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -84,6 +128,8 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [taskView, setTaskView] = useState<'list' | 'timeline'>('list');
+  const [addingToSectionId, setAddingToSectionId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const updateTask = useUpdateTask();
 
   const sensors = useSensors(
@@ -137,8 +183,14 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
     });
   };
 
-  const handleAssignSection = (taskId: string, sectionId: string | null) => {
+  const handleMoveToSection = (taskId: string, sectionId: string | null) => {
     updateTask.mutate({ id: taskId, section_id: sectionId } as any);
+    toast.success(sectionId ? 'Zadanie przeniesione do sekcji' : 'Zadanie usunięte z sekcji');
+  };
+
+  const handleAddTaskInSection = (sectionId: string) => {
+    setAddingToSectionId(sectionId);
+    setIsModalOpen(true);
   };
 
   if (isLoading) {
@@ -179,6 +231,48 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
     }
   }
 
+  // All task IDs for the global sortable context
+  const allTaskIds = typedTasks.map((t) => t.id);
+
+  // Find which section a task belongs to
+  const findTaskSection = (taskId: string): string | null => {
+    const task = typedTasks.find((t) => t.id === taskId);
+    return task?.section_id || null;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeSection = active.data?.current?.sectionId ?? '__unsectioned__';
+    const overSection = over.data?.current?.sectionId ?? '__unsectioned__';
+
+    if (activeSection !== overSection) {
+      // Cross-section move: update section_id
+      const newSectionId = overSection === '__unsectioned__' ? null : overSection;
+      updateTask.mutate({ id: active.id as string, section_id: newSectionId } as any);
+    } else {
+      // Same section reorder
+      const sectionId = activeSection === '__unsectioned__' ? null : activeSection;
+      const tasksInSection = sectionId
+        ? (sectionTaskMap.get(sectionId) || [])
+        : unsectionedTasks;
+      const ids = tasksInSection.map((t) => t.id);
+      const oldIdx = ids.indexOf(active.id as string);
+      const newIdx = ids.indexOf(over.id as string);
+      if (oldIdx === -1 || newIdx === -1) return;
+      const newOrder = arrayMove(ids, oldIdx, newIdx);
+      reorderTasks.mutate(newOrder);
+    }
+  };
+
+  const activeTask = activeId ? typedTasks.find((t) => t.id === activeId) : null;
+
   return (
     <>
       <DataCard
@@ -192,7 +286,7 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
             <Button variant="ghost" size="sm" onClick={() => setIsAddingSection(true)}>
               <Plus className="h-4 w-4 mr-1" /> Sekcja
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setIsModalOpen(true)}>
+            <Button variant="ghost" size="sm" onClick={() => { setAddingToSectionId(null); setIsModalOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Zadanie
             </Button>
           </div>
@@ -201,6 +295,12 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
         {taskView === 'timeline' ? (
           <TaskTimeline tasks={typedTasks} onTaskClick={handleTaskClick} />
         ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
         <div className="space-y-4">
           {isAddingSection && (
             <div className="flex gap-2">
@@ -239,6 +339,15 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                   <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: section.color }} />
                   <span className="text-sm font-semibold flex-1">{section.name}</span>
                   <Badge variant="secondary" className="text-xs">{sectionTasks.length}</Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleAddTaskInSection(section.id)}
+                    title="Dodaj zadanie w sekcji"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -254,34 +363,28 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                 </div>
 
                 {!isCollapsed && (
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event: DragEndEvent) => {
-                    const { active, over } = event;
-                    if (!over || active.id === over.id) return;
-                    const items = sectionTasks.map((t) => t.id);
-                    const oldIdx = items.indexOf(active.id as string);
-                    const newIdx = items.indexOf(over.id as string);
-                    if (oldIdx === -1 || newIdx === -1) return;
-                    const newOrder = arrayMove(items, oldIdx, newIdx);
-                    reorderTasks.mutate(newOrder);
-                  }}>
-                    <SortableContext items={sectionTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                      <div className="divide-y divide-border pl-4">
-                        {sectionTasks.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-3 text-center">Brak zadań w sekcji</p>
-                        ) : (
-                          sectionTasks.map((task) => (
-                            <SortableTaskItem key={task.id} id={task.id}>
+                  <SortableContext items={sectionTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                    <div className="divide-y divide-border pl-4">
+                      {sectionTasks.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center">Brak zadań w sekcji</p>
+                      ) : (
+                        sectionTasks.map((task) => (
+                          <SortableTaskItem key={task.id} id={task.id} sectionId={section.id}>
+                            <div className="group">
                               <TaskRow
                                 task={task}
                                 onClick={() => handleTaskClick(task)}
                                 onToggleStatus={(e) => handleStatusToggle(e, task)}
+                                sections={sections}
+                                currentSectionId={section.id}
+                                onMoveToSection={handleMoveToSection}
                               />
-                            </SortableTaskItem>
-                          ))
-                        )}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
+                            </div>
+                          </SortableTaskItem>
+                        ))
+                      )}
+                    </div>
+                  </SortableContext>
                 )}
               </div>
             );
@@ -296,37 +399,48 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                   <Badge variant="secondary" className="text-xs">{unsectionedTasks.length}</Badge>
                 </div>
               )}
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event: DragEndEvent) => {
-                const { active, over } = event;
-                if (!over || active.id === over.id) return;
-                const items = unsectionedTasks.map((t) => t.id);
-                const oldIdx = items.indexOf(active.id as string);
-                const newIdx = items.indexOf(over.id as string);
-                if (oldIdx === -1 || newIdx === -1) return;
-                const newOrder = arrayMove(items, oldIdx, newIdx);
-                reorderTasks.mutate(newOrder);
-              }}>
-                <SortableContext items={unsectionedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                  <div className="divide-y divide-border">
-                    {unsectionedTasks.map((task) => (
-                      <SortableTaskItem key={task.id} id={task.id}>
+              <SortableContext items={unsectionedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="divide-y divide-border">
+                  {unsectionedTasks.map((task) => (
+                    <SortableTaskItem key={task.id} id={task.id} sectionId={null}>
+                      <div className="group">
                         <TaskRow
                           task={task}
                           onClick={() => handleTaskClick(task)}
                           onToggleStatus={(e) => handleStatusToggle(e, task)}
+                          sections={sections}
+                          currentSectionId={null}
+                          onMoveToSection={handleMoveToSection}
                         />
-                      </SortableTaskItem>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                      </div>
+                    </SortableTaskItem>
+                  ))}
+                </div>
+              </SortableContext>
             </div>
           )}
         </div>
+
+        <DragOverlay>
+          {activeTask && (
+            <div className="bg-background border rounded-md shadow-lg px-4 py-2">
+              <p className="text-sm font-medium">{activeTask.title}</p>
+            </div>
+          )}
+        </DragOverlay>
+        </DndContext>
         )}
       </DataCard>
 
-      <TaskModal open={isModalOpen} onOpenChange={setIsModalOpen} preselectedProjectId={projectId} />
+      <TaskModal
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open);
+          if (!open) setAddingToSectionId(null);
+        }}
+        preselectedProjectId={projectId}
+        preselectedSectionId={addingToSectionId || undefined}
+      />
 
       {selectedTask && (
         <TaskDetailSheet
