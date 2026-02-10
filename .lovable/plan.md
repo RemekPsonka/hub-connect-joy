@@ -1,59 +1,40 @@
 
-# Naprawa zapisu numeru komorkowego
+# Inteligentne scalanie numerow telefonow
 
 ## Problem
-Numer komorkowy z wizytowki jest tracony podczas scalania (merge) duplikatow. Konkretnie:
+Wiele kontaktow ma numer stacjonarny zapisany w polu `phone` (telefon prywatny/komorkowy) z powodu starego bledu w imporcie. Przy ponownym skanowaniu wizytowek merge nie nadpisuje istniejacego numeru, wiec numer komorkowy jest odrzucany.
 
-1. OCR rozpoznaje dwa numery: stacjonarny (`phone`) i komorkowy (`mobile`)
-2. `toExtendedContact` poprawnie ustawia: `phone = mobile`, `phone_business = phone`
-3. Ale `merge-contacts` edge function (linia 80-86) przekierowuje `newContactData.phone` do `phone_business` zamiast uzupelnic `phone`
-4. Poniewaz `phone_business` juz istnieje -- numer komorkowy jest calkowicie odrzucany
-
-Dodatkowy problem: edge function NIGDY nie aktualizuje `phone` -- nawet gdy jest pusty w istniejacym kontakcie.
+Przyklad: Grzegorz Brachaczek ma `phone: +48338108428` (stacjonarny), a wizytowka zawiera komorkowy `+48 660 919 504` -- ktory jest ignorowany.
 
 ## Rozwiazanie
 
-### 1. Poprawka merge-contacts edge function
+### Plik: `supabase/functions/merge-contacts/index.ts`
 
-**Plik:** `supabase/functions/merge-contacts/index.ts`
+Dodanie funkcji `isMobileNumber` wykrywajacej polskie numery komorkowe (prefiksy 5xx, 6xx, 7xx, 8xx po +48) oraz inteligentnej logiki zamiany:
 
-Zmiana sekcji PHONE HANDLING (linie 77-92):
+```text
+Logika scalania telefonow:
 
-```
-// PHONE HANDLING
-// phone = numer prywatny/komorkowy (priorytet)
-// phone_business = numer sluzbowy/stacjonarny
+1. Jesli istniejacy phone jest stacjonarny, a nowy phone jest komorkowy:
+   -> Przenies stacjonarny do phone_business (jesli puste)
+   -> Ustaw komorkowy jako phone
 
-// Fill phone (mobile) if empty on existing contact
-if (newContactData.phone && !existingContact.phone) {
-  mergedData.phone = newContactData.phone;
-}
+2. Jesli phone jest puste:
+   -> Ustaw nowy phone
 
-// Fill phone_business if empty on existing contact
-if (newContactData.phone_business && !existingContact.phone_business) {
-  mergedData.phone_business = newContactData.phone_business;
-}
+3. Jesli phone_business jest puste:
+   -> Ustaw nowy phone_business
 ```
 
-Kluczowa zmiana: `phone` z nowych danych trafia do `phone` (nie do `phone_business`), a `phone_business` jest obslugiwany osobno.
+Funkcja rozpoznawania typu numeru:
+- Numery komorkowe w Polsce zaczynaja sie od +48 5xx, 6xx, 7xx, 8xx
+- Numery stacjonarne zaczynaja sie od +48 1x, 2x, 3x, 4x (kody kierunkowe miast)
 
-### 2. Poprawka mapowania w useAIImport.ts
+### Efekt
+Po wdrozeniu tej zmiany, ponowne zeskanowanie wizytowek spowoduje:
+- Automatyczne przeniesienie numerow stacjonarnych z pola `phone` do `phone_business`
+- Wstawienie numerow komorkowych w pole `phone`
+- Bez recznego poprawiania kazdego kontaktu z osobna
 
-**Plik:** `src/hooks/useAIImport.ts`
-
-W sekcji merge (linia 910-928) -- upewnienie sie ze `phone` i `phone_business` sa wysylane jako oddzielne pola, bez przekierowania:
-
-```typescript
-await mergeContacts(contact.duplicate_contact_id, {
-  ...
-  phone: contact.phone || undefined,
-  phone_business: contact.phone_business || undefined,
-  ...
-});
-```
-
-To juz jest poprawne, wiec glowna zmiana jest w edge function.
-
-## Pliki do modyfikacji
-
-1. `supabase/functions/merge-contacts/index.ts` -- poprawka logiki scalania telefonow
+### Plik do modyfikacji
+1. `supabase/functions/merge-contacts/index.ts` -- dodanie detekcji typu numeru i logiki zamiany
