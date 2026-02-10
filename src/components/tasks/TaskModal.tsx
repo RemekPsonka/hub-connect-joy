@@ -49,13 +49,14 @@ interface TaskModalProps {
   task?: TaskWithDetails | null;
   preselectedContactId?: string;
   preselectedProjectId?: string;
+  preselectedSectionId?: string;
   initialData?: TaskInitialData;
   onTaskCreated?: (taskId: string) => void;
 }
 
 type TaskType = 'standard' | 'cross' | 'group';
 
-export function TaskModal({ open, onOpenChange, task, preselectedContactId, preselectedProjectId, initialData, onTaskCreated }: TaskModalProps) {
+export function TaskModal({ open, onOpenChange, task, preselectedContactId, preselectedProjectId, preselectedSectionId, initialData, onTaskCreated }: TaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taskType, setTaskType] = useState<TaskType>('standard');
@@ -228,6 +229,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
             status,
             due_date: dueDate?.toISOString().split('T')[0],
           project_id: projectId || null,
+          section_id: preselectedSectionId || null,
           recurrence_rule: recurrenceRule as any,
           },
           contactId: contactId || undefined,

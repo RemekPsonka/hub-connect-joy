@@ -5,9 +5,10 @@ import { GripVertical } from 'lucide-react';
 interface SortableTaskItemProps {
   id: string;
   children: React.ReactNode;
+  sectionId?: string | null;
 }
 
-export function SortableTaskItem({ id, children }: SortableTaskItemProps) {
+export function SortableTaskItem({ id, children, sectionId }: SortableTaskItemProps) {
   const {
     attributes,
     listeners,
@@ -15,7 +16,7 @@ export function SortableTaskItem({ id, children }: SortableTaskItemProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id });
+  } = useSortable({ id, data: { sectionId: sectionId ?? '__unsectioned__' } });
 
   const style = {
     transform: CSS.Transform.toString(transform),
