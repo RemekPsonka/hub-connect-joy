@@ -1,27 +1,27 @@
 
-# Kompaktowe znaczniki grup na liscie kontaktow
+# Wylaczenie pobierania skanow wizytowek
 
-## Problem
-Badge grupy na liscie kontaktow zajmuje za duzo miejsca -- pelna nazwa grupy (np. "Baza kontaktow biznesowych") jest wyswietlana w duzym badge'u, co psuje uklad tabeli.
+## Zakres zmian
+Calkowite usuniecie logiki wycinania, uploadowania i wyswietlania podgladu wizytowek. Kolumna w bazie zostaje (bezpieczniej), ale kod przestaje z niej korzystac.
 
-## Rozwiazanie
-Zamiana pelnego badge'a na kompaktowy znacznik: mala kolorowa kropka + skrocona nazwa (max ~12 znakow) wyswietlana obok. Dla list kontaktow badge bedzie mial wariant "compact".
+## Pliki do modyfikacji
 
-### Plik: `src/components/contacts/GroupBadge.tsx`
-- Dodanie propa `compact?: boolean`
-- W trybie compact: mala kolorowa kropka (8x8px) + skrocona nazwa grupy (truncate, max-width)
-- W trybie domyslnym: bez zmian (inne miejsca w aplikacji dalej uzyja pelnego badge'a)
-- Brak grupy w trybie compact: szary tekst "–" zamiast pelnego badge'a "Brak grupy"
+### 1. `src/hooks/useAIImport.ts`
+- Usunac funkcje `cropAndUploadBusinessCard` (linie 158-216)
+- Usunac pola `bounding_box` i `business_card_image_url` z interfejsu `ParsedContact`
+- Usunac blok "Crop and upload business card images" (linie 602-618)
+- Usunac ustawianie `business_card_image_url` przy tworzeniu/merge kontaktow (linie 1013, 1109)
+- Usunac mapowanie `bounding_box` z parsowania (linie 315-316, 595)
 
-### Plik: `src/components/contacts/ContactsTable.tsx`
-- Przekazanie `compact` do `GroupBadge` w tabeli kontaktow
+### 2. `src/components/contacts/ContactDetailHeader.tsx`
+- Usunac import `BusinessCardPreview` i blok warunkowy wyswietlajacy podglad wizytowki (linie 173-177)
 
-### Wyglad compact:
-```text
-[● Baza kont...]   -- kolorowa kropka + skrocona nazwa
-```
+### 3. `supabase/functions/ocr-business-cards-batch/index.ts`
+- Usunac z promptu AI instrukcje dotyczace `bounding_box` (opis pola, przyklad, format JSON)
 
-Zamiast obecnego:
-```text
-[  Baza kontaktow biznesowych  ]  -- duzy czerwony badge
-```
+### 4. `src/components/contacts/BusinessCardPreview.tsx`
+- Usunac caly plik (komponent juz nie bedzie uzywany)
+
+## Co zostaje
+- Kolumna `business_card_image_url` w bazie danych -- nie ruszamy (bezpieczna, pusta kolumna TEXT)
+- Bucket Storage `business-cards` -- zostaje (moze byc uzywany w przyszlosci)
