@@ -1,90 +1,72 @@
 
 
-# Scalanie zaznaczonych kontaktow
+# Reorganizacja zakladek OSOBA / FIRMA
 
-## Co sie zmieni
+## Cel
 
-Po zaznaczeniu 2+ kontaktow w tabeli pojawi sie nowy przycisk **"Scal zaznaczone"**. Po kliknieciu otwiera sie modal z porownaniem danych obu kontaktow -- uzytkownik dla kazdego pola wybiera ktora wartosc zachowac (lub obie, jesli pole to wspiera). Po zatwierdzeniu kontakt "glowny" zostaje zaktualizowany wybranymi wartosciami, a duplikat jest dezaktywowany (soft delete).
+Rozdzielic dane osobowe od firmowych. Widok OSOBA zawiera tylko informacje o relacji z osoba (Agent AI, spotkania, potrzeby, poszukiwani, zadania, historia). Widok FIRMA zawiera pelna karte firmy (CompanyView). W prawej kolumnie zostaja: notatki, zadania, mini-karta firmy, statystyki, siec LinkedIn i siec kontaktow.
 
-## Zmiany w plikach
+## Zmiany w `src/pages/ContactDetail.tsx`
 
-### 1. Nowy komponent: `src/components/contacts/BulkMergeContactModal.tsx`
+### Nowy uklad zakladek w widoku OSOBA
 
-Modal scalania zaznaczonych kontaktow:
-- Pobiera pelne dane obu kontaktow z bazy (select *)
-- Dla kazdego pola wyswietla wartosc z kontaktu A i kontaktu B
-- Uzytkownik klika na wartosc ktora chce zachowac (radio-like UI) -- zaznaczona wartosc jest podswietlona
-- Pola obslugiwane:
-  - **Proste (wybierz jedno):** full_name, first_name, last_name, email, phone, phone_business, company, position, city, linkedin_url, source, address, email_secondary, address_secondary, notes, profile_summary
-  - **Laczenie:** tags (checkboxy, domyslnie wszystkie), notes (opcja polaczenia)
-  - **Automatyczne:** primary_group_id (wybor), company_id, relationship_strength (wyzszy)
-- Podglad wyniku scalenia na dole
-- Przyciski: "Anuluj", "Scal kontakty"
-- Po scaleniu: kontakt "przegrany" dostaje is_active=false, kontakt "zwyciezca" aktualizowany
-- Powiazane rekordy (needs, offers, tasks, consultations) przenoszone na zwyciezce
+Zamiast obecnych 7 zakladek (Firma, Spotkania, Potrzeby, Profil AI, Siec, Poszukiwani, Wiecej), nowe zakladki:
 
-### 2. Nowa edge function: `supabase/functions/bulk-merge-contacts/index.ts`
+1. **Spotkania** (BI + Konsultacje -- bez zmian, `MeetingsTab`)
+2. **Potrzeby** (Potrzeby + Oferty -- `ContactNeedsOffersTab`)
+3. **Poszukiwani** (`ContactWantedTab`)
+4. **Profil AI** (Profil AI osoby -- bez zmian)
+5. **Wiecej** (Zadania, Udzialy, Historia, Przeglad)
 
-- Przyjmuje: `primaryContactId`, `secondaryContactId`, `mergedFields` (obiekt z wybranymi wartosciami)
-- Weryfikuje auth i dostep do obu kontaktow
-- Aktualizuje primary contact wybranymi polami
-- Przenosi powiazane rekordy z secondary na primary:
-  - `needs` (contact_id)
-  - `offers` (contact_id)
-  - `task_contacts` (contact_id)
-  - `consultations` (contact_id)
-  - `contact_activity_log` (contact_id)
-- Soft-delete secondary contact (is_active = false)
-- Loguje scalenie w `contact_merge_history` i `contact_activity_log`
+Usuniete z OSOBA:
+- Zakladka **Firma** (przeniesiona calkowicie do widoku FIRMA)
+- Zakladka **Siec** (przeniesiona do prawej kolumny)
 
-### 3. Modyfikacja: `src/components/contacts/ContactsTable.tsx`
+### Nowa prawa kolumna
 
-- Dodac przycisk "Scal zaznaczone" (ikona Merge/GitMerge) obok "Usun zaznaczone" -- widoczny tylko gdy zaznaczono dokladnie 2 kontakty
-- Stan `isMergeOpen` do kontroli modalu
-- Po scaleniu: odswiezyc liste i wyzerowac zaznaczenie
+Kolejnosc elementow w prawej kolumnie (sticky):
+1. Notatki (bez zmian, `ContactNotesPanel`)
+2. Zadania (bez zmian, `ContactTasksPanel`)
+3. Mini-karta firmy (bez zmian, `ContactCompanyCard`)
+4. Statystyki (bez zmian, `ContactQuickStats`)
+5. **Siec LinkedIn** (`LinkedInNetworkSection`) -- przeniesiona z zakladki Siec
+6. **Siec kontaktow** (`ContactConnectionsSection`) -- przeniesiona z zakladki Siec
 
-### 4. Modyfikacja: `src/hooks/useContacts.ts`
+### Widok FIRMA
 
-- Dodac `useBulkMergeContacts` mutation hook:
-  - Wywoluje edge function `bulk-merge-contacts`
-  - Invaliduje queries kontaktow
-  - Toast sukcesu
+Bez zmian -- nadal renderuje `CompanyView`.
 
-## UI modalu scalania
+### Domyslna zakladka
 
+Zmiana `getDefaultTab()`:
+- Domyslna zakladka: `meetings` (zamiast `company`)
+- Usunac `company` z listy validTabs
+- Dodac `wanted` do validTabs (juz jest)
+
+## Szczegoly techniczne
+
+### Zmiany w TabsList
+
+Obecne:
 ```text
-Scalanie kontaktow
-Wybierz wartosci ktore chcesz zachowac w scalonym kontakcie.
-
-Pole            | Kontakt A (wybor)     | Kontakt B (wybor)
-----------------|----------------------|--------------------
-Imie i nazwisko | [x] Dominik Leszcz.. | [ ] Dominik Leszcz..
-Email           | [x] d.leszczynski@.. | [ ] d.leszczynski@..
-Telefon pryw.   | [x] +48601443...     | [ ] +48 601 44...
-Firma           | [ ] -                | [ ] -
-Stanowisko      | [ ] -                | [ ] -
-Grupa           | [x] Czlonkowie CC    | [ ] Baza kont. bizn.
-Tagi            | [v] tag1  [v] tag2   | [v] tag3           (checkboxy)
-Notatki         | [x] Zachowaj A       | [ ] Zachowaj B  [ ] Polacz
-
-                              [Anuluj]  [Scal kontakty]
+Firma | Spotkania | Potrzeby | Profil AI | Siec | Poszukiwani | Wiecej
 ```
 
-Domyslnie zaznaczony jest kontakt z bardziej kompletnymi danymi (wiecej wypelnionych pol). Dla pol gdzie obie wartosci sa identyczne -- automatycznie zaznaczone, bez mozliwosci wyboru.
-
-## Logika przenoszenia powiazanych rekordow
-
-Edge function po scaleniu przeniesie wszystkie powiazane rekordy z kontaktu B na kontakt A:
-
+Nowe (5 zakladek zamiast 7):
 ```text
-UPDATE needs SET contact_id = primaryId WHERE contact_id = secondaryId
-UPDATE offers SET contact_id = primaryId WHERE contact_id = secondaryId
-UPDATE task_contacts SET contact_id = primaryId WHERE contact_id = secondaryId
-UPDATE consultations SET contact_id = primaryId WHERE contact_id = secondaryId
-UPDATE contact_activity_log SET contact_id = primaryId WHERE contact_id = secondaryId
+Spotkania | Potrzeby | Poszukiwani | Profil AI | Wiecej
 ```
 
-## Ograniczenia
+Grid zmienia sie z `lg:grid-cols-7` na `lg:grid-cols-5`.
 
-- Scalanie dokladnie 2 kontaktow (nie wiecej) -- przy 3+ przycisk nieaktywny z tooltipem "Zaznacz dokladnie 2 kontakty"
-- Scalanie nieodwracalne (ale secondary kontakt pozostaje w bazie jako nieaktywny)
+### Przeniesienie sieci do prawej kolumny
+
+Komponenty `LinkedInNetworkSection` i `ContactConnectionsSection` przenoszone z `TabsContent value="network"` do prawej kolumny pod `ContactQuickStats`. Zachowuja te same propsy (`contactId`, `contactName`).
+
+### Zakladka "Wiecej"
+
+Obecna zakladka "Wiecej" zawiera Udzialy, Zadania, Historia, Przeglad. Bez zmian w jej zawartosci.
+
+## Podsumowanie zmian
+
+Modyfikowany jest tylko jeden plik: `src/pages/ContactDetail.tsx`. Zadne komponenty nie sa tworzone ani usuwane -- wszystko to przeniesienie istniejacych komponentow miedzy sekcjami.
