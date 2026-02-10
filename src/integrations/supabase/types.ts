@@ -5716,6 +5716,45 @@ export type Database = {
           },
         ]
       }
+      task_dependencies: {
+        Row: {
+          created_at: string
+          dependency_type: string
+          depends_on_task_id: string
+          id: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          dependency_type?: string
+          depends_on_task_id: string
+          id?: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          dependency_type?: string
+          depends_on_task_id?: string
+          id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_dependencies_depends_on_task_id_fkey"
+            columns: ["depends_on_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_dependencies_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_label_assignments: {
         Row: {
           created_at: string
@@ -5784,6 +5823,58 @@ export type Database = {
           },
           {
             foreignKeyName: "task_labels_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_sections: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          project_id: string
+          sort_order: number
+          tenant_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          project_id: string
+          sort_order?: number
+          tenant_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          project_id?: string
+          sort_order?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_sections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_sections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "task_sections_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -5865,6 +5956,7 @@ export type Database = {
           parent_task_id: string | null
           priority: string | null
           project_id: string | null
+          section_id: string | null
           snoozed_until: string | null
           sort_order: number | null
           source_task_id: string | null
@@ -5890,6 +5982,7 @@ export type Database = {
           parent_task_id?: string | null
           priority?: string | null
           project_id?: string | null
+          section_id?: string | null
           snoozed_until?: string | null
           sort_order?: number | null
           source_task_id?: string | null
@@ -5915,6 +6008,7 @@ export type Database = {
           parent_task_id?: string | null
           priority?: string | null
           project_id?: string | null
+          section_id?: string | null
           snoozed_until?: string | null
           sort_order?: number | null
           source_task_id?: string | null
@@ -5967,6 +6061,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "task_sections"
             referencedColumns: ["id"]
           },
           {

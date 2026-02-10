@@ -52,6 +52,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { TaskLinkedMeetings } from './TaskLinkedMeetings';
 import { TaskComments } from './TaskComments';
 import { TaskLabelsManager } from './TaskLabelsManager';
+import { TaskDependencies } from './TaskDependencies';
 
 interface TaskDetailSheetProps {
   open: boolean;
@@ -172,6 +173,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
           {/* Labels */}
           <TaskLabelsManager taskId={task.id} />
+
+          {/* Dependencies */}
+          <TaskDependencies taskId={task.id} />
 
           {/* Cross-task workflow */}
           {isCrossTask && crossTask && (
