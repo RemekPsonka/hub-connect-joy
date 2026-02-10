@@ -15,3 +15,7 @@ export { ConvertProspectDialog } from './ConvertProspectDialog';
 export { TeamStats } from './TeamStats';
 export { TableView } from './TableView';
 export { TeamSettings } from './TeamSettings';
+export { ProspectingTab } from './ProspectingTab';
+export { ProspectingImportDialog } from './ProspectingImportDialog';
+export { ProspectingList } from './ProspectingList';
+export { ProspectingConvertDialog } from './ProspectingConvertDialog';

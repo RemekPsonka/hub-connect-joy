@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutGrid, List, Users, Plus, BarChart3 } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3, Search } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -10,12 +10,13 @@ import {
   TeamStats,
   TableView,
   TeamSettings,
+  ProspectingTab,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table';
+type ViewMode = 'kanban' | 'table' | 'prospecting';
 
 const STORAGE_KEY = 'deals-team-selected';
 
@@ -149,6 +150,10 @@ export default function DealsTeamDashboard() {
                 <List className="h-4 w-4" />
                 <span className="hidden sm:inline">Tabela</span>
               </TabsTrigger>
+              <TabsTrigger value="prospecting" className="gap-2">
+                <Search className="h-4 w-4" />
+                <span className="hidden sm:inline">Prospecting</span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -168,6 +173,10 @@ export default function DealsTeamDashboard() {
 
       {selectedTeamId && viewMode === 'table' && (
         <TableView teamId={selectedTeamId} />
+      )}
+
+      {selectedTeamId && viewMode === 'prospecting' && (
+        <ProspectingTab teamId={selectedTeamId} />
       )}
 
       {/* Create Team Dialog */}
