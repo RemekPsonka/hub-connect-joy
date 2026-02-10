@@ -7,10 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 import { useCreateWantedContact, useCompanyByNip } from '@/hooks/useWantedContacts';
-import { User, Building2, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface WantedContactModalProps {
   open: boolean;
@@ -25,9 +24,6 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
   const [personName, setPersonName] = useState('');
   const [personPosition, setPersonPosition] = useState('');
   const [personContext, setPersonContext] = useState('');
-  const [personEmail, setPersonEmail] = useState('');
-  const [personPhone, setPersonPhone] = useState('');
-  const [personLinkedin, setPersonLinkedin] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyNip, setCompanyNip] = useState('');
   const [companyRegon, setCompanyRegon] = useState('');
@@ -63,9 +59,9 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
         requested_by_contact_id: requestedBy!,
         person_name: personName.trim() || null,
         person_position: personPosition.trim() || null,
-        person_email: personEmail.trim() || null,
-        person_phone: personPhone.trim() || null,
-        person_linkedin: personLinkedin.trim() || null,
+        person_email: null,
+        person_phone: null,
+        person_linkedin: null,
         person_context: personContext.trim() || null,
         company_name: companyName.trim() || null,
         company_nip: companyNip.trim() || null,
@@ -91,9 +87,6 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
     setPersonName('');
     setPersonPosition('');
     setPersonContext('');
-    setPersonEmail('');
-    setPersonPhone('');
-    setPersonLinkedin('');
     setCompanyName('');
     setCompanyNip('');
     setCompanyRegon('');
@@ -124,79 +117,51 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
           </div>
 
           {/* Kogo szukamy */}
-          <Tabs defaultValue="person">
+          <div className="space-y-3">
             <Label className="text-sm font-semibold">Kogo szukamy (przynajmniej jedno)</Label>
-            <TabsList className="mt-2 w-full grid grid-cols-2">
-              <TabsTrigger value="person" className="gap-1.5">
-                <User className="h-3.5 w-3.5" /> Osoba
-              </TabsTrigger>
-              <TabsTrigger value="company" className="gap-1.5">
-                <Building2 className="h-3.5 w-3.5" /> Firma
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="person" className="space-y-3 mt-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Imię i nazwisko</Label>
-                  <Input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="np. Krzysztof Kowalski" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Stanowisko</Label>
-                  <Input value={personPosition} onChange={(e) => setPersonPosition(e.target.value)} placeholder="np. CEO, CTO" />
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Imię i nazwisko</Label>
+                <Input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="np. Krzysztof Kowalski" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Opis osoby</Label>
-                <Textarea value={personContext} onChange={(e) => setPersonContext(e.target.value)} placeholder="np. znany lekarz, ekspert od AI, profesor na politechnice..." rows={2} />
+                <Label className="text-xs">Stanowisko</Label>
+                <Input value={personPosition} onChange={(e) => setPersonPosition(e.target.value)} placeholder="np. CEO, CTO" />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Email</Label>
-                  <Input value={personEmail} onChange={(e) => setPersonEmail(e.target.value)} type="email" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Opis osoby</Label>
+              <Textarea value={personContext} onChange={(e) => setPersonContext(e.target.value)} placeholder="np. znany lekarz, ekspert od AI, profesor na politechnice..." rows={2} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">NIP firmy</Label>
+                <div className="relative">
+                  <Input value={companyNip} onChange={(e) => setCompanyNip(e.target.value)} placeholder="np. 1234567890" />
+                  {nipLoading && <Loader2 className="h-4 w-4 animate-spin absolute right-2 top-2.5 text-muted-foreground" />}
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Telefon</Label>
-                  <Input value={personPhone} onChange={(e) => setPersonPhone(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">LinkedIn</Label>
-                  <Input value={personLinkedin} onChange={(e) => setPersonLinkedin(e.target.value)} />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="company" className="space-y-3 mt-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">NIP firmy</Label>
-                  <div className="relative">
-                    <Input value={companyNip} onChange={(e) => setCompanyNip(e.target.value)} placeholder="np. 1234567890" />
-                    {nipLoading && <Loader2 className="h-4 w-4 animate-spin absolute right-2 top-2.5 text-muted-foreground" />}
-                  </div>
-                  {nipCompany && <p className="text-xs text-green-500">Znaleziono: {nipCompany.name}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">REGON</Label>
-                  <Input value={companyRegon} onChange={(e) => setCompanyRegon(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Nazwa firmy</Label>
-                  <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="np. ABC Sp. z o.o." />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Branża</Label>
-                  <Input value={companyIndustry} onChange={(e) => setCompanyIndustry(e.target.value)} placeholder="np. IT, Medycyna" />
-                </div>
+                {nipCompany && <p className="text-xs text-green-500">Znaleziono: {nipCompany.name}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Opis roli w firmie</Label>
-                <Textarea value={companyContext} onChange={(e) => setCompanyContext(e.target.value)} placeholder="np. szef logistyki, ktoś z zarządu, dyrektor finansowy..." rows={2} />
+                <Label className="text-xs">REGON</Label>
+                <Input value={companyRegon} onChange={(e) => setCompanyRegon(e.target.value)} />
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nazwa firmy</Label>
+                <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="np. ABC Sp. z o.o." />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Branża</Label>
+                <Input value={companyIndustry} onChange={(e) => setCompanyIndustry(e.target.value)} placeholder="np. IT, Medycyna" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Opis roli w firmie</Label>
+              <Textarea value={companyContext} onChange={(e) => setCompanyContext(e.target.value)} placeholder="np. szef logistyki, ktoś z zarządu, dyrektor finansowy..." rows={2} />
+            </div>
+          </div>
 
           {/* Dodatkowe */}
           <div className="space-y-3 border-t pt-4">
