@@ -591,7 +591,11 @@ export function useAIImport(): UseAIImportReturn {
       });
 
       if (contacts.length === 0) {
-        setErrors(['Nie udało się wyodrębnić żadnych kontaktów ze zdjęć wizytówek.']);
+        if (data.errors && data.errors.length > 0) {
+          setErrors(data.errors);
+        } else {
+          setErrors(['Nie udało się wyodrębnić żadnych kontaktów ze zdjęć wizytówek.']);
+        }
       } else {
         toast.success(`Rozpoznano ${contacts.length} wizytówek`);
       }
