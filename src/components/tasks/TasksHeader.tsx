@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown, FolderKanban } from 'lucide-react';
+import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown, FolderKanban, Table2 } from 'lucide-react';
 import type { TasksFilters } from '@/hooks/useTasks';
 import { TaskContactFilter } from './TaskContactFilter';
 import { useProjects } from '@/hooks/useProjects';
@@ -34,8 +34,8 @@ function ProjectFilterSelect({ value, onChange }: { value?: string; onChange: (v
 interface TasksHeaderProps {
   filters: TasksFilters;
   onFiltersChange: (filters: TasksFilters) => void;
-  view: 'list' | 'kanban';
-  onViewChange: (view: 'list' | 'kanban') => void;
+  view: 'list' | 'kanban' | 'table';
+  onViewChange: (view: 'list' | 'kanban' | 'table') => void;
   onNewTask: () => void;
   pendingCount?: number;
 }
@@ -226,10 +226,13 @@ export function TasksHeader({
         <ToggleGroup
           type="single"
           value={view}
-          onValueChange={(v) => v && onViewChange(v as 'list' | 'kanban')}
+          onValueChange={(v) => v && onViewChange(v as 'list' | 'kanban' | 'table')}
         >
           <ToggleGroupItem value="list" aria-label="Widok listy">
             <List className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="table" aria-label="Widok tabeli">
+            <Table2 className="h-4 w-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="kanban" aria-label="Widok kanban">
             <Columns className="h-4 w-4" />
