@@ -10,6 +10,7 @@ import type { DealTeamContact } from '@/types/dealTeam';
 interface TopLeadCardProps {
   contact: DealTeamContact;
   teamId: string;
+  onClick?: () => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -19,7 +20,7 @@ const priorityColors: Record<string, string> = {
   low: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
-export function TopLeadCard({ contact, teamId }: TopLeadCardProps) {
+export function TopLeadCard({ contact, teamId, onClick }: TopLeadCardProps) {
   const [showPromote, setShowPromote] = useState(false);
 
   // Guard: don't render if contact data is missing (RLS filtered)
@@ -27,7 +28,7 @@ export function TopLeadCard({ contact, teamId }: TopLeadCardProps) {
 
   return (
     <>
-      <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-shadow">
+      <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-shadow cursor-pointer" onClick={onClick}>
         <CardContent className="p-3 space-y-2">
           {/* Row 1: Name + priority + status indicator */}
           <div className="flex justify-between items-start gap-2">

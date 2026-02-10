@@ -14,9 +14,10 @@ import type { DealTeamContact } from '@/types/dealTeam';
 interface HotLeadCardProps {
   contact: DealTeamContact;
   teamId: string;
+  onClick?: () => void;
 }
 
-export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
+export function HotLeadCard({ contact, teamId, onClick }: HotLeadCardProps) {
   const { data: assignments = [] } = useContactAssignments(contact.id);
   const updateAssignment = useUpdateAssignment();
   const { data: members = [] } = useTeamMembers(teamId);
@@ -34,7 +35,7 @@ export function HotLeadCard({ contact, teamId }: HotLeadCardProps) {
   if (!contact.contact) return null;
 
   return (
-    <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
+    <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow cursor-pointer" onClick={onClick}>
       <CardContent className="p-3 space-y-2">
         {/* Row 1: Name + status */}
         <div className="flex justify-between items-start gap-2">
