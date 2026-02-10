@@ -712,6 +712,99 @@ export function useCreateSubtask() {
   });
 }
 
+// ─── Duplicate Task ─────────────────────────────────────
+
+export function useDuplicateTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      // Fetch original task
+      const { data: original, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+      if (fetchError) throw fetchError;
+
+      // Create copy
+      const { data: newTask, error: createError } = await supabase
+        .from('tasks')
+        .insert({
+          title: `${original.title} (kopia)`,
+          description: original.description,
+          task_type: original.task_type,
+          priority: original.priority,
+          due_date: original.due_date,
+          status: 'pending',
+          tenant_id: original.tenant_id,
+          project_id: original.project_id,
+          owner_id: original.owner_id,
+          assigned_to: original.assigned_to,
+          category_id: original.category_id,
+          visibility: original.visibility,
+          section_id: original.section_id,
+        })
+        .select()
+        .single();
+      if (createError) throw createError;
+
+      // Copy task_contacts
+      const { data: contacts } = await supabase
+        .from('task_contacts')
+        .select('contact_id, role')
+        .eq('task_id', taskId);
+
+      if (contacts && contacts.length > 0) {
+        await supabase.from('task_contacts').insert(
+          contacts.map((c) => ({ task_id: newTask.id, contact_id: c.contact_id, role: c.role }))
+        );
+      }
+
+      // Copy subtasks
+      const { data: subtasks } = await supabase
+        .from('tasks')
+        .select('title, priority, task_type')
+        .eq('parent_task_id', taskId);
+
+      if (subtasks && subtasks.length > 0) {
+        await supabase.from('tasks').insert(
+          subtasks.map((s) => ({
+            title: s.title,
+            priority: s.priority,
+            task_type: s.task_type || 'standard',
+            parent_task_id: newTask.id,
+            tenant_id: original.tenant_id,
+            project_id: original.project_id,
+            owner_id: original.owner_id,
+            status: 'pending',
+          }))
+        );
+      }
+
+      // Copy label assignments
+      const { data: labels } = await supabase
+        .from('task_label_assignments')
+        .select('label_id')
+        .eq('task_id', taskId);
+
+      if (labels && labels.length > 0) {
+        await supabase.from('task_label_assignments').insert(
+          labels.map((l) => ({ task_id: newTask.id, label_id: l.label_id }))
+        );
+      }
+
+      return newTask;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
+  });
+}
+
 // ─── Bulk Operations ────────────────────────────────────
 
 export function useBulkUpdateTasks() {
