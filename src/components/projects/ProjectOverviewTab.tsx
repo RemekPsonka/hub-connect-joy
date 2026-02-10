@@ -30,7 +30,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Users, CheckSquare, StickyNote, Calendar, Plus, Trash2, CalendarDays } from 'lucide-react';
+import { Users, CheckSquare, StickyNote, Calendar, Plus, Trash2, CalendarDays, Zap } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { format, differenceInDays, isBefore, isAfter } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -171,6 +172,41 @@ export function ProjectOverviewTab({ project }: ProjectOverviewTabProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Auto-assign */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Auto-assign</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={!!(project as any).auto_assign_mode}
+                onCheckedChange={(checked) =>
+                  updateProject.mutate({
+                    id: project.id,
+                    data: { auto_assign_mode: checked ? 'load_balance' : null } as any,
+                  })
+                }
+              />
+              {(project as any).auto_assign_mode && (
+                <Select
+                  value={(project as any).auto_assign_mode}
+                  onValueChange={(v) =>
+                    updateProject.mutate({ id: project.id, data: { auto_assign_mode: v } as any })
+                  }
+                >
+                  <SelectTrigger className="w-[140px] h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="load_balance">Load balance</SelectItem>
+                    <SelectItem value="round_robin">Round robin</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
 
           {project.description && (

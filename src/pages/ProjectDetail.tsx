@@ -24,6 +24,7 @@ import {
   Eye,
   Diamond,
   CalendarDays,
+  FileStack,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -41,6 +42,8 @@ import { ProjectNotesTab } from '@/components/projects/ProjectNotesTab';
 import { ProjectFilesTab } from '@/components/projects/ProjectFilesTab';
 import { ProjectMilestones } from '@/components/projects/ProjectMilestones';
 import { AutomationRulesPanel } from '@/components/tasks/AutomationRulesPanel';
+import { ProjectReportExport } from '@/components/projects/ProjectReportExport';
+import { ProjectTemplateManager } from '@/components/projects/ProjectTemplateManager';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -130,6 +133,7 @@ export default function ProjectDetail() {
         </div>
 
         {/* Actions */}
+        <ProjectReportExport project={project} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="shrink-0">
@@ -189,6 +193,10 @@ export default function ProjectDetail() {
             <CalendarDays className="h-4 w-4" />
             <span className="hidden sm:inline">Automatyzacje</span>
           </TabsTrigger>
+          <TabsTrigger value="templates" className="gap-1.5">
+            <FileStack className="h-4 w-4" />
+            <span className="hidden sm:inline">Szablony</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -211,6 +219,9 @@ export default function ProjectDetail() {
         </TabsContent>
         <TabsContent value="automations" className="mt-4">
           <AutomationRulesPanel projectId={project.id} />
+        </TabsContent>
+        <TabsContent value="templates" className="mt-4">
+          <ProjectTemplateManager />
         </TabsContent>
       </Tabs>
     </div>
