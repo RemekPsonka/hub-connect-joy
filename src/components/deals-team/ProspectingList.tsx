@@ -162,7 +162,7 @@ export function ProspectingList({ teamId }: Props) {
           </SelectContent>
         </Select>
 
-        {uniqueSources.length > 1 && (
+        {uniqueSources.length > 0 && (
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
             <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Filtruj źródło" />
