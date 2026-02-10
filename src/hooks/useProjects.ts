@@ -440,7 +440,32 @@ export function useProjectTasks(projectId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
-        .select('*')
+        .select(`
+          *,
+          task_contacts(
+            contact_id,
+            role,
+            contacts(id, full_name, company)
+          ),
+          cross_tasks(
+            id,
+            contact_a_id,
+            contact_b_id,
+            connection_reason,
+            suggested_intro,
+            intro_made,
+            discussed_with_a,
+            discussed_with_a_at,
+            discussed_with_b,
+            discussed_with_b_at,
+            intro_made_at,
+            contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
+            contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)
+          ),
+          task_categories(id, name, color, icon, visibility_type, workflow_steps),
+          owner:directors!tasks_owner_id_fkey(id, full_name),
+          assignee:directors!tasks_assigned_to_fkey(id, full_name)
+        `)
         .eq('project_id', projectId!)
         .is('parent_task_id', null)
         .order('sort_order', { ascending: true });

@@ -5,41 +5,52 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Circle, Clock, CheckCircle2, Plus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CheckSquare, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { TaskModal } from '@/components/tasks/TaskModal';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { TaskStatusBadge } from '@/components/tasks/TaskStatusBadge';
+import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
+import { useUpdateTask } from '@/hooks/useTasks';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 
 interface ProjectTasksTabProps {
   projectId: string;
 }
 
-function getTaskStatusIcon(status: string) {
-  switch (status) {
-    case 'done': return <CheckCircle2 className="h-4 w-4 text-success" />;
-    case 'in_progress': return <Clock className="h-4 w-4 text-primary" />;
-    default: return <Circle className="h-4 w-4 text-muted-foreground" />;
-  }
-}
-
-function getTaskStatusLabel(status: string) {
-  switch (status) {
-    case 'done': return 'Zakończone';
-    case 'in_progress': return 'W toku';
-    case 'pending': return 'Oczekujące';
-    default: return status;
-  }
-}
-
 export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const { data: tasks, isLoading } = useProjectTasks(projectId);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const updateTask = useUpdateTask();
+
+  const handleTaskClick = (task: TaskWithDetails) => {
+    setSelectedTask(task);
+    setIsDetailOpen(true);
+  };
+
+  const handleStatusToggle = (e: React.MouseEvent, task: TaskWithDetails) => {
+    e.stopPropagation();
+    const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+    updateTask.mutate({ id: task.id, status: newStatus });
+  };
+
+  const handleEdit = () => {
+    setEditingTask(selectedTask);
+    setIsDetailOpen(false);
+  };
 
   if (isLoading) {
     return <SkeletonCard height="h-48" />;
   }
 
-  if (!tasks?.length) {
+  const typedTasks = (tasks || []) as TaskWithDetails[];
+
+  if (!typedTasks.length) {
     return (
       <>
         <DataCard>
@@ -66,7 +77,7 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   return (
     <>
       <DataCard
-        title={`Zadania (${tasks.length})`}
+        title={`Zadania (${typedTasks.length})`}
         action={
           <Button variant="ghost" size="sm" onClick={() => setIsModalOpen(true)}>
             <Plus className="h-4 w-4" />
@@ -74,11 +85,20 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
         }
       >
         <div className="divide-y divide-border">
-          {tasks.map((task) => (
-            <div key={task.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-              {getTaskStatusIcon(task.status || 'pending')}
+          {typedTasks.map((task) => (
+            <div
+              key={task.id}
+              className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2 transition-colors"
+              onClick={() => handleTaskClick(task)}
+            >
+              <Checkbox
+                checked={task.status === 'completed'}
+                onCheckedChange={() => {}}
+                onClick={(e) => handleStatusToggle(e, task)}
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${task.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
+                <p className={`text-sm font-medium truncate ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
                   {task.title}
                 </p>
                 {task.due_date && (
@@ -87,18 +107,37 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                   </p>
                 )}
               </div>
-              <Badge variant="outline" className="text-xs shrink-0">
-                {getTaskStatusLabel(task.status || 'pending')}
-              </Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                <TaskPriorityBadge priority={task.priority} />
+                <TaskStatusBadge status={task.status || 'pending'} />
+              </div>
             </div>
           ))}
         </div>
       </DataCard>
+
       <TaskModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         preselectedProjectId={projectId}
       />
+
+      {selectedTask && (
+        <TaskDetailSheet
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+          task={selectedTask}
+          onEdit={handleEdit}
+        />
+      )}
+
+      {editingTask && (
+        <TaskModal
+          open={!!editingTask}
+          onOpenChange={(open) => { if (!open) setEditingTask(null); }}
+          task={editingTask}
+        />
+      )}
     </>
   );
 }
