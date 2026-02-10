@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Loader2,
   Eye,
+  Diamond,
 } from 'lucide-react';
 import {
   useProject,
@@ -35,6 +36,7 @@ import { ProjectTasksTab } from '@/components/projects/ProjectTasksTab';
 import { ProjectContactsTab } from '@/components/projects/ProjectContactsTab';
 import { ProjectNotesTab } from '@/components/projects/ProjectNotesTab';
 import { ProjectFilesTab } from '@/components/projects/ProjectFilesTab';
+import { ProjectMilestones } from '@/components/projects/ProjectMilestones';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -167,6 +169,10 @@ export default function ProjectDetail() {
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Pliki</span>
           </TabsTrigger>
+          <TabsTrigger value="milestones" className="gap-1.5">
+            <Diamond className="h-4 w-4" />
+            <span className="hidden sm:inline">Kamienie</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -183,6 +189,9 @@ export default function ProjectDetail() {
         </TabsContent>
         <TabsContent value="files" className="mt-4">
           <ProjectFilesTab projectId={project.id} />
+        </TabsContent>
+        <TabsContent value="milestones" className="mt-4">
+          <ProjectMilestones projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>
