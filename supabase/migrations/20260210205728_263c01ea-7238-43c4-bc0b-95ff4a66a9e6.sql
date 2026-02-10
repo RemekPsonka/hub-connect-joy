@@ -1,0 +1,1 @@
+ALTER TABLE public.meeting_prospects ADD COLUMN priority TEXT DEFAULT NULL;
