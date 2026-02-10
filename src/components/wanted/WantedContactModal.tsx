@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 import { useCreateWantedContact, useCompanyByNip } from '@/hooks/useWantedContacts';
+import { WantedCheckActions } from './WantedCheckActions';
 import { Loader2 } from 'lucide-react';
 
 interface WantedContactModalProps {
@@ -173,6 +174,19 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
               <Label className="text-xs">Opis roli w firmie</Label>
               <Textarea value={companyContext} onChange={(e) => setCompanyContext(e.target.value)} placeholder="np. szef logistyki, ktoś z zarządu, dyrektor finansowy..." rows={2} />
             </div>
+          </div>
+
+          {/* Sprawdź / Uzupełnij AI */}
+          <div className="border-t pt-4">
+            <WantedCheckActions
+              personName={personName}
+              companyName={companyName}
+              onEnrichResult={(result) => {
+                if (result.position && !personPosition) setPersonPosition(result.position);
+                if (result.summary) setPersonContext(result.summary);
+                if (result.industry && !companyIndustry) setCompanyIndustry(result.industry);
+              }}
+            />
           </div>
 
           {/* Dodatkowe */}
