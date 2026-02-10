@@ -22,6 +22,7 @@ import {
   Link2,
   Plus,
   FolderKanban,
+  Copy,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -32,6 +33,7 @@ import {
   useSubtasks,
   useCreateSubtask,
   useUpdateCrossTaskStatus,
+  useDuplicateTask,
 } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { toast } from 'sonner';
@@ -73,6 +75,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
   const updateCrossStatus = useUpdateCrossTaskStatus();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
+  const duplicateTask = useDuplicateTask();
 
   // Subtasks
   const { data: subtasks = [] } = useSubtasks(task.id);
@@ -126,6 +129,13 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
       toast.success('Zadanie usunięte');
       onOpenChange(false);
     } catch { toast.error('Wystąpił błąd'); }
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      await duplicateTask.mutateAsync(task.id);
+      toast.success('Zadanie zduplikowane');
+    } catch { toast.error('Nie udało się zduplikować zadania'); }
   };
 
   const isLoading = updateCrossStatus.isPending || updateTask.isPending;
@@ -346,6 +356,10 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
             </AlertDialog>
 
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleDuplicate} disabled={duplicateTask.isPending}>
+                {duplicateTask.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Copy className="h-4 w-4 mr-1.5" />}
+                Duplikuj
+              </Button>
               <Button variant="outline" size="sm" onClick={onEdit}>
                 <Edit2 className="h-4 w-4 mr-1.5" /> Edytuj
               </Button>
