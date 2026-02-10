@@ -1,101 +1,82 @@
 
-# Import poszukiwanych z listy z rozpoznaniem AI
+# Dodanie terminu waznosci do poszukiwanych kontaktow
 
-## Opis
+## Co sie zmieni
 
-Uzytkownik wkleja dowolna liste (tekst, CSV, notatki ze spotkania) do textarea. AI rozpoznaje kogo szukamy i mapuje na pola wanted_contacts. Wynik wyswietlany jako lista kart do przejrzenia -- uzytkownik moze edytowac kazda pozycje i zatwierdzic ja pojedynczo lub wszystkie naraz.
+Kazdy poszukiwany kontakt bedzie mial "termin waznosci" -- po jego uplynieciu pozycja automatycznie zmienia status na "expired" i trafia do archiwum. Uzytkownik wybiera okres: miesiac, kwartal, rok, lub bez limitu.
 
-## Przeplyw
+## Zmiany w bazie danych
 
-```text
-1. Uzytkownik klika "Importuj liste" na stronie /wanted
-2. Otwiera sie dialog z textarea + wybor "Kto szuka" (wymagane)
-3. Uzytkownik wkleja liste (np. "Jan Kowalski, CEO z ABC Sp. z o.o., szukamy bo potrzebujemy dostawce IT")
-4. Klikniecie "Analizuj" wysyla tekst do edge function parse-wanted-list
-5. AI zwraca tablice poszukiwanych z polami: person_name, person_position, person_context, company_name, company_nip, company_industry, company_context, search_context, urgency
-6. Wyswietlane jako lista kart z edytowalnymi polami
-7. Kazda karta ma przycisk "Zatwierdz" (zapisuje do bazy) i "Odrzuc" (usuwa z listy)
-8. Przycisk "Zatwierdz wszystkie" na gorze
+Nowa kolumna w tabeli `wanted_contacts`:
+- `expires_at` (timestamp with time zone, nullable) -- data wygasniecia, null = bez limitu
+
+Nowy status `expired` dodany do logiki aplikacji.
+
+Trigger bazodanowy lub funkcja cron nie jest potrzebna -- filtrowanie po stronie zapytania: kontakty z `expires_at < now()` beda traktowane jako "expired" w zapytaniach. Alternatywnie, prostsza opcja: **cron job w Supabase** (pg_cron) ktory co godzine aktualizuje status na 'expired' dla rekordow z `expires_at < now() AND status = 'active'`.
+
+Wybieram podejscie z **pg_cron** -- bo wtedy status jest trwaly i nie trzeba modyfikowac kazdego zapytania.
+
+## Zmiany w plikach
+
+### 1. Migracja SQL
+
+```sql
+ALTER TABLE wanted_contacts ADD COLUMN expires_at timestamptz;
+
+-- Cron: co godzine archiwizuj przeterminowane
+SELECT cron.schedule(
+  'expire-wanted-contacts',
+  '0 * * * *',
+  $$UPDATE public.wanted_contacts SET status = 'expired' WHERE status IN ('active','in_progress') AND expires_at IS NOT NULL AND expires_at < now()$$
+);
 ```
 
-## Nowe pliki
+### 2. `src/hooks/useWantedContacts.ts`
 
-### 1. Edge function: `supabase/functions/parse-wanted-list/index.ts`
+- Dodac `expires_at: string | null` do interfejsu `WantedContact`
+- W `useCreateWantedContact` dodac `expires_at` do inputu
 
-Wzorowana na istniejacym `parse-contacts-list`, ale z innym promptem i struktura wyjsciowa:
+### 3. `src/components/wanted/WantedContactModal.tsx`
 
-- Wejscie: `{ content: string, contentType: "text" }`
-- AI prompt: rozpoznaj osoby/firmy/role do poszukiwania, wyodrebnij person_name, person_position, person_context, company_name, company_nip, company_industry, company_context, search_context, sugerowana urgency
-- Wyjscie: `{ items: ParsedWantedItem[], metadata: { totalParsed, warnings } }`
-- Auth: weryfikacja przez `verifyAuth` (ten sam pattern co inne funkcje)
-- Model: `google/gemini-3-flash-preview`
+- Dodac pole "Termin poszukiwania" -- Select z opcjami:
+  - Miesiac (oblicza `now + 1 month`)
+  - Kwartal (`now + 3 months`)
+  - Rok (`now + 12 months`)
+  - Bez limitu (`null`)
+- Wyslac obliczona date jako `expires_at`
 
-### 2. Komponent: `src/components/wanted/ImportWantedDialog.tsx`
+### 4. `src/components/wanted/WantedContactCard.tsx`
 
-Dialog z dwoma etapami:
+- Wyswietlic termin wygasniecia (np. "Do: 15 mar 2026") lub "Bez limitu"
+- Jesli blisko terminu (< 7 dni) -- wyroznic kolorem (pomaranczowy/czerwony)
+- Dodac status `expired` do label/badge: "Wygasly"
 
-**Etap 1 -- Wklejanie:**
-- ConnectionContactSelect: "Kto szuka" (wymagane, wspolne dla calej listy)
-- Textarea: wklej liste (placeholder z przykladami)
-- Przycisk "Analizuj z AI"
+### 5. `src/components/wanted/ImportWantedDialog.tsx`
 
-**Etap 2 -- Przegladanie wynikow:**
-- Lista kart z rozpoznanymi pozycjami
-- Kazda karta pokazuje wypelnione pola (person_name, company_name, itp.) z mozliwoscia edycji inline
-- Kazda karta: przycisk "Zatwierdz" (zielony) i "Odrzuc" (czerwony)
-- Na gorze: "Zatwierdz wszystkie (N)" i "Odrzuc wszystkie"
-- Po zatwierdzeniu pozycji -- `useCreateWantedContact` z wybranym "Kto szuka" i polami z karty
-- Zatwierdzone karty znikaja z listy (lub oznaczane jako done)
+- Dodac pole terminu do etapu importu (wspolne dla calej listy lub per pozycja)
+- Przekazac `expires_at` przy zatwierdzaniu
 
-### 3. Hook/util (w komponencie lub osobny)
+### 6. `src/pages/WantedContacts.tsx`
 
-Wywolanie edge function `parse-wanted-list` przez `supabase.functions.invoke`.
+- Dodac status "Wygasle" do filtra statusow
+- Domyslnie ukryc wygasle (filtr na 'all' nie pokazuje expired, osobna opcja "Archiwum")
+- Opcjonalnie: dodac licznik wygaslych w statystykach
 
-## Zmiany w istniejacych plikach
+### 7. `src/components/contacts/ContactWantedTab.tsx`
 
-### `src/pages/WantedContacts.tsx`
+- Brak zmian -- korzysta z `WantedContactCard` ktory juz zostanie zaktualizowany
 
-- Dodac przycisk "Importuj liste" obok "Dodaj"
-- Dodac state i renderowanie `ImportWantedDialog`
+## Obliczanie daty
 
-### `supabase/config.toml`
-
-- Dodac sekcje `[functions.parse-wanted-list]` z `verify_jwt = false`
-
-## Szczegoly techniczne
-
-### Prompt AI (parse-wanted-list)
-
-Prompt instruuje model aby z dowolnego tekstu wyodrebnil liste poszukiwanych kontaktow/firm/rol i zmapowal na strukture:
+W formularzu uzytkownik wybiera okres, a frontend oblicza date:
 
 ```text
-{
-  items: [{
-    person_name: string | null,
-    person_position: string | null,
-    person_context: string | null,
-    company_name: string | null,
-    company_nip: string | null,
-    company_industry: string | null,
-    company_context: string | null,
-    search_context: string | null,
-    urgency: "low" | "normal" | "high" | "critical"
-  }]
-}
+"1month"  → new Date(); date.setMonth(date.getMonth() + 1)
+"3months" → new Date(); date.setMonth(date.getMonth() + 3)  
+"1year"   → new Date(); date.setFullYear(date.getFullYear() + 1)
+"none"    → null
 ```
 
-### UI karty do przegladania
+## Archiwum
 
-Kazda karta ma:
-- Edytowalne pola (Input/Textarea) wypelnione danymi z AI
-- Badge z sugerowana pilnoscia (edytowalny)
-- Ikona statusu: oczekuje / zatwierdzona / odrzucona
-- Przycisk "Zatwierdz" wywoluje `useCreateWantedContact.mutate(...)` z polami z karty + wspolnym `requested_by_contact_id`
-
-## Kolejnosc implementacji
-
-```text
-1. Edge function parse-wanted-list (+ config.toml)
-2. ImportWantedDialog.tsx (oba etapy)
-3. WantedContacts.tsx (przycisk "Importuj liste")
-```
+Wygasle pozycje nie sa usuwane -- zmieniaja status na "expired". Uzytkownik moze je zobaczyc wybierajac filtr "Wygasle" na stronie poszukiwanych. Karty wygaslych sa wyszarzone i nie maja przyciskow akcji.
