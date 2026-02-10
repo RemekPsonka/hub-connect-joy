@@ -56,6 +56,8 @@ import { TaskComments } from './TaskComments';
 import { TaskLabelsManager } from './TaskLabelsManager';
 import { TaskDependencies } from './TaskDependencies';
 import { TaskTimeTracker } from './TaskTimeTracker';
+import { TaskCustomFields } from './TaskCustomFields';
+import { TaskActivityLog } from './TaskActivityLog';
 import { getRecurrenceLabel } from './RecurrenceSelector';
 import { Repeat } from 'lucide-react';
 
@@ -186,6 +188,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
           {/* Labels */}
           <TaskLabelsManager taskId={task.id} />
+
+          {/* Custom Fields */}
+          <TaskCustomFields taskId={task.id} projectId={task.project_id} />
 
           {/* Dependencies */}
           <TaskDependencies taskId={task.id} />
@@ -350,6 +355,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
           {/* Comments */}
           <TaskComments taskId={task.id} />
+
+          {/* Activity Log */}
+          <TaskActivityLog taskId={task.id} />
 
           {/* Actions */}
           <Separator />

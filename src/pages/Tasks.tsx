@@ -3,16 +3,18 @@ import { TasksHeader } from '@/components/tasks/TasksHeader';
 import { TasksList } from '@/components/tasks/TasksList';
 import { TasksTable } from '@/components/tasks/TasksTable';
 import { TasksKanban } from '@/components/tasks/TasksKanban';
+import { TasksCalendar } from '@/components/tasks/TasksCalendar';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { BulkTaskActions } from '@/components/tasks/BulkTaskActions';
+import { useTaskKeyboardShortcuts } from '@/components/tasks/KeyboardShortcuts';
 import { useTasks, usePendingTasksCount, useUpdateTask, type TasksFilters, type TaskWithDetails } from '@/hooks/useTasks';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Tasks() {
   const [filters, setFilters] = useState<TasksFilters>({});
-  const [view, setView] = useState<'list' | 'kanban' | 'table'>('list');
+  const [view, setView] = useState<'list' | 'kanban' | 'table' | 'calendar'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -24,6 +26,14 @@ export default function Tasks() {
   const { data: tasks = [], isLoading } = useTasks(filters);
   const { data: pendingCount = 0 } = usePendingTasksCount();
   const updateTask = useUpdateTask();
+
+  const handleNewTask = useCallback(() => {
+    setSelectedTask(null);
+    setIsEditMode(false);
+    setIsModalOpen(true);
+  }, []);
+
+  useTaskKeyboardShortcuts({ onNewTask: handleNewTask, onViewChange: setView });
 
   const handleTaskClick = (task: TaskWithDetails) => {
     setSelectedTask(task);
@@ -42,12 +52,6 @@ export default function Tasks() {
     } catch (error) {
       toast.error('Wystąpił błąd');
     }
-  };
-
-  const handleNewTask = () => {
-    setSelectedTask(null);
-    setIsEditMode(false);
-    setIsModalOpen(true);
   };
 
   const handleEditFromDetail = () => {
@@ -114,6 +118,12 @@ export default function Tasks() {
           onStatusChange={handleStatusChange}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
+        />
+      ) : view === 'calendar' ? (
+        <TasksCalendar
+          tasks={tasks}
+          onTaskClick={handleTaskClick}
+          onStatusChange={handleStatusChange}
         />
       ) : (
         <TasksKanban

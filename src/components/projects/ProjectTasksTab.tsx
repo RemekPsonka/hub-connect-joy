@@ -7,7 +7,8 @@ import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { CheckSquare, Plus, ChevronDown, ChevronRight, MoreHorizontal, Trash2, Pencil } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { CheckSquare, Plus, ChevronDown, ChevronRight, MoreHorizontal, Trash2, Pencil, List, GanttChart } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { TaskModal } from '@/components/tasks/TaskModal';
@@ -16,6 +17,7 @@ import { TaskStatusBadge } from '@/components/tasks/TaskStatusBadge';
 import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
 import { useUpdateTask } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
+import { TaskTimeline } from '@/components/tasks/TaskTimeline';
 import { useTaskSections, useCreateTaskSection, useDeleteTaskSection } from '@/hooks/useTaskSections';
 import {
   DropdownMenu,
@@ -75,6 +77,7 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
   const [newSectionName, setNewSectionName] = useState('');
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [taskView, setTaskView] = useState<'list' | 'timeline'>('list');
   const updateTask = useUpdateTask();
 
   const handleTaskClick = (task: TaskWithDetails) => {
@@ -170,7 +173,11 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
       <DataCard
         title={`Zadania (${typedTasks.length})`}
         action={
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
+            <ToggleGroup type="single" value={taskView} onValueChange={(v) => v && setTaskView(v as 'list' | 'timeline')} size="sm">
+              <ToggleGroupItem value="list" aria-label="Lista"><List className="h-3.5 w-3.5" /></ToggleGroupItem>
+              <ToggleGroupItem value="timeline" aria-label="Timeline"><GanttChart className="h-3.5 w-3.5" /></ToggleGroupItem>
+            </ToggleGroup>
             <Button variant="ghost" size="sm" onClick={() => setIsAddingSection(true)}>
               <Plus className="h-4 w-4 mr-1" /> Sekcja
             </Button>
@@ -180,8 +187,10 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
           </div>
         }
       >
+        {taskView === 'timeline' ? (
+          <TaskTimeline tasks={typedTasks} onTaskClick={handleTaskClick} />
+        ) : (
         <div className="space-y-4">
-          {/* Add section form */}
           {isAddingSection && (
             <div className="flex gap-2">
               <Input
@@ -275,6 +284,7 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
             </div>
           )}
         </div>
+        )}
       </DataCard>
 
       <TaskModal open={isModalOpen} onOpenChange={setIsModalOpen} preselectedProjectId={projectId} />

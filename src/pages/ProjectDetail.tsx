@@ -40,6 +40,7 @@ import { ProjectContactsTab } from '@/components/projects/ProjectContactsTab';
 import { ProjectNotesTab } from '@/components/projects/ProjectNotesTab';
 import { ProjectFilesTab } from '@/components/projects/ProjectFilesTab';
 import { ProjectMilestones } from '@/components/projects/ProjectMilestones';
+import { AutomationRulesPanel } from '@/components/tasks/AutomationRulesPanel';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -184,6 +185,10 @@ export default function ProjectDetail() {
             <Diamond className="h-4 w-4" />
             <span className="hidden sm:inline">Kamienie</span>
           </TabsTrigger>
+          <TabsTrigger value="automations" className="gap-1.5">
+            <CalendarDays className="h-4 w-4" />
+            <span className="hidden sm:inline">Automatyzacje</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -203,6 +208,9 @@ export default function ProjectDetail() {
         </TabsContent>
         <TabsContent value="milestones" className="mt-4">
           <ProjectMilestones projectId={project.id} />
+        </TabsContent>
+        <TabsContent value="automations" className="mt-4">
+          <AutomationRulesPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>
