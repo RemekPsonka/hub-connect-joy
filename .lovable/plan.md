@@ -1,44 +1,49 @@
 
-
-# Natychmiastowe odswiezanie danych po dodaniu
+# Interaktywne zadania w widoku projektu
 
 ## Problem
 
-Po dodaniu zadania (lub innego elementu) na stronie projektu, kontaktu lub konsultacji dane nie pojawiaja sie od razu -- trzeba recznie odswiezyc strone. Przyczyna: mutacje (`useCreateTask`, `useCreateCrossTask`, `useUpdateTask`, bulk operations) nie invaliduja kluczy cache takich jak `project-tasks` i `consultation-tasks`.
+Zakladka "Zadania" w widoku projektu wyswietla zadania jako prosty, statyczny tekst. Brak mozliwosci:
+- Klikniecia w zadanie, zeby otworzyc szczegoly (TaskDetailSheet)
+- Zmiany statusu zadania (checkbox)
+- Dodawania subtaskow
+- Edycji zadania
 
 ## Rozwiazanie
 
-Dodac brakujace `invalidateQueries` do wszystkich mutacji w `src/hooks/useTasks.ts`, aby po kazdej zmianie zadania odswiezaly sie rowniez widoki powiazane z projektami i konsultacjami.
+Przebudowa `ProjectTasksTab` tak, aby uzywala tych samych komponentow co glowna strona Zadan (`Tasks.tsx`): `TaskDetailSheet` do podgladu/edycji, `TaskModal` do edycji, checkbox do zmiany statusu.
 
-## Zmiany w pliku `src/hooks/useTasks.ts`
+### Zmiany w `src/hooks/useProjects.ts` - useProjectTasks
 
-Dodac do `onSuccess` nastepujacych hookow:
+Obecne zapytanie pobiera tylko `select('*')` z tabeli `tasks`. Trzeba rozszerzyc o joiny, zeby zwracac `TaskWithDetails`:
 
-### 1. `useCreateTask` (linia ~470)
-Dodac:
-- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
-- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
+```
+select(`*, task_contacts(contact_id, contacts(full_name, company)), cross_tasks(...)`)
+```
 
-### 2. `useCreateCrossTask` (linia ~536)
-Dodac:
-- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
+Dzieki temu dane beda kompatybilne z `TaskDetailSheet` i `TasksList`.
 
-### 3. `useUpdateTask` (linia ~561)
-Dodac:
-- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
-- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
+### Zmiany w `src/components/projects/ProjectTasksTab.tsx`
 
-### 4. `useDeleteTask` (linia ~619)
-Dodac:
-- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
-- `queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] })`
+1. Dodanie stanu na `selectedTask`, `isDetailOpen`, `isEditMode`
+2. Kazdy wiersz zadania staje sie klikalny -- otwiera `TaskDetailSheet`
+3. Dodanie checkboxa do szybkiej zmiany statusu (uzywajac `useUpdateTask`)
+4. Renderowanie `TaskDetailSheet` (podglad, subtaski, usuwanie)
+5. Edycja z `TaskDetailSheet` otwiera `TaskModal` w trybie edycji
+6. Po zamknieciu sheetu/modalu dane odswiezaja sie automatycznie (dzieki juz dodanym invalidacjom `project-tasks`)
 
-### 5. `useBulkUpdateTasks` (linia ~644)
-Dodac:
-- `queryClient.invalidateQueries({ queryKey: ['project-tasks'] })`
+### Szczegoly techniczne
 
-### 6. `useCreateSubtask` (linia ~700)
-Juz ma `project-tasks` -- OK.
+Nowy uklad wiersza zadania:
+```text
+[checkbox] Tytul zadania                    [status badge] [termin]
+           Opis (1 linia)                   [priorytet]
+```
 
-Lacznie: 1 plik, ~8 dodanych linii. Zadne nowe komponenty, zadne zmiany w edge functions.
+Klikniecie w wiersz -> otwiera TaskDetailSheet (boczny panel z pelnym podgladem, subtaskami, edycja, usuwaniem).
 
+Checkbox zmienia status miedzy `pending` i `completed`.
+
+Modyfikowane pliki:
+- `src/hooks/useProjects.ts` -- rozszerzenie selecta w useProjectTasks
+- `src/components/projects/ProjectTasksTab.tsx` -- dodanie interaktywnosci
