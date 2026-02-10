@@ -1,82 +1,75 @@
 
-# Dodanie terminu waznosci do poszukiwanych kontaktow
+# Dodanie obslugi plikow do importu poszukiwanych
 
 ## Co sie zmieni
 
-Kazdy poszukiwany kontakt bedzie mial "termin waznosci" -- po jego uplynieciu pozycja automatycznie zmienia status na "expired" i trafia do archiwum. Uzytkownik wybiera okres: miesiac, kwartal, rok, lub bez limitu.
-
-## Zmiany w bazie danych
-
-Nowa kolumna w tabeli `wanted_contacts`:
-- `expires_at` (timestamp with time zone, nullable) -- data wygasniecia, null = bez limitu
-
-Nowy status `expired` dodany do logiki aplikacji.
-
-Trigger bazodanowy lub funkcja cron nie jest potrzebna -- filtrowanie po stronie zapytania: kontakty z `expires_at < now()` beda traktowane jako "expired" w zapytaniach. Alternatywnie, prostsza opcja: **cron job w Supabase** (pg_cron) ktory co godzine aktualizuje status na 'expired' dla rekordow z `expires_at < now() AND status = 'active'`.
-
-Wybieram podejscie z **pg_cron** -- bo wtedy status jest trwaly i nie trzeba modyfikowac kazdego zapytania.
+Dialog "Importuj liste poszukiwanych" bedzie obslugiwac nie tylko wklejanie tekstu, ale rowniez wczytywanie plikow: zdjec (PNG/JPG), PDF, arkuszy Excel (XLSX/CSV). Uzytkownik wybiera plik lub wkleja tekst -- oba sposoby prowadza do tego samego kroku review z kartami.
 
 ## Zmiany w plikach
 
-### 1. Migracja SQL
+### 1. `src/components/wanted/ImportWantedDialog.tsx`
 
-```sql
-ALTER TABLE wanted_contacts ADD COLUMN expires_at timestamptz;
+- Dodac przycisk "Wczytaj plik" z ukrytym `<input type="file" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp" />`
+- Pokazac nazwe wczytanego pliku z mozliwoscia usuniecia
+- Przy analizie:
+  - CSV: `file.text()` -> wyslac jako `{ content, contentType: "csv" }`
+  - XLSX/XLS: uzyc biblioteki `xlsx` (juz zainstalowana) do konwersji na CSV -> wyslac jako `{ content, contentType: "csv" }`
+  - PDF: `file.text()` -> wyslac jako `{ content, contentType: "pdf" }`
+  - Obrazy (PNG/JPG/WEBP): konwersja do base64 przez `FileReader.readAsDataURL` -> wyslac jako `{ content, contentType: "image" }`
+- Przycisk "Analizuj z AI" aktywny gdy jest tekst LUB plik (+ wybrany requestedBy)
+- Nowe stanu: `uploadedFile: File | null`
+- Dodac ikone `Upload` z lucide-react
 
--- Cron: co godzine archiwizuj przeterminowane
-SELECT cron.schedule(
-  'expire-wanted-contacts',
-  '0 * * * *',
-  $$UPDATE public.wanted_contacts SET status = 'expired' WHERE status IN ('active','in_progress') AND expires_at IS NOT NULL AND expires_at < now()$$
-);
-```
+### 2. `supabase/functions/parse-wanted-list/index.ts`
 
-### 2. `src/hooks/useWantedContacts.ts`
+- Rozszerzyc o obsluge `contentType` w body (`"text" | "csv" | "pdf" | "image"`)
+- Dla `image`: uzyc multimodalnego promptu z `image_url` (ten sam pattern co w `parse-contacts-list`)
+- Dla `csv`/`pdf`: tekst trafia do user prompt jako dane do analizy
+- Dodac walidacje rozmiaru contentu (max 5MB)
+- System prompt bez zmian -- AI i tak rozpozna tabelaryczne dane
 
-- Dodac `expires_at: string | null` do interfejsu `WantedContact`
-- W `useCreateWantedContact` dodac `expires_at` do inputu
-
-### 3. `src/components/wanted/WantedContactModal.tsx`
-
-- Dodac pole "Termin poszukiwania" -- Select z opcjami:
-  - Miesiac (oblicza `now + 1 month`)
-  - Kwartal (`now + 3 months`)
-  - Rok (`now + 12 months`)
-  - Bez limitu (`null`)
-- Wyslac obliczona date jako `expires_at`
-
-### 4. `src/components/wanted/WantedContactCard.tsx`
-
-- Wyswietlic termin wygasniecia (np. "Do: 15 mar 2026") lub "Bez limitu"
-- Jesli blisko terminu (< 7 dni) -- wyroznic kolorem (pomaranczowy/czerwony)
-- Dodac status `expired` do label/badge: "Wygasly"
-
-### 5. `src/components/wanted/ImportWantedDialog.tsx`
-
-- Dodac pole terminu do etapu importu (wspolne dla calej listy lub per pozycja)
-- Przekazac `expires_at` przy zatwierdzaniu
-
-### 6. `src/pages/WantedContacts.tsx`
-
-- Dodac status "Wygasle" do filtra statusow
-- Domyslnie ukryc wygasle (filtr na 'all' nie pokazuje expired, osobna opcja "Archiwum")
-- Opcjonalnie: dodac licznik wygaslych w statystykach
-
-### 7. `src/components/contacts/ContactWantedTab.tsx`
-
-- Brak zmian -- korzysta z `WantedContactCard` ktory juz zostanie zaktualizowany
-
-## Obliczanie daty
-
-W formularzu uzytkownik wybiera okres, a frontend oblicza date:
+## Uklad UI (etap input)
 
 ```text
-"1month"  → new Date(); date.setMonth(date.getMonth() + 1)
-"3months" → new Date(); date.setMonth(date.getMonth() + 3)  
-"1year"   → new Date(); date.setFullYear(date.getFullYear() + 1)
-"none"    → null
+Kto szuka *
+[select kontakt]
+
+Wklej liste lub wczytaj plik
+[textarea - wklej tekst...]
+
+[przycisk: Wczytaj plik (CSV, Excel, PDF, zdjecie)]
+[jesli plik: badge z nazwa pliku + X do usuniecia]
+
+Termin poszukiwania
+[select: miesiac / kwartal / rok / bez limitu]
+
+[Anuluj] [Analizuj z AI]
 ```
 
-## Archiwum
+Jesli uzytkownik wkleil tekst I wczytal plik -- priorytet ma plik.
 
-Wygasle pozycje nie sa usuwane -- zmieniaja status na "expired". Uzytkownik moze je zobaczyc wybierajac filtr "Wygasle" na stronie poszukiwanych. Karty wygaslych sa wyszarzone i nie maja przyciskow akcji.
+## Szczegoly techniczne
+
+### Konwersja plikow (frontend)
+
+Wzorowane na istniejacym `useAIImport.ts` (linia 282-302):
+
+- CSV: `await file.text()`
+- XLSX: `XLSX.read(arrayBuffer)` -> `XLSX.utils.sheet_to_csv(sheet)`
+- PDF: `await file.text()` (tekst z PDF)
+- Obrazy: `FileReader.readAsDataURL(file)` -> base64 string
+
+### Edge function - obsluga image
+
+Dla `contentType === 'image'`, wiadomosc do AI bedzie miala format multimodalny:
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "prompt..." },
+    { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
+  ]
+}
+```
+
+Ten sam pattern co w istniejacym `parse-contacts-list/index.ts` (linia 118-127).
