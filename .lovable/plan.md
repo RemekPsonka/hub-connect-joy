@@ -1,91 +1,90 @@
 
-# Sprawdzanie w bazie i uzupelnianie danych AI dla poszukiwanych
+
+# Scalanie zaznaczonych kontaktow
 
 ## Co sie zmieni
 
-Na kartach poszukiwanych (zarowno w formularzu dodawania jak i w imporcie listy) pojawia sie dwa nowe przyciski:
-
-1. **"Sprawdz w bazie"** (ikona Database/Search) -- wyszukuje w tabeli `contacts` i `companies` osoby/firmy o podobnej nazwie. Jesli znajdzie -- pokazuje wyniki z mozliwoscia dopasowania.
-2. **"Uzupelnij dane AI"** (ikona Sparkles/Globe) -- wywoluje istniejaca edge function `enrich-person-data` (Perplexity + Firecrawl), zwraca uzupelnione dane i krotki opis osoby. Dane trafiaja do pol karty -- uzytkownik musi zatwierdzic.
+Po zaznaczeniu 2+ kontaktow w tabeli pojawi sie nowy przycisk **"Scal zaznaczone"**. Po kliknieciu otwiera sie modal z porownaniem danych obu kontaktow -- uzytkownik dla kazdego pola wybiera ktora wartosc zachowac (lub obie, jesli pole to wspiera). Po zatwierdzeniu kontakt "glowny" zostaje zaktualizowany wybranymi wartosciami, a duplikat jest dezaktywowany (soft delete).
 
 ## Zmiany w plikach
 
-### 1. `src/components/wanted/WantedContactModal.tsx`
+### 1. Nowy komponent: `src/components/contacts/BulkMergeContactModal.tsx`
 
-- Dodac dwa przyciski w sekcji "Kogo szukamy":
-  - **"Sprawdz w bazie"**: wywoluje `check-duplicate-contact` z `person_name` (split na first/last) + `company_name`. Wyswietla wynik inline pod formularzem (alert z linkiem do kontaktu lub "nie znaleziono").
-  - **"Uzupelnij dane AI"**: wywoluje `enrich-person-data` z `first_name`, `last_name`, `company`. Wynik uzupelnia pola: `person_position`, `person_context`, `company_industry`. Pokazuje opis osoby w polu `person_context` lub nowym polu podgladu. Uzytkownik widzi zmiany i moze je edytowac przed zapisaniem.
-- Nowe stany: `isChecking`, `checkResult`, `isEnriching`, `enrichResult`
-- Wynik sprawdzenia bazy: zielony badge "Znaleziono: Jan Kowalski (ABC Sp. z o.o.)" z linkiem, lub szary "Nie znaleziono w bazie"
-- Wynik wzbogacania AI: pola formularza zostaja automatycznie wypelnione danymi z AI, toast "Uzupelniono dane z AI"
+Modal scalania zaznaczonych kontaktow:
+- Pobiera pelne dane obu kontaktow z bazy (select *)
+- Dla kazdego pola wyswietla wartosc z kontaktu A i kontaktu B
+- Uzytkownik klika na wartosc ktora chce zachowac (radio-like UI) -- zaznaczona wartosc jest podswietlona
+- Pola obslugiwane:
+  - **Proste (wybierz jedno):** full_name, first_name, last_name, email, phone, phone_business, company, position, city, linkedin_url, source, address, email_secondary, address_secondary, notes, profile_summary
+  - **Laczenie:** tags (checkboxy, domyslnie wszystkie), notes (opcja polaczenia)
+  - **Automatyczne:** primary_group_id (wybor), company_id, relationship_strength (wyzszy)
+- Podglad wyniku scalenia na dole
+- Przyciski: "Anuluj", "Scal kontakty"
+- Po scaleniu: kontakt "przegrany" dostaje is_active=false, kontakt "zwyciezca" aktualizowany
+- Powiazane rekordy (needs, offers, tasks, consultations) przenoszone na zwyciezce
 
-### 2. `src/components/wanted/ImportWantedDialog.tsx`
+### 2. Nowa edge function: `supabase/functions/bulk-merge-contacts/index.ts`
 
-- Na kazdej karcie review (etap 2) dodac dwa przyciski obok "Odrzuc"/"Zatwierdz":
-  - **"Sprawdz"** (ikona Search): ten sam mechanizm co wyzej
-  - **"AI"** (ikona Sparkles): wywoluje `enrich-person-data`, uzupelnia pola karty
-- Wyniki wyswietlane inline na karcie:
-  - Sprawdzenie bazy: maly alert pod kartą z wynikiem
-  - AI: pola karty aktualizowane automatycznie + description dodane do `person_context`
-- Nowe pola w `ReviewItem`: `_checkResult`, `_isChecking`, `_isEnriching`, `_enrichResult`
+- Przyjmuje: `primaryContactId`, `secondaryContactId`, `mergedFields` (obiekt z wybranymi wartosciami)
+- Weryfikuje auth i dostep do obu kontaktow
+- Aktualizuje primary contact wybranymi polami
+- Przenosi powiazane rekordy z secondary na primary:
+  - `needs` (contact_id)
+  - `offers` (contact_id)
+  - `task_contacts` (contact_id)
+  - `consultations` (contact_id)
+  - `contact_activity_log` (contact_id)
+- Soft-delete secondary contact (is_active = false)
+- Loguje scalenie w `contact_merge_history` i `contact_activity_log`
 
-### 3. Nowy komponent: `src/components/wanted/WantedCheckActions.tsx`
+### 3. Modyfikacja: `src/components/contacts/ContactsTable.tsx`
 
-Wspolny komponent z dwoma przyciskami (uzyty i w modalu i w imporcie):
-- Props: `personName`, `companyName`, `onCheckResult`, `onEnrichResult`, `isChecking`, `isEnriching`
-- Przycisk "Sprawdz w bazie": split `personName` na first/last, invoke `check-duplicate-contact`
-- Przycisk "Uzupelnij AI": invoke `enrich-person-data` z danymi
-- Wyswietlanie wynikow: inline pod przyciskami
+- Dodac przycisk "Scal zaznaczone" (ikona Merge/GitMerge) obok "Usun zaznaczone" -- widoczny tylko gdy zaznaczono dokladnie 2 kontakty
+- Stan `isMergeOpen` do kontroli modalu
+- Po scaleniu: odswiezyc liste i wyzerowac zaznaczenie
 
-## Logika sprawdzania w bazie
+### 4. Modyfikacja: `src/hooks/useContacts.ts`
 
-```text
-1. Split person_name na first_name + last_name
-2. Invoke check-duplicate-contact({ contact: { first_name, last_name } })
-3. Jesli isDuplicate === true: pokazac dane existingContact (imie, firma, link)
-4. Jesli nie: szukac po company_name w tabeli companies (ilike)
-5. Wyswietlic wynik
-```
+- Dodac `useBulkMergeContacts` mutation hook:
+  - Wywoluje edge function `bulk-merge-contacts`
+  - Invaliduje queries kontaktow
+  - Toast sukcesu
 
-## Logika uzupelniania AI
-
-```text
-1. Invoke enrich-person-data({ first_name, last_name, company })
-2. Z odpowiedzi wyciagnac: position, bio (summary), industry
-3. Uzupelnic pola formularza:
-   - person_position <- enriched position (jesli puste)
-   - person_context <- enriched bio/summary
-   - company_industry <- enriched industry (jesli puste)
-4. Toast "Uzupelniono dane"
-5. Uzytkownik widzi zmiany i moze edytowac
-```
-
-## Szczegoly UI
-
-### Przyciski na karcie (Import)
-```text
-[Sprawdz w bazie] [Uzupelnij AI]  ...  [Odrzuc] [Zatwierdz]
-```
-
-### Przyciski w modalu (Dodawanie)
-Dodane pod sekcja "Kogo szukamy", przed "Dodatkowe":
-```text
-[Sprawdz w naszej bazie]  [Uzupelnij dane AI]
-```
-
-### Wynik sprawdzenia (inline)
-- Znaleziono: zielony banner z imieniem i firma, link "Zobacz kontakt"
-- Nie znaleziono: szary tekst "Nie znaleziono podobnego kontaktu w bazie"
-
-### Wynik AI (inline)
-- Pola formularza zostaja zaktualizowane (podswietlenie zmian opcjonalne)
-- Krotki opis osoby wstawiony do `person_context`
-- Toast potwierdzajacy
-
-## Kolejnosc implementacji
+## UI modalu scalania
 
 ```text
-1. WantedCheckActions.tsx (wspolny komponent)
-2. WantedContactModal.tsx (integracja w formularzu dodawania)
-3. ImportWantedDialog.tsx (integracja na kartach review)
+Scalanie kontaktow
+Wybierz wartosci ktore chcesz zachowac w scalonym kontakcie.
+
+Pole            | Kontakt A (wybor)     | Kontakt B (wybor)
+----------------|----------------------|--------------------
+Imie i nazwisko | [x] Dominik Leszcz.. | [ ] Dominik Leszcz..
+Email           | [x] d.leszczynski@.. | [ ] d.leszczynski@..
+Telefon pryw.   | [x] +48601443...     | [ ] +48 601 44...
+Firma           | [ ] -                | [ ] -
+Stanowisko      | [ ] -                | [ ] -
+Grupa           | [x] Czlonkowie CC    | [ ] Baza kont. bizn.
+Tagi            | [v] tag1  [v] tag2   | [v] tag3           (checkboxy)
+Notatki         | [x] Zachowaj A       | [ ] Zachowaj B  [ ] Polacz
+
+                              [Anuluj]  [Scal kontakty]
 ```
+
+Domyslnie zaznaczony jest kontakt z bardziej kompletnymi danymi (wiecej wypelnionych pol). Dla pol gdzie obie wartosci sa identyczne -- automatycznie zaznaczone, bez mozliwosci wyboru.
+
+## Logika przenoszenia powiazanych rekordow
+
+Edge function po scaleniu przeniesie wszystkie powiazane rekordy z kontaktu B na kontakt A:
+
+```text
+UPDATE needs SET contact_id = primaryId WHERE contact_id = secondaryId
+UPDATE offers SET contact_id = primaryId WHERE contact_id = secondaryId
+UPDATE task_contacts SET contact_id = primaryId WHERE contact_id = secondaryId
+UPDATE consultations SET contact_id = primaryId WHERE contact_id = secondaryId
+UPDATE contact_activity_log SET contact_id = primaryId WHERE contact_id = secondaryId
+```
+
+## Ograniczenia
+
+- Scalanie dokladnie 2 kontaktow (nie wiecej) -- przy 3+ przycisk nieaktywny z tooltipem "Zaznacz dokladnie 2 kontakty"
+- Scalanie nieodwracalne (ale secondary kontakt pozostaje w bazie jako nieaktywny)
