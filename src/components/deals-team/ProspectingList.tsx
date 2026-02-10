@@ -53,10 +53,17 @@ export function ProspectingList({ teamId }: Props) {
   const [notesText, setNotesText] = useState('');
   const [convertProspect, setConvertProspect] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
-  const filtered = statusFilter === 'all'
-    ? prospects
-    : prospects.filter((p) => p.prospecting_status === statusFilter);
+  const uniqueSources = Array.from(
+    new Set(prospects.map((p) => p.source_event).filter(Boolean))
+  ) as string[];
+
+  const filtered = prospects.filter(
+    (p) =>
+      (statusFilter === 'all' || p.prospecting_status === statusFilter) &&
+      (sourceFilter === 'all' || p.source_event === sourceFilter)
+  );
 
   const handleStatusChange = (id: string, status: ProspectingStatus) => {
     updateMutation.mutate({ id, teamId, prospecting_status: status });
@@ -95,8 +102,8 @@ export function ProspectingList({ teamId }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
-      <div className="flex items-center gap-2">
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filtruj status" />
@@ -113,6 +120,25 @@ export function ProspectingList({ teamId }: Props) {
             })}
           </SelectContent>
         </Select>
+
+        {uniqueSources.length > 1 && (
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Filtruj źródło" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Wszystkie źródła</SelectItem>
+              {uniqueSources.map((src) => {
+                const count = prospects.filter((p) => p.source_event === src).length;
+                return (
+                  <SelectItem key={src} value={src}>
+                    {src} ({count})
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* List */}

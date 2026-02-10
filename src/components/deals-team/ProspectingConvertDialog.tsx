@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, CheckCircle, UserPlus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { MeetingProspect } from '@/hooks/useMeetingProspects';
+
+interface FoundContact {
+  id: string;
+  full_name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  position: string | null;
+}
 
 interface Props {
   open: boolean;
@@ -42,6 +52,43 @@ export function ProspectingConvertDialog({
   const [category, setCategory] = useState<'lead' | 'top' | 'hot'>('lead');
   const [loading, setLoading] = useState(false);
 
+  // Duplicate detection
+  const [duplicates, setDuplicates] = useState<FoundContact[]>([]);
+  const [searchingDuplicates, setSearchingDuplicates] = useState(false);
+  const [mode, setMode] = useState<'new' | string>('new'); // 'new' or contact ID
+
+  useEffect(() => {
+    if (!open || !tenantId || !prospect.full_name) return;
+
+    const search = async () => {
+      setSearchingDuplicates(true);
+      try {
+        let query = supabase
+          .from('contacts')
+          .select('id, full_name, company, email, phone, position')
+          .eq('tenant_id', tenantId)
+          .ilike('full_name', `%${prospect.full_name.trim()}%`)
+          .limit(5);
+
+        const { data } = await query;
+        setDuplicates(data || []);
+        // Auto-select first duplicate if found
+        if (data && data.length > 0) {
+          setMode(data[0].id);
+        } else {
+          setMode('new');
+        }
+      } catch {
+        setDuplicates([]);
+        setMode('new');
+      } finally {
+        setSearchingDuplicates(false);
+      }
+    };
+
+    search();
+  }, [open, tenantId, prospect.full_name]);
+
   const handleConvert = async () => {
     if (!tenantId || !directorId) {
       toast.error('Brak autoryzacji');
@@ -50,56 +97,92 @@ export function ProspectingConvertDialog({
 
     setLoading(true);
     try {
-      // 1. Create contact in CRM
-      const { data: contact, error: contactError } = await supabase
-        .from('contacts')
-        .insert({
-          full_name: prospect.full_name,
-          company: prospect.company,
-          position: prospect.position,
-          email: email || null,
-          phone: phone || null,
-          linkedin_url: linkedin || null,
-          tenant_id: tenantId,
-          director_id: directorId,
-          source: `Prospecting: ${prospect.source_event || 'Import'}`,
-          met_source: prospect.source_event || null,
-        })
-        .select('id')
-        .single();
+      let contactId: string;
 
-      if (contactError) throw contactError;
+      if (mode !== 'new') {
+        // MERGE: update existing contact with missing fields
+        contactId = mode;
+        const updates: Record<string, string> = {};
+        const existing = duplicates.find((d) => d.id === contactId);
 
-      // 2. Add to deal team as LEAD/TOP/HOT
-      const { data: teamContact, error: teamError } = await supabase
+        if (email && !existing?.email) updates.email = email;
+        if (phone && !existing?.phone) updates.phone = phone;
+        if (linkedin) updates.linkedin_url = linkedin;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('contacts').update(updates).eq('id', contactId);
+        }
+      } else {
+        // CREATE new contact
+        const { data: contact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            full_name: prospect.full_name,
+            company: prospect.company,
+            position: prospect.position,
+            email: email || null,
+            phone: phone || null,
+            linkedin_url: linkedin || null,
+            tenant_id: tenantId,
+            director_id: directorId,
+            source: `Prospecting: ${prospect.source_event || 'Import'}`,
+            met_source: prospect.source_event || null,
+          })
+          .select('id')
+          .single();
+
+        if (contactError) throw contactError;
+        contactId = contact.id;
+      }
+
+      // Check if contact already in team
+      const { data: existingTeamContact } = await supabase
         .from('deal_team_contacts')
-        .insert({
-          team_id: teamId,
-          contact_id: contact.id,
-          tenant_id: tenantId,
-          category,
-          priority: 'medium',
-          status: 'active',
-        })
         .select('id')
-        .single();
+        .eq('team_id', teamId)
+        .eq('contact_id', contactId)
+        .maybeSingle();
 
-      if (teamError) throw teamError;
+      let teamContactId: string;
 
-      // 3. Update meeting prospect as converted
+      if (existingTeamContact) {
+        teamContactId = existingTeamContact.id;
+        toast.info('Kontakt już był w zespole — zaktualizowano prospekta');
+      } else {
+        const { data: teamContact, error: teamError } = await supabase
+          .from('deal_team_contacts')
+          .insert({
+            team_id: teamId,
+            contact_id: contactId,
+            tenant_id: tenantId,
+            category,
+            priority: 'medium',
+            status: 'active',
+          })
+          .select('id')
+          .single();
+
+        if (teamError) throw teamError;
+        teamContactId = teamContact.id;
+      }
+
+      // Mark prospect as converted
       await (supabase as any)
         .from('meeting_prospects')
         .update({
           prospecting_status: 'converted',
-          converted_to_contact_id: contact.id,
-          converted_to_team_contact_id: teamContact.id,
+          converted_to_contact_id: contactId,
+          converted_to_team_contact_id: teamContactId,
           converted_at: new Date().toISOString(),
         })
         .eq('id', prospectId);
 
       queryClient.invalidateQueries({ queryKey: ['meeting-prospects', teamId] });
       queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', teamId] });
-      toast.success(`${prospect.full_name} skonwertowany na kontakt (${category.toUpperCase()})`);
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+
+      const action = mode !== 'new' ? 'scalony' : 'utworzony';
+      toast.success(`${prospect.full_name} — kontakt ${action}, dodany jako ${category.toUpperCase()}`);
       onOpenChange(false);
     } catch (error: any) {
       toast.error(`Błąd konwersji: ${error.message}`);
@@ -110,12 +193,13 @@ export function ProspectingConvertDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Konwertuj na kontakt CRM</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Prospect info */}
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="font-medium">{prospect.full_name}</p>
             <div className="text-sm text-muted-foreground">
@@ -124,21 +208,70 @@ export function ProspectingConvertDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@firma.pl" />
+          {/* Duplicate detection */}
+          {searchingDuplicates ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Szukam duplikatów...
+            </div>
+          ) : duplicates.length > 0 ? (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Znaleziono podobne kontakty</Label>
+              <RadioGroup value={mode} onValueChange={setMode}>
+                {duplicates.map((dup) => (
+                  <div
+                    key={dup.id}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      mode === dup.id ? 'border-primary bg-primary/5' : 'border-border'
+                    }`}
+                    onClick={() => setMode(dup.id)}
+                  >
+                    <RadioGroupItem value={dup.id} id={dup.id} className="mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-medium text-sm">{dup.full_name}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {dup.company && <span>{dup.company}</span>}
+                        {dup.email && <span> • {dup.email}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div
+                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    mode === 'new' ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                  onClick={() => setMode('new')}
+                >
+                  <RadioGroupItem value="new" id="new-contact" className="mt-0.5" />
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Utwórz nowy kontakt</span>
+                  </div>
+                </div>
+              </RadioGroup>
+            </div>
+          ) : null}
+
+          {/* Contact fields */}
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@firma.pl" />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefon</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+48..." />
+            </div>
+            <div className="space-y-2">
+              <Label>LinkedIn</Label>
+              <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Telefon</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+48..." />
-          </div>
-
-          <div className="space-y-2">
-            <Label>LinkedIn</Label>
-            <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
-          </div>
-
+          {/* Category */}
           <div className="space-y-2">
             <Label>Kategoria na Kanban</Label>
             <div className="flex gap-2">
@@ -162,7 +295,7 @@ export function ProspectingConvertDialog({
           </Button>
           <Button onClick={handleConvert} disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Konwertuj
+            {mode !== 'new' ? 'Scal i konwertuj' : 'Konwertuj'}
           </Button>
         </DialogFooter>
       </DialogContent>
