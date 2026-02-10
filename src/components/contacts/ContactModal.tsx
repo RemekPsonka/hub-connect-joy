@@ -44,7 +44,9 @@ const contactSchema = z.object({
   first_name: z.string().min(1, 'Imię jest wymagane').max(50, 'Maksymalnie 50 znaków'),
   last_name: z.string().min(1, 'Nazwisko jest wymagane').max(50, 'Maksymalnie 50 znaków'),
   email: z.string().email('Nieprawidłowy adres email').max(255).optional().or(z.literal('')),
+  email_secondary: z.string().email('Nieprawidłowy adres email').max(255).optional().or(z.literal('')),
   phone: z.string().max(20, 'Maksymalnie 20 znaków').optional().or(z.literal('')),
+  phone_business: z.string().max(20, 'Maksymalnie 20 znaków').optional().or(z.literal('')),
   company: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
   position: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
   linkedin_url: z.string()
@@ -56,6 +58,7 @@ const contactSchema = z.object({
     .or(z.literal('')),
   primary_group_id: z.string().optional().or(z.literal('')),
   city: z.string().max(100, 'Maksymalnie 100 znaków').optional().or(z.literal('')),
+  address: z.string().max(255, 'Maksymalnie 255 znaków').optional().or(z.literal('')),
   source: z.string().optional().or(z.literal('')),
   tags: z.array(z.string()).optional(),
   notes: z.string().max(2000, 'Maksymalnie 2000 znaków').optional().or(z.literal('')),
@@ -121,12 +124,15 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
       first_name: '',
       last_name: '',
       email: '',
+      email_secondary: '',
       phone: '',
+      phone_business: '',
       company: '',
       position: '',
       linkedin_url: '',
       primary_group_id: '',
       city: '',
+      address: '',
       source: '',
       tags: [],
       notes: '',
@@ -140,12 +146,15 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
         first_name: contact.first_name || '',
         last_name: contact.last_name || '',
         email: contact.email || '',
+        email_secondary: (contact as any).email_secondary || '',
         phone: contact.phone || '',
+        phone_business: (contact as any).phone_business || '',
         company: contact.company || '',
         position: contact.position || '',
         linkedin_url: contact.linkedin_url || '',
         primary_group_id: contact.primary_group_id || '',
         city: contact.city || '',
+        address: (contact as any).address || '',
         source: contact.source || '',
         tags: contact.tags || [],
         notes: contact.notes || '',
@@ -156,12 +165,15 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
         first_name: '',
         last_name: '',
         email: '',
+        email_secondary: '',
         phone: '',
+        phone_business: '',
         company: '',
         position: '',
         linkedin_url: '',
         primary_group_id: '',
         city: '',
+        address: '',
         source: '',
         tags: [],
         notes: '',
@@ -187,12 +199,15 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
       last_name: data.last_name,
       full_name: fullName,
       email: data.email || null,
+      email_secondary: data.email_secondary || null,
       phone: data.phone || null,
+      phone_business: data.phone_business || null,
       company: data.company || null,
       position: data.position || null,
       linkedin_url: normalizedLinkedinUrl,
       primary_group_id: data.primary_group_id || null,
       city: data.city || null,
+      address: data.address || null,
       source: data.source || null,
       notes: data.notes || null,
       tags: data.tags || [],
@@ -435,6 +450,50 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
                 </TabsContent>
 
                 <TabsContent value="additional" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone_business"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefon służbowy</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+48 33 506 54 61" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="email_secondary"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email dodatkowy</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="jan@prywatny.pl" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Adres</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ul. Przykładowa 10, 00-001 Warszawa" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}

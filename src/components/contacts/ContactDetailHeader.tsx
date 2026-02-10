@@ -125,6 +125,16 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
                   <span>{contact.phone}</span>
                 </a>
               )}
+              {(contact as any).phone_business && (
+                <a 
+                  href={`tel:${(contact as any).phone_business}`}
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  <span className="text-xs text-muted-foreground/70">służb.</span>
+                  <span>{(contact as any).phone_business}</span>
+                </a>
+              )}
               {contact.linkedin_url && (
                 <a 
                   href={contact.linkedin_url}
@@ -134,6 +144,16 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
                 >
                   <Linkedin className="h-3.5 w-3.5" />
                   <span>LinkedIn</span>
+                </a>
+              )}
+              {(contact as any).email_secondary && (
+                <a 
+                  href={`mailto:${(contact as any).email_secondary}`}
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  <span className="text-xs text-muted-foreground/70">dod.</span>
+                  <span>{(contact as any).email_secondary}</span>
                 </a>
               )}
             </div>

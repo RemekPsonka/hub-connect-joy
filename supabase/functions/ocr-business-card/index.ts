@@ -69,8 +69,8 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi pol
 - position: Stanowisko w firmie, np. Dyrektor, Manager, Prezes (string lub null) - to NIE jest tytuł naukowy!
 - company: Nazwa firmy (string lub null)
 - email: Adres email (string lub null)
-- phone: Główny numer telefonu (string lub null)
-- mobile: Numer komórkowy jeśli inny niż główny (string lub null)
+- phone: Numer stacjonarny/firmowy (zaczynający się od +48 1x, 2x, 3x, 4x, np. +48 33 506 54 61). Jeśli jest tylko jeden numer i jest komórkowy, ustaw null (string lub null)
+- mobile: Numer komórkowy (zaczynający się od +48 5xx, 6xx, 7xx, 8xx, np. +48 660 919 504). Jeśli jest tylko jeden numer, wpisz go tutaj (string lub null)
 - website: Strona www firmy bez http/https (string lub null)
 - address: Pełny adres - ulica, numer, miasto, kod (string lub null)
 - city: Samo miasto (string lub null)
@@ -80,11 +80,16 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) z następującymi pol
 - notes: Inne informacje z wizytówki, np. slogan, specjalizacje (string lub null)
 - profile_summary: Krótkie profesjonalne podsumowanie osoby (2-3 zdania) na podstawie stanowiska, firmy i tytułów. Opisz kim jest ta osoba zawodowo i jaką wartość może wnieść do sieci kontaktów. (string, wymagane)
 
-PRZYKŁADY rozdzielania:
+PRZYKŁADY rozdzielania tytułów:
 - "dr hab. n. med. Jan Kowalski, prof. UJ" → title: "dr hab. n. med., prof. UJ", first_name: "Jan", last_name: "Kowalski"
 - "mgr inż. Anna Nowak" → title: "mgr inż.", first_name: "Anna", last_name: "Nowak"
 - "Piotr Wiśniewski MBA" → title: "MBA", first_name: "Piotr", last_name: "Wiśniewski"
 - "Jan Kowalski" → title: null, first_name: "Jan", last_name: "Kowalski"
+
+PRZYKŁADY rozdzielania telefonów:
+- Wizytówka z "tel. 33 50 65 461" i "kom. 660 919 504" → phone: "+48 33 50 65 461", mobile: "+48 660 919 504"
+- Wizytówka z tylko "660 919 504" → phone: null, mobile: "+48 660 919 504"
+- Wizytówka z tylko "33 50 65 461" → phone: "+48 33 50 65 461", mobile: null
 
 PRZYKŁAD profile_summary:
 - Dla "dr hab. n. med. Bartłomiej Guzik, prof. UJ, Dyrektor Szpitala Wojskowego" → "Doświadczony lekarz i naukowiec z tytułem profesora UJ. Jako Dyrektor Szpitala Wojskowego łączy kompetencje medyczne z zarządczymi. Potencjalny partner w projektach zdrowotnych i edukacji medycznej."
