@@ -8,7 +8,8 @@ import { LeadCard } from './LeadCard';
 import { ProspectCard } from './ProspectCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
-import type { DealCategory } from '@/types/dealTeam';
+import { DealContactDetailSheet } from './DealContactDetailSheet';
+import type { DealCategory, DealTeamContact } from '@/types/dealTeam';
 
 interface KanbanBoardProps {
   teamId: string;
@@ -20,6 +21,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
 
   // Filter contacts by category
   const hotContacts = useMemo(
@@ -70,7 +72,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
         >
           {hotContacts.map((contact) => (
-            <HotLeadCard key={contact.id} contact={contact} teamId={teamId} />
+            <HotLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
           ))}
         </KanbanColumn>
 
@@ -84,7 +86,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
         >
           {topContacts.map((contact) => (
-            <TopLeadCard key={contact.id} contact={contact} teamId={teamId} />
+            <TopLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
           ))}
         </KanbanColumn>
 
@@ -98,7 +100,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           emptyMessage="Brak leadów. Dodaj kontakty z CRM →"
         >
           {leadContacts.map((contact) => (
-            <LeadCard key={contact.id} contact={contact} teamId={teamId} />
+            <LeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
           ))}
         </KanbanColumn>
 
@@ -131,6 +133,14 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         open={showAddProspect}
         onOpenChange={setShowAddProspect}
         teamId={teamId}
+      />
+
+      {/* Contact Detail Sheet */}
+      <DealContactDetailSheet
+        contact={selectedContact}
+        teamId={teamId}
+        open={selectedContact !== null}
+        onOpenChange={(open) => !open && setSelectedContact(null)}
       />
     </>
   );
