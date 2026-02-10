@@ -75,20 +75,19 @@ serve(async (req) => {
     }
 
     // ============= PHONE HANDLING =============
-    // Private phone - NEVER overwrite! It stays as is
-    // Business card phone goes to phone_business
-    if (newContactData.phone) {
-      if (!existingContact.phone_business) {
-        mergedData.phone_business = newContactData.phone;
-        console.log(`Setting phone_business to: ${newContactData.phone}`);
-      } else {
-        console.log(`phone_business already exists (${existingContact.phone_business}), keeping it`);
-      }
+    // phone = numer prywatny/komórkowy (priorytet)
+    // phone_business = numer służbowy/stacjonarny
+
+    // Fill phone (mobile) if empty on existing contact
+    if (newContactData.phone && !existingContact.phone) {
+      mergedData.phone = newContactData.phone;
+      console.log(`Setting phone to: ${newContactData.phone}`);
     }
-    
-    // If newContactData explicitly has phone_business, use that directly
+
+    // Fill phone_business if empty on existing contact
     if (newContactData.phone_business && !existingContact.phone_business) {
       mergedData.phone_business = newContactData.phone_business;
+      console.log(`Setting phone_business to: ${newContactData.phone_business}`);
     }
 
     // ============= EMAIL HANDLING =============
