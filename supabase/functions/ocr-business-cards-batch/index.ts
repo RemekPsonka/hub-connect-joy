@@ -87,6 +87,7 @@ Dla KAŻDEJ wizytówki wyekstrahuj:
 - linkedin_url: LinkedIn URL
 - notes: Inne informacje (slogan, specjalizacje)
 - profile_summary: 2-3 zdania profesjonalnego opisu osoby
+- bounding_box: { x: procent_od_lewej, y: procent_od_gory, w: procent_szerokosci, h: procent_wysokosci } - przybliżone współrzędne wizytówki na zdjęciu w PROCENTACH (0-100). Np. jeśli wizytówka zaczyna się w 10% od lewej, 20% od góry i zajmuje 40% szerokości i 30% wysokości: { x: 10, y: 20, w: 40, h: 30 }
 
 PRZYKŁADY rozdzielania tytułów:
 - "dr hab. n. med. Jan Kowalski" → title: "dr hab. n. med.", first_name: "Jan", last_name: "Kowalski"

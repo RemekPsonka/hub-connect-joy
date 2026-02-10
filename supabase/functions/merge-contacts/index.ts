@@ -87,7 +87,7 @@ serve(async (req) => {
     // 5. Company, position - update only if empty
 
     // Fields that should only be filled if empty (not overwritten)
-    const simpleFields = ['company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id'];
+    const simpleFields = ['company', 'position', 'city', 'linkedin_url', 'source', 'primary_group_id', 'business_card_image_url'];
 
     for (const field of simpleFields) {
       if (!existingContact[field] && newContactData[field]) {
