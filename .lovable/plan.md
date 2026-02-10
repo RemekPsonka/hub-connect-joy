@@ -1,108 +1,54 @@
 
-# Ostatnia iteracja: DnD sortowanie, Auto-assign, Raport PDF, Szablony projektow
+
+# Dodanie brakujących triggerów bazodanowych
 
 ## Co zostanie zbudowane
 
-### 1. Drag-and-drop sortowanie zadań (Faza 6.1)
-Reorderowanie zadań w widoku listy projektu oraz subtasków w TaskDetailSheet za pomocą @dnd-kit (już zainstalowany). Po przeciągnięciu -- batch update `sort_order` w bazie.
+Trzy triggery bazodanowe zapewniające automatyzację workflow:
 
-### 2. Auto-assign (Faza 4.3)
-Nowa kolumna `auto_assign_mode` w tabeli `projects` + trigger DB na INSERT tasks. Gdy projekt ma włączony auto-assign, nowe zadanie jest automatycznie przypisywane do członka zespołu z najmniejszą liczbą aktywnych zadań. UI: przełącznik w ProjectOverviewTab.
-
-### 3. Raport projektu z eksportem PDF (Faza 5.3)
-Przycisk "Eksportuj PDF" w nagłówku ProjectDetail. Raport zawiera: dane projektu, postęp zadań, kamienie milowe, budżet czasu vs rzeczywisty, listę ryzyk (overdue, brak przypisania). Generowany przez jspdf (już zainstalowany).
-
-### 4. Szablony projektów -- UI zarządzania (Faza 3.4)
-Interfejs tworzenia szablonów (nazwa + lista predefiniowanych sekcji/zadań zapisana w `template_data` JSONB -- kolumna już istnieje). Opcja "Utwórz z szablonu" w dialogu tworzenia projektu.
+1. **handle_recurring_task** -- po zmianie statusu zadania na `completed`, jeśli zadanie ma `recurrence_rule` (JSONB), automatycznie tworzy nowe zadanie z wyliczonym kolejnym `due_date`
+2. **on_task_comment_notify** -- po dodaniu komentarza do zadania, generuje powiadomienie dla właściciela zadania (i przypisanego)
+3. **on_task_status_notify** -- po zmianie statusu zadania, generuje powiadomienie dla właściciela i przypisanego
 
 ---
 
-## Szczegóły techniczne
+## Szczegoly techniczne
 
-### Krok 1: Migracja bazy danych
+### Jedna migracja SQL z trzema funkcjami i triggerami:
 
-Jedna migracja:
-- Kolumna `auto_assign_mode` (TEXT, nullable) w tabeli `projects` -- wartości: `round_robin`, `load_balance`, lub NULL (wyłączony)
-- Trigger `auto_assign_new_task` na INSERT do `tasks`: jeśli `project_id` jest ustawiony i projekt ma `auto_assign_mode`, przypisz `owner_id` do członka projektu z najmniejszą liczbą pending/in_progress zadań
+### 1. handle_recurring_task
 
-### Krok 2: Drag-and-drop sortowanie
+- **Trigger:** AFTER UPDATE na `tasks`, warunek: `OLD.status != 'completed' AND NEW.status = 'completed' AND NEW.recurrence_rule IS NOT NULL`
+- **Logika funkcji:**
+  - Parsuje `recurrence_rule` JSONB (format: `{"frequency": "daily|weekly|monthly", "interval": 1}`)
+  - Wylicza nowy `due_date` na podstawie `NEW.due_date + interval`
+  - INSERT nowego zadania z tym samym `title`, `description`, `priority`, `project_id`, `section_id`, `owner_id`, `assigned_to`, `tenant_id`, `recurrence_rule`, nowym `due_date`, status `pending`
+  - Ustawia `source_task_id` na `NEW.id` (powiazanie z oryginalem)
 
-**Nowy hook: `useTaskReorder.ts`**
-- Funkcja `reorderTasks(taskIds: string[])` -- batch update `sort_order` w tabeli `tasks`
-- Optymistyczna aktualizacja w React Query cache
+### 2. on_task_comment_notify
 
-**Nowy komponent: `SortableTaskItem.tsx`**
-- Wrapper wokół `TaskRow` z `useSortable` z @dnd-kit/sortable
-- Obsługa stylu drag overlay
+- **Trigger:** AFTER INSERT na `task_comments`
+- **Logika funkcji:**
+  - Pobiera zadanie (`task_id`) z tabeli `tasks`
+  - Generuje powiadomienia w `task_notifications` dla:
+    - `owner_id` zadania (jesli != autor komentarza)
+    - `assigned_to` zadania (jesli != autor i != owner)
+  - Typ: `comment_added`, tytul: "Nowy komentarz", wiadomosc: skrocona tresc komentarza
 
-**Modyfikacja `ProjectTasksTab.tsx`:**
-- Owinięcie listy zadań w sekcjach w `DndContext` + `SortableContext`
-- Po zdarzeniu `onDragEnd` -- wywołanie `reorderTasks` z nową kolejnością
-- Sortowalne sekcje (zmiana `sort_order` sekcji)
+### 3. on_task_status_notify
 
-**Modyfikacja `TaskDetailSheet.tsx`:**
-- Subtaski owiniete w DndContext dla zmiany kolejności
+- **Trigger:** AFTER UPDATE na `tasks`, warunek: `OLD.status IS DISTINCT FROM NEW.status`
+- **Logika funkcji:**
+  - Generuje powiadomienia w `task_notifications` dla:
+    - `owner_id` (jesli istnieje i != aktualny uzytkownik)
+    - `assigned_to` (jesli istnieje, != owner, != aktualny uzytkownik)
+  - Typ: `status_changed`, tytul: "Zmiana statusu zadania", wiadomosc: "[tytul]: [stary status] -> [nowy status]"
 
-### Krok 3: Auto-assign UI
+### Wazne detale:
+- Funkcje uzywaja `SECURITY DEFINER` aby miec dostep do tabel niezaleznie od RLS
+- Wszystkie trzy triggery sa niezalezne od istniejacych (`auto_assign_task_trigger`, `log_task_changes_trigger`)
+- `owner_id` w tabeli `tasks` jest typu TEXT (UUID jako string) -- konieczne castowanie na UUID przy INSERT do `task_notifications.director_id`
 
-**Modyfikacja `ProjectOverviewTab.tsx`:**
-- Nowa sekcja "Auto-assign" w karcie "Szczegóły"
-- Switch (włącz/wyłącz) + Select trybu (Round-robin / Load-balance)
-- Wywołanie `updateProject` z `auto_assign_mode`
+## Pliki do zmiany
+1. Nowa migracja SQL (jedyna zmiana -- brak zmian w kodzie frontendu, poniewaz `useTaskNotifications.ts` juz obsluguje Realtime na tabeli `task_notifications`)
 
-**Modyfikacja `useProjects.ts`:**
-- Dodanie `auto_assign_mode` do `ProjectCreateSchema`
-
-### Krok 4: Raport PDF
-
-**Nowy komponent: `ProjectReportExport.tsx`**
-- Przycisk "Eksportuj PDF"
-- Pobiera dane: projekt, zadania, kamienie milowe, czas (time entries)
-- Generuje PDF z jspdf + jspdf-autotable:
-  - Nagłówek z nazwą projektu i statusem
-  - Podsumowanie: liczba zadań, postęp, budżet czasu
-  - Tabela kamieni milowych
-  - Tabela zadań (tytuł, status, priorytet, termin, czas)
-  - Sekcja ryzyk: overdue tasks, zadania bez przypisania
-
-**Modyfikacja `ProjectDetail.tsx`:**
-- Przycisk eksportu w nagłówku (obok DropdownMenu)
-
-### Krok 5: Szablony projektów
-
-**Nowy hook: `useProjectTemplates.ts`**
-- CRUD na `project_templates` z `template_data` (JSONB)
-- Struktura template_data: `{ sections: [{ name, color, tasks: [{ title, priority, description }] }] }`
-- Funkcja `createProjectFromTemplate` -- tworzy projekt + sekcje + zadania
-
-**Nowy komponent: `ProjectTemplateManager.tsx`**
-- Lista istniejących szablonów
-- Dialog tworzenia/edycji szablonu (nazwa + definiowanie sekcji i zadań)
-- Przycisk usuwania szablonu
-
-**Modyfikacja dialogu tworzenia projektu:**
-- Opcjonalny Select "Utwórz z szablonu" -- po wyborze szablonu, automatyczne generowanie struktury
-
-## Nowe zależności npm
-- `@dnd-kit/sortable` -- potrzebne do SortableContext (core już zainstalowany, ale sortable nie)
-
-## Pliki do utworzenia (5)
-1. `src/hooks/useTaskReorder.ts`
-2. `src/hooks/useProjectTemplates.ts`
-3. `src/components/tasks/SortableTaskItem.tsx`
-4. `src/components/projects/ProjectReportExport.tsx`
-5. `src/components/projects/ProjectTemplateManager.tsx`
-
-## Pliki do modyfikacji (5)
-1. `src/components/projects/ProjectTasksTab.tsx` -- DnD context dla zadań i sekcji
-2. `src/components/tasks/TaskDetailSheet.tsx` -- DnD dla subtasków
-3. `src/components/projects/ProjectOverviewTab.tsx` -- sekcja Auto-assign
-4. `src/pages/ProjectDetail.tsx` -- przycisk eksportu PDF
-5. `src/hooks/useProjects.ts` -- auto_assign_mode w schemacie
-
-## Kolejność implementacji
-1. Migracja DB (auto_assign_mode + trigger)
-2. Drag-and-drop (hook + SortableTaskItem + integracja w ProjectTasksTab i TaskDetailSheet)
-3. Auto-assign UI (ProjectOverviewTab + useProjects)
-4. Raport PDF (ProjectReportExport + integracja w ProjectDetail)
-5. Szablony (useProjectTemplates + ProjectTemplateManager + integracja w dialogu tworzenia)
