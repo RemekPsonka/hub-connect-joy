@@ -51,6 +51,7 @@ const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Sovra = lazy(() => import("./pages/Sovra"));
 const WantedContacts = lazy(() => import("./pages/WantedContacts"));
+const TaskAnalytics = lazy(() => import("./pages/TaskAnalytics"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -115,6 +116,7 @@ const App = () => (
                     } 
                   />
                   <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
+                  <Route path="/tasks/analytics" element={<DirectorGuard><TaskAnalytics /></DirectorGuard>} />
                   <Route path="/my-tasks" element={<DirectorGuard><MyTasks /></DirectorGuard>} />
                   <Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
                   <Route path="/projects" element={<DirectorGuard><Projects /></DirectorGuard>} />

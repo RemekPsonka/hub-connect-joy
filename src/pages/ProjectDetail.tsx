@@ -23,7 +23,10 @@ import {
   Loader2,
   Eye,
   Diamond,
+  CalendarDays,
 } from 'lucide-react';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import {
   useProject,
   useUpdateProject,
@@ -109,6 +112,14 @@ export default function ProjectDetail() {
             <Badge className={`text-xs ${statusCfg.color}`}>
               {statusCfg.label}
             </Badge>
+            {((project as any).start_date || (project as any).due_date) && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {(project as any).start_date && format(new Date((project as any).start_date), 'd MMM', { locale: pl })}
+                {(project as any).start_date && (project as any).due_date && ' → '}
+                {(project as any).due_date && format(new Date((project as any).due_date), 'd MMM yyyy', { locale: pl })}
+              </span>
+            )}
           </div>
           {project.description && (
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">

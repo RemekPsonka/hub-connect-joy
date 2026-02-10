@@ -30,10 +30,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Users, CheckSquare, StickyNote, Calendar, Plus, Trash2 } from 'lucide-react';
+import { Users, CheckSquare, StickyNote, Calendar, Plus, Trash2, CalendarDays } from 'lucide-react';
 import type { TaskWithDetails } from '@/hooks/useTasks';
-import { format } from 'date-fns';
+import { format, differenceInDays, isBefore, isAfter } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 
 interface ProjectOverviewTabProps {
   project: ProjectWithOwner;
@@ -256,6 +258,94 @@ export function ProjectOverviewTab({ project }: ProjectOverviewTabProps) {
               Brak dodatkowych członków — dodaj dyrektorów do zespołu projektowego.
             </p>
           )}
+        </div>
+      </DataCard>
+
+      {/* Schedule / Dates */}
+      <DataCard title="Harmonogram" className="md:col-span-2">
+        <div className="flex flex-wrap gap-6 items-start">
+          {/* Start date */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Data rozpoczęcia</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-[160px] justify-start text-left font-normal">
+                  <CalendarDays className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                  {(project as any).start_date
+                    ? format(new Date((project as any).start_date), 'd MMM yyyy', { locale: pl })
+                    : 'Ustaw datę'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarPicker
+                  mode="single"
+                  selected={(project as any).start_date ? new Date((project as any).start_date) : undefined}
+                  onSelect={(d) =>
+                    updateProject.mutate({
+                      id: project.id,
+                      data: { start_date: d ? format(d, 'yyyy-MM-dd') : null } as any,
+                    })
+                  }
+                  locale={pl}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Due date */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Termin</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-[160px] justify-start text-left font-normal">
+                  <CalendarDays className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                  {(project as any).due_date
+                    ? format(new Date((project as any).due_date), 'd MMM yyyy', { locale: pl })
+                    : 'Ustaw termin'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarPicker
+                  mode="single"
+                  selected={(project as any).due_date ? new Date((project as any).due_date) : undefined}
+                  onSelect={(d) =>
+                    updateProject.mutate({
+                      id: project.id,
+                      data: { due_date: d ? format(d, 'yyyy-MM-dd') : null } as any,
+                    })
+                  }
+                  locale={pl}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Time progress */}
+          {(project as any).start_date && (project as any).due_date && (() => {
+            const start = new Date((project as any).start_date);
+            const end = new Date((project as any).due_date);
+            const totalDays = differenceInDays(end, start);
+            const elapsed = differenceInDays(new Date(), start);
+            const pct = totalDays > 0 ? Math.min(100, Math.max(0, Math.round((elapsed / totalDays) * 100))) : 0;
+            const isOverdue = isAfter(new Date(), end) && project.status !== 'done';
+            const daysLeft = differenceInDays(end, new Date());
+            return (
+              <div className="flex-1 min-w-[200px] space-y-1">
+                <Label className="text-xs text-muted-foreground">Postęp czasowy</Label>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${isOverdue ? 'bg-destructive' : pct > 80 ? 'bg-warning' : 'bg-primary'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isOverdue
+                    ? `Przekroczony termin o ${Math.abs(daysLeft)} dni`
+                    : `${daysLeft} dni do terminu (${pct}%)`}
+                </p>
+              </div>
+            );
+          })()}
         </div>
       </DataCard>
 
