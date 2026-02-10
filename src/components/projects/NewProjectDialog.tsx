@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useCreateProject, PROJECT_STATUSES } from '@/hooks/useProjects';
+import { useProjectTemplates, useCreateProjectFromTemplate } from '@/hooks/useProjectTemplates';
 
 const PROJECT_COLORS = [
   '#7C3AED', '#10B981', '#F59E0B', '#EF4444',
@@ -29,26 +30,44 @@ interface NewProjectDialogProps {
 export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) {
   const navigate = useNavigate();
   const createProject = useCreateProject();
+  const { data: templates = [] } = useProjectTemplates();
+  const createFromTemplate = useCreateProjectFromTemplate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('new');
   const [color, setColor] = useState('#7C3AED');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = await createProject.mutateAsync({
-      name,
-      description: description || null,
-      status: status as any,
-      color,
-    });
+    let projectId: string;
+
+    if (selectedTemplateId) {
+      const result = await createFromTemplate.mutateAsync({
+        projectName: name,
+        templateId: selectedTemplateId,
+      });
+      projectId = result.id;
+    } else {
+      const result = await createProject.mutateAsync({
+        name,
+        description: description || null,
+        status: status as any,
+        color,
+      });
+      projectId = result.id;
+    }
+
     onOpenChange(false);
     setName('');
     setDescription('');
     setStatus('new');
     setColor('#7C3AED');
-    navigate(`/projects/${result.id}`);
+    setSelectedTemplateId('');
+    navigate(`/projects/${projectId}`);
   };
+
+  const isPending = createProject.isPending || createFromTemplate.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,6 +80,23 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {templates.length > 0 && (
+            <div className="space-y-2">
+              <Label>Szablon (opcjonalnie)</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Bez szablonu" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Bez szablonu</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="name">Nazwa projektu *</Label>
             <Input
@@ -122,8 +158,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Anuluj
             </Button>
-            <Button type="submit" disabled={!name.trim() || createProject.isPending}>
-              {createProject.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            <Button type="submit" disabled={!name.trim() || isPending}>
+              {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Utwórz projekt
             </Button>
           </DialogFooter>
