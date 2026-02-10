@@ -31,6 +31,7 @@ export interface WantedContact {
   created_at: string;
   updated_at: string;
   fulfilled_at: string | null;
+  expires_at: string | null;
   // Joined
   requested_by_contact?: { id: string; full_name: string; company: string | null };
   matched_contact?: { id: string; full_name: string; company: string | null } | null;
@@ -58,7 +59,14 @@ export function useWantedContacts(filters?: WantedContactFilters) {
         .order('created_at', { ascending: false });
 
       if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status);
+        if (filters.status === 'expired') {
+          query = query.eq('status', 'expired');
+        } else {
+          query = query.eq('status', filters.status);
+        }
+      } else if (!filters?.status || filters.status === 'all') {
+        // Default: hide expired from "all"
+        query = query.neq('status', 'expired');
       }
       if (filters?.urgency && filters.urgency !== 'all') {
         query = query.eq('urgency', filters.urgency);
@@ -119,6 +127,7 @@ export function useCreateWantedContact() {
       description?: string | null;
       notes?: string | null;
       urgency?: string;
+      expires_at?: string | null;
     }) => {
       if (!director) throw new Error('Brak dyrektora');
       const { data, error } = await supabase

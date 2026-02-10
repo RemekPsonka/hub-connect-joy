@@ -55,6 +55,7 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
   const [rawText, setRawText] = useState('');
+  const [duration, setDuration] = useState('3months');
   const [isParsing, setIsParsing] = useState(false);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const createWanted = useCreateWantedContact();
@@ -98,6 +99,15 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
     ));
   };
 
+  const computeExpiresAt = (dur: string): string | null => {
+    if (dur === 'none') return null;
+    const d = new Date();
+    if (dur === '1month') d.setMonth(d.getMonth() + 1);
+    else if (dur === '3months') d.setMonth(d.getMonth() + 3);
+    else if (dur === '1year') d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString();
+  };
+
   const approveItem = async (item: ReviewItem) => {
     if (!requestedBy) return;
     setItems(prev => prev.map(it =>
@@ -115,6 +125,7 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
       company_context: item.company_context,
       search_context: item.search_context,
       urgency: item.urgency,
+      expires_at: computeExpiresAt(duration),
     });
   };
 
@@ -137,6 +148,7 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
       setRawText('');
       setItems([]);
       setRequestedBy(null);
+      setDuration('3months');
     }, 200);
   };
 
@@ -170,6 +182,19 @@ export function ImportWantedDialog({ open, onOpenChange }: ImportWantedDialogPro
                 rows={8}
                 className="font-mono text-sm"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Termin poszukiwania</Label>
+              <Select value={duration} onValueChange={setDuration}>
+                <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1month">Miesiąc</SelectItem>
+                  <SelectItem value="3months">Kwartał</SelectItem>
+                  <SelectItem value="1year">Rok</SelectItem>
+                  <SelectItem value="none">Bez limitu</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <DialogFooter>

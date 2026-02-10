@@ -31,6 +31,7 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
   const [companyContext, setCompanyContext] = useState('');
   const [searchContext, setSearchContext] = useState('');
   const [urgency, setUrgency] = useState('normal');
+  const [duration, setDuration] = useState('3months');
   const [notes, setNotes] = useState('');
   const [companyId, setCompanyId] = useState<string | null>(null);
 
@@ -52,6 +53,15 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
 
   const canSubmit = !!requestedBy && (!!personName.trim() || !!companyName.trim());
 
+  const computeExpiresAt = (dur: string): string | null => {
+    if (dur === 'none') return null;
+    const d = new Date();
+    if (dur === '1month') d.setMonth(d.getMonth() + 1);
+    else if (dur === '3months') d.setMonth(d.getMonth() + 3);
+    else if (dur === '1year') d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString();
+  };
+
   const handleSubmit = () => {
     if (!canSubmit) return;
     createWanted.mutate(
@@ -72,6 +82,7 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
         search_context: searchContext.trim() || null,
         notes: notes.trim() || null,
         urgency,
+        expires_at: computeExpiresAt(duration),
       },
       {
         onSuccess: () => {
@@ -94,6 +105,7 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
     setCompanyContext('');
     setSearchContext('');
     setUrgency('normal');
+    setDuration('3months');
     setNotes('');
     setCompanyId(null);
   };
@@ -179,6 +191,18 @@ export function WantedContactModal({ open, onOpenChange, preselectedContactId }:
                     <SelectItem value="normal">Normalna</SelectItem>
                     <SelectItem value="high">Wysoka</SelectItem>
                     <SelectItem value="critical">Krytyczna</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Termin poszukiwania</Label>
+                <Select value={duration} onValueChange={setDuration}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1month">Miesiąc</SelectItem>
+                    <SelectItem value="3months">Kwartał</SelectItem>
+                    <SelectItem value="1year">Rok</SelectItem>
+                    <SelectItem value="none">Bez limitu</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
