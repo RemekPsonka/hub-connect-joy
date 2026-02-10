@@ -7,9 +7,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
 import { TaskModal } from '@/components/tasks/TaskModal';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { format, isPast, isToday } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 
 interface ContactTasksPanelProps {
   contactId: string;
@@ -20,6 +22,14 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
   const updateTask = useUpdateTask();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+
+  const handleTaskClick = (task: TaskWithDetails) => {
+    setSelectedTask(task);
+    setIsDetailOpen(true);
+  };
 
   const openTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
   const completedTasks = tasks.filter(t => t.status === 'completed' || t.status === 'cancelled');
@@ -61,10 +71,11 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
           ) : (
             <>
               {openTasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-2 py-1">
+                <div key={task.id} className="flex items-start gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1" onClick={() => handleTaskClick(task)}>
                   <Checkbox
                     checked={false}
-                    onCheckedChange={() => handleToggleStatus(task.id, task.status)}
+                    onCheckedChange={(e) => { e && handleToggleStatus(task.id, task.status); }}
+                    onClick={(e) => e.stopPropagation()}
                     className="mt-0.5 h-3.5 w-3.5"
                   />
                   <div className="flex-1 min-w-0">
@@ -83,6 +94,7 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
                 </div>
               ))}
 
+
               {completedTasks.length > 0 && (
                 <Collapsible open={showCompleted} onOpenChange={setShowCompleted}>
                   <CollapsibleTrigger asChild>
@@ -92,10 +104,11 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
                   </CollapsibleTrigger>
                   <CollapsibleContent className="space-y-1 mt-1">
                     {completedTasks.map((task) => (
-                      <div key={task.id} className="flex items-start gap-2 py-1 opacity-60">
+                      <div key={task.id} className="flex items-start gap-2 py-1 opacity-60 cursor-pointer hover:opacity-80 rounded px-1 -mx-1" onClick={() => handleTaskClick(task)}>
                         <Checkbox
                           checked={true}
-                          onCheckedChange={() => handleToggleStatus(task.id, task.status)}
+                          onCheckedChange={(e) => { e !== undefined && handleToggleStatus(task.id, task.status); }}
+                          onClick={(e) => e.stopPropagation()}
                           className="mt-0.5 h-3.5 w-3.5"
                         />
                         <p className="text-xs line-through truncate">{task.title}</p>
@@ -110,10 +123,25 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
       </Card>
 
       <TaskModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
+        open={isModalOpen || !!editingTask}
+        onOpenChange={(open) => {
+          if (!open) { setIsModalOpen(false); setEditingTask(null); }
+        }}
         preselectedContactId={contactId}
+        task={editingTask}
       />
+
+      {selectedTask && (
+        <TaskDetailSheet
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+          task={selectedTask}
+          onEdit={() => {
+            setIsDetailOpen(false);
+            setEditingTask(selectedTask);
+          }}
+        />
+      )}
     </>
   );
 }
