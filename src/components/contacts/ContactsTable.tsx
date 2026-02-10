@@ -349,7 +349,7 @@ export function ContactsTable({
                         )}
                       </div>
                       <div className="px-4 w-[100px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <GroupBadge group={contact.contact_groups} />
+                        <GroupBadge group={contact.contact_groups} compact />
                       </div>
                       <div className="px-4 w-[140px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         {contact.profile_summary ? (
