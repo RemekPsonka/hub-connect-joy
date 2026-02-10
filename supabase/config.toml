@@ -158,3 +158,6 @@ verify_jwt = false
 
 [functions.parse-wanted-list]
 verify_jwt = false
+
+[functions.bulk-merge-contacts]
+verify_jwt = false

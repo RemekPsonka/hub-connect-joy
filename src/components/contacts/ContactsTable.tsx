@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2, Check } from 'lucide-react';
+import { ArrowUpDown, Trash2, FolderOpen, Users, Phone, Mail, Sparkles, Loader2, Check, GitMerge } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { GroupBadge } from './GroupBadge';
 import { RelationshipStrengthBar } from './RelationshipStrengthBar';
+import { BulkMergeContactModal } from './BulkMergeContactModal';
 import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, useGenerateContactProfile, type ContactWithGroup } from '@/hooks/useContacts';
 
 const ROW_HEIGHT = 56;
@@ -68,6 +69,7 @@ export function ContactsTable({
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [isMergeOpen, setIsMergeOpen] = useState(false);
   const { data: groups = [] } = useContactGroups();
   const bulkUpdate = useBulkUpdateContacts();
   const bulkDelete = useBulkDeleteContacts();
@@ -202,6 +204,17 @@ export function ContactsTable({
               ))}
             </SelectContent>
           </Select>
+          {selectedIds.length === 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setIsMergeOpen(true)}
+            >
+              <GitMerge className="h-4 w-4" />
+              Scal zaznaczone
+            </Button>
+          )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm" className="gap-2">
@@ -430,6 +443,14 @@ export function ContactsTable({
           </Pagination>
         )}
       </div>
+      {selectedIds.length === 2 && (
+        <BulkMergeContactModal
+          open={isMergeOpen}
+          onOpenChange={setIsMergeOpen}
+          contactIds={[selectedIds[0], selectedIds[1]]}
+          onSuccess={() => setSelectedIds([])}
+        />
+      )}
     </div>
   );
 }

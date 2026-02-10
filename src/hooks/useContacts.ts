@@ -300,6 +300,37 @@ export function useBulkUpdateContacts() {
   });
 }
 
+export function useBulkMergeContacts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ primaryContactId, secondaryContactId, mergedFields }: {
+      primaryContactId: string;
+      secondaryContactId: string;
+      mergedFields: Record<string, unknown>;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('bulk-merge-contacts', {
+        body: { primaryContactId, secondaryContactId, mergedFields },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['contact'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Kontakty zostały scalone');
+    },
+    onError: (error) => {
+      console.error('Error merging contacts:', error);
+      toast.error('Nie udało się scalić kontaktów');
+    },
+  });
+}
+
 export function useBulkDeleteContacts() {
   const queryClient = useQueryClient();
 
