@@ -50,6 +50,8 @@ import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { TaskLinkedMeetings } from './TaskLinkedMeetings';
+import { TaskComments } from './TaskComments';
+import { TaskLabelsManager } from './TaskLabelsManager';
 
 interface TaskDetailSheetProps {
   open: boolean;
@@ -167,6 +169,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
               </div>
             )}
           </div>
+
+          {/* Labels */}
+          <TaskLabelsManager taskId={task.id} />
 
           {/* Cross-task workflow */}
           {isCrossTask && crossTask && (
@@ -311,6 +316,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
           {/* Linked GCal meetings */}
           <TaskLinkedMeetings taskId={task.id} />
+
+          {/* Comments */}
+          <TaskComments taskId={task.id} />
 
           {/* Actions */}
           <Separator />
