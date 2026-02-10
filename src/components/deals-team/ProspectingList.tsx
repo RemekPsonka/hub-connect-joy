@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MoreHorizontal, MessageSquare, UserPlus, Trash2 } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { MoreHorizontal, MessageSquare, UserPlus, Trash2, Circle } from 'lucide-react';
 import {
   useMeetingProspects,
   useUpdateMeetingProspect,
@@ -24,6 +24,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ProspectingConvertDialog } from './ProspectingConvertDialog';
+
+const PRIORITY_CYCLE: (string | null)[] = [null, 'high', 'medium', 'low'];
+const PRIORITY_COLORS: Record<string, string> = {
+  high: 'text-red-500 fill-red-500',
+  medium: 'text-yellow-500 fill-yellow-500',
+  low: 'text-green-500 fill-green-500',
+};
+const PRIORITY_LABELS: Record<string, string> = {
+  high: 'Ważne',
+  medium: 'Średnie',
+  low: 'Mniej ważne',
+};
+
+const PRIORITY_SORT_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 const STATUS_LABELS: Record<ProspectingStatus, string> = {
   new: 'Nowy',
@@ -54,16 +68,30 @@ export function ProspectingList({ teamId }: Props) {
   const [convertProspect, setConvertProspect] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
 
   const uniqueSources = Array.from(
     new Set(prospects.map((p) => p.source_event).filter(Boolean))
   ) as string[];
 
-  const filtered = prospects.filter(
-    (p) =>
-      (statusFilter === 'all' || p.prospecting_status === statusFilter) &&
-      (sourceFilter === 'all' || p.source_event === sourceFilter)
-  );
+  const filtered = prospects
+    .filter(
+      (p) =>
+        (statusFilter === 'all' || p.prospecting_status === statusFilter) &&
+        (sourceFilter === 'all' || p.source_event === sourceFilter) &&
+        (priorityFilter === 'all' || (priorityFilter === 'none' ? !p.priority : p.priority === priorityFilter))
+    )
+    .sort((a, b) => {
+      const oa = a.priority ? (PRIORITY_SORT_ORDER[a.priority] ?? 3) : 3;
+      const ob = b.priority ? (PRIORITY_SORT_ORDER[b.priority] ?? 3) : 3;
+      return oa - ob;
+    });
+
+  const handlePriorityToggle = useCallback((id: string, currentPriority: string | null) => {
+    const idx = PRIORITY_CYCLE.indexOf(currentPriority);
+    const next = PRIORITY_CYCLE[(idx + 1) % PRIORITY_CYCLE.length];
+    updateMutation.mutate({ id, teamId, priority: next });
+  }, [updateMutation, teamId]);
 
   const handleStatusChange = (id: string, status: ProspectingStatus) => {
     updateMutation.mutate({ id, teamId, prospecting_status: status });
@@ -121,6 +149,19 @@ export function ProspectingList({ teamId }: Props) {
           </SelectContent>
         </Select>
 
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtruj priorytet" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Wszystkie priorytety</SelectItem>
+            <SelectItem value="high">🔴 Ważne</SelectItem>
+            <SelectItem value="medium">🟡 Średnie</SelectItem>
+            <SelectItem value="low">🟢 Mniej ważne</SelectItem>
+            <SelectItem value="none">⚪ Bez znacznika</SelectItem>
+          </SelectContent>
+        </Select>
+
         {uniqueSources.length > 1 && (
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
             <SelectTrigger className="w-[220px]">
@@ -151,7 +192,15 @@ export function ProspectingList({ teamId }: Props) {
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium">{prospect.full_name}</span>
+                   <button
+                     type="button"
+                     title={prospect.priority ? PRIORITY_LABELS[prospect.priority] : 'Ustaw priorytet'}
+                     className="shrink-0 cursor-pointer hover:scale-125 transition-transform"
+                     onClick={() => handlePriorityToggle(prospect.id, prospect.priority)}
+                   >
+                     <Circle className={`h-3.5 w-3.5 ${prospect.priority ? PRIORITY_COLORS[prospect.priority] : 'text-muted-foreground/30'}`} />
+                   </button>
+                   <span className="font-medium">{prospect.full_name}</span>
                   <Badge
                     variant="secondary"
                     className={STATUS_COLORS[prospect.prospecting_status]}
@@ -222,6 +271,18 @@ export function ProspectingList({ teamId }: Props) {
                     <MessageSquare className="h-4 w-4 mr-2" />
                     {prospect.prospecting_notes ? 'Edytuj notatkę' : 'Dodaj notatkę'}
                   </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  {(['high', 'medium', 'low'] as const).map((p) => (
+                    <DropdownMenuItem
+                      key={p}
+                      onClick={() => updateMutation.mutate({ id: prospect.id, teamId, priority: prospect.priority === p ? null : p })}
+                    >
+                      <Circle className={`h-3.5 w-3.5 mr-2 ${PRIORITY_COLORS[p]}`} />
+                      {PRIORITY_LABELS[p]} {prospect.priority === p && '✓'}
+                    </DropdownMenuItem>
+                  ))}
 
                   <DropdownMenuSeparator />
 

@@ -28,6 +28,7 @@ export interface MeetingProspect {
   converted_to_contact_id: string | null;
   converted_to_team_contact_id: string | null;
   converted_at: string | null;
+  priority: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +164,7 @@ export function useUpdateMeetingProspect() {
       email?: string | null;
       phone?: string | null;
       linkedin_url?: string | null;
+      priority?: string | null;
     }) => {
       const { error } = await (supabase as any)
         .from('meeting_prospects')
