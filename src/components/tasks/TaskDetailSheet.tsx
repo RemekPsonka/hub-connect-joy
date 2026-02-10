@@ -1,4 +1,20 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Sheet,
   SheetContent,
@@ -23,6 +39,7 @@ import {
   Plus,
   FolderKanban,
   Copy,
+  GripVertical,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -35,6 +52,7 @@ import {
   useUpdateCrossTaskStatus,
   useDuplicateTask,
 } from '@/hooks/useTasks';
+import { useTaskReorder } from '@/hooks/useTaskReorder';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import {
@@ -61,6 +79,20 @@ import { TaskActivityLog } from './TaskActivityLog';
 import { getRecurrenceLabel } from './RecurrenceSelector';
 import { Repeat } from 'lucide-react';
 
+function SortableSubtaskItem({ subtask, onToggle }: { subtask: any; onToggle: (id: string, checked: boolean) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 py-1">
+      <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground">
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <Checkbox checked={subtask.status === 'completed'} onCheckedChange={(v) => onToggle(subtask.id, !!v)} />
+      <span className={`text-sm flex-1 ${subtask.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{subtask.title}</span>
+    </div>
+  );
+}
+
 interface TaskDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,7 +117,23 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
   // Subtasks
   const { data: subtasks = [] } = useSubtasks(task.id);
   const createSubtask = useCreateSubtask();
+  const reorderTasks = useTaskReorder();
   const [newSubtask, setNewSubtask] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleSubtaskDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = subtasks.findIndex(s => s.id === active.id);
+    const newIndex = subtasks.findIndex(s => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(subtasks, oldIndex, newIndex);
+    reorderTasks.mutate(reordered.map(s => s.id));
+  }, [subtasks, reorderTasks]);
 
   const completedSubtasks = subtasks.filter(s => s.status === 'completed').length;
   const totalSubtasks = subtasks.length;
@@ -278,19 +326,19 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
               </div>
             )}
 
-            <div className="space-y-1.5">
-              {subtasks.map((sub) => (
-                <div key={sub.id} className="flex items-center gap-2 py-1">
-                  <Checkbox
-                    checked={sub.status === 'completed'}
-                    onCheckedChange={(v) => handleSubtaskToggle(sub.id, !!v)}
-                  />
-                  <span className={`text-sm flex-1 ${sub.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
-                    {sub.title}
-                  </span>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSubtaskDragEnd}>
+              <SortableContext items={subtasks.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-1.5">
+                  {subtasks.map((sub) => (
+                    <SortableSubtaskItem
+                      key={sub.id}
+                      subtask={sub}
+                      onToggle={handleSubtaskToggle}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
 
             <div className="flex gap-2">
               <Input
