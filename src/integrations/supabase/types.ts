@@ -3849,6 +3849,96 @@ export type Database = {
           },
         ]
       }
+      meeting_prospects: {
+        Row: {
+          company: string | null
+          converted_at: string | null
+          converted_to_contact_id: string | null
+          converted_to_team_contact_id: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          imported_at: string | null
+          imported_by: string
+          industry: string | null
+          is_prospecting: boolean | null
+          linkedin_url: string | null
+          phone: string | null
+          position: string | null
+          prospecting_notes: string | null
+          prospecting_status: string | null
+          source_event: string | null
+          source_file_name: string | null
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          company?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          imported_at?: string | null
+          imported_by: string
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          phone?: string | null
+          position?: string | null
+          prospecting_notes?: string | null
+          prospecting_status?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          imported_at?: string | null
+          imported_by?: string
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          phone?: string | null
+          position?: string | null
+          prospecting_notes?: string | null
+          prospecting_status?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_prospects_converted_to_contact_id_fkey"
+            columns: ["converted_to_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_prospects_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_recommendations: {
         Row: {
           created_at: string | null
