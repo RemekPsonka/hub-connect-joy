@@ -7,6 +7,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Detect if a Polish phone number is mobile.
+ * Mobile prefixes after +48: 5xx, 6xx, 7xx, 8xx
+ * Landline prefixes after +48: 1x, 2x, 3x, 4x (city area codes)
+ */
+function isMobileNumber(phone: string): boolean {
+  const digits = phone.replace(/[\s\-\(\)]/g, '');
+  // Match +48 followed by 5/6/7/8
+  if (/^\+48[5-8]\d{8}$/.test(digits)) return true;
+  // Without +48 prefix, 9-digit starting with 5/6/7/8
+  if (/^[5-8]\d{8}$/.test(digits)) return true;
+  return false;
+}
+
+function isLandlineNumber(phone: string): boolean {
+  const digits = phone.replace(/[\s\-\(\)]/g, '');
+  if (/^\+48[1-4]\d+$/.test(digits)) return true;
+  if (/^[1-4]\d+$/.test(digits) && digits.length >= 7) return true;
+  return false;
+}
+
 interface MergeRequest {
   existingContactId: string;
   newContactData: Record<string, any>;
@@ -74,20 +95,46 @@ serve(async (req) => {
       }
     }
 
-    // ============= PHONE HANDLING =============
+    // ============= SMART PHONE HANDLING =============
     // phone = numer prywatny/komórkowy (priorytet)
     // phone_business = numer służbowy/stacjonarny
+    
+    const existingPhone = existingContact.phone;
+    const existingPhoneBusiness = existingContact.phone_business;
+    const newPhone = newContactData.phone;
+    const newPhoneBusiness = newContactData.phone_business;
 
-    // Fill phone (mobile) if empty on existing contact
-    if (newContactData.phone && !existingContact.phone) {
-      mergedData.phone = newContactData.phone;
-      console.log(`Setting phone to: ${newContactData.phone}`);
+    if (newPhone) {
+      if (!existingPhone) {
+        // No existing phone - set it
+        mergedData.phone = newPhone;
+        console.log(`Setting phone to: ${newPhone}`);
+      } else if (existingPhone !== newPhone) {
+        // Existing phone differs from new phone
+        const existingIsMobile = isMobileNumber(existingPhone);
+        const newIsMobile = isMobileNumber(newPhone);
+        const existingIsLandline = isLandlineNumber(existingPhone);
+
+        if (existingIsLandline && newIsMobile) {
+          // SWAP: move landline to phone_business, set mobile as phone
+          console.log(`Smart swap: existing landline ${existingPhone} -> phone_business, new mobile ${newPhone} -> phone`);
+          mergedData.phone = newPhone;
+          if (!existingPhoneBusiness) {
+            mergedData.phone_business = existingPhone;
+          }
+        } else if (!existingIsMobile && newIsMobile && !existingPhoneBusiness) {
+          // Existing is unknown type, new is mobile - swap if phone_business empty
+          console.log(`Moving unknown ${existingPhone} to phone_business, setting mobile ${newPhone} as phone`);
+          mergedData.phone = newPhone;
+          mergedData.phone_business = existingPhone;
+        }
+      }
     }
 
     // Fill phone_business if empty on existing contact
-    if (newContactData.phone_business && !existingContact.phone_business) {
-      mergedData.phone_business = newContactData.phone_business;
-      console.log(`Setting phone_business to: ${newContactData.phone_business}`);
+    if (newPhoneBusiness && !existingPhoneBusiness && !mergedData.phone_business) {
+      mergedData.phone_business = newPhoneBusiness;
+      console.log(`Setting phone_business to: ${newPhoneBusiness}`);
     }
 
     // ============= EMAIL HANDLING =============
