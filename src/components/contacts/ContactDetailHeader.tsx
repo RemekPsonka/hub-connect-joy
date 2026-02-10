@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown, Building, Globe, Share2, CreditCard } from 'lucide-react';
+import { Mail, Phone, Linkedin, Edit, Trash2, ArrowLeft, CalendarPlus, Crown, Building, Globe, Share2 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +24,7 @@ import { pl } from 'date-fns/locale';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 import { CompanyModal } from '@/components/contacts/CompanyModal';
 import { ShareContactDialog } from '@/components/contacts/ShareContactDialog';
-import { BusinessCardPreview } from '@/components/contacts/BusinessCardPreview';
+
 
 interface ContactDetailHeaderProps {
   contact: ContactWithDetails;
@@ -170,12 +170,6 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
         <div className="flex flex-col items-end gap-3">
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2">
-            {(contact as any).business_card_image_url && (
-              <BusinessCardPreview 
-                imageUrl={(contact as any).business_card_image_url} 
-                contactName={contact.full_name} 
-              />
-            )}
             <ShareContactDialog contactId={contact.id} contactName={contact.full_name} />
             <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
               <CalendarPlus className="h-4 w-4 mr-1.5" />

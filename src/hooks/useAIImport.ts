@@ -38,10 +38,6 @@ export interface ParsedContact {
   company_description: string | null;
   company_logo_url: string | null;
   
-  // Business card image
-  bounding_box: { x: number; y: number; w: number; h: number } | null;
-  business_card_image_url: string | null;
-  
   // Status tracking
   status: 'pending' | 'enriching_company' | 'enriching_person' | 'duplicate' | 'ready' | 'error';
   selected: boolean;
@@ -155,65 +151,6 @@ function extractCompanyFromEmail(email: string): { domain: string; companyName: 
   };
 }
 
-// Crop a business card from an image using bounding box and upload to Storage
-async function cropAndUploadBusinessCard(
-  imageBase64: string,
-  boundingBox: { x: number; y: number; w: number; h: number },
-  tenantId: string,
-  contactIndex: number
-): Promise<string | null> {
-  try {
-    return await new Promise<string | null>((resolve) => {
-      const img = new Image();
-      img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(null); return; }
-
-        // Convert percentage coordinates to pixels
-        const sx = (boundingBox.x / 100) * img.width;
-        const sy = (boundingBox.y / 100) * img.height;
-        const sw = (boundingBox.w / 100) * img.width;
-        const sh = (boundingBox.h / 100) * img.height;
-
-        // Scale to max 400px width
-        const maxWidth = 400;
-        const scale = Math.min(1, maxWidth / sw);
-        canvas.width = Math.round(sw * scale);
-        canvas.height = Math.round(sh * scale);
-
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-        // Convert to JPEG blob
-        canvas.toBlob(async (blob) => {
-          if (!blob) { resolve(null); return; }
-
-          const fileName = `${tenantId}/${Date.now()}_${contactIndex}.jpg`;
-          const { data, error } = await supabase.storage
-            .from('business-cards')
-            .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
-
-          if (error) {
-            console.error('Business card upload error:', error);
-            resolve(null);
-            return;
-          }
-
-          const { data: publicUrlData } = supabase.storage
-            .from('business-cards')
-            .getPublicUrl(data.path);
-
-          resolve(publicUrlData.publicUrl);
-        }, 'image/jpeg', 0.7);
-      };
-      img.onerror = () => resolve(null);
-      img.src = imageBase64;
-    });
-  } catch (err) {
-    console.error('Crop error:', err);
-    return null;
-  }
-}
 
 export function useAIImport(): UseAIImportReturn {
   const { director, assistant } = useAuth();
@@ -312,9 +249,6 @@ export function useAIImport(): UseAIImportReturn {
     company_description: null,
     company_logo_url: null,
     
-    // Business card image
-    bounding_box: contact.bounding_box || null,
-    business_card_image_url: null,
     
     status: 'pending',
     selected: true,
@@ -592,30 +526,12 @@ export function useAIImport(): UseAIImportReturn {
         linkedin_url: c.linkedin_url,
         notes: c.notes,
         tags: [],
-        bounding_box: c.bounding_box || null,
+        
         company_nip: c.nip || null,
         company_regon: c.regon || null,
         company_website: c.website || null,
         company_address: c.address || null,
       }));
-
-      // Crop and upload business card images from bounding boxes
-      if (tenantId) {
-        setProgress({ current: 0, total: contacts.length, stage: 'Wycinanie wizytówek...' });
-        for (let i = 0; i < contacts.length; i++) {
-          const contact = contacts[i];
-          if (contact.bounding_box) {
-            setProgress({ current: i + 1, total: contacts.length, stage: `Wycinanie: ${contact.first_name || ''} ${contact.last_name || ''}`.trim() });
-            // Find the source image - for now use first image (batch usually sends one at a time)
-            // TODO: track which image each contact came from for multi-image batches
-            const sourceImage = images[0];
-            const url = await cropAndUploadBusinessCard(sourceImage, contact.bounding_box, tenantId, i);
-            if (url) {
-              contacts[i] = { ...contacts[i], business_card_image_url: url };
-            }
-          }
-        }
-      }
 
       // Check duplicates
       if (contacts.length > 0 && tenantId) {
@@ -1010,7 +926,7 @@ export function useAIImport(): UseAIImportReturn {
                 met_source: contact.met_source || undefined,
                 met_date: contact.met_date || undefined,
                 profile_summary: contact.ai_person_info || undefined,
-                business_card_image_url: contact.business_card_image_url || undefined,
+                
               });
               result.merged++;
               continue;
@@ -1106,7 +1022,7 @@ export function useAIImport(): UseAIImportReturn {
             met_date: contact.met_date || null,
             linkedin_url: contact.linkedin_url || null,
             profile_summary: contact.ai_person_info || null,
-            business_card_image_url: contact.business_card_image_url || null,
+            
           });
           result.created++;
         } catch (err) {
