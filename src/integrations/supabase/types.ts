@@ -1730,6 +1730,7 @@ export type Database = {
         Row: {
           address: string | null
           address_secondary: string | null
+          business_card_image_url: string | null
           city: string | null
           company: string | null
           company_id: string | null
@@ -1769,6 +1770,7 @@ export type Database = {
         Insert: {
           address?: string | null
           address_secondary?: string | null
+          business_card_image_url?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
@@ -1808,6 +1810,7 @@ export type Database = {
         Update: {
           address?: string | null
           address_secondary?: string | null
+          business_card_image_url?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
