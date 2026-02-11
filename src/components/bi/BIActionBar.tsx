@@ -1,4 +1,4 @@
-import { Save, Sparkles, History, Loader2, AlertCircle } from 'lucide-react';
+import { Save, Sparkles, History, Loader2, AlertCircle, NotebookPen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -13,6 +13,7 @@ interface BIActionBarProps {
   onSaveAndClose: () => void;
   onProcessAI: () => void;
   onShowHistory: () => void;
+  onFillFromNote: () => void;
 }
 
 const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
@@ -31,6 +32,7 @@ export function BIActionBar({
   onSaveAndClose,
   onProcessAI,
   onShowHistory,
+  onFillFromNote,
 }: BIActionBarProps) {
   const status = biData?.status || 'draft';
   const statusConfig = statusLabels[status] || statusLabels.draft;
@@ -56,6 +58,12 @@ export function BIActionBar({
               Historia
             </Button>
           )}
+
+          {/* Fill from Note Button */}
+          <Button variant="ghost" size="sm" onClick={onFillFromNote}>
+            <NotebookPen className="h-4 w-4 mr-1" />
+            Z notatki
+          </Button>
 
           {/* Save Button */}
           <Button 

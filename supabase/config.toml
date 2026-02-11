@@ -164,3 +164,6 @@ verify_jwt = false
 
 [functions.prospect-ai-brief]
 verify_jwt = false
+
+[functions.bi-fill-from-note]
+verify_jwt = false
