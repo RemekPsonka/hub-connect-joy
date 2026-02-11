@@ -161,3 +161,6 @@ verify_jwt = false
 
 [functions.bulk-merge-contacts]
 verify_jwt = false
+
+[functions.prospect-ai-brief]
+verify_jwt = false

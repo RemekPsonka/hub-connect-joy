@@ -29,6 +29,8 @@ export interface MeetingProspect {
   converted_to_team_contact_id: string | null;
   converted_at: string | null;
   priority: string | null;
+  ai_brief: string | null;
+  ai_brief_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +181,41 @@ export function useUpdateMeetingProspect() {
     },
     onError: (error: Error) => {
       toast.error(`Błąd aktualizacji: ${error.message}`);
+    },
+  });
+}
+
+export function useGenerateProspectBrief() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ prospectId, teamId }: { prospectId: string; teamId: string }) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prospect-ai-brief`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ prospectId }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+        throw new Error(err.error || `Błąd ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { brief: data.brief, teamId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['meeting-prospects', result.teamId] });
+      toast.success('Brief AI wygenerowany');
+    },
+    onError: (error: Error) => {
+      toast.error(`Błąd generowania briefu: ${error.message}`);
     },
   });
 }

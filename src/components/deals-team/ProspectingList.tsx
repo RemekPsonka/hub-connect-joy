@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
-import { MoreHorizontal, MessageSquare, UserPlus, Trash2, Circle } from 'lucide-react';
+import { MoreHorizontal, MessageSquare, UserPlus, Trash2, Circle, Sparkles, Loader2 } from 'lucide-react';
 import {
   useMeetingProspects,
   useUpdateMeetingProspect,
   useDeleteMeetingProspect,
+  useGenerateProspectBrief,
   type ProspectingStatus,
 } from '@/hooks/useMeetingProspects';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ProspectingConvertDialog } from './ProspectingConvertDialog';
+import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
 
 const PRIORITY_CYCLE: (string | null)[] = [null, 'high', 'medium', 'low'];
 const PRIORITY_COLORS: Record<string, string> = {
@@ -63,9 +65,11 @@ export function ProspectingList({ teamId }: Props) {
   const { data: prospects = [], isLoading } = useMeetingProspects(teamId);
   const updateMutation = useUpdateMeetingProspect();
   const deleteMutation = useDeleteMeetingProspect();
+  const briefMutation = useGenerateProspectBrief();
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
   const [convertProspect, setConvertProspect] = useState<string | null>(null);
+  const [briefProspect, setBriefProspect] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -252,6 +256,18 @@ export function ProspectingList({ teamId }: Props) {
                     {prospect.prospecting_notes}
                   </p>
                 ) : null}
+
+                {/* AI Brief indicator */}
+                {prospect.ai_brief && (
+                  <button
+                    type="button"
+                    className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer"
+                    onClick={() => setBriefProspect(prospect.id)}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Zobacz brief AI
+                  </button>
+                )}
               </div>
 
               {/* Actions */}
@@ -262,6 +278,29 @@ export function ProspectingList({ teamId }: Props) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      briefMutation.mutate({ prospectId: prospect.id, teamId });
+                    }}
+                    disabled={briefMutation.isPending}
+                  >
+                    {briefMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    {prospect.ai_brief ? 'Odśwież brief AI' : 'Analiza AI'}
+                  </DropdownMenuItem>
+
+                  {prospect.ai_brief && (
+                    <DropdownMenuItem onClick={() => setBriefProspect(prospect.id)}>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Zobacz brief
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuSeparator />
+
                   <DropdownMenuItem
                     onClick={() => {
                       setEditingNotes(prospect.id);
@@ -330,6 +369,24 @@ export function ProspectingList({ teamId }: Props) {
           prospect={prospects.find((p) => p.id === convertProspect)!}
         />
       )}
+
+      {/* AI Brief Dialog */}
+      {briefProspect && (() => {
+        const p = prospects.find((pr) => pr.id === briefProspect);
+        if (!p?.ai_brief) return null;
+        return (
+          <ProspectAIBriefDialog
+            open={!!briefProspect}
+            onOpenChange={(val) => !val && setBriefProspect(null)}
+            prospectName={p.full_name}
+            company={p.company}
+            brief={p.ai_brief}
+            generatedAt={p.ai_brief_generated_at}
+            onRegenerate={() => briefMutation.mutate({ prospectId: p.id, teamId })}
+            isRegenerating={briefMutation.isPending}
+          />
+        );
+      })()}
     </div>
   );
 }
