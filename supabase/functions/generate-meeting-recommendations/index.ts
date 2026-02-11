@@ -392,10 +392,13 @@ Podaj numer osoby z listy powyżej, uzasadnienie i tematy do rozmowy.`;
       console.error('Error deleting old recommendations:', deleteError);
     }
 
-    if (allRecommendations.length > 0) {
+    // Filter out recommendations with null recommended_contact_id
+    const validRecommendations = allRecommendations.filter(r => r.recommended_contact_id != null);
+
+    if (validRecommendations.length > 0) {
       const { data: inserted, error: insertError } = await supabase
         .from('meeting_recommendations')
-        .insert(allRecommendations)
+        .insert(validRecommendations)
         .select();
 
       if (insertError) throw insertError;
