@@ -244,45 +244,47 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
               <Separator />
 
-              {/* Category change */}
-              <section>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  Kategoria
-                </h4>
-                <div className="flex gap-1.5">
-                  {(['hot', 'top', 'lead', 'cold'] as const).map((cat) => {
-                    const cfg = categoryConfig[cat];
-                    const isCurrent = contact.category === cat;
-                    return (
-                      <Button
-                        key={cat}
-                        variant={isCurrent ? 'default' : 'outline'}
-                        size="sm"
-                        className={cn('flex-1 text-xs h-8', isCurrent && 'pointer-events-none')}
-                        disabled={isCurrent}
-                        onClick={() => {
-                          // Promote to TOP or HOT requires dialog
-                          if (cat === 'top' || cat === 'hot') {
-                            setPromoteTarget(cat);
-                          } else {
-                            // Simple move (to LEAD or COLD)
-                            updateContact.mutate({
-                              id: contact.id,
-                              teamId,
-                              category: cat as DealCategory,
-                            });
-                          }
-                        }}
-                      >
-                        {cfg.icon} {cfg.label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </section>
+              {/* Category change - hidden for clients */}
+              {contact.category !== 'client' && (
+                <>
+                  <section>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <ArrowRight className="h-3.5 w-3.5" />
+                      Kategoria
+                    </h4>
+                    <div className="flex gap-1.5">
+                      {(['hot', 'top', 'lead', 'cold'] as const).map((cat) => {
+                        const cfg = categoryConfig[cat];
+                        const isCurrent = contact.category === cat;
+                        return (
+                          <Button
+                            key={cat}
+                            variant={isCurrent ? 'default' : 'outline'}
+                            size="sm"
+                            className={cn('flex-1 text-xs h-8', isCurrent && 'pointer-events-none')}
+                            disabled={isCurrent}
+                            onClick={() => {
+                              if (cat === 'top' || cat === 'hot') {
+                                setPromoteTarget(cat);
+                              } else {
+                                updateContact.mutate({
+                                  id: contact.id,
+                                  teamId,
+                                  category: cat as DealCategory,
+                                });
+                              }
+                            }}
+                          >
+                            {cfg.icon} {cfg.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </section>
 
-              <Separator />
+                  <Separator />
+                </>
+              )}
 
               {/* Notes */}
               <section>
@@ -359,55 +361,93 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
               <Separator />
 
-              {/* Weekly Status */}
-              <section>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+              {contact.category === 'client' ? (
+                /* Rozliczenie section for clients */
+                <section>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5" />
-                    Statusy tygodniowe
+                    Rozliczenie
                   </h4>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setShowWeeklyForm(true)}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Dodaj
-                  </Button>
-                </div>
-                {contact.status_overdue && (
-                  <div className="flex items-center gap-1.5 text-xs text-destructive mb-2 bg-destructive/10 rounded p-2">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    Status przeterminowany
+                  <div className="flex gap-1.5">
+                    {([
+                      { value: 'monthly', label: 'Miesięczne' },
+                      { value: 'quarterly', label: 'Kwartalne' },
+                      { value: 'semi_annual', label: 'Półroczne' },
+                      { value: 'annual', label: 'Roczne' },
+                    ] as const).map((opt) => {
+                      const isCurrent = (contact.review_frequency || 'quarterly') === opt.value;
+                      return (
+                        <Button
+                          key={opt.value}
+                          variant={isCurrent ? 'default' : 'outline'}
+                          size="sm"
+                          className={cn('flex-1 text-xs h-8', isCurrent && 'pointer-events-none')}
+                          disabled={isCurrent}
+                          onClick={() => {
+                            updateContact.mutate({
+                              id: contact.id,
+                              teamId,
+                              reviewFrequency: opt.value,
+                            });
+                          }}
+                        >
+                          {opt.label}
+                        </Button>
+                      );
+                    })}
                   </div>
-                )}
-                {weeklyStatuses.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Brak statusów</p>
-                ) : (
-                  <div className="space-y-2">
-                    {weeklyStatuses.slice(0, 5).map((ws) => (
-                      <div key={ws.id} className="bg-muted/50 rounded p-2.5 text-xs space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">
-                            Tydzień {format(new Date(ws.week_start), 'dd.MM', { locale: pl })}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {ws.reporter?.full_name}
-                          </span>
+                </section>
+              ) : (
+                /* Weekly Status for non-clients */
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      Statusy tygodniowe
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setShowWeeklyForm(true)}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Dodaj
+                    </Button>
+                  </div>
+                  {contact.status_overdue && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive mb-2 bg-destructive/10 rounded p-2">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Status przeterminowany
+                    </div>
+                  )}
+                  {weeklyStatuses.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Brak statusów</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {weeklyStatuses.slice(0, 5).map((ws) => (
+                        <div key={ws.id} className="bg-muted/50 rounded p-2.5 text-xs space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">
+                              Tydzień {format(new Date(ws.week_start), 'dd.MM', { locale: pl })}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {ws.reporter?.full_name}
+                            </span>
+                          </div>
+                          <p>{ws.status_summary}</p>
+                          {ws.next_steps && (
+                            <p className="text-muted-foreground">→ {ws.next_steps}</p>
+                          )}
+                          {ws.blockers && (
+                            <p className="text-destructive">⚠ {ws.blockers}</p>
+                          )}
                         </div>
-                        <p>{ws.status_summary}</p>
-                        {ws.next_steps && (
-                          <p className="text-muted-foreground">→ {ws.next_steps}</p>
-                        )}
-                        {ws.blockers && (
-                          <p className="text-destructive">⚠ {ws.blockers}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
 
               <Separator />
 

@@ -82,6 +82,7 @@ export interface DealTeamContact {
   category_changed_at: string;
   ai_brief: string | null;
   ai_brief_generated_at: string | null;
+  review_frequency: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   created_at: string;
   updated_at: string;
   // JOIN z contacts
@@ -253,6 +254,7 @@ export interface UpdateTeamContactInput {
   estimatedValue?: number | null;
   valueCurrency?: string;
   notes?: string | null;
+  reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
 }
 
 export interface PromoteContactInput {
