@@ -1,82 +1,62 @@
 
 
-# Wzbogacenie Briefu AI o dane z Business Interview (BI)
+# Dodanie kategorii "Cold Lead" do Kanban
 
-## Problem
+## Zakres zmian
 
-Funkcja `prospect-ai-brief` generuje brief wylacznie na podstawie danych z Perplexity (wyszukiwanie zewnetrzne). Jezeli kontakt ma juz wypelniony arkusz Business Interview w systemie, te cenne dane (strategia, potrzeby, inwestycje, hobby, organizacje, rodzina) sa ignorowane.
+Nowa kategoria `cold` zostanie dodana jako najnizszy etap w lejku sprzedazowym, ponizej LEAD. Cold Lead to kontakt "zimny" -- wczesny etap, jeszcze bez kwalifikacji.
 
-## Rozwiazanie
+## Brak zmian w bazie danych
 
-Po pobraniu danych kontaktu, edge function sprawdzi czy istnieje rekord w `business_interviews` dla danego `contact_id`. Jezeli tak -- wyciagnie kluczowe dane z sekcji BI i doda je do promptu syntezy AI jako dodatkowy kontekst.
+Kolumna `category` w tabeli `deal_team_contacts` jest typu `text` bez ograniczen CHECK -- nie potrzeba migracji SQL.
 
-### Logika w edge function
-
-```text
-1. Pobierz contact_id (dla deal_contact -- juz mamy; dla prospect -- szukamy po full_name + company)
-2. SELECT z business_interviews WHERE contact_id = X AND status != 'draft' (najnowsza wersja)
-3. Jezeli rekord istnieje -- wyciagnij dane z sekcji:
-   - section_a_basic: branza, zrodlo kontaktu, status relacji
-   - section_c_company_profile: zakres dzialalnosci, rynki, produkty, rola, udzialy
-   - section_d_scale: przychody, pracownicy, pojazdy, liczba spolek, kraje
-   - section_f_strategy: cele strategiczne, szanse, ryzyka
-   - section_g_needs: top3 priorytety, wyzwanie, czego poszukuje
-   - section_h_investments: ostatnie/planowane inwestycje
-   - section_l_personal: miasto, hobby, cele prywatne, rodzina
-   - section_m_organizations: fundacje, organizacje branzowe, izby
-4. Sformatuj jako blok tekstu "DANE Z BUSINESS INTERVIEW"
-5. Dodaj do promptu syntezy AI -- przed sekcjami Perplexity
-```
-
-### Zmiany w prompcie syntezy
-
-Dodanie nowej sekcji w prompcie:
-
-```text
-DANE Z WEWNETRZNEGO SYSTEMU CRM (Business Interview):
-[sformatowane dane z BI]
-
-WAZNE: Dane z Business Interview to ZWERYFIKOWANE informacje uzyskane bezposrednio 
-od klienta lub z wewnetrznych zrodel. Maja WYZSZY priorytet niz dane z wyszukiwania 
-internetowego. Uwzglednij je w briefie i oznacz jako potwierdzone.
-```
-
-### Obsluga obu zrodel (prospect vs deal_contact)
-
-| Zrodlo | Jak znalezc contact_id |
-|---|---|
-| `deal_contact` | Juz mamy `dtc.contact_id` z zapytania |
-| `prospect` | Szukamy w tabeli `contacts` po `full_name` i `company` (opcjonalnie). Jezeli brak dopasowania -- pomijamy BI |
-
-### Plik do modyfikacji
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `supabase/functions/prospect-ai-brief/index.ts` | Dodanie zapytania do `business_interviews`, formatowanie danych BI, wzbogacenie promptu syntezy |
+| `src/types/dealTeam.ts` | Dodanie `'cold'` do typu `DealCategory` |
+| `src/components/deals-team/KanbanBoard.tsx` | Nowa kolumna COLD LEAD z filtrem + nowy komponent `ColdLeadCard` (lub reuse `LeadCard`) |
+| `src/components/deals-team/ColdLeadCard.tsx` | **Nowy plik** -- karta cold leada z przyciskiem "do LEAD" |
+| `src/components/deals-team/TeamStats.tsx` | Nowa karta statystyk dla COLD (grid 5 kolumn) |
+| `src/components/deals-team/TableView.tsx` | Dodanie `cold` do `categoryConfig` i `categoryOrder` |
+| `src/components/deals-team/AddContactDialog.tsx` | Dodanie opcji `cold` w Select kategorii |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | Dodanie `cold` do `categoryConfig` |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie `cold` do listy kategorii przy konwersji |
+| `src/hooks/useDealsTeamContacts.ts` | Dodanie `cold_count` do statystyk |
 
-### Szczegoly techniczne
+## Szczegoly techniczne
 
-Funkcja pomocnicza `formatBIData(bi)` zamieni sekcje JSONB na czytelny tekst:
+### 1. Typ `DealCategory` (dealTeam.ts)
 
 ```text
-formatBIData(bi) -> string:
-  result = ""
-  if section_a_basic:
-    result += "Branza: " + branza.join(", ")
-    result += "Zrodlo kontaktu: " + zrodlo_kontaktu
-    result += "Status relacji: " + status_relacji
-  if section_c_company_profile:
-    result += "Zakres dzialalnosci: " + zakres_dzialalnosci
-    result += "Produkty/uslugi: " + produkty_uslugi.join(", ")
-    result += "Rola: " + tytul_rola
-    ...
-  if section_l_personal:
-    result += "Miasto: " + miasto_bazowe
-    result += "Hobby: " + hobby.join(", ")
-    result += "Rodzina: " + ...
-  ...
-  return result
+// Przed:
+export type DealCategory = 'hot' | 'top' | 'lead';
+
+// Po:
+export type DealCategory = 'hot' | 'top' | 'lead' | 'cold';
 ```
 
-Jezeli BI nie istnieje lub jest w statusie `draft` -- blok "DANE Z BUSINESS INTERVIEW" nie pojawi sie w prompcie (brak zmian w dzialaniu).
+### 2. `DealTeamContactStats` -- dodanie `cold_count`
+
+### 3. KanbanBoard -- nowa kolumna COLD LEAD
+
+- Ikona: `❄️` lub `🧊`
+- Kolor: `slate` / `gray`
+- Kolejnosc: HOT > TOP > LEAD > COLD > POSZUKIWANI
+- Grid zmieni sie na `lg:grid-cols-5`
+
+### 4. ColdLeadCard
+
+- Podobny do LeadCard ale z przyciskiem "do LEAD" (awans w gore)
+- Kolor border: `border-l-slate-400`
+
+### 5. TableView -- categoryOrder
+
+```text
+const categoryOrder = { hot: 4, top: 3, lead: 2, cold: 1 };
+```
+
+### 6. ProspectingConvertDialog -- domyslna kategoria `cold`
+
+Przy konwersji prospekta domyslna kategoria zmieni sie z `lead` na `cold` (zimny kontakt dopiero wchodzi do lejka).
 
