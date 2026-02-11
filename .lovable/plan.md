@@ -1,67 +1,81 @@
 
 
-# Przenoszenie briefu AI z prospectingu do karty kontaktu
+# Kompaktowe karty + akcje przenoszenia w popupie + filtrowanie/grupowanie
 
-## Problem
+## Zakres zmian
 
-Podczas konwersji prospekta na kontakt dealowy (Kanban), brief AI (`ai_brief`) jest kopiowany tylko do arkusza Business Interview (BI), ale **nie jest zapisywany** w kolumnie `deal_team_contacts.ai_brief`. Dlatego w popupie kontaktu (DealContactDetailSheet) brief jest pusty i wyswietla sie "Brak briefu".
+1. **Kompaktowe karty** -- kazda karta (HOT/TOP/LEAD/COLD) staje sie jednolinijkowa: tylko nazwa kontaktu, firma (skrocona), i mala kolorowa kropka statusu. Usuwamy przyciski "do HOT/TOP" z kart oraz notatki, priorytet badge, next action itp.
+2. **Akcje przenoszenia w popupie** -- w `DealContactDetailSheet` dodajemy sekcje "Zmien kategorie" z przyciskami do przenoszenia kontaktu miedzy kolumnami (HOT/TOP/LEAD/COLD), z uruchomieniem `PromoteDialog` gdy wymagane sa dodatkowe dane (np. LEAD->TOP wymaga przypisania osoby).
+3. **Filtrowanie i szukanie** -- nad Kanbanem dodajemy pasek z: wyszukiwarka tekstowa (po nazwie/firmie), filtr po priorytecie, filtr po statusie.
 
-## Rozwiazanie
-
-W pliku `ProspectingConvertDialog.tsx`, w momencie insertu do `deal_team_contacts` (linia 216-223), nalezy dodac pole `ai_brief` oraz `ai_brief_generated_at` z danych prospekta.
-
-## Plik do modyfikacji
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie `ai_brief` i `ai_brief_generated_at` do insertu `deal_team_contacts` |
+| `HotLeadCard.tsx` | Kompaktowa wersja: 1 wiersz -- nazwa + firma + kropka statusu. Usunac assignments, next meeting, next action, estimated value |
+| `TopLeadCard.tsx` | Kompaktowa wersja: 1 wiersz -- nazwa + firma + kropka statusu. Usunac przycisk "do HOT", priorytet badge, next action |
+| `LeadCard.tsx` | Kompaktowa wersja: 1 wiersz -- nazwa + firma + kropka statusu. Usunac przycisk "do TOP", priorytet badge, notatki |
+| `ColdLeadCard.tsx` | Kompaktowa wersja: 1 wiersz -- nazwa + firma + kropka statusu. Usunac przycisk "do LEAD", priorytet badge, notatki |
+| `DealContactDetailSheet.tsx` | Dodac sekcje "Zmien kategorie" z przyciskami do HOT/TOP/LEAD/COLD + integracja z PromoteDialog |
+| `KanbanBoard.tsx` | Dodac pasek filtrowania (szukaj, priorytet, status) nad kolumnami + logika filtrowania kontaktow |
+| `KanbanColumn.tsx` | Zmniejszyc `space-y-2` na `space-y-1` dla gesciejszego rozmieszczenia |
 
 ## Szczegoly techniczne
 
-W insercie do `deal_team_contacts` (linia 216-223) dodac:
+### 1. Kompaktowe karty (przyklad TopLeadCard)
+
+Kazda karta bedzie wygladac tak:
 
 ```text
-// Przed:
-.insert({
-  team_id: teamId,
-  contact_id: contactId,
-  tenant_id: tenantId,
-  category,
-  priority: 'medium',
-  status: 'active',
-})
-
-// Po:
-.insert({
-  team_id: teamId,
-  contact_id: contactId,
-  tenant_id: tenantId,
-  category,
-  priority: 'medium',
-  status: 'active',
-  ai_brief: prospect.ai_brief || null,
-  ai_brief_generated_at: prospect.ai_brief_generated_at || null,
-})
+[kolorowy border-l-2] Imie Nazwisko · Firma     ●
 ```
 
-Dodatkowo, jesli kontakt juz istnial w zespole (`existingTeamContact`), brief powinien zostac zaktualizowany jesli jest pusty:
+Struktura JSX:
+- Card z `p-1.5` zamiast `p-3`
+- Jeden wiersz flex: nazwa (truncate) + separator " · " + firma (truncate) + kropka statusu (2px)
+- Brak przyciskow akcji, brak badge'y priorytetu
+- Zachowujemy: draggable, onDragStart/End, onClick, isDragging
+
+Wysokosc karty: ~32-36px zamiast obecnych ~100-140px.
+
+### 2. Przenoszenie kategorii z popupu
+
+W `DealContactDetailSheet`, pod sekcja "Status" dodajemy:
 
 ```text
-if (existingTeamContact) {
-  teamContactId = existingTeamContact.id;
-  // Update brief if missing
-  if (prospect.ai_brief) {
-    await supabase
-      .from('deal_team_contacts')
-      .update({
-        ai_brief: prospect.ai_brief,
-        ai_brief_generated_at: prospect.ai_brief_generated_at || new Date().toISOString(),
-      })
-      .eq('id', existingTeamContact.id)
-      .is('ai_brief', null);
-  }
-  toast.info('Kontakt juz byl w zespole -- zaktualizowano');
-}
+--- Separator ---
+Kategoria
+[🔥 HOT] [⭐ TOP] [📋 LEAD] [❄️ COLD]   <-- 4 przyciski, aktualny wyszarzony
 ```
 
-Zmiana dotyczy tylko jednego pliku i dwoch miejsc w kodzie (insert nowego kontaktu + update istniejacego).
+Logika:
+- Klikniecie w nowa kategorie:
+  - Jesli przenoszenie wymaga danych (COLD/LEAD -> TOP, TOP -> HOT) -> otwiera `PromoteDialog`
+  - Jesli przenoszenie jest proste (np. HOT -> COLD, TOP -> LEAD) -> bezposredni `updateContact.mutate({ category })`
+- Po zmianie kategorii popup pozostaje otwarty (dane sie odswiezyly przez react-query)
+
+Wymagane PromoteDialog:
+- Do TOP: wymaga assignedTo + nextAction
+- Do HOT: wymaga nextMeetingDate
+
+### 3. Filtrowanie nad Kanbanem
+
+Nad siatka kolumn dodajemy pasek:
+
+```text
+[🔍 Szukaj kontakt...] [Priorytet ▼] [Status ▼]
+```
+
+- **Szukaj**: filtruje po `contact.full_name` i `contact.company` (case-insensitive)
+- **Priorytet**: multi-select (urgent/high/medium/low)
+- **Status**: multi-select (active/on_hold/won/lost/disqualified)
+
+Logika filtrowania:
+- Stan w `KanbanBoard`: `searchQuery`, `priorityFilter[]`, `statusFilter[]`
+- Filtrowane listy: `hotContacts`, `topContacts` itd. uwzgledniaja filtry
+- Liczniki w naglowkach kolumn pokazuja ilosc po filtracji
+
+### 4. KanbanColumn -- gestsze ukladanie
+
+- `space-y-2` -> `space-y-1` w kontenerze kart
+- Zachowujemy ScrollArea dla przewijania setek pozycji
