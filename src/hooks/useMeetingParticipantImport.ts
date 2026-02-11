@@ -13,6 +13,7 @@ export interface MatchedParticipant {
   contactFullName?: string;
   contactCompany?: string | null;
   primaryGroupId?: string | null;
+  groupName?: string | null;
 }
 
 export async function matchContactsFromParsed(
@@ -23,7 +24,7 @@ export async function matchContactsFromParsed(
   // Fetch all contacts for this tenant (batch, up to 1000)
   const { data: contacts } = await supabase
     .from('contacts')
-    .select('id, full_name, company, primary_group_id, director_id')
+    .select('id, full_name, company, primary_group_id, director_id, contact_groups(name)')
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
     .limit(1000);
@@ -56,6 +57,7 @@ export async function matchContactsFromParsed(
         contactFullName: match.full_name,
         contactCompany: match.company,
         primaryGroupId: match.primary_group_id,
+        groupName: (match as any).contact_groups?.name || null,
       } as MatchedParticipant;
     }
 

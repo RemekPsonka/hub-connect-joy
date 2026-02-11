@@ -7,6 +7,7 @@ import {
   Users,
   Sparkles,
   Building2,
+  UserPlus,
 } from 'lucide-react';
 import {
   Dialog,
@@ -29,11 +30,11 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDealTeams } from '@/hooks/useDealTeams';
+import { useContactGroups } from '@/hooks/useContactGroups';
 import {
   matchContactsFromParsed,
   useImportPDFParticipants,
   type MatchedParticipant,
-  type ParticipantMatchType,
 } from '@/hooks/useMeetingParticipantImport';
 import type { ParsedPerson } from '@/hooks/useMeetingProspects';
 import { toast } from 'sonner';
@@ -46,19 +47,16 @@ interface Props {
   meetingDate: string;
 }
 
-const BADGE_CONFIG: Record<ParticipantMatchType, { label: string; className: string }> = {
-  member: {
-    label: 'Mój członek',
-    className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-  },
-  cc_member: {
-    label: 'Członek CC',
-    className: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
-  },
-  prospect: {
-    label: 'Prospect',
-    className: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
-  },
+const getBadgeInfo = (p: MatchedParticipant) => {
+  if (p.matchType === 'prospect') {
+    return { label: 'Prospect', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
+  }
+  return {
+    label: p.groupName || 'Kontakt CH',
+    className: p.matchType === 'member'
+      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+      : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  };
 };
 
 export function ImportPDFMeetingDialog({
@@ -80,6 +78,7 @@ export function ImportPDFMeetingDialog({
   const directorId = director?.id;
 
   const { data: teams = [] } = useDealTeams();
+  const { data: contactGroups = [] } = useContactGroups();
   const importMutation = useImportPDFParticipants();
 
   const reset = () => {
@@ -150,17 +149,51 @@ export function ImportPDFMeetingDialog({
     setParticipants((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleChangeBadge = (index: number, newType: ParticipantMatchType) => {
+  const handleChangeBadge = (index: number, value: string) => {
     setParticipants((prev) =>
       prev.map((p, i) => {
         if (i !== index) return p;
-        // If changing from contact-type to prospect, remove contact link
-        if (newType === 'prospect') {
-          return { ...p, matchType: newType, contactId: undefined };
+        if (value === 'prospect') {
+          return { ...p, matchType: 'prospect' as const, contactId: undefined, primaryGroupId: null, groupName: null };
         }
-        return { ...p, matchType: newType };
+        // value is a group ID
+        const group = contactGroups.find((g) => g.id === value);
+        return {
+          ...p,
+          matchType: 'cc_member' as const,
+          primaryGroupId: value,
+          groupName: group?.name || null,
+        };
       })
     );
+  };
+
+  const handleAddToDatabase = async (index: number) => {
+    if (!tenantId || !directorId) return;
+    const p = participants[index];
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert({
+        tenant_id: tenantId,
+        director_id: directorId,
+        full_name: p.parsed.full_name,
+        company: p.parsed.company || null,
+        position: p.parsed.position || null,
+        primary_group_id: p.primaryGroupId || null,
+        source: 'meeting_import',
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      toast.error('Błąd dodawania kontaktu');
+      return;
+    }
+
+    setParticipants((prev) =>
+      prev.map((pp, i) => (i === index ? { ...pp, contactId: data.id } : pp))
+    );
+    toast.success('Kontakt dodany do bazy');
   };
 
   const handleImport = () => {
@@ -275,7 +308,8 @@ export function ImportPDFMeetingDialog({
             <ScrollArea className="h-[350px] border rounded-md">
               <div className="divide-y">
                 {participants.map((p, i) => {
-                  const badge = BADGE_CONFIG[p.matchType];
+                  const badge = getBadgeInfo(p);
+                  const selectValue = p.matchType === 'prospect' ? 'prospect' : (p.primaryGroupId || 'no-group');
                   return (
                     <div
                       key={i}
@@ -296,20 +330,34 @@ export function ImportPDFMeetingDialog({
                         </div>
                       </div>
 
-                      {/* Badge selector */}
+                      {/* Badge selector — grupy z CRM + Prospect */}
                       <Select
-                        value={p.matchType}
-                        onValueChange={(v) => handleChangeBadge(i, v as ParticipantMatchType)}
+                        value={selectValue}
+                        onValueChange={(v) => handleChangeBadge(i, v)}
                       >
                         <SelectTrigger className="w-auto border-0 p-0 h-auto shadow-none">
                           <Badge className={badge.className}>{badge.label}</Badge>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="member">Mój członek</SelectItem>
-                          <SelectItem value="cc_member">Członek CC</SelectItem>
+                          {contactGroups.map((g) => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          ))}
                           <SelectItem value="prospect">Prospect</SelectItem>
                         </SelectContent>
                       </Select>
+
+                      {/* Dodaj do bazy — only for non-prospects without contactId */}
+                      {p.matchType !== 'prospect' && !p.contactId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleAddToDatabase(i)}
+                        >
+                          <UserPlus className="h-3 w-3 mr-1" />
+                          Dodaj do bazy
+                        </Button>
+                      )}
 
                       <Button
                         variant="ghost"
