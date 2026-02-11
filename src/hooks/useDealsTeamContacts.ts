@@ -372,3 +372,117 @@ export function useChangeContactStatus() {
     },
   });
 }
+
+/**
+ * Generuje brief AI dla kontaktu dealowego
+ */
+export function useGenerateDealContactBrief() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ dealContactId, teamId }: { dealContactId: string; teamId: string }) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prospect-ai-brief`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ source: 'deal_contact', dealContactId }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+        throw new Error(err.error || `Błąd ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { brief: data.brief, teamId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
+      toast.success('Brief AI wygenerowany');
+    },
+    onError: (error: Error) => {
+      toast.error(`Błąd generowania briefu: ${error.message}`);
+    },
+  });
+}
+
+/**
+ * Cofa kontakt dealowy na listę prospecting
+ */
+export function useRevertToProspecting() {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+  const userId = director?.id;
+
+  return useMutation({
+    mutationFn: async ({ dealContactId, teamId, contactId }: { dealContactId: string; teamId: string; contactId: string }) => {
+      if (!tenantId || !userId) throw new Error('Brak autoryzacji');
+
+      // 1. Fetch contact data
+      const { data: contact, error: cErr } = await supabase
+        .from('contacts')
+        .select('full_name, company, position, email, phone, linkedin_url')
+        .eq('id', contactId)
+        .single();
+
+      if (cErr || !contact) throw new Error('Nie znaleziono kontaktu');
+
+      // 2. Create prospect
+      const { error: insertErr } = await (supabase as any)
+        .from('meeting_prospects')
+        .insert({
+          team_id: teamId,
+          tenant_id: tenantId,
+          full_name: contact.full_name,
+          company: contact.company,
+          position: contact.position,
+          industry: null,
+          email: contact.email,
+          phone: contact.phone,
+          linkedin_url: contact.linkedin_url,
+          imported_by: userId,
+          is_prospecting: true,
+          prospecting_status: 'new',
+          source_event: 'Cofnięto z Kanban',
+        });
+
+      if (insertErr) throw insertErr;
+
+      // 3. Delete from deal_team_contacts
+      const { error: delErr } = await supabase
+        .from('deal_team_contacts')
+        .delete()
+        .eq('id', dealContactId);
+
+      if (delErr) throw delErr;
+
+      // 4. Log activity
+      await (supabase as any)
+        .from('deal_team_activity_log')
+        .insert({
+          team_id: teamId,
+          tenant_id: tenantId,
+          team_contact_id: null,
+          actor_id: userId,
+          action: 'contact_removed',
+          note: `Cofnięto na listę prospecting: ${contact.full_name}`,
+        });
+
+      return { teamId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
+      queryClient.invalidateQueries({ queryKey: ['meeting-prospects', result.teamId] });
+      toast.success('Kontakt cofnięty na listę prospecting');
+    },
+    onError: (error: Error) => {
+      toast.error(`Błąd: ${error.message}`);
+    },
+  });
+}

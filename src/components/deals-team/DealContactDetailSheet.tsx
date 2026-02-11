@@ -4,7 +4,8 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
-  Clock, AlertTriangle, MessageSquare, History, ChevronDown
+  Clock, AlertTriangle, MessageSquare, History, ChevronDown,
+  Sparkles, RefreshCw, ArrowLeftRight, Loader2
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -25,11 +26,12 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { useChangeContactStatus, useRemoveContactFromTeam, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { useChangeContactStatus, useRemoveContactFromTeam, useUpdateTeamContact, useGenerateDealContactBrief, useRevertToProspecting } from '@/hooks/useDealsTeamContacts';
 import { useContactActivityLog } from '@/hooks/useContactActivityLog';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
 import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
 import { WeeklyStatusForm } from './WeeklyStatusForm';
+import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import type { DealTeamContact, DealContactStatus } from '@/types/dealTeam';
@@ -77,6 +79,8 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const removeContact = useRemoveContactFromTeam();
   const updateContact = useUpdateTeamContact();
   const updateTask = useUpdateTask();
+  const generateBrief = useGenerateDealContactBrief();
+  const revertToProspecting = useRevertToProspecting();
 
   const { data: activityLog = [] } = useContactActivityLog(contact?.id);
   const { data: weeklyStatuses = [] } = useTeamContactWeeklyStatuses(contact?.id);
@@ -89,6 +93,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
+  const [briefDialogOpen, setBriefDialogOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Sync notes from contact
@@ -138,6 +143,15 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const handleRemove = () => {
     removeContact.mutate({ contactId: contact.id, teamId });
     onOpenChange(false);
+  };
+
+  const handleRevert = () => {
+    revertToProspecting.mutate({ dealContactId: contact.id, teamId, contactId: contact.contact_id });
+    onOpenChange(false);
+  };
+
+  const handleGenerateBrief = () => {
+    generateBrief.mutate({ dealContactId: contact.id, teamId });
   };
 
   const handleToggleTask = (taskId: string, currentStatus: string) => {
@@ -223,6 +237,65 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                   placeholder="Dodaj notatki..."
                   className="min-h-[80px] text-sm resize-none"
                 />
+              </section>
+
+              <Separator />
+
+              {/* Brief AI */}
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Brief AI
+                  </h4>
+                  {contact.ai_brief ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleGenerateBrief}
+                      disabled={generateBrief.isPending}
+                    >
+                      <RefreshCw className={cn('h-3 w-3 mr-1', generateBrief.isPending && 'animate-spin')} />
+                      Odśwież
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleGenerateBrief}
+                      disabled={generateBrief.isPending}
+                    >
+                      {generateBrief.isPending ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3 mr-1" />
+                      )}
+                      {generateBrief.isPending ? 'Generuję...' : 'Generuj'}
+                    </Button>
+                  )}
+                </div>
+                {contact.ai_brief ? (
+                  <div
+                    className="bg-muted/50 rounded p-3 text-xs cursor-pointer hover:bg-muted/70 transition-colors"
+                    onClick={() => setBriefDialogOpen(true)}
+                  >
+                    <p className="line-clamp-4 whitespace-pre-wrap">{contact.ai_brief.substring(0, 300)}...</p>
+                    {contact.ai_brief_generated_at && (
+                      <p className="text-muted-foreground mt-1.5 text-[10px]">
+                        Wygenerowano: {format(new Date(contact.ai_brief_generated_at), 'd MMM yyyy, HH:mm', { locale: pl })}
+                      </p>
+                    )}
+                    <p className="text-primary mt-1 text-[10px]">Kliknij aby otworzyć pełny brief →</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {generateBrief.isPending
+                      ? 'Trwa generowanie briefu AI...'
+                      : 'Brak briefu. Kliknij "Generuj" aby przygotować brief do rozmowy.'}
+                  </p>
+                )}
               </section>
 
               <Separator />
@@ -416,8 +489,34 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
               <Separator />
 
-              {/* Remove action */}
-              <section className="pb-4">
+              {/* Actions */}
+              <section className="pb-4 space-y-2">
+                {/* Revert to Prospecting */}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full text-xs">
+                      <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" />
+                      Cofnij na listę Prospecting
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cofnij na listę Prospecting</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Czy na pewno chcesz cofnąć {contact.contact.full_name} na listę prospecting?
+                        Kontakt zostanie usunięty z tablicy Kanban i utworzony jako nowy prospekt.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRevert}>
+                        Cofnij
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Remove from team */}
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="ghost" size="sm" className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 text-xs">
@@ -477,6 +576,20 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
             setTaskDetailOpen(false);
             setTaskModalOpen(true);
           }}
+        />
+      )}
+
+      {/* Brief AI Dialog */}
+      {contact.ai_brief && (
+        <ProspectAIBriefDialog
+          open={briefDialogOpen}
+          onOpenChange={setBriefDialogOpen}
+          prospectName={contact.contact.full_name}
+          company={contact.contact.company}
+          brief={contact.ai_brief}
+          generatedAt={contact.ai_brief_generated_at}
+          onRegenerate={handleGenerateBrief}
+          isRegenerating={generateBrief.isPending}
         />
       )}
     </>
