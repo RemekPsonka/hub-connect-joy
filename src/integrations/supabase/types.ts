@@ -3810,33 +3810,36 @@ export type Database = {
       meeting_participants: {
         Row: {
           attendance_status: string | null
-          contact_id: string
+          contact_id: string | null
           created_at: string | null
           id: string
           is_member: boolean | null
           is_new: boolean | null
           meeting_id: string
           notes: string | null
+          prospect_id: string | null
         }
         Insert: {
           attendance_status?: string | null
-          contact_id: string
+          contact_id?: string | null
           created_at?: string | null
           id?: string
           is_member?: boolean | null
           is_new?: boolean | null
           meeting_id: string
           notes?: string | null
+          prospect_id?: string | null
         }
         Update: {
           attendance_status?: string | null
-          contact_id?: string
+          contact_id?: string | null
           created_at?: string | null
           id?: string
           is_member?: boolean | null
           is_new?: boolean | null
           meeting_id?: string
           notes?: string | null
+          prospect_id?: string | null
         }
         Relationships: [
           {
@@ -3851,6 +3854,13 @@ export type Database = {
             columns: ["meeting_id"]
             isOneToOne: false
             referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_participants_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_prospects"
             referencedColumns: ["id"]
           },
         ]
@@ -3872,6 +3882,7 @@ export type Database = {
           industry: string | null
           is_prospecting: boolean | null
           linkedin_url: string | null
+          meeting_id: string | null
           phone: string | null
           position: string | null
           priority: string | null
@@ -3899,6 +3910,7 @@ export type Database = {
           industry?: string | null
           is_prospecting?: boolean | null
           linkedin_url?: string | null
+          meeting_id?: string | null
           phone?: string | null
           position?: string | null
           priority?: string | null
@@ -3926,6 +3938,7 @@ export type Database = {
           industry?: string | null
           is_prospecting?: boolean | null
           linkedin_url?: string | null
+          meeting_id?: string | null
           phone?: string | null
           position?: string | null
           priority?: string | null
@@ -3943,6 +3956,13 @@ export type Database = {
             columns: ["converted_to_contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_prospects_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
             referencedColumns: ["id"]
           },
           {

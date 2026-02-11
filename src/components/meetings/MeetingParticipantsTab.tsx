@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Upload, Search, UserPlus, Trash2 } from 'lucide-react';
+import { Plus, Upload, Search, UserPlus, Trash2, FileText, Sparkles } from 'lucide-react';
 import { ParticipantBadge } from './ParticipantBadge';
 import {
   useMeetingParticipants,
@@ -28,23 +28,31 @@ import {
 } from '@/hooks/useMeetings';
 import { AddParticipantModal } from './AddParticipantModal';
 import { ImportCSVModal } from './ImportCSVModal';
+import { ImportPDFMeetingDialog } from './ImportPDFMeetingDialog';
+import { ProspectAIBriefDialog } from '@/components/deals-team/ProspectAIBriefDialog';
+import { useGenerateProspectBrief } from '@/hooks/useMeetingProspects';
 import { toast } from 'sonner';
 
 interface MeetingParticipantsTabProps {
   meetingId: string;
+  meetingName?: string;
+  meetingDate?: string;
 }
 
 type ParticipantFilter = 'all' | 'members' | 'new';
 
-export function MeetingParticipantsTab({ meetingId }: MeetingParticipantsTabProps) {
+export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: MeetingParticipantsTabProps) {
   const [filter, setFilter] = useState<ParticipantFilter>('all');
   const [search, setSearch] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPDFOpen, setImportPDFOpen] = useState(false);
+  const [briefProspect, setBriefProspect] = useState<any>(null);
 
   const { data: participants = [], isLoading } = useMeetingParticipants(meetingId);
   const updateAttendance = useUpdateParticipantAttendance();
   const removeParticipant = useRemoveParticipant();
+  const generateBrief = useGenerateProspectBrief();
 
   const filteredParticipants = participants.filter((p) => {
     // Apply type filter
@@ -126,6 +134,10 @@ export function MeetingParticipantsTab({ meetingId }: MeetingParticipantsTabProp
         </div>
 
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportPDFOpen(true)} className="gap-2">
+            <FileText className="h-4 w-4" />
+            Importuj z PDF
+          </Button>
           <Button variant="outline" onClick={() => setImportModalOpen(true)} className="gap-2">
             <Upload className="h-4 w-4" />
             Importuj z CSV
@@ -162,46 +174,63 @@ export function MeetingParticipantsTab({ meetingId }: MeetingParticipantsTabProp
                   <TableHead>Imię i nazwisko</TableHead>
                   <TableHead>Firma</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-12 text-center">Brief</TableHead>
                   <TableHead className="text-center">Obecność</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredParticipants.map((participant) => (
-                  <TableRow key={participant.id}>
-                    <TableCell className="font-medium">
-                      {participant.contact?.full_name ?? 'Nieznany kontakt'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {participant.contact?.company ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <ParticipantBadge
-                        isMember={participant.is_member}
-                        isNew={participant.is_new}
-                        primaryGroupId={participant.contact?.primary_group_id}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={participant.attendance_status === 'attended'}
-                        onCheckedChange={(checked) =>
-                          handleAttendanceChange(participant.id, checked as boolean)
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveParticipant(participant.id)}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredParticipants.map((participant) => {
+                  const isProspect = !!(participant as any).prospect_id && !participant.contact_id;
+                  return (
+                    <TableRow key={participant.id}>
+                      <TableCell className="font-medium">
+                        {participant.contact?.full_name ?? 'Nieznany kontakt'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {participant.contact?.company ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <ParticipantBadge
+                          isMember={participant.is_member}
+                          isNew={participant.is_new}
+                          primaryGroupId={participant.contact?.primary_group_id}
+                          isProspect={isProspect}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {(participant as any).prospect_id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => setBriefProspect((participant as any).prospect_id)}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox
+                          checked={participant.attendance_status === 'attended'}
+                          onCheckedChange={(checked) =>
+                            handleAttendanceChange(participant.id, checked as boolean)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveParticipant(participant.id)}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -224,6 +253,16 @@ export function MeetingParticipantsTab({ meetingId }: MeetingParticipantsTabProp
         onOpenChange={setImportModalOpen}
         meetingId={meetingId}
       />
+
+      {meetingName && meetingDate && (
+        <ImportPDFMeetingDialog
+          open={importPDFOpen}
+          onOpenChange={setImportPDFOpen}
+          meetingId={meetingId}
+          meetingName={meetingName}
+          meetingDate={meetingDate}
+        />
+      )}
     </div>
   );
 }

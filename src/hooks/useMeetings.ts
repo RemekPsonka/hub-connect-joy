@@ -245,7 +245,7 @@ export function useMeetingParticipants(meetingId: string | undefined) {
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return data as MeetingParticipant[];
+      return data as (MeetingParticipant & { prospect_id?: string | null })[];
     },
     enabled: !!meetingId,
   });

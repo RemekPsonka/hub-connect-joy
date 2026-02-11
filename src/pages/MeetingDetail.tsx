@@ -127,7 +127,7 @@ export default function MeetingDetail() {
         </TabsList>
 
         <TabsContent value="participants">
-          <MeetingParticipantsTab meetingId={meeting.id} />
+          <MeetingParticipantsTab meetingId={meeting.id} meetingName={meeting.name} meetingDate={meeting.scheduled_at} />
         </TabsContent>
 
         <TabsContent value="recommendations">
