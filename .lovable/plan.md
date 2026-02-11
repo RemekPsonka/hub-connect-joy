@@ -1,78 +1,55 @@
 
 
-# Drag & Drop miedzy kolumnami + Popup zamiast nawigacji
+# Naprawa bledu w Kanban Drag & Drop
 
-## Zakres zmian
+## Problem
 
-1. **Drag & Drop** -- mozliwosc przeciagania kart kontaktow miedzy kolumnami HOT/TOP/LEAD/COLD (analogicznie do TasksKanban)
-2. **Klikniecie otwiera popup** -- klikniecie w karte otwiera `DealContactDetailSheet` (juz dzisiaj dziala tak z KanbanBoard). Natomiast w kartach (`HotLeadCard`, `TopLeadCard`, `LeadCard`, `ColdLeadCard`) sa `<Link>` do profilu kontaktu, ktore trzeba zamienic na zwykly tekst -- nawigacja na karte kontaktu bedzie dostepna wylacznie przez hiperlink w popupie (`DealContactDetailSheet` juz ma link "Otworz profil CRM").
+Blad wynika z konfliktu miedzy drag & drop a kliknieciem karty:
+1. Po zakonczeniu przeciagania (drop/dragEnd) zdarzenie `click` rowniez sie odpala na karcie, co otwiera popup `DealContactDetailSheet` jednoczesnie z aktualizacja kategorii -- powodujac niespodziewane zachowanie i potencjalny crash.
+2. W `HotLeadCard` checkbox do zadac nie ma `onClick` ze `stopPropagation`, wiec klikniecie w checkbox rowniez otwiera popup.
+
+## Rozwiazanie
+
+### 1. Blokowanie click po drag (wszystkie karty)
+
+Dodanie logiki `wasDragging` ref w `KanbanBoard` ktora blokuje `onClick` jesli wlasnie zakonczono przeciaganie:
+
+```text
+KanbanBoard:
+  - wasDraggingRef = useRef(false)
+  - handleDragStart: wasDraggingRef.current = true
+  - handleDragEnd: setTimeout(() => wasDraggingRef.current = false, 0)
+  - handleCardClick(contact): if (wasDraggingRef.current) return; setSelectedContact(contact)
+```
+
+### 2. stopPropagation na Checkbox w HotLeadCard
+
+Dodanie `onClick={(e) => e.stopPropagation()}` na kazdym `Checkbox` w `HotLeadCard` aby klikniecie w checkbox nie otwieralo popupu.
+
+### 3. Zabezpieczenie priorityColors przed null
+
+W `TopLeadCard`, `LeadCard`, `ColdLeadCard` -- dodanie fallbacku gdy `contact.priority` jest null/undefined:
+
+```text
+priorityColors[contact.priority] || ''
+```
 
 ## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/deals-team/KanbanColumn.tsx` | Dodanie props `onDragOver`, `onDragEnter`, `onDragLeave`, `onDrop` + kolor `slate` + wizualne wskazniki drop zone |
-| `src/components/deals-team/KanbanBoard.tsx` | Logika drag & drop (handleDragStart/End/Over/Enter/Leave/Drop), zmiana kategorii przez `useUpdateTeamContact`, przekazanie eventow do KanbanColumn |
-| `src/components/deals-team/HotLeadCard.tsx` | Zamiana `<Link>` na `<span>`, dodanie `draggable` + `onDragStart/End` |
-| `src/components/deals-team/TopLeadCard.tsx` | Zamiana `<Link>` na `<span>`, dodanie `draggable` + `onDragStart/End`, untangling promote `onClick` od card `onClick` |
-| `src/components/deals-team/LeadCard.tsx` | Zamiana `<Link>` na `<span>`, dodanie `draggable` + `onDragStart/End` |
-| `src/components/deals-team/ColdLeadCard.tsx` | Zamiana `<Link>` na `<span>`, dodanie `draggable` + `onDragStart/End` |
+| `src/components/deals-team/KanbanBoard.tsx` | Dodanie `wasDraggingRef` + `handleCardClick` z zabezpieczeniem, przekazanie do kart |
+| `src/components/deals-team/HotLeadCard.tsx` | Dodanie `onClick={e => e.stopPropagation()}` na Checkbox |
+| `src/components/deals-team/TopLeadCard.tsx` | Fallback dla `priorityColors` |
+| `src/components/deals-team/LeadCard.tsx` | Fallback dla `priorityColors` |
+| `src/components/deals-team/ColdLeadCard.tsx` | Fallback dla `priorityColors` |
 
 ## Szczegoly techniczne
 
-### 1. Drag & Drop (natywny HTML5, bez dodatkowych bibliotek)
-
-Wzorzec identyczny jak w `TasksKanban.tsx`:
-
-```text
-KanbanBoard:
-  - state: draggingContactId, dragOverColumn
-  - handleDragStart(e, contactId): ustawia draggingContactId, dataTransfer
-  - handleDragEnd(): resetuje state
-  - handleDragOver(e): preventDefault
-  - handleDragEnter(e, columnId): ustawia dragOverColumn
-  - handleDragLeave(e): resetuje dragOverColumn (jesli wyszedl z kolumny)
-  - handleDrop(e, category): pobiera contactId z dataTransfer, 
-    jesli kategoria sie zmienila -> updateContact.mutate({ id, teamId, category })
-```
-
-### 2. KanbanColumn -- nowe props
-
-```text
-+ onDragOver?: (e: React.DragEvent) => void
-+ onDragEnter?: (e: React.DragEvent) => void
-+ onDragLeave?: (e: React.DragEvent) => void
-+ onDrop?: (e: React.DragEvent) => void
-+ isDropTarget?: boolean
-```
-
-Gdy `isDropTarget === true`:
-- Kolumna podswietla sie (ring-2, bg-primary/5)
-- Pojawia sie "Upusc tutaj" placeholder na dole
-
-Dodanie `slate` do `colorClasses`.
-
-### 3. Karty -- zmiany
-
-Kazda karta (Hot/Top/Lead/Cold) dostanie:
-- `draggable` na `<Card>`
-- `onDragStart` / `onDragEnd` props (przekazane z KanbanBoard)
-- `<Link to={...}>` zamieniony na `<span className="font-medium text-sm block truncate">` -- bez nawigacji na klikniecie
-- Wizualne oznaczenie podczas przeciagania (opacity, scale)
-
-Nowe props kart:
-```text
-+ onDragStart?: (e: React.DragEvent) => void
-+ onDragEnd?: () => void
-+ isDragging?: boolean
-```
-
-### 4. Nawigacja do profilu
-
-- Karty: **brak** linku do profilu -- klikniecie otwiera popup `DealContactDetailSheet`
-- Popup: link "Otworz profil CRM" z ikona `ExternalLink` -- **juz istnieje** w liniach 198-205 DealContactDetailSheet -- bez zmian
-
-### 5. Kolumna POSZUKIWANI
-
-Kolumna POSZUKIWANI nie uczestnicy w drag & drop (prospekty to inny typ danych). Przeciaganie bedzie ograniczone do 4 kolumn: HOT, TOP, LEAD, COLD.
+W `KanbanBoard.tsx`:
+- Nowy `useRef`: `const wasDraggingRef = useRef(false);`
+- W `handleDragStart`: `wasDraggingRef.current = true;`
+- W `handleDragEnd`: `setTimeout(() => { wasDraggingRef.current = false; }, 0);` (setTimeout zapewnia ze click event zdazy sie odpalic zanim flaga zostanie zresetowana)
+- Nowa funkcja `handleCardClick(contact)`: sprawdza `wasDraggingRef.current` -- jesli true, return; w przeciwnym razie `setSelectedContact(contact)`
+- Zamiana `onClick={() => setSelectedContact(contact)}` na `onClick={() => handleCardClick(contact)}` we wszystkich kartach
 
