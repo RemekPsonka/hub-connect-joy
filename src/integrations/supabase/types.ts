@@ -4043,6 +4043,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_meeting_participants_contact"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_meeting_participants_meeting"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_meeting_participants_prospect"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_prospects"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "meeting_participants_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false

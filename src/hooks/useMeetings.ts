@@ -247,8 +247,8 @@ export function useMeetingParticipants(meetingId: string | undefined) {
         .from('meeting_participants')
         .select(`
           *,
-          contact:contacts(id, full_name, company, email, primary_group_id),
-          prospect:meeting_prospects(id, full_name, company, position, industry)
+          contact:contacts!contact_id(id, full_name, company, email, primary_group_id),
+          prospect:meeting_prospects!prospect_id(id, full_name, company, position, industry)
         `)
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: true });
