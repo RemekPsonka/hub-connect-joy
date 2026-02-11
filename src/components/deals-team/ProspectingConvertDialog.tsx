@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Loader2, CheckCircle, UserPlus } from 'lucide-react';
 import {
   Dialog,
@@ -56,6 +56,68 @@ export function ProspectingConvertDialog({
   const [duplicates, setDuplicates] = useState<FoundContact[]>([]);
   const [searchingDuplicates, setSearchingDuplicates] = useState(false);
   const [mode, setMode] = useState<'new' | string>('new'); // 'new' or contact ID
+
+  /** Auto-create BI record with brief from prospecting and trigger AI fill */
+  const autoCreateBI = useCallback(async (contactId: string, prospect: MeetingProspect) => {
+    if (!tenantId) return;
+
+    // Check if BI already exists for this contact
+    const { data: existingBI } = await supabase
+      .from('business_interviews')
+      .select('id')
+      .eq('contact_id', contactId)
+      .maybeSingle();
+
+    const briefContent = [prospect.ai_brief, prospect.prospecting_notes].filter(Boolean).join('\n\n');
+
+    if (existingBI) {
+      // Update existing BI with brief if section_a_basic.podpowiedzi_brief is empty
+      const { data: biRow } = await supabase
+        .from('business_interviews')
+        .select('section_a_basic')
+        .eq('id', existingBI.id)
+        .single();
+
+      const sectionA = (biRow?.section_a_basic as Record<string, any>) || {};
+      if (!sectionA.podpowiedzi_brief) {
+        await supabase
+          .from('business_interviews')
+          .update({
+            section_a_basic: { ...sectionA, podpowiedzi_brief: briefContent } as any,
+          })
+          .eq('id', existingBI.id);
+      }
+    } else {
+      // Create new BI record
+      await supabase
+        .from('business_interviews')
+        .insert({
+          contact_id: contactId,
+          tenant_id: tenantId,
+          status: 'draft',
+          section_a_basic: {
+            podpowiedzi_brief: briefContent,
+            zrodlo_kontaktu: prospect.source_event || 'Prospecting',
+          } as any,
+        });
+    }
+
+    // Trigger AI fill-from-note in background (fire-and-forget)
+    if (briefContent.trim()) {
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bi-fill-from-note`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          note: briefContent,
+          contactName: prospect.full_name,
+          companyName: prospect.company || undefined,
+        }),
+      }).catch(() => {});
+    }
+  }, [tenantId]);
 
   useEffect(() => {
     if (!open || !tenantId || !prospect.full_name) return;
@@ -176,6 +238,15 @@ export function ProspectingConvertDialog({
           converted_at: new Date().toISOString(),
         })
         .eq('id', prospectId);
+
+      // Auto-create BI with brief data from prospecting
+      if (prospect.ai_brief || prospect.prospecting_notes) {
+        try {
+          await autoCreateBI(contactId, prospect);
+        } catch (biError) {
+          console.warn('Auto-create BI failed (non-critical):', biError);
+        }
+      }
 
       queryClient.invalidateQueries({ queryKey: ['meeting-prospects', teamId] });
       queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', teamId] });
