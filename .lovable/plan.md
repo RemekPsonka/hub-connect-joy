@@ -1,90 +1,116 @@
 
 
-# Edycja grup produktow (Product Categories)
+# Naprawa panelu DEALS -- przypisania nie widac + brakujace funkcje
 
-## Cel
+## Problem
 
-Dodanie mozliwosci edycji istniejacych grup produktow w `ProductCategoryManager` -- zmiana nazwy, koloru i prowizji. Obecnie kategorie sa wyswietlane jako read-only.
+1. **Deals sie nie przypisuje / nie widac**: Polityki RLS na tabeli `deal_team_contacts` wymagaja `is_deal_team_member(team_id)` dla WSZYSTKICH operacji (SELECT, INSERT, UPDATE, DELETE). Jezeli uzytkownik nie jest czlonkiem zespolu Deals, to:
+   - INSERT (dodawanie) konczy sie bledem RLS (cichy blad)
+   - SELECT (wyswietlanie) nie zwraca wierszy -- panel pokazuje "Brak przypisania"
 
-## Zakres zmian
+2. **Brak mozliwosci usuwania z lejka**: Panel nie ma opcji usuwania powiazania.
 
-### Plik: `src/components/deals-team/ProductCategoryManager.tsx`
+## Rozwiazanie
 
-Dodanie trybu edycji inline dla kazdej kategorii (wzorzec analogiczny do `DefaultPositionsManager`):
+### 1. Zmiana polityk RLS (migracja SQL)
 
-**Stan edycji:**
-- `editingId` -- ID aktualnie edytowanej kategorii (lub null)
-- `editName`, `editColor`, `editCommission` -- wartosci formularza edycji
-
-**Dla kazdej kategorii w liscie:**
-- Gdy NIE edytowana: wyswietlenie jak dotychczas + przycisk edycji (ikona `Pencil`) i usuwania (ikona `X`)
-- Gdy edytowana: zamiana na formularz inline z:
-  - Input nazwy
-  - Paleta kolorow (te same `colorOptions`)
-  - Input prowizji %
-  - Przycisk zapisu (ikona `Check`) i anulowania (ikona `X`)
-
-**Logika:**
-- Klikniecie `Pencil` ustawia `editingId` i wypelnia pola danymi kategorii
-- Klikniecie `Check` lub Enter wywoluje `updateCategory.mutateAsync`
-- Klikniecie `X` (przy edycji) lub Escape anuluje edycje
-- Usuwanie kategorii uzywa `updateCategory` z `isActive: false` (soft delete)
-
-### Plik: `src/hooks/useProductCategories.ts`
-
-Bez zmian -- hook `useUpdateProductCategory` juz obsluguje aktualizacje nazwy, koloru, prowizji i `isActive`.
-
-## Szczegoly techniczne
-
-### Widok kategorii -- tryb normalny
+Dodanie alternatywnych polityk pozwalajacych na operacje rowniez dla administratorow tenanta (np. dyrektorow), nie tylko czlonkow zespolu:
 
 ```text
-<div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
-  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color }} />
-  <span className="text-sm font-medium flex-1">{cat.name}</span>
-  {cat.default_commission_percent > 0 && (
-    <Badge>{cat.default_commission_percent}% prowizji</Badge>
-  )}
-  <Button variant="ghost" size="sm" onClick={() => startEditing(cat)}>
-    <Pencil className="h-3.5 w-3.5" />
-  </Button>
-  <Button variant="ghost" size="sm" onClick={() => handleDelete(cat)}>
-    <X className="h-3.5 w-3.5" />
-  </Button>
-</div>
+-- Nowa polityka SELECT: tenant member moze czytac swoje kontakty
+CREATE POLICY "dtc_select_own_contacts" ON deal_team_contacts
+  FOR SELECT USING (
+    tenant_id = get_current_tenant_id()
+    AND contact_id IN (
+      SELECT id FROM contacts WHERE tenant_id = get_current_tenant_id()
+    )
+  );
+
+-- Nowa polityka INSERT: tenant member moze dodawac
+CREATE POLICY "dtc_insert_tenant" ON deal_team_contacts
+  FOR INSERT WITH CHECK (
+    tenant_id = get_current_tenant_id()
+  );
 ```
 
-### Widok kategorii -- tryb edycji
+Alternatywnie (prostsze): zmiana istniejacych polityk aby usunac wymog `is_deal_team_member` lub dodac OR z dodatkowym warunkiem.
 
-```text
-<div className="space-y-2 p-3 border rounded-lg border-primary/50">
-  <Input value={editName} onChange={...} placeholder="Nazwa grupy" />
-  <div className="flex gap-1.5">
-    {colorOptions.map(c => <button ... />)}
-  </div>
-  <Input value={editCommission} onChange={...} placeholder="Prowizja %" type="number" />
-  <div className="flex gap-2">
-    <Button onClick={handleSaveEdit}><Check /> Zapisz</Button>
-    <Button variant="ghost" onClick={cancelEditing}><X /> Anuluj</Button>
-  </div>
-</div>
-```
+### 2. Poprawka `ContactDealsPanel.tsx`
 
-### Usuwanie (soft delete)
+- **Filtrowanie zespolow**: W dropdownie "Dodaj" pokazywac tylko zespoly, w ktorych uzytkownik jest czlonkiem (uzyc `useMyDealTeams` zamiast `useDealTeams`)
+- **Przycisk usuwania**: Dodac ikonke `X` przy kazdym badge'u umozliwiajaca usuniecie kontaktu z zespolu
+- **Lepsza obsluga bledow**: Wyswietlanie toast z bledem jesli insert sie nie powiedzie
 
-```text
-const handleDelete = async (cat: ProductCategory) => {
-  await updateCategory.mutateAsync({
-    id: cat.id,
-    teamId,
-    isActive: false,
-  });
-};
-```
+### 3. Poprawka cache invalidation
 
-## Podsumowanie
+W `useAddContactToTeam` (hook mutacji) dodac invalidacje `['contact-deal-teams']` w `onSuccess` aby panel DEALS na karcie kontaktu automatycznie sie odswiezal.
+
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/deals-team/ProductCategoryManager.tsx` | Tryb edycji inline + przycisk usuwania dla kazdej kategorii |
+| Migracja SQL | Rozszerzenie polityk RLS na `deal_team_contacts` -- dodanie polityki SELECT dla tenant members (bez wymogu `is_deal_team_member`) |
+| `src/components/contacts/ContactDealsPanel.tsx` | 1) Zamiana `useDealTeams` na `useMyDealTeams` 2) Dodanie przycisku usuwania z lejka 3) Lepsza obsluga bledow |
+| `src/hooks/useDealsTeamContacts.ts` | Dodanie invalidacji `['contact-deal-teams']` w `onSuccess` mutacji `useAddContactToTeam` |
+
+## Szczegoly techniczne
+
+### Migracja RLS
+
+Istniejace polityki wymagaja `is_deal_team_member(team_id)` co blokuje uzytkownikow nie-czlonkow. Rozwiazanie:
+
+```text
+-- Usun stara politke SELECT
+DROP POLICY IF EXISTS "dtc_select" ON deal_team_contacts;
+
+-- Nowa polityka: czlonek zespolu LUB wlasciciel kontaktu w tenancie
+CREATE POLICY "dtc_select" ON deal_team_contacts
+  FOR SELECT USING (
+    tenant_id = get_current_tenant_id()
+    AND (
+      is_deal_team_member(team_id)
+      OR contact_id IN (SELECT id FROM contacts WHERE director_id = get_current_director_id())
+    )
+  );
+
+-- Analogicznie dla INSERT -- pozwol dodawac do zespolow ktorych jestes czlonkiem
+-- (tu bez zmian, ale filtrujemy w UI po useMyDealTeams)
+```
+
+### ContactDealsPanel -- przycisk usuwania
+
+```text
+<Badge ...>
+  {link.team_name} -- {link.category.toUpperCase()}
+  <button onClick={() => handleRemove(link.id, link.team_id)} className="ml-1">
+    <X className="h-3 w-3" />
+  </button>
+</Badge>
+```
+
+Funkcja `handleRemove` uzywa `useRemoveContactFromTeam` z `useDealsTeamContacts.ts`.
+
+### Cache invalidation w useAddContactToTeam
+
+```text
+onSuccess: (result) => {
+  queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
+  queryClient.invalidateQueries({ queryKey: ['deal-team-clients', result.teamId] });
+  queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] }); // NOWE
+  toast.success('Kontakt zostal dodany do zespolu');
+},
+```
+
+### useMyDealTeams zamiast useDealTeams
+
+W `ContactDealsPanel` zamiana:
+```text
+// PRZED:
+const { data: allTeams = [] } = useDealTeams();
+
+// PO:
+const { data: allTeams = [] } = useMyDealTeams();
+```
+
+Dzieki temu uzytkownik widzi w dropdownie tylko zespoly, do ktorych nalezy, i nie napotka bledow RLS przy insercie.
 
