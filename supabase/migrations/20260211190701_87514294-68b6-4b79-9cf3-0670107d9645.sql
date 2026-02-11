@@ -1,0 +1,3 @@
+ALTER TABLE meeting_participants DROP CONSTRAINT IF EXISTS fk_meeting_participants_contact;
+ALTER TABLE meeting_participants DROP CONSTRAINT IF EXISTS fk_meeting_participants_meeting;
+ALTER TABLE meeting_participants DROP CONSTRAINT IF EXISTS fk_meeting_participants_prospect;
