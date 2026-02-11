@@ -1,7 +1,7 @@
 // ===== ENUMS / UNION TYPES =====
 
 export type DealTeamRole = 'leader' | 'member' | 'viewer';
-export type DealCategory = 'hot' | 'top' | 'lead' | 'cold';
+export type DealCategory = 'hot' | 'top' | 'lead' | 'cold' | 'client';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type ProspectStatus = 

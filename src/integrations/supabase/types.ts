@@ -2416,6 +2416,87 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_team_client_products: {
+        Row: {
+          commission_percent: number
+          created_at: string
+          deal_value: number
+          expected_commission: number
+          id: string
+          notes: string | null
+          probability_percent: number
+          product_category_id: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          commission_percent?: number
+          created_at?: string
+          deal_value?: number
+          expected_commission?: number
+          id?: string
+          notes?: string | null
+          probability_percent?: number
+          product_category_id: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          commission_percent?: number
+          created_at?: string
+          deal_value?: number
+          expected_commission?: number
+          id?: string
+          notes?: string | null
+          probability_percent?: number
+          product_category_id?: string
+          team_contact_id?: string
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_client_products_product_category_id_fkey"
+            columns: ["product_category_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_client_products_team_contact_id_fkey"
+            columns: ["team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_client_products_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_client_products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_client_products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_team_contacts: {
         Row: {
           ai_brief: string | null
@@ -2545,6 +2626,64 @@ export type Database = {
           },
         ]
       }
+      deal_team_product_categories: {
+        Row: {
+          color: string
+          created_at: string
+          default_commission_percent: number | null
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          default_commission_percent?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          default_commission_percent?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_product_categories_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_product_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_product_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_team_prospects: {
         Row: {
           assigned_to: string | null
@@ -2622,6 +2761,64 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      deal_team_revenue_forecasts: {
+        Row: {
+          amount: number
+          client_product_id: string
+          created_at: string
+          id: string
+          month_date: string
+          month_offset: number
+          percentage: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          client_product_id: string
+          created_at?: string
+          id?: string
+          month_date: string
+          month_offset: number
+          percentage?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_product_id?: string
+          created_at?: string
+          id?: string
+          month_date?: string
+          month_offset?: number
+          percentage?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_revenue_forecasts_client_product_id_fkey"
+            columns: ["client_product_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_client_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_revenue_forecasts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_revenue_forecasts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deal_team_weekly_statuses: {
         Row: {

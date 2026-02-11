@@ -38,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ProductCategoryManager } from './ProductCategoryManager';
 import type { DealTeamRole } from '@/types/dealTeam';
 
 interface TeamSettingsProps {
@@ -353,6 +354,11 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
                     Dodaj członka
                   </Button>
                 </div>
+
+                <Separator />
+
+                {/* Product Categories */}
+                <ProductCategoryManager teamId={teamId} />
               </div>
             </ScrollArea>
           )}
