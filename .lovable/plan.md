@@ -1,51 +1,41 @@
 
-# Dodanie opcji "Klient" do konwersji prospektów + ujednolicenie dialogu
+# Naprawa panelu DEALS -- brakujący klucz obcy
 
 ## Problem
 
-1. W dialogu konwersji prospekta brakuje kategorii **"KLIENT"** -- dostepne sa tylko COLD, LEAD, TOP, HOT
-2. `ProspectCard` na Kanbanie uzywa starego dialogu `ConvertProspectDialog`, ktory **nie sprawdza duplikatow** w bazie kontaktow
-3. Nowy dialog `ProspectingConvertDialog` (z wyszukiwaniem duplikatow) jest uzywany tylko w zakladce Prospecting
+Zapytanie `useContactDealTeams` zwraca **błąd 400**: `Could not find a relationship between 'deal_team_contacts' and 'deal_teams'`.
 
-## Rozwiazanie
+Przyczyna: tabela `deal_team_contacts` nie ma **żadnych kluczy obcych** -- wszystkie FK zostały prawdopodobnie przypadkowo usunięte w poprzedniej migracji (usuwanie duplikatów na `meeting_participants`). PostgREST wymaga FK do wykonania joinów.
 
-### 1. Dodanie kategorii "client" do `ProspectingConvertDialog`
+Dane Roberta Kiepury **są poprawnie zapisane** w bazie (team: SGU, kategoria: lead), ale panel DEALS nie może ich pobrać z powodu brakującego joina.
 
-Rozszerzenie tablicy kategorii z `['cold', 'lead', 'top', 'hot']` o `'client'`:
+## Rozwiązanie
+
+### 1. Migracja SQL -- odtworzenie kluczy obcych
+
+Dodanie brakujących FK na tabeli `deal_team_contacts`:
 
 ```text
-{(['cold', 'lead', 'top', 'hot', 'client'] as const).map((cat) => (
-  <Button ...>
-    {cat === 'client' ? 'KLIENT' : cat.toUpperCase()}
-  </Button>
-))}
+ALTER TABLE deal_team_contacts
+  ADD CONSTRAINT deal_team_contacts_team_id_fkey 
+    FOREIGN KEY (team_id) REFERENCES deal_teams(id) ON DELETE CASCADE;
+
+ALTER TABLE deal_team_contacts
+  ADD CONSTRAINT deal_team_contacts_contact_id_fkey 
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE;
+
+ALTER TABLE deal_team_contacts
+  ADD CONSTRAINT deal_team_contacts_tenant_id_fkey 
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
 ```
 
-Gdy uzytkownik wybierze "KLIENT", kontakt zostanie dodany do zespolu ze statusem `'won'` (jak w istniejacym `useConvertToClient`).
+### 2. Brak zmian w kodzie
 
-### 2. Zamiana dialogu w `ProspectCard` (Kanban)
-
-`ProspectCard` zostanie przemigrowany ze starego `ConvertProspectDialog` na nowy `ProspectingConvertDialog`, ktory:
-- Automatycznie wyszukuje duplikaty po imieniu/nazwisku
-- Pozwala scalic z istniejacym kontaktem lub utworzyc nowy
-- Sprawdza czy kontakt juz jest dodany do zespolu
-- Tworzy automatycznie arkusz BI z briefem AI
-
-### 3. Logika statusu dla kategorii "client"
-
-W `handleConvert` w `ProspectingConvertDialog`, jesli wybrana kategoria to `'client'`:
-- Ustawic `status: 'won'` zamiast domyslnego `'active'`
-- Zachowac reszte logiki (duplikaty, BI, brief) bez zmian
+Hook `useContactDealTeams` jest poprawny -- join `deal_teams(name, color)` zadziała automatycznie po przywróceniu FK.
 
 ## Pliki do modyfikacji
 
-| Plik | Zmiana |
+| Element | Zmiana |
 |---|---|
-| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie 'client' do kategorii, obsluga statusu 'won' dla klientow |
-| `src/components/deals-team/ProspectCard.tsx` | Zamiana `ConvertProspectDialog` na `ProspectingConvertDialog` z duplikacja |
-
-## Uwagi
-
-- Typ `DealCategory` w `src/types/dealTeam.ts` juz zawiera `'client'` -- bez zmian
-- Hook `useTeamClients` juz obsluguje `category: 'client'` -- bez zmian
-- Stary `ConvertProspectDialog` pozostaje w kodzie (moze byc uzywany gdzie indziej), ale `ProspectCard` przestanie go uzywac
+| Migracja SQL | Dodanie 3 kluczy obcych na `deal_team_contacts` |
+| Kod frontend | Bez zmian |
