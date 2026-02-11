@@ -28,6 +28,7 @@ import { ContactCompanyCard } from '@/components/contacts/ContactCompanyCard';
 import { ContactQuickStats } from '@/components/contacts/ContactQuickStats';
 import { MeetingsTab } from '@/components/contacts/MeetingsTab';
 import { ContactConnectionsSection } from '@/components/contacts/ContactConnectionsSection';
+import { ContactKnowledgeTimeline } from '@/components/contacts/ContactKnowledgeTimeline';
 import { LinkedInNetworkSection } from '@/components/contacts/LinkedInNetworkSection';
 import { AIProfileRenderer } from '@/components/contacts/AIProfileRenderer';
 import { useAuth } from '@/contexts/AuthContext';
@@ -269,6 +270,9 @@ export default function ContactDetail() {
             <div className="lg:w-[40%] space-y-4 lg:sticky lg:top-4 lg:self-start">
               {/* Notatki */}
               {isAdmin && <ContactNotesPanel contact={contact} />}
+
+              {/* Zebrana wiedza — timeline ze wszystkich źródeł */}
+              <ContactKnowledgeTimeline contactId={contact.id} />
 
               {/* Zadania */}
               <ContactTasksPanel contactId={contact.id} />

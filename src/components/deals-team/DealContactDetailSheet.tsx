@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
@@ -110,11 +111,22 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         if (contact) {
+          // Save to deal_team_contacts (legacy)
           updateContact.mutate({
             id: contact.id,
             teamId,
             notes: value || null,
           });
+          // Also sync to contacts.notes (single source of truth for AI)
+          if (contact.contact_id) {
+            supabase
+              .from('contacts')
+              .update({ notes: value || null })
+              .eq('id', contact.contact_id)
+              .then(({ error }) => {
+                if (error) console.error('Failed to sync notes to contacts:', error);
+              });
+          }
         }
       }, 1000);
     },

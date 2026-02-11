@@ -217,17 +217,62 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Contact not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch additional data
-    const [consultationsResult, needsResult, offersResult] = await Promise.all([
+    // Fetch additional data including deal team context
+    const [consultationsResult, needsResult, offersResult, dealTeamResult, taskCommentsResult] = await Promise.all([
       supabase.from("consultations").select("scheduled_at, notes, ai_summary, agenda, status").eq("contact_id", contact_id).order("scheduled_at", { ascending: false }).limit(3),
       supabase.from("needs").select("title, description, priority, status").eq("contact_id", contact_id).eq("status", "active"),
       supabase.from("offers").select("title, description, status").eq("contact_id", contact_id).eq("status", "active"),
+      // Deal team contacts + weekly statuses
+      supabase.from("deal_team_contacts").select("id, notes, category, status").eq("contact_id", contact_id),
+      // Task comments via task_contacts
+      supabase.from("task_contacts").select("task_id").eq("contact_id", contact_id),
     ]);
 
     const consultations = consultationsResult.data || [];
     const needs = needsResult.data || [];
     const offers = offersResult.data || [];
+    const dealTeamContacts = dealTeamResult.data || [];
     let company = contact.companies;
+
+    // Fetch weekly statuses for deal team contacts
+    let weeklyStatusesStr = '';
+    if (dealTeamContacts.length > 0) {
+      const dtcIds = dealTeamContacts.map((d: any) => d.id);
+      const { data: weeklyStatuses } = await supabase
+        .from('deal_team_weekly_statuses')
+        .select('week_start, status_summary, next_steps, blockers')
+        .in('team_contact_id', dtcIds)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      if (weeklyStatuses && weeklyStatuses.length > 0) {
+        weeklyStatusesStr = weeklyStatuses.map((ws: any) => 
+          `- Tydzień ${ws.week_start}: ${ws.status_summary}${ws.next_steps ? ` → ${ws.next_steps}` : ''}${ws.blockers ? ` ⚠ ${ws.blockers}` : ''}`
+        ).join('\n');
+      }
+    }
+
+    // Fetch task comments
+    let taskCommentsStr = '';
+    const taskIds = (taskCommentsResult.data || []).map((t: any) => t.task_id);
+    if (taskIds.length > 0) {
+      const { data: comments } = await supabase
+        .from('task_comments')
+        .select('content, created_at')
+        .in('task_id', taskIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (comments && comments.length > 0) {
+        taskCommentsStr = comments.map((c: any) => `- ${c.content.substring(0, 150)}`).join('\n');
+      }
+    }
+
+    // Build deal notes string
+    const dealNotesStr = dealTeamContacts
+      .filter((d: any) => d.notes)
+      .map((d: any) => d.notes.substring(0, 200))
+      .join('\n');
 
     console.log("Generating AI profile for contact:", contact.full_name);
 
@@ -542,6 +587,15 @@ Maksymalnie 1200 słów. ZAWSZE oznaczaj źródła.`;
 **Email:** ${contact.email || 'brak'}
 **Notatki:** ${contact.notes || 'Brak'}
 
+${dealNotesStr ? `# NOTATKI Z PROCESU SPRZEDAŻY (KANBAN)
+${dealNotesStr}
+` : ''}
+${weeklyStatusesStr ? `# OSTATNIE STATUSY TYGODNIOWE
+${weeklyStatusesStr}
+` : ''}
+${taskCommentsStr ? `# KOMENTARZE DO ZADAŃ
+${taskCommentsStr}
+` : ''}
 # DANE Z SYSTEMU CRM
 **Potrzeby:** ${needs.map(n => `${n.title}: ${n.description || ''}`).join('; ') || 'Brak'}
 **Oferty:** ${offers.map(o => `${o.title}: ${o.description || ''}`).join('; ') || 'Brak'}

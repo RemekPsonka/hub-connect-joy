@@ -68,7 +68,8 @@ serve(async (req) => {
       offersResult,
       tasksResult,
       conversationsResult,
-      biDataResult
+      biDataResult,
+      dealTeamResult
     ] = await Promise.all([
       supabase
         .from('contacts')
@@ -110,7 +111,11 @@ serve(async (req) => {
         .from('contact_bi_data')
         .select('*')
         .eq('contact_id', contact_id)
-        .maybeSingle()
+        .maybeSingle(),
+      supabase
+        .from('deal_team_contacts')
+        .select('id, notes, category, status')
+        .eq('contact_id', contact_id)
     ]);
 
     const contact = contactResult.data;
@@ -120,6 +125,45 @@ serve(async (req) => {
     const tasks = tasksResult.data || [];
     const conversations = conversationsResult.data || [];
     const biData = biDataResult.data;
+    const dealTeamContacts = dealTeamResult.data || [];
+
+    // Build deal context for learning
+    let dealContextStr = '';
+    if (dealTeamContacts.length > 0) {
+      const dtcIds = dealTeamContacts.map((d: any) => d.id);
+      const { data: weeklyStatuses } = await supabase
+        .from('deal_team_weekly_statuses')
+        .select('week_start, status_summary, next_steps, blockers')
+        .in('team_contact_id', dtcIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      const dealNotes = dealTeamContacts.filter((d: any) => d.notes).map((d: any) => d.notes.substring(0, 200));
+      
+      if (dealNotes.length > 0) {
+        dealContextStr += `\n## NOTATKI Z PROCESU SPRZEDAŻY\n${dealNotes.join('\n')}`;
+      }
+      if (weeklyStatuses && weeklyStatuses.length > 0) {
+        dealContextStr += `\n## STATUSY TYGODNIOWE\n${weeklyStatuses.map((ws: any) => 
+          `- ${ws.week_start}: ${ws.status_summary}${ws.next_steps ? ` → ${ws.next_steps}` : ''}${ws.blockers ? ` ⚠ ${ws.blockers}` : ''}`
+        ).join('\n')}`;
+      }
+    }
+
+    // Fetch task comments
+    const taskIds = tasks.map((t: any) => t.task_id);
+    let taskCommentsStr = '';
+    if (taskIds.length > 0) {
+      const { data: comments } = await supabase
+        .from('task_comments')
+        .select('content')
+        .in('task_id', taskIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (comments && comments.length > 0) {
+        taskCommentsStr = `\n## KOMENTARZE DO ZADAŃ\n${comments.map((c: any) => `- ${c.content.substring(0, 150)}`).join('\n')}`;
+      }
+    }
 
     if (!contact) {
       return new Response(
@@ -226,6 +270,8 @@ Przeanalizuj WSZYSTKIE dostępne dane o OSOBIE oraz jej FIRMIE i stwórz skonden
 - Siła relacji: ${contact.relationship_strength || 5}/10 ${(contact.relationship_strength || 5) <= 3 ? '(słaba - wymaga budowania zaufania)' : (contact.relationship_strength || 5) >= 7 ? '(silna - można działać biznesowo)' : '(średnia)'}
 - Grupa: ${contact.primary_group?.name || 'brak'}
 ${companyContext}
+${dealContextStr}
+${taskCommentsStr}
 
 ## KONSULTACJE Z TĄ OSOBĄ (${consultations.length})
 ${consultations.slice(0, 10).map((c: any) => 

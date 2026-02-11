@@ -65,15 +65,39 @@ serve(async (req) => {
       );
     }
 
-    // Fetch related data
-    const [consultations, needs, offers, tasks, connections, biData] = await Promise.all([
+    // Fetch related data including deal team context
+    const [consultations, needs, offers, tasks, connections, biData, dealTeamResult] = await Promise.all([
       supabase.from('consultations').select('*').eq('contact_id', contact_id).order('scheduled_at', { ascending: false }),
       supabase.from('needs').select('*').eq('contact_id', contact_id),
       supabase.from('offers').select('*').eq('contact_id', contact_id),
       supabase.from('task_contacts').select('task_id, role, tasks(*)').eq('contact_id', contact_id),
       supabase.from('connections').select(`*, contact_a:contacts!connections_contact_a_id_fkey(id, full_name), contact_b:contacts!connections_contact_b_id_fkey(id, full_name)`).or(`contact_a_id.eq.${contact_id},contact_b_id.eq.${contact_id}`),
-      supabase.from('contact_bi_data').select('*').eq('contact_id', contact_id).maybeSingle()
+      supabase.from('contact_bi_data').select('*').eq('contact_id', contact_id).maybeSingle(),
+      supabase.from('deal_team_contacts').select('id, notes, category, status').eq('contact_id', contact_id),
     ]);
+
+    // Fetch weekly statuses + task comments for enriched context
+    let dealContextStr = '';
+    const dealTeamContacts = dealTeamResult.data || [];
+    if (dealTeamContacts.length > 0) {
+      const dtcIds = dealTeamContacts.map((d: any) => d.id);
+      const { data: weeklyStatuses } = await supabase
+        .from('deal_team_weekly_statuses')
+        .select('week_start, status_summary, next_steps')
+        .in('team_contact_id', dtcIds)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      const dealNotes = dealTeamContacts.filter((d: any) => d.notes).map((d: any) => d.notes.substring(0, 200));
+      
+      if (dealNotes.length > 0 || (weeklyStatuses && weeklyStatuses.length > 0)) {
+        dealContextStr = '\n## KONTEKST PROCESU SPRZEDAŻY';
+        if (dealNotes.length > 0) dealContextStr += `\nNotatki Kanban: ${dealNotes.join('; ')}`;
+        if (weeklyStatuses && weeklyStatuses.length > 0) {
+          dealContextStr += `\nStatusy tygodniowe:\n${weeklyStatuses.map((ws: any) => `- ${ws.week_start}: ${ws.status_summary}`).join('\n')}`;
+        }
+      }
+    }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -174,6 +198,7 @@ ${JSON.stringify(financialData).substring(0, 400)}`;
 - AI Profile Summary: ${contact.profile_summary || 'Brak'}
 - Tagi: ${(contact.tags || []).join(', ') || 'brak'}
 ${companyContext}
+${dealContextStr}
 
 ## INSTRUKCJE DOT. SIŁY RELACJI
 ${(contact.relationship_strength || 5) <= 3 ? `
