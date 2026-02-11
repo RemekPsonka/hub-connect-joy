@@ -62,7 +62,7 @@ export function ProspectingConvertDialog({
   const [email, setEmail] = useState(prospect.email || '');
   const [phone, setPhone] = useState(prospect.phone || '');
   const [linkedin, setLinkedin] = useState(prospect.linkedin_url || '');
-  const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot'>('cold');
+  const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot' | 'client'>('cold');
   const [loading, setLoading] = useState(false);
 
   // Duplicate detection
@@ -248,7 +248,7 @@ export function ProspectingConvertDialog({
             tenant_id: tenantId,
             category,
             priority: 'medium',
-            status: 'active',
+            status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
             ai_brief_generated_at: prospect.ai_brief_generated_at || null,
           })
@@ -285,7 +285,7 @@ export function ProspectingConvertDialog({
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
 
       const action = mode !== 'new' ? 'scalony' : 'utworzony';
-      toast.success(`${prospect.full_name} — kontakt ${action}, dodany jako ${category.toUpperCase()}`);
+      toast.success(`${prospect.full_name} — kontakt ${action}, dodany jako ${category === 'client' ? 'KLIENT' : category.toUpperCase()}`);
       onOpenChange(false);
     } catch (error: any) {
       toast.error(`Błąd konwersji: ${error.message}`);
@@ -397,14 +397,14 @@ export function ProspectingConvertDialog({
           <div className="space-y-2">
             <Label>Kategoria na Kanban</Label>
             <div className="flex gap-2">
-              {(['cold', 'lead', 'top', 'hot'] as const).map((cat) => (
+              {(['cold', 'lead', 'top', 'hot', 'client'] as const).map((cat) => (
                 <Button
                   key={cat}
                   variant={category === cat ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setCategory(cat)}
                 >
-                  {cat.toUpperCase()}
+                  {cat === 'client' ? 'KLIENT' : cat.toUpperCase()}
                 </Button>
               ))}
             </div>

@@ -3,8 +3,9 @@ import { ArrowRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ConvertProspectDialog } from './ConvertProspectDialog';
+import { ProspectingConvertDialog } from './ProspectingConvertDialog';
 import type { DealTeamProspect, ProspectStatus } from '@/types/dealTeam';
+import type { MeetingProspect } from '@/hooks/useMeetingProspects';
 
 interface ProspectCardProps {
   prospect: DealTeamProspect;
@@ -34,6 +35,37 @@ const statusLabels: Record<ProspectStatus, string> = {
   converted: 'Skonwertowano',
   cancelled: 'Anulowano',
 };
+
+/** Map DealTeamProspect to MeetingProspect shape for the convert dialog */
+function toMeetingProspect(p: DealTeamProspect, teamId: string): MeetingProspect {
+  return {
+    id: p.id,
+    team_id: teamId,
+    tenant_id: p.tenant_id,
+    full_name: p.prospect_name,
+    company: p.prospect_company,
+    position: p.prospect_position,
+    industry: null,
+    email: p.prospect_email,
+    phone: p.prospect_phone,
+    linkedin_url: p.prospect_linkedin,
+    source_event: null,
+    source_file_name: null,
+    imported_at: p.created_at,
+    imported_by: p.requested_by,
+    is_prospecting: true,
+    prospecting_notes: p.prospect_notes,
+    prospecting_status: p.status === 'converted' ? 'converted' : 'new',
+    converted_to_contact_id: p.converted_to_contact_id,
+    converted_to_team_contact_id: null,
+    converted_at: null,
+    priority: p.priority,
+    ai_brief: null,
+    ai_brief_generated_at: null,
+    created_at: p.created_at,
+    updated_at: p.updated_at,
+  };
+}
 
 export function ProspectCard({ prospect, teamId }: ProspectCardProps) {
   const [showConvert, setShowConvert] = useState(false);
@@ -96,17 +128,18 @@ export function ProspectCard({ prospect, teamId }: ProspectCardProps) {
             onClick={() => setShowConvert(true)}
           >
             <ArrowRight className="h-3 w-3 mr-1" />
-            Konwertuj do LEAD
+            Konwertuj do CRM
           </Button>
         </CardContent>
       </Card>
 
-      {/* Convert Dialog */}
-      <ConvertProspectDialog
-        prospect={prospect}
-        teamId={teamId}
+      {/* Convert Dialog with duplicate detection */}
+      <ProspectingConvertDialog
         open={showConvert}
-        onClose={() => setShowConvert(false)}
+        onOpenChange={setShowConvert}
+        prospectId={prospect.id}
+        teamId={teamId}
+        prospect={toMeetingProspect(prospect, teamId)}
       />
     </>
   );
