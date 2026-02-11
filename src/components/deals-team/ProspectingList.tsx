@@ -69,6 +69,12 @@ export function ProspectingList({ teamId }: Props) {
   const deleteMutation = useDeleteMeetingProspect();
   const briefMutation = useGenerateProspectBrief();
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [generatingBriefId, setGeneratingBriefId] = useState<string | null>(null);
+
+  const handleGenerateBrief = useCallback((prospectId: string) => {
+    setGeneratingBriefId(prospectId);
+    briefMutation.mutateAsync({ prospectId, teamId }).finally(() => setGeneratingBriefId(null));
+  }, [briefMutation, teamId]);
   const [notesText, setNotesText] = useState('');
   const [convertProspect, setConvertProspect] = useState<string | null>(null);
   const [briefProspect, setBriefProspect] = useState<string | null>(null);
@@ -335,12 +341,12 @@ export function ProspectingList({ teamId }: Props) {
                     if (prospect.ai_brief) {
                       setBriefProspect(prospect.id);
                     } else {
-                      briefMutation.mutate({ prospectId: prospect.id, teamId });
+                      handleGenerateBrief(prospect.id);
                     }
                   }}
-                  disabled={briefMutation.isPending}
+                  disabled={generatingBriefId === prospect.id}
                 >
-                  {briefMutation.isPending ? (
+                  {generatingBriefId === prospect.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Sparkles className={`h-4 w-4 ${prospect.ai_brief ? 'text-primary' : ''}`} />
@@ -361,10 +367,10 @@ export function ProspectingList({ teamId }: Props) {
                           Zobacz brief
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => briefMutation.mutate({ prospectId: prospect.id, teamId })}
-                          disabled={briefMutation.isPending}
+                          onClick={() => handleGenerateBrief(prospect.id)}
+                          disabled={generatingBriefId === prospect.id}
                         >
-                          {briefMutation.isPending ? (
+                          {generatingBriefId === prospect.id ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           ) : (
                             <Sparkles className="h-4 w-4 mr-2" />
@@ -374,10 +380,10 @@ export function ProspectingList({ teamId }: Props) {
                       </>
                     ) : (
                       <DropdownMenuItem
-                        onClick={() => briefMutation.mutate({ prospectId: prospect.id, teamId })}
-                        disabled={briefMutation.isPending}
+                        onClick={() => handleGenerateBrief(prospect.id)}
+                        disabled={generatingBriefId === prospect.id}
                       >
-                        {briefMutation.isPending ? (
+                        {generatingBriefId === prospect.id ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
                           <Sparkles className="h-4 w-4 mr-2" />
@@ -470,8 +476,8 @@ export function ProspectingList({ teamId }: Props) {
             company={p.company}
             brief={p.ai_brief}
             generatedAt={p.ai_brief_generated_at}
-            onRegenerate={() => briefMutation.mutate({ prospectId: p.id, teamId })}
-            isRegenerating={briefMutation.isPending}
+            onRegenerate={() => handleGenerateBrief(p.id)}
+            isRegenerating={generatingBriefId === p.id}
           />
         );
       })()}
