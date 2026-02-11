@@ -17,7 +17,6 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Verify authorization
     const authResult = await verifyAuth(req, supabase);
     if (isAuthError(authResult)) {
       return unauthorizedResponse(authResult, corsHeaders);
@@ -35,7 +34,6 @@ Deno.serve(async (req) => {
     }
 
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-    
     if (!lovableApiKey) {
       return new Response(
         JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
@@ -43,20 +41,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get all participants with their profiles
+    // ──────────────────────────────────────────────
+    // 1. Get all participants with contacts + prospect data
+    // ──────────────────────────────────────────────
     const { data: participants, error: participantsError } = await supabase
       .from('meeting_participants')
       .select(`
-        contact_id,
-        is_member,
-        contact:contacts(
-          id,
-          full_name,
-          company,
-          position,
-          profile_summary,
-          notes
-        )
+        id, contact_id, is_member, is_new, prospect_id,
+        contact:contacts(id, full_name, company, position, profile_summary, notes, tags, primary_group_id)
       `)
       .eq('meeting_id', meetingId);
 
@@ -68,62 +60,157 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get tenant_id from any participant contact
-    const { data: tenantData } = await supabase
-      .from('contacts')
-      .select('tenant_id')
-      .eq('id', participants[0].contact_id)
-      .single();
-    
-    const tenantId = tenantData?.tenant_id;
+    const contactIds = participants.filter(p => p.contact_id).map(p => p.contact_id!);
+    const prospectIds = participants.filter(p => p.prospect_id).map(p => p.prospect_id!);
 
-    // Get needs and offers for all participants
-    const contactIds = participants.map(p => p.contact_id);
-    
-    const [needsResult, offersResult] = await Promise.all([
-      supabase
-        .from('needs')
-        .select('id, title, description, contact_id')
-        .in('contact_id', contactIds)
-        .eq('status', 'active'),
-      supabase
-        .from('offers')
-        .select('id, title, description, contact_id')
-        .in('contact_id', contactIds)
-        .eq('status', 'active')
+    // ──────────────────────────────────────────────
+    // 2. Fetch enrichment data in parallel
+    // ──────────────────────────────────────────────
+    const [
+      needsResult,
+      offersResult,
+      biResult,
+      prospectsResult,
+      pastMeetingsResult,
+    ] = await Promise.all([
+      supabase.from('needs').select('id, title, description, contact_id').in('contact_id', contactIds).eq('status', 'active'),
+      supabase.from('offers').select('id, title, description, contact_id').in('contact_id', contactIds).eq('status', 'active'),
+      supabase.from('business_interviews')
+        .select('contact_id, section_g_needs, section_j_value_for_cc, section_f_strategy, section_c_company_profile, section_l_personal')
+        .in('contact_id', contactIds),
+      prospectIds.length > 0
+        ? supabase.from('meeting_prospects').select('id, full_name, company, position, industry, ai_brief, prospecting_notes').in('id', prospectIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from('one_on_one_meetings').select('contact_a_id, contact_b_id').or(
+        contactIds.map(id => `contact_a_id.eq.${id},contact_b_id.eq.${id}`).join(',')
+      ),
     ]);
 
     const needs = needsResult.data || [];
     const offers = offersResult.data || [];
+    const biData = biResult.data || [];
+    const prospectsData = (prospectsResult as any).data || [];
+    const pastMeetings = pastMeetingsResult.data || [];
 
-    // Build context for each participant
+    // ──────────────────────────────────────────────
+    // 3. Build meeting history map
+    // ──────────────────────────────────────────────
+    const meetingHistoryMap: Record<string, number> = {};
+    pastMeetings.forEach((m: any) => {
+      const key1 = `${m.contact_a_id}_${m.contact_b_id}`;
+      const key2 = `${m.contact_b_id}_${m.contact_a_id}`;
+      meetingHistoryMap[key1] = (meetingHistoryMap[key1] || 0) + 1;
+      meetingHistoryMap[key2] = (meetingHistoryMap[key2] || 0) + 1;
+    });
+
+    // ──────────────────────────────────────────────
+    // 4. Build prospect map by prospect_id
+    // ──────────────────────────────────────────────
+    const prospectMap: Record<string, any> = {};
+    prospectsData.forEach((p: any) => { prospectMap[p.id] = p; });
+
+    // BI data map by contact_id
+    const biMap: Record<string, any> = {};
+    biData.forEach((bi: any) => { biMap[bi.contact_id] = bi; });
+
+    // ──────────────────────────────────────────────
+    // 5. Build participant profiles
+    // ──────────────────────────────────────────────
     const participantProfiles = participants.map((p: any) => {
+      const contact = p.contact as any;
+      const isProspect = !!p.prospect_id;
+      const prospect = isProspect ? prospectMap[p.prospect_id] : null;
+      const bi = contact ? biMap[p.contact_id] : null;
       const contactNeeds = needs.filter((n: any) => n.contact_id === p.contact_id);
       const contactOffers = offers.filter((o: any) => o.contact_id === p.contact_id);
-      const contact = p.contact as any;
-      
+
+      // For prospect without contact, use prospect data
+      const name = contact?.full_name || prospect?.full_name || 'Nieznany';
+      const company = contact?.company || prospect?.company || '';
+      const position = contact?.position || prospect?.position || '';
+
       return {
-        id: p.contact_id,
-        name: contact?.full_name || 'Nieznany',
-        company: contact?.company || '',
-        position: contact?.position || '',
+        id: p.contact_id || `prospect_${p.prospect_id}`,
+        participantId: p.id,
+        name,
+        company,
+        position,
         profile: contact?.profile_summary || '',
+        notes: contact?.notes || '',
+        tags: contact?.tags || [],
         needs: contactNeeds.map((n: any) => n.title).join(', ') || 'Brak',
         offers: contactOffers.map((o: any) => o.title).join(', ') || 'Brak',
-        isMember: p.is_member
+        isMember: !!p.is_member,
+        isNew: !!p.is_new,
+        isProspect,
+        prospectId: p.prospect_id,
+        contactId: p.contact_id,
+        // BI data
+        biNeeds: bi?.section_g_needs ? JSON.stringify(bi.section_g_needs) : null,
+        biValue: bi?.section_j_value_for_cc ? JSON.stringify(bi.section_j_value_for_cc) : null,
+        biStrategy: bi?.section_f_strategy ? JSON.stringify(bi.section_f_strategy) : null,
+        biCompany: bi?.section_c_company_profile ? JSON.stringify(bi.section_c_company_profile) : null,
+        biPersonal: bi?.section_l_personal ? JSON.stringify(bi.section_l_personal) : null,
+        // Prospect AI brief
+        aiBrief: prospect?.ai_brief || null,
+        prospectingNotes: prospect?.prospecting_notes || null,
+        industry: prospect?.industry || null,
+        type: p.is_member ? 'CZŁONEK' : (isProspect ? 'PROSPECT' : 'GOŚĆ CC'),
       };
     });
 
     const allRecommendations: any[] = [];
 
-    // Generate recommendations for each selected member
+    // ──────────────────────────────────────────────
+    // 6. Generate recommendations for each selected contact
+    // ──────────────────────────────────────────────
     for (const forContactId of forContactIds) {
-      const forContact = participantProfiles.find(p => p.id === forContactId);
+      const forContact = participantProfiles.find(p => p.id === forContactId || p.contactId === forContactId);
       if (!forContact) continue;
 
-      const otherParticipants = participantProfiles.filter(p => p.id !== forContactId);
-      
-      if (otherParticipants.length === 0) continue;
+      // Other participants (excluding the member themselves)
+      const otherParticipants = participantProfiles.filter(p => 
+        (p.id !== forContactId && p.contactId !== forContactId)
+      );
+
+      // Separate into categories for AI
+      const prospects = otherParticipants.filter(p => p.isProspect);
+      const guests = otherParticipants.filter(p => !p.isMember && !p.isProspect);
+      const members = otherParticipants.filter(p => p.isMember);
+
+      // Build meeting history text for this contact
+      const historyLines: string[] = [];
+      otherParticipants.forEach(other => {
+        const key = `${forContactId}_${other.contactId || other.id}`;
+        const count = meetingHistoryMap[key] || 0;
+        if (count > 0) {
+          historyLines.push(`- ${other.name}: spotkali się ${count}x`);
+        }
+      });
+
+      // Build enriched profile for AI
+      const buildParticipantDesc = (p: any, index: number) => {
+        let desc = `${index + 1}. ${p.name} (${p.company || 'brak firmy'}) [${p.type}]
+   Stanowisko: ${p.position || 'brak'}
+   Profil: ${p.profile || 'brak'}
+   Potrzeby: ${p.needs}
+   Oferty: ${p.offers}`;
+        if (p.aiBrief) {
+          desc += `\n   AI BRIEF PROSPEKTA:\n   ${p.aiBrief.substring(0, 800)}`;
+        }
+        if (p.prospectingNotes) {
+          desc += `\n   Notatki prospektingowe: ${p.prospectingNotes}`;
+        }
+        if (p.industry) {
+          desc += `\n   Branża: ${p.industry}`;
+        }
+        return desc;
+      };
+
+      // Ordered: prospects first, then guests, then members
+      const orderedOthers = [...prospects, ...guests, ...members];
+
+      if (orderedOthers.length === 0) continue;
 
       const prompt = `Jesteś ekspertem od networkingu biznesowego. Twoim zadaniem jest wybranie najlepszych osób do rozmowy 1x1 podczas spotkania networkingowego.
 
@@ -132,34 +219,35 @@ Imię: ${forContact.name}
 Firma: ${forContact.company}
 Stanowisko: ${forContact.position}
 Profil: ${forContact.profile}
+Notatki: ${forContact.notes || 'brak'}
+Tagi: ${forContact.tags?.join(', ') || 'brak'}
 Potrzeby: ${forContact.needs}
 Oferty: ${forContact.offers}
+${forContact.biNeeds ? `\nPOTRZEBY BIZNESOWE (z BI):\n${forContact.biNeeds}` : ''}
+${forContact.biValue ? `\nWARTOŚĆ DLA SPOŁECZNOŚCI (z BI):\n${forContact.biValue}` : ''}
+${forContact.biStrategy ? `\nSTRATEGIA FIRMY (z BI):\n${forContact.biStrategy}` : ''}
+${forContact.biPersonal ? `\nINFORMACJE OSOBISTE (z BI):\n${forContact.biPersonal}` : ''}
 
-INNI UCZESTNICY SPOTKANIA:
-${otherParticipants.map((p, i) => `
-${i + 1}. ${p.name} (${p.company})
-   Stanowisko: ${p.position}
-   Profil: ${p.profile}
-   Potrzeby: ${p.needs}
-   Oferty: ${p.offers}
-`).join('\n')}
+ZASADY DOPASOWANIA:
+1. PRIORYTET NAJWYŻSZY: Łącz z PROSPEKTAMI -- to najważniejsze spotkania!
+2. PRIORYTET WYSOKI: Łącz z GOŚĆMI CC (nie-członkami)
+3. ZAKAZANE: NIE rekomenduj spotkań z innymi CZŁONKAMI -- oni się już znają
+4. Minimum 3, maksimum 5 rekomendacji
+5. Unikaj par które już się spotkały (historia poniżej)
+6. Uzasadnienie: 2-3 zdania po polsku, konkretne i merytoryczne
+
+${historyLines.length > 0 ? `HISTORIA SPOTKAŃ 1:1 (unikaj powtórek!):\n${historyLines.join('\n')}` : 'Brak historii spotkań 1:1.'}
+
+UCZESTNICY SPOTKANIA (uporządkowani wg priorytetu):
+${orderedOthers.map((p, i) => buildParticipantDesc(p, i)).join('\n\n')}
 
 ZADANIE:
-Wybierz maksymalnie 5 najlepszych osób do rozmowy dla ${forContact.name}.
-Priorytetyzuj dopasowania na podstawie:
-1. Potrzeby jednej osoby pasujące do ofert drugiej (need-offer match)
-2. Komplementarne kompetencje i możliwości współpracy (synergy)
-3. Wspólne branże lub zainteresowania biznesowe (networking)
+Wybierz minimum 3, maksimum 5 najlepszych osób do rozmowy 1x1 dla ${forContact.name}.
+Priorytetyzuj PROSPEKTÓW i GOŚCI CC. NIE rekomenduj CZŁONKÓW chyba że nie ma wystarczającej liczby prospektów/gości.
+Podaj numer osoby z listy powyżej, uzasadnienie i tematy do rozmowy.`;
 
-Dla każdej rekomendacji podaj:
-- Numer osoby z listy powyżej
-- Uzasadnienie (2-3 zdania po polsku)
-- Konkretne tematy do rozmowy (3 punkty)
-- Typ dopasowania: need-offer, offer-need, synergy lub networking`;
+      console.log(`Generating recommendations for ${forContact.name} (${orderedOthers.length} candidates)...`);
 
-      console.log(`Generating recommendations for ${forContact.name}...`);
-
-      // Call Lovable AI with tool calling for structured output
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -173,7 +261,7 @@ Dla każdej rekomendacji podaj:
             type: 'function',
             function: {
               name: 'provide_recommendations',
-              description: 'Zwraca listę rekomendowanych osób do rozmowy',
+              description: 'Zwraca listę rekomendowanych osób do rozmowy 1x1',
               parameters: {
                 type: 'object',
                 properties: {
@@ -202,6 +290,7 @@ Dla każdej rekomendacji podaj:
                       },
                       required: ['participant_index', 'reasoning', 'talking_points', 'match_type']
                     },
+                    minItems: 3,
                     maxItems: 5
                   }
                 },
@@ -216,16 +305,18 @@ Dla każdej rekomendacji podaj:
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
         console.error('AI API error:', aiResponse.status, errorText);
-        
-        // Fallback to random recommendations if AI fails
-        const shuffled = [...otherParticipants].sort(() => Math.random() - 0.5).slice(0, 5);
-        shuffled.forEach((p, index) => {
+        // Fallback: prioritize prospects and guests
+        const fallbackCandidates = [...prospects, ...guests].slice(0, 5);
+        if (fallbackCandidates.length < 3) {
+          fallbackCandidates.push(...members.slice(0, 3 - fallbackCandidates.length));
+        }
+        fallbackCandidates.slice(0, 5).forEach((p, index) => {
           allRecommendations.push({
             meeting_id: meetingId,
             for_contact_id: forContactId,
-            recommended_contact_id: p.id,
+            recommended_contact_id: p.contactId || null,
             rank: index + 1,
-            reasoning: 'Rekomendacja automatyczna - warto poznać innych uczestników spotkania.',
+            reasoning: 'Rekomendacja automatyczna -- warto poznać tego uczestnika spotkania.',
             talking_points: 'Zapytaj o aktualne projekty; Omów wyzwania branżowe; Poszukaj obszarów współpracy',
             match_type: 'networking',
             status: 'pending'
@@ -235,9 +326,8 @@ Dla każdej rekomendacji podaj:
       }
 
       const aiData = await aiResponse.json();
-      console.log('AI response:', JSON.stringify(aiData, null, 2));
+      console.log('AI response received for', forContact.name);
 
-      // Parse tool call response
       let parsedRecs: any[] = [];
       try {
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
@@ -251,13 +341,13 @@ Dla każdej rekomendacji podaj:
 
       // Convert AI recommendations to database format
       parsedRecs.forEach((rec: any, index: number) => {
-        const participantIndex = rec.participant_index - 1; // Convert to 0-indexed
-        if (participantIndex >= 0 && participantIndex < otherParticipants.length) {
-          const recommendedContact = otherParticipants[participantIndex];
+        const participantIndex = rec.participant_index - 1;
+        if (participantIndex >= 0 && participantIndex < orderedOthers.length) {
+          const recommendedParticipant = orderedOthers[participantIndex];
           allRecommendations.push({
             meeting_id: meetingId,
             for_contact_id: forContactId,
-            recommended_contact_id: recommendedContact.id,
+            recommended_contact_id: recommendedParticipant.contactId || null,
             rank: index + 1,
             reasoning: rec.reasoning || 'Potencjalna wartość biznesowa',
             talking_points: rec.talking_points || 'Omów aktualne projekty i wyzwania',
@@ -267,16 +357,20 @@ Dla każdej rekomendacji podaj:
         }
       });
 
-      // If no AI recommendations, add fallback
-      if (parsedRecs.length === 0) {
-        const shuffled = [...otherParticipants].sort(() => Math.random() - 0.5).slice(0, 3);
-        shuffled.forEach((p, index) => {
+      // Fallback: ensure minimum 3 recommendations
+      const currentRecs = allRecommendations.filter(r => r.for_contact_id === forContactId);
+      if (currentRecs.length < 3) {
+        const usedIds = new Set(currentRecs.map(r => r.recommended_contact_id));
+        const remaining = [...prospects, ...guests, ...members]
+          .filter(p => !usedIds.has(p.contactId) && !usedIds.has(p.id));
+        const needed = 3 - currentRecs.length;
+        remaining.slice(0, needed).forEach((p, index) => {
           allRecommendations.push({
             meeting_id: meetingId,
             for_contact_id: forContactId,
-            recommended_contact_id: p.id,
-            rank: index + 1,
-            reasoning: 'Warto poznać innych uczestników spotkania i nawiązać kontakt.',
+            recommended_contact_id: p.contactId || null,
+            rank: currentRecs.length + index + 1,
+            reasoning: 'Warto poznać tego uczestnika spotkania i nawiązać kontakt.',
             talking_points: 'Przedstaw się i opowiedz o swojej działalności; Zapytaj o aktualne wyzwania; Poszukaj punktów wspólnych',
             match_type: 'networking',
             status: 'pending'
@@ -285,7 +379,9 @@ Dla każdej rekomendacji podaj:
       }
     }
 
-    // Delete existing recommendations for these contacts
+    // ──────────────────────────────────────────────
+    // 7. Save to database
+    // ──────────────────────────────────────────────
     const { error: deleteError } = await supabase
       .from('meeting_recommendations')
       .delete()
@@ -296,7 +392,6 @@ Dla każdej rekomendacji podaj:
       console.error('Error deleting old recommendations:', deleteError);
     }
 
-    // Insert new recommendations
     if (allRecommendations.length > 0) {
       const { data: inserted, error: insertError } = await supabase
         .from('meeting_recommendations')
@@ -305,7 +400,6 @@ Dla każdej rekomendacji podaj:
 
       if (insertError) throw insertError;
 
-      // Update meeting flag
       await supabase
         .from('group_meetings')
         .update({ recommendations_generated: true })
