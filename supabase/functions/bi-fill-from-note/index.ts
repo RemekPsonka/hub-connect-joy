@@ -1,24 +1,66 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Fields that belong to the MAIN contact/company records, NOT BI
+const CONTACT_COMPANY_SCHEMA = {
+  type: "object",
+  properties: {
+    contact_updates: {
+      type: "object",
+      description: "Data to update on the main contact card (NOT BI). Only include if found.",
+      properties: {
+        email: { type: "string", description: "Email osobisty/biznesowy" },
+        email_secondary: { type: "string", description: "Dodatkowy email" },
+        phone: { type: "string", description: "Telefon główny" },
+        phone_business: { type: "string", description: "Telefon biznesowy" },
+        position: { type: "string", description: "Stanowisko/rola" },
+        linkedin_url: { type: "string", description: "URL profilu LinkedIn" },
+        city: { type: "string", description: "Miasto zamieszkania/bazowe" },
+        address: { type: "string", description: "Adres" },
+        tags: { type: "array", items: { type: "string" }, description: "Tagi branżowe: FMCG, food, tech, agro, retail itp." },
+      },
+      additionalProperties: false,
+    },
+    company_updates: {
+      type: "object",
+      description: "Data to update on the company record. Only include if found.",
+      properties: {
+        name: { type: "string", description: "Oficjalna nazwa firmy" },
+        nip: { type: "string", description: "NIP firmy" },
+        krs: { type: "string", description: "KRS firmy" },
+        regon: { type: "string", description: "REGON firmy" },
+        website: { type: "string", description: "Strona www firmy" },
+        industry: { type: "string", description: "Branża firmy" },
+        description: { type: "string", description: "Opis działalności firmy" },
+        employee_count: { type: "string", description: "Liczba pracowników" },
+        city: { type: "string", description: "Miasto siedziby firmy" },
+        address: { type: "string", description: "Adres siedziby firmy" },
+        phone: { type: "string", description: "Telefon firmowy" },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+};
+
+// BI-specific knowledge fields (NOT contact/company data)
 const BI_SECTIONS_SCHEMA = {
   type: "object",
   properties: {
+    // Contact & company updates go to main DB
+    ...CONTACT_COMPANY_SCHEMA.properties,
+    // BI-specific sections
     section_a_basic: {
       type: "object",
+      description: "Kontekst spotkania - relacja, brief, źródło. NIE dane kontaktowe (email/telefon/NIP idą do contact_updates/company_updates).",
       properties: {
         branza: { type: "array", items: { type: "string" } },
         branza_tagi: { type: "array", items: { type: "string" } },
-        email_bezposredni: { type: "string" },
-        telefon_prywatny: { type: "string" },
-        www: { type: "string" },
-        nip: { type: "string" },
-        email_asystenta: { type: "string" },
-        telefon_asystenta: { type: "string" },
         zrodlo_kontaktu: { type: "string" },
         status_relacji: { type: "string", enum: ["nowy", "polecony", "powracajacy", "znajomy", "klient"] },
         sila_relacji: { type: "number" },
@@ -28,6 +70,7 @@ const BI_SECTIONS_SCHEMA = {
     },
     section_c_company_profile: {
       type: "object",
+      description: "Profil firmy z perspektywy BI (wiedza ze spotkania). Dane rejestrowe (NIP, adres) idą do company_updates.",
       properties: {
         zakres_dzialalnosci: { type: "string" },
         rynki: { type: "string" },
@@ -43,10 +86,7 @@ const BI_SECTIONS_SCHEMA = {
           type: "array",
           items: {
             type: "object",
-            properties: {
-              nazwa: { type: "string" },
-              procent: { type: "number" },
-            },
+            properties: { nazwa: { type: "string" }, procent: { type: "number" } },
             required: ["nazwa"],
             additionalProperties: false,
           },
@@ -148,22 +188,14 @@ const BI_SECTIONS_SCHEMA = {
         zasady: { type: "string" },
         partner: {
           type: "object",
-          properties: {
-            imie: { type: "string" },
-            wiek: { type: "number" },
-            zajecie: { type: "string" },
-          },
+          properties: { imie: { type: "string" }, wiek: { type: "number" }, zajecie: { type: "string" } },
           additionalProperties: false,
         },
         dzieci: {
           type: "array",
           items: {
             type: "object",
-            properties: {
-              imie: { type: "string" },
-              wiek: { type: "number" },
-              zajecie: { type: "string" },
-            },
+            properties: { imie: { type: "string" }, wiek: { type: "number" }, zajecie: { type: "string" } },
             additionalProperties: false,
           },
         },
@@ -214,11 +246,36 @@ function buildExistingDataContext(existingData: any): string {
   return `\n\nPOLA JUŻ UZUPEŁNIONE (NIE NADPISUJ, NIE ZMIENIAJ):\n${filled.join("\n")}`;
 }
 
-async function extractFromNote(note: string, contactName: string, companyName: string | null, existingData: any, apiKey: string) {
+function buildExistingContactContext(contactData: any, companyData: any): string {
+  const parts: string[] = [];
+  if (contactData) {
+    if (contactData.email) parts.push(`contact.email = "${contactData.email}"`);
+    if (contactData.phone) parts.push(`contact.phone = "${contactData.phone}"`);
+    if (contactData.position) parts.push(`contact.position = "${contactData.position}"`);
+    if (contactData.city) parts.push(`contact.city = "${contactData.city}"`);
+    if (contactData.linkedin_url) parts.push(`contact.linkedin_url = "${contactData.linkedin_url}"`);
+    if (contactData.tags?.length) parts.push(`contact.tags = ${JSON.stringify(contactData.tags)}`);
+  }
+  if (companyData) {
+    if (companyData.nip) parts.push(`company.nip = "${companyData.nip}"`);
+    if (companyData.website) parts.push(`company.website = "${companyData.website}"`);
+    if (companyData.industry) parts.push(`company.industry = "${companyData.industry}"`);
+  }
+  if (parts.length === 0) return "";
+  return `\n\nDANE JUŻ W GŁÓWNEJ BAZIE (NIE NADPISUJ jeśli się nie zmieniły):\n${parts.join("\n")}`;
+}
+
+async function extractFromNote(note: string, contactName: string, companyName: string | null, existingData: any, contactContext: string, apiKey: string) {
   const existingContext = buildExistingDataContext(existingData);
 
   const systemPrompt = `Jesteś ekspertem od analizy notatek ze spotkań biznesowych. 
-Twoim zadaniem jest wyekstrahowanie ustrukturyzowanych danych z notatki i zmapowanie ich na sekcje formularza Business Interview.
+Twoim zadaniem jest wyekstrahowanie ustrukturyzowanych danych z notatki.
+
+WAŻNA ZASADA ARCHITEKTURY:
+- Dane KONTAKTOWE osoby (email, telefon, miasto, stanowisko, LinkedIn, tagi) → wpisz do "contact_updates"
+- Dane FIRMOWE (NIP, KRS, REGON, www, adres firmy, branża, opis, liczba pracowników) → wpisz do "company_updates"  
+- Dane WIEDZY ze spotkania (strategia, potrzeby, relacje, rodzina, hobby, zaangażowanie) → wpisz do sekcji BI (section_*)
+- NIE duplikuj danych — email/telefon/NIP TYLKO w contact_updates/company_updates, NIGDY w sekcjach BI
 
 Kontekst:
 - Osoba: ${contactName}
@@ -230,28 +287,24 @@ ZASADY EKSTRAKCJI:
 3. ${existingContext ? "Pola już uzupełnione (wymienione poniżej) NIE NADPISUJ." : "Uzupełniaj wszystkie pola, które możesz."}
 
 ZASADY WNIOSKOWANIA:
-- Jeśli notatka mówi o emeryturze rodziców, przekazaniu firmy, konstytucji rodzinnej → ustaw sukcesja=true i opisz w sukcesja_opis
-- Członkowie rodziny wymienieni w kontekście biznesu → lista_wspolnikow (nazwa + relacja), partner, dzieci
-- "siostra Monika" → lista_wspolnikow: [{nazwa: "Monika (siostra)", procent: 0}]
-- Mapuj przychody na predefiniowane przedziały: do_10mln, 10_50mln, 50_100mln, 100_300mln, 300_500mln, 500mln_1mld, powyzej_1mld
-  Np. "300 mln zł" → "300_500mln", "50 mln" → "50_100mln"
-- Wyzwania biznesowe → czego_poszukuje (mapuj na enum: klienci, ekspansja, kapital, ma, inwestor, hr, optymalizacja, technologia)
-  Np. "szuka sieci do przejęcia" → ["ma", "ekspansja"], "rekrutacja technologa" → ["hr"]
-- Lokalizacje/miasta → miasto_bazowe, czeste_lokalizacje
-- Branże → branza (opisowe) + branza_tagi (krótkie tagi: FMCG, food, agro, retail, tech, itp.)
-- Jeśli firma ma wiele spółek/oddziałów → glowna_vs_holding=true, liczba_spolek
-- Wnioskuj knowhow z opisu kompetencji i doświadczenia (section_j_value_for_cc)
-- Wnioskuj zasoby z opisu infrastruktury (sklepy, hale, grunty itp.)
-- "planowane M&A", "rozmowy o przejęciu" → section_h_investments.status = "w_trakcie"
-- Opis wyzwań → top3_priorytety, najwieksze_wyzwanie
-- horyzont_czasowy: "0-6" (pilne), "6-18" (średni), "18+" (długoterminowy)
-- priorytet: "niski", "sredni", "wysoki"
+- Jeśli notatka mówi o emeryturze rodziców, przekazaniu firmy → sukcesja=true + sukcesja_opis
+- Członkowie rodziny w kontekście biznesu → lista_wspolnikow
+- Mapuj przychody na enum: do_10mln, 10_50mln, 50_100mln, 100_300mln, 300_500mln, 500mln_1mld, powyzej_1mld
+- Wyzwania → czego_poszukuje (enum: klienci, ekspansja, kapital, ma, inwestor, hr, optymalizacja, technologia)
+- Lokalizacje/miasta osoby → contact_updates.city
+- Lokalizacje/miasta firmy → company_updates.city
+- Branże → contact_updates.tags (krótkie tagi: FMCG, food, agro, retail, tech)
+- Stanowisko/rola → contact_updates.position (i tytul_rola w BI dla kontekstu relacji)
+- Telefon/email → ZAWSZE do contact_updates, NIGDY do sekcji BI
+- NIP/KRS/www → ZAWSZE do company_updates, NIGDY do sekcji BI
 ${existingContext}
+${contactContext}
 
 W polu ai_notes napisz:
 1. Co udało się wyciągnąć i wywnioskować
-2. Jakie pola wymagają weryfikacji z osobą
-3. Czego brakuje i co warto dopytać`;
+2. Jakie pola wymagają weryfikacji
+3. Czego brakuje i co warto dopytać
+4. Jakie dane zostały zapisane do głównej karty kontaktu/firmy`;
 
   const userContent = note
     ? `Notatka ze spotkania:\n\n${note}`
@@ -273,7 +326,7 @@ W polu ai_notes napisz:
         type: "function",
         function: {
           name: "fill_bi_sections",
-          description: "Fill Business Interview sections with extracted data from the meeting note",
+          description: "Fill Business Interview sections and contact/company updates with extracted data",
           parameters: BI_SECTIONS_SCHEMA,
         },
       }],
@@ -295,7 +348,7 @@ W polu ai_notes napisz:
 }
 
 async function searchPerplexityCompany(companyName: string, contactName: string, perplexityKey: string): Promise<string | null> {
-  const query = `"${companyName}" Polska firma: NIP, strona www, właściciele, struktura grupy kapitałowej, spółki zależne, organizacje branżowe, izby handlowe, dane finansowe KRS, przychody, zatrudnienie, branża`;
+  const query = `"${companyName}" Polska firma: NIP, strona www, właściciele, struktura grupy kapitałowej, spółki zależne, organizacje branżowe, izby handlowe, dane finansowe KRS, przychody, zatrudnienie, branża, adres siedziby, telefon`;
 
   try {
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -309,7 +362,7 @@ async function searchPerplexityCompany(companyName: string, contactName: string,
         messages: [
           {
             role: "system",
-            content: "Jesteś asystentem wyszukującym szczegółowe informacje biznesowe o polskich firmach. Podawaj fakty: NIP, KRS, strona www, właściciele, struktura grupy, przychody, branża, organizacje branżowe, izby handlowe. Jeśli nie znajdziesz informacji, napisz to wprost.",
+            content: "Jesteś asystentem wyszukującym szczegółowe informacje biznesowe o polskich firmach. Podawaj fakty: NIP, KRS, REGON, strona www, właściciele, struktura grupy, przychody, branża, organizacje branżowe, izby handlowe, adres siedziby, telefon firmowy, liczba pracowników. Jeśli nie znajdziesz informacji, napisz to wprost.",
           },
           { role: "user", content: query },
         ],
@@ -318,10 +371,7 @@ async function searchPerplexityCompany(companyName: string, contactName: string,
     });
 
     if (!response.ok) {
-      const status = response.status;
-      console.error("Perplexity company search error:", status);
-      if (status === 429) console.warn("Perplexity rate limited");
-      if (status === 402) console.warn("Perplexity quota exceeded");
+      console.error("Perplexity company search error:", response.status);
       return null;
     }
 
@@ -335,7 +385,7 @@ async function searchPerplexityCompany(companyName: string, contactName: string,
 
 async function searchPerplexityPerson(contactName: string, companyName: string | null, perplexityKey: string): Promise<string | null> {
   const companyPart = companyName ? ` "${companyName}"` : "";
-  const query = `"${contactName}"${companyPart} Polska: aktywność publiczna, organizacje, stowarzyszenia, fundacje, hobby, zainteresowania, wywiady prasowe, nagrody, rodzina, wykształcenie`;
+  const query = `"${contactName}"${companyPart} Polska: email, LinkedIn, aktywność publiczna, organizacje, stowarzyszenia, fundacje, hobby, zainteresowania, wywiady prasowe, nagrody, rodzina, wykształcenie, miasto zamieszkania`;
 
   try {
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -349,7 +399,7 @@ async function searchPerplexityPerson(contactName: string, companyName: string |
         messages: [
           {
             role: "system",
-            content: "Jesteś asystentem wyszukującym informacje o polskich przedsiębiorcach. Szukaj: aktywność publiczna, członkostwo w organizacjach, stowarzyszeniach, izbach handlowych, fundacjach. Hobby, zainteresowania, wywiady prasowe, nagrody, informacje o rodzinie. Jeśli nie znajdziesz informacji, napisz to wprost.",
+            content: "Jesteś asystentem wyszukującym informacje o polskich przedsiębiorcach. Szukaj: email kontaktowy, profil LinkedIn, aktywność publiczna, członkostwo w organizacjach, stowarzyszeniach, izbach handlowych, fundacjach. Hobby, zainteresowania, wywiady prasowe, nagrody, informacje o rodzinie, miasto zamieszkania. Jeśli nie znajdziesz informacji, napisz to wprost.",
           },
           { role: "user", content: query },
         ],
@@ -370,7 +420,7 @@ async function searchPerplexityPerson(contactName: string, companyName: string |
   }
 }
 
-async function synthesize(extractedData: any, companyData: string | null, personData: string | null, contactName: string, companyName: string | null, existingData: any, apiKey: string) {
+async function synthesize(extractedData: any, companyData: string | null, personData: string | null, contactName: string, companyName: string | null, existingData: any, contactContext: string, apiKey: string) {
   if (!companyData && !personData) return extractedData;
 
   const existingContext = buildExistingDataContext(existingData);
@@ -382,7 +432,11 @@ async function synthesize(extractedData: any, companyData: string | null, person
   const systemPrompt = `Jesteś ekspertem od uzupełniania formularzy Business Interview.
 Masz dane wyekstrahowane z notatki oraz dodatkowe informacje z internetu.
 
-Twoim zadaniem jest UZUPEŁNIENIE brakujących pól w danych z notatki, korzystając z danych z internetu.
+WAŻNA ZASADA ARCHITEKTURY:
+- Dane KONTAKTOWE osoby (email, telefon, miasto, stanowisko, LinkedIn, tagi) → "contact_updates"
+- Dane FIRMOWE (NIP, KRS, REGON, www, adres, branża, opis, pracownicy) → "company_updates"
+- Dane WIEDZY ze spotkania → sekcje BI (section_*)
+- NIE duplikuj — NIP/email/telefon TYLKO w contact_updates/company_updates
 
 ZASADY:
 1. NIE nadpisuj danych już wyekstrahowanych z notatki — mają priorytet
@@ -392,13 +446,10 @@ ZASADY:
 5. czego_poszukuje mapuj na enum: klienci, ekspansja, kapital, ma, inwestor, hr, optymalizacja, technologia
 6. Organizacje branżowe → section_m_organizations.organizacje_branzowe
 7. Izby handlowe → section_m_organizations.izby_handlowe
-8. Stowarzyszenia → section_m_organizations.stowarzyszenia
-9. Fundacje → section_m_organizations.fundacje_csr
-10. Hobby/zainteresowania → section_l_personal.hobby
-11. Informacje o rodzinie → section_l_personal.partner, section_l_personal.dzieci
-12. NIP → section_a_basic.nip
-13. Strona www → section_a_basic.www
+8. Telefon/email osoby → contact_updates (nie BI)
+9. NIP/www/adres firmy → company_updates (nie BI)
 ${existingContext}
+${contactContext}
 
 Osoba: ${contactName}
 Firma: ${companyName || 'nieznana'}
@@ -408,7 +459,7 @@ ${JSON.stringify(extractedData, null, 2)}
 
 ${perplexitySections.join("\n\n")}
 
-W ai_notes dodaj informację co zostało uzupełnione z internetu i co wymaga weryfikacji.`;
+W ai_notes dodaj co zostało uzupełnione z internetu, co wymaga weryfikacji, i jakie dane trafiły do karty kontaktu/firmy.`;
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -426,7 +477,7 @@ W ai_notes dodaj informację co zostało uzupełnione z internetu i co wymaga we
         type: "function",
         function: {
           name: "fill_bi_sections",
-          description: "Fill Business Interview sections with merged data",
+          description: "Fill Business Interview sections and contact/company updates with merged data",
           parameters: BI_SECTIONS_SCHEMA,
         },
       }],
@@ -450,13 +501,89 @@ W ai_notes dodaj informację co zostało uzupełnione z internetu i co wymaga we
   }
 }
 
+// Update contact record with extracted data (only non-empty, non-existing fields)
+async function updateContactRecord(supabaseAdmin: any, contactId: string, contactUpdates: any, existingContact: any) {
+  if (!contactUpdates || Object.keys(contactUpdates).length === 0) return;
+
+  const updates: Record<string, any> = {};
+  const allowedFields = ['email', 'email_secondary', 'phone', 'phone_business', 'position', 'linkedin_url', 'city', 'address', 'tags'];
+
+  for (const field of allowedFields) {
+    const newVal = contactUpdates[field];
+    if (newVal === undefined || newVal === null || newVal === '') continue;
+
+    const existingVal = existingContact?.[field];
+
+    if (field === 'tags') {
+      // Merge arrays
+      const existingTags = existingVal || [];
+      const newTags = (Array.isArray(newVal) ? newVal : []).filter((t: string) => !existingTags.includes(t));
+      if (newTags.length > 0) {
+        updates.tags = [...existingTags, ...newTags];
+      }
+    } else if (!existingVal) {
+      // Only fill empty fields
+      updates[field] = newVal;
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    console.log("[bi-fill-from-note] Updating contact record:", Object.keys(updates));
+    const { error } = await supabaseAdmin
+      .from('contacts')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', contactId);
+    if (error) console.error("[bi-fill-from-note] Contact update error:", error);
+  }
+}
+
+// Update company record with extracted data
+async function updateCompanyRecord(supabaseAdmin: any, companyId: string | null, companyUpdates: any, tenantId: string, companyName: string | null) {
+  if (!companyUpdates || Object.keys(companyUpdates).length === 0) return;
+  
+  // If no company_id, try to find or skip
+  if (!companyId) {
+    console.log("[bi-fill-from-note] No company_id on contact, skipping company updates");
+    return;
+  }
+
+  // Get existing company data
+  const { data: existingCompany } = await supabaseAdmin
+    .from('companies')
+    .select('*')
+    .eq('id', companyId)
+    .single();
+
+  const updates: Record<string, any> = {};
+  const allowedFields = ['nip', 'krs', 'regon', 'website', 'industry', 'description', 'employee_count', 'city', 'address', 'phone'];
+
+  for (const field of allowedFields) {
+    const newVal = companyUpdates[field];
+    if (newVal === undefined || newVal === null || newVal === '') continue;
+    
+    const existingVal = existingCompany?.[field];
+    if (!existingVal) {
+      updates[field] = newVal;
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    console.log("[bi-fill-from-note] Updating company record:", Object.keys(updates));
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', companyId);
+    if (error) console.error("[bi-fill-from-note] Company update error:", error);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { note, contactName, companyName, existingData } = await req.json();
+    const { note, contactName, companyName, existingData, contactId } = await req.json();
 
     if (!contactName) {
       return new Response(JSON.stringify({ error: "contactName is required" }), {
@@ -467,24 +594,49 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log(`[bi-fill-from-note] Processing for ${contactName}, company: ${companyName || 'unknown'}, note length: ${note?.length || 0}`);
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    console.log(`[bi-fill-from-note] Processing for ${contactName}, company: ${companyName || 'unknown'}, note length: ${note?.length || 0}, contactId: ${contactId || 'none'}`);
+
+    // Fetch existing contact & company data to build context
+    let existingContact: any = null;
+    let existingCompany: any = null;
+    let contactContext = "";
+
+    if (contactId) {
+      const { data: contactData } = await supabaseAdmin
+        .from('contacts')
+        .select('*, companies(*)')
+        .eq('id', contactId)
+        .single();
+
+      if (contactData) {
+        existingContact = contactData;
+        existingCompany = contactData.companies;
+        contactContext = buildExistingContactContext(contactData, contactData.companies);
+      }
+    }
 
     // Step 1: Extract structured data from note
     console.log("[bi-fill-from-note] Step 1: Extracting from note...");
-    const extractedData = await extractFromNote(note || "", contactName, companyName, existingData, LOVABLE_API_KEY);
-    console.log("[bi-fill-from-note] Extracted sections:", Object.keys(extractedData).filter(k => k !== 'ai_notes'));
+    const extractedData = await extractFromNote(note || "", contactName, companyName, existingData, contactContext, LOVABLE_API_KEY);
+    console.log("[bi-fill-from-note] Extracted sections:", Object.keys(extractedData).filter(k => !['ai_notes', 'contact_updates', 'company_updates'].includes(k)));
 
     // Step 2: Enrich with Perplexity (2 parallel queries)
-    let companyData: string | null = null;
-    let personData: string | null = null;
+    let companySearchData: string | null = null;
+    let personSearchData: string | null = null;
 
     if (PERPLEXITY_API_KEY) {
-      console.log("[bi-fill-from-note] Step 2: Enriching with Perplexity (2 queries)...");
+      console.log("[bi-fill-from-note] Step 2: Enriching with Perplexity...");
       const searchPromises: Promise<string | null>[] = [];
 
       if (companyName) {
@@ -495,25 +647,50 @@ serve(async (req) => {
       searchPromises.push(searchPerplexityPerson(contactName, companyName, PERPLEXITY_API_KEY));
 
       const [companyResult, personResult] = await Promise.all(searchPromises);
-      companyData = companyResult;
-      personData = personResult;
+      companySearchData = companyResult;
+      personSearchData = personResult;
 
-      if (companyData) console.log("[bi-fill-from-note] Company data received, length:", companyData.length);
-      if (personData) console.log("[bi-fill-from-note] Person data received, length:", personData.length);
-    } else {
-      console.log("[bi-fill-from-note] Step 2: Skipping Perplexity (no API key)");
+      if (companySearchData) console.log("[bi-fill-from-note] Company data received, length:", companySearchData.length);
+      if (personSearchData) console.log("[bi-fill-from-note] Person data received, length:", personSearchData.length);
     }
 
     // Step 3: Synthesize
     let finalData = extractedData;
-    if (companyData || personData) {
+    if (companySearchData || personSearchData) {
       console.log("[bi-fill-from-note] Step 3: Synthesizing...");
-      finalData = await synthesize(extractedData, companyData, personData, contactName, companyName, existingData, LOVABLE_API_KEY);
+      finalData = await synthesize(extractedData, companySearchData, personSearchData, contactName, companyName, existingData, contactContext, LOVABLE_API_KEY);
     }
 
-    console.log("[bi-fill-from-note] Done. Final sections:", Object.keys(finalData).filter(k => k !== 'ai_notes'));
+    // Step 4: Write contact/company updates to main DB
+    if (contactId) {
+      const contactUpdates = finalData.contact_updates;
+      const companyUpdates = finalData.company_updates;
 
-    return new Response(JSON.stringify({ success: true, data: finalData }), {
+      await Promise.all([
+        updateContactRecord(supabaseAdmin, contactId, contactUpdates, existingContact),
+        updateCompanyRecord(supabaseAdmin, existingContact?.company_id, companyUpdates, existingContact?.tenant_id, companyName),
+      ]);
+
+      console.log("[bi-fill-from-note] Main DB updates completed");
+    }
+
+    // Step 5: Strip contact/company updates from BI data (they're in main DB now)
+    const biData = { ...finalData };
+    const appliedContactUpdates = biData.contact_updates || {};
+    const appliedCompanyUpdates = biData.company_updates || {};
+    delete biData.contact_updates;
+    delete biData.company_updates;
+
+    console.log("[bi-fill-from-note] Done. BI sections:", Object.keys(biData).filter(k => k !== 'ai_notes'));
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      data: biData,
+      mainDbUpdates: {
+        contact: Object.keys(appliedContactUpdates),
+        company: Object.keys(appliedCompanyUpdates),
+      }
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

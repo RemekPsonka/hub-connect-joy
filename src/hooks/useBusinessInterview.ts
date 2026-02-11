@@ -328,26 +328,44 @@ export function useBIStats(tenantId: string | undefined) {
 
 // Fill BI from note using AI + Perplexity
 export function useFillBIFromNote() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       note,
       contactName,
       companyName,
       existingData,
+      contactId,
     }: {
       note: string;
       contactName: string;
       companyName?: string;
       existingData?: Record<string, any>;
+      contactId?: string;
     }) => {
       const { data, error } = await supabase.functions.invoke('bi-fill-from-note', {
-        body: { note, contactName, companyName, existingData },
+        body: { note, contactName, companyName, existingData, contactId },
       });
 
       if (error) throw error;
       if (!data.success) throw new Error(data.error || 'AI fill failed');
 
+      // Log what was updated in main DB
+      if (data.mainDbUpdates) {
+        const { contact, company } = data.mainDbUpdates;
+        if (contact?.length > 0) console.log('[BI Fill] Updated contact fields:', contact);
+        if (company?.length > 0) console.log('[BI Fill] Updated company fields:', company);
+      }
+
       return data.data as Record<string, any>;
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate contact query so UI reflects new data from main DB
+      if (variables.contactId) {
+        queryClient.invalidateQueries({ queryKey: ['contact', variables.contactId] });
+        queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      }
     },
   });
 }

@@ -155,6 +155,7 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
         contactName,
         companyName: companyName || undefined,
         existingData: formData,
+        contactId,
       });
       return result;
     } catch (error) {
