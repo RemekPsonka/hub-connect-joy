@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, UserPlus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ContactModal } from '@/components/contacts/ContactModal';
 import type { DealCategory, DealPriority } from '@/types/dealTeam';
 
 interface AddContactDialogProps {
@@ -50,8 +51,10 @@ export function AddContactDialog({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [selectedContactName, setSelectedContactName] = useState<string | null>(null);
   const [category, setCategory] = useState<DealCategory>(defaultCategory);
   const [priority, setPriority] = useState<DealPriority>('medium');
+  const [showCreateContact, setShowCreateContact] = useState(false);
 
   // Search contacts
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
@@ -74,6 +77,19 @@ export function AddContactDialog({
 
   const selectedContact = searchResults.find((c) => c.id === selectedContactId);
 
+  // For contacts created via ContactModal (not in search results)
+  const selectedCreatedContact = selectedContactId && !selectedContact && selectedContactName
+    ? { id: selectedContactId, full_name: selectedContactName, company: null, email: null }
+    : null;
+
+  const displayContact = selectedContact || selectedCreatedContact;
+
+  const handleContactCreated = (contactId: string, contactName: string) => {
+    setSelectedContactId(contactId);
+    setSelectedContactName(contactName);
+    setShowCreateContact(false);
+  };
+
   const handleSubmit = async () => {
     if (!selectedContactId) return;
 
@@ -87,6 +103,7 @@ export function AddContactDialog({
     // Reset form and close dialog
     setSearchQuery('');
     setSelectedContactId(null);
+    setSelectedContactName(null);
     setCategory(defaultCategory);
     setPriority('medium');
     onOpenChange(false);
@@ -96,6 +113,7 @@ export function AddContactDialog({
     if (!newOpen) {
       setSearchQuery('');
       setSelectedContactId(null);
+      setSelectedContactName(null);
       setCategory(defaultCategory);
       setPriority('medium');
     }
@@ -103,6 +121,7 @@ export function AddContactDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
@@ -133,9 +152,21 @@ export function AddContactDialog({
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : searchResults.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nie znaleziono kontaktów
-                </p>
+                <div className="text-center py-4 space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Nie znaleziono kontaktów
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setShowCreateContact(true)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Dodaj nowy kontakt
+                  </Button>
+                </div>
               ) : (
                 <ScrollArea className="h-[150px] border rounded-md">
                   <div className="p-2 space-y-1">
@@ -171,11 +202,11 @@ export function AddContactDialog({
           )}
 
           {/* Selected contact preview */}
-          {selectedContact && (
+          {displayContact && (
             <div className="p-3 bg-muted rounded-md">
-              <p className="font-medium text-sm">{selectedContact.full_name}</p>
-              {selectedContact.company && (
-                <p className="text-xs text-muted-foreground">{selectedContact.company}</p>
+              <p className="font-medium text-sm">{displayContact.full_name}</p>
+              {displayContact.company && (
+                <p className="text-xs text-muted-foreground">{displayContact.company}</p>
               )}
             </div>
           )}
@@ -228,5 +259,12 @@ export function AddContactDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ContactModal
+      isOpen={showCreateContact}
+      onClose={() => setShowCreateContact(false)}
+      onCreated={handleContactCreated}
+    />
+  </>
   );
 }
