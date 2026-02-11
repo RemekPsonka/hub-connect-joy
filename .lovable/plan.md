@@ -1,55 +1,67 @@
 
 
-# Naprawa bledu w Kanban Drag & Drop
+# Przenoszenie briefu AI z prospectingu do karty kontaktu
 
 ## Problem
 
-Blad wynika z konfliktu miedzy drag & drop a kliknieciem karty:
-1. Po zakonczeniu przeciagania (drop/dragEnd) zdarzenie `click` rowniez sie odpala na karcie, co otwiera popup `DealContactDetailSheet` jednoczesnie z aktualizacja kategorii -- powodujac niespodziewane zachowanie i potencjalny crash.
-2. W `HotLeadCard` checkbox do zadac nie ma `onClick` ze `stopPropagation`, wiec klikniecie w checkbox rowniez otwiera popup.
+Podczas konwersji prospekta na kontakt dealowy (Kanban), brief AI (`ai_brief`) jest kopiowany tylko do arkusza Business Interview (BI), ale **nie jest zapisywany** w kolumnie `deal_team_contacts.ai_brief`. Dlatego w popupie kontaktu (DealContactDetailSheet) brief jest pusty i wyswietla sie "Brak briefu".
 
 ## Rozwiazanie
 
-### 1. Blokowanie click po drag (wszystkie karty)
+W pliku `ProspectingConvertDialog.tsx`, w momencie insertu do `deal_team_contacts` (linia 216-223), nalezy dodac pole `ai_brief` oraz `ai_brief_generated_at` z danych prospekta.
 
-Dodanie logiki `wasDragging` ref w `KanbanBoard` ktora blokuje `onClick` jesli wlasnie zakonczono przeciaganie:
-
-```text
-KanbanBoard:
-  - wasDraggingRef = useRef(false)
-  - handleDragStart: wasDraggingRef.current = true
-  - handleDragEnd: setTimeout(() => wasDraggingRef.current = false, 0)
-  - handleCardClick(contact): if (wasDraggingRef.current) return; setSelectedContact(contact)
-```
-
-### 2. stopPropagation na Checkbox w HotLeadCard
-
-Dodanie `onClick={(e) => e.stopPropagation()}` na kazdym `Checkbox` w `HotLeadCard` aby klikniecie w checkbox nie otwieralo popupu.
-
-### 3. Zabezpieczenie priorityColors przed null
-
-W `TopLeadCard`, `LeadCard`, `ColdLeadCard` -- dodanie fallbacku gdy `contact.priority` jest null/undefined:
-
-```text
-priorityColors[contact.priority] || ''
-```
-
-## Pliki do modyfikacji
+## Plik do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/deals-team/KanbanBoard.tsx` | Dodanie `wasDraggingRef` + `handleCardClick` z zabezpieczeniem, przekazanie do kart |
-| `src/components/deals-team/HotLeadCard.tsx` | Dodanie `onClick={e => e.stopPropagation()}` na Checkbox |
-| `src/components/deals-team/TopLeadCard.tsx` | Fallback dla `priorityColors` |
-| `src/components/deals-team/LeadCard.tsx` | Fallback dla `priorityColors` |
-| `src/components/deals-team/ColdLeadCard.tsx` | Fallback dla `priorityColors` |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie `ai_brief` i `ai_brief_generated_at` do insertu `deal_team_contacts` |
 
 ## Szczegoly techniczne
 
-W `KanbanBoard.tsx`:
-- Nowy `useRef`: `const wasDraggingRef = useRef(false);`
-- W `handleDragStart`: `wasDraggingRef.current = true;`
-- W `handleDragEnd`: `setTimeout(() => { wasDraggingRef.current = false; }, 0);` (setTimeout zapewnia ze click event zdazy sie odpalic zanim flaga zostanie zresetowana)
-- Nowa funkcja `handleCardClick(contact)`: sprawdza `wasDraggingRef.current` -- jesli true, return; w przeciwnym razie `setSelectedContact(contact)`
-- Zamiana `onClick={() => setSelectedContact(contact)}` na `onClick={() => handleCardClick(contact)}` we wszystkich kartach
+W insercie do `deal_team_contacts` (linia 216-223) dodac:
 
+```text
+// Przed:
+.insert({
+  team_id: teamId,
+  contact_id: contactId,
+  tenant_id: tenantId,
+  category,
+  priority: 'medium',
+  status: 'active',
+})
+
+// Po:
+.insert({
+  team_id: teamId,
+  contact_id: contactId,
+  tenant_id: tenantId,
+  category,
+  priority: 'medium',
+  status: 'active',
+  ai_brief: prospect.ai_brief || null,
+  ai_brief_generated_at: prospect.ai_brief_generated_at || null,
+})
+```
+
+Dodatkowo, jesli kontakt juz istnial w zespole (`existingTeamContact`), brief powinien zostac zaktualizowany jesli jest pusty:
+
+```text
+if (existingTeamContact) {
+  teamContactId = existingTeamContact.id;
+  // Update brief if missing
+  if (prospect.ai_brief) {
+    await supabase
+      .from('deal_team_contacts')
+      .update({
+        ai_brief: prospect.ai_brief,
+        ai_brief_generated_at: prospect.ai_brief_generated_at || new Date().toISOString(),
+      })
+      .eq('id', existingTeamContact.id)
+      .is('ai_brief', null);
+  }
+  toast.info('Kontakt juz byl w zespole -- zaktualizowano');
+}
+```
+
+Zmiana dotyczy tylko jednego pliku i dwoch miejsc w kodzie (insert nowego kontaktu + update istniejacego).
