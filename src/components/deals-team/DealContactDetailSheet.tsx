@@ -6,7 +6,7 @@ import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
   Clock, AlertTriangle, MessageSquare, History, ChevronDown,
-  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight
+  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -28,6 +28,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { useChangeContactStatus, useRemoveContactFromTeam, useUpdateTeamContact, useGenerateDealContactBrief, useRevertToProspecting } from '@/hooks/useDealsTeamContacts';
+import { useConvertToClient } from '@/hooks/useTeamClients';
+import { ClientProductsPanel } from './ClientProductsPanel';
 import { useContactActivityLog } from '@/hooks/useContactActivityLog';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
 import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
@@ -52,6 +54,7 @@ const categoryConfig: Record<string, { label: string; icon: string; color: strin
   top: { label: 'TOP', icon: '⭐', color: 'bg-amber-100 text-amber-800' },
   lead: { label: 'LEAD', icon: '📋', color: 'bg-blue-100 text-blue-800' },
   cold: { label: 'COLD', icon: '❄️', color: 'bg-slate-100 text-slate-800' },
+  client: { label: 'KLIENT', icon: '✅', color: 'bg-emerald-100 text-emerald-800' },
 };
 
 const statusLabels: Record<DealContactStatus, string> = {
@@ -84,6 +87,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const updateTask = useUpdateTask();
   const generateBrief = useGenerateDealContactBrief();
   const revertToProspecting = useRevertToProspecting();
+  const convertToClient = useConvertToClient();
 
   const { data: activityLog = [] } = useContactActivityLog(contact?.id);
   const { data: weeklyStatuses = [] } = useTeamContactWeeklyStatuses(contact?.id);
@@ -544,8 +548,33 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
               <Separator />
 
+              {/* Products / Deals */}
+              <ClientProductsPanel
+                teamContactId={contact.id}
+                teamId={teamId}
+                category={contact.category}
+              />
+
+              <Separator />
+
               {/* Actions */}
               <section className="pb-4 space-y-2">
+                {/* Convert to Client */}
+                {contact.category !== 'client' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => {
+                      convertToClient.mutate({ id: contact.id, teamId });
+                      onOpenChange(false);
+                    }}
+                    disabled={convertToClient.isPending}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 mr-1.5" />
+                    Konwertuj do klienta
+                  </Button>
+                )}
                 {/* Revert to Prospecting */}
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
