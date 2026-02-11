@@ -1,58 +1,78 @@
 
 
-# Naprawa: firma nie przypisuje sie + brak mozliwosci recznego dodania
+# Wzmocnienie briefu pierwszej rozmowy -- glebokie wyszukiwanie osoby i firmy
 
 ## Problem
 
-Kontakt "Michal Matejka" ma pole tekstowe `company = "EMMA Market"` ale **nie ma `company_id`** (brak powiazanego rekordu w tabeli `companies`). Na zakladce FIRMA widac "Brak przypisanej firmy" z komunikatem pasywnym -- **bez zadnego przycisku akcji**.
-
-Dwa bledy:
-
-1. **CompanyView** -- gdy kontakt ma `contact.company` (tekst) ale nie ma domeny email, wyswietla tylko tekst "Firma X nie zostala powiazana" bez mozliwosci dzialania. Brakuje przycisku do utworzenia firmy z nazwy.
-
-2. **Edge function `bi-fill-from-note`** -- gdy `company_id` jest null, pomija company updates (linia 545-548: "No company_id, skipping"). Nie tworzy nowej firmy, wiec Perplexity moze znalezc NIP/www ale nie ma gdzie tego zapisac.
+Obecne prompty Perplexity sa zbyt ogolne i krotkie. Wynik: "Brak danych o pasjach, rodzinie czy zainteresowaniach" -- bo Perplexity nie dostaje wystarczajaco precyzyjnych instrukcji wyszukiwania. Brief jest powierzchowny.
 
 ## Rozwiazanie
 
-### 1. CompanyView -- przycisk "Utworz firme z nazwy"
+Zmiana w jednym pliku: `supabase/functions/prospect-ai-brief/index.ts`
 
-Dodanie trzeciego wariantu w bloku `if (!company)`: gdy `contact.company` istnieje ale nie ma `emailDomain`, pokazac przycisk tworzenia firmy z nazwy tekstowej (nie z domeny).
+### 1. Perplexity: z 2 zapytan na 4 rownolegle
 
-Logika przycisku:
-- Tworzy rekord w `companies` z `name = contact.company`
-- Przypisuje `company_id` na kontakcie
-- Uruchamia `enrich-company-data` (tak jak `useCreateCompanyFromDomain` ale z nazwy)
+Zamiast 2 ogolnych zapytan (osoba + firma), rozbijamy na 4 wyspecjalizowane:
 
-### 2. Nowy hook `useCreateCompanyFromName`
+| Zapytanie | Cel |
+|---|---|
+| **Osoba -- profil zawodowy** | Rola, historia kariery, inne firmy, zarzady, rady nadzorcze, KRS |
+| **Osoba -- prywatnie** | Pasje, hobby, rodzina, organizacje, fundacje, wywiady, wypowiedzi medialne, social media |
+| **Firma -- profil** | Dzialalnosc, lokalizacje, majatek, skala, przychody, zatrudnienie, www |
+| **Firma -- aktualnosci** | Notki prasowe, przetargi, inwestycje, nagrody, eventy, kontrakty, zmiany wlascicielskie |
 
-W `useCompanies.ts` -- analogiczny do `useCreateCompanyFromDomain`, ale:
-- Przyjmuje `companyName` i `contactId`
-- Tworzy firme z nazwa (bez website)
-- Przypisuje do kontaktu
-- Uruchamia AI enrichment z `company_name`
+Wszystkie 4 zapytania lecą rownolegle przez `Promise.all`.
 
-### 3. Edge function -- auto-tworzenie firmy
+### 2. Prompty Perplexity -- znacznie bardziej szczegolowe
 
-W `updateCompanyRecord`, gdy `company_id` jest null ale `companyName` istnieje:
-- Utworz nowy rekord w `companies` z nazwa i tenant_id
-- Zaktualizuj kontakt z nowym `company_id`
-- Zapisz dane Perplexity do nowej firmy
+Kazdy prompt bedzie zawieral konkretne instrukcje wyszukiwania, np.:
 
-## Pliki do modyfikacji
+**Osoba -- prywatnie:**
+- Szukaj wynikow typu: "imie nazwisko + wywiad", "imie nazwisko + pasja", "imie nazwisko + fundacja"
+- Sprawdz LinkedIn, Golden.com, social media
+- Rodzina: partner/zona/maz, dzieci (jezeli publicznie dostepne)
+- Organizacje: izby handlowe, stowarzyszenia, kluby biznesowe, rotary, lions
+- Cytaty z wywiadow, wypowiedzi na konferencjach
+
+**Firma -- aktualnosci:**
+- Notki prasowe z ostatnich 2 lat
+- Przetargi publiczne (TED, BIP)
+- Nagrody, wyroznienia, rankingi
+- Zmiany w KRS, nowi wspolnicy, podwyzszenie kapitalu
+- Eventy, sponsoring, targi branżowe
+
+### 3. Prompt syntezy AI -- rozbudowany
+
+Sekcja **Osoba** z "2-3 zdan" na pelny profil z podsekcjami:
+- Kariera i rola
+- Inne firmy i zarzady
+- Pasje, zainteresowania, hobby
+- Rodzina (jezeli znane)
+- Organizacje, fundacje, CSR
+- Cytaty / wypowiedzi medialne
+
+Sekcja **Firma** z pelnym rozbudowaniem:
+- Profil i dzialalnosc
+- Lokalizacje i majatek
+- Skala (przychody, zatrudnienie)
+- Aktualnosci: ostatnie inwestycje, przetargi, notki prasowe
+- Spolki powiazane, grupa kapitalowa
+
+### 4. Upgrade modelu Perplexity
+
+Zmiana z `sonar` na `sonar-pro` -- model z wielokrokowym rozumowaniem i 2x wiecej cytatow. Lepiej radzi sobie ze znajdowaniem ukrytych informacji.
+
+### 5. Usuniecie filtra czasowego
+
+Obecny `search_recency_filter: "year"` ogranicza wyniki do ostatniego roku. Dla zapytan o osobe (kariera, rodzina) to za malo. Filtr roczny pozostaje tylko dla zapytania o aktualnosci firmy.
+
+## Zmiana w pliku
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/contacts/CompanyView.tsx` | Dodanie przycisku "Utworz firme" gdy `contact.company` istnieje |
-| `src/hooks/useCompanies.ts` | Nowy hook `useCreateCompanyFromName` |
-| `supabase/functions/bi-fill-from-note/index.ts` | `updateCompanyRecord` -- auto-tworzenie firmy gdy brak `company_id` |
+| `supabase/functions/prospect-ai-brief/index.ts` | Nowe 4 prompty Perplexity, nowy prompt syntezy, model sonar-pro |
 
-## Logika w CompanyView
+## Efekt
 
-```text
-if (!company) {
-  if (emailDomain) -> przycisk "Utworz firme z domeny" (istniejacy)
-  else if (contact.company) -> przycisk "Utworz firme EMMA Market" (NOWY)
-  else -> komunikat "brak firmy"
-}
-```
+Brief bedzie zawieral znacznie wiecej "smaczkow" -- cytaty z wywiadow, informacje o rodzinie, pasjach, organizacjach, ostatnich inwestycjach firmy, notkach prasowych. Kazdy znaleziony fakt pojawi sie w briefie.
 
