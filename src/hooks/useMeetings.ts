@@ -167,11 +167,14 @@ export function useCreateMeeting() {
 
   return useMutation({
     mutationFn: async (meeting: MeetingInsert) => {
-      // Get tenant_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       const { data: director } = await supabase
         .from('directors')
         .select('tenant_id')
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
       
       if (!director) throw new Error('No tenant found');
 
@@ -526,11 +529,13 @@ export function useLogOneOnOne() {
       }
 
       // Create connection if follow-up needed
-      if (followUpNeeded) {
-        const { data: director } = await supabase
+        if (followUpNeeded) {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        const { data: director } = currentUser ? await supabase
           .from('directors')
           .select('tenant_id')
-          .single();
+          .eq('user_id', currentUser.id)
+          .maybeSingle() : { data: null };
 
         if (director) {
           await supabase.from('connections').insert({
