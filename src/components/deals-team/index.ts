@@ -4,6 +4,7 @@ export { KanbanColumn } from './KanbanColumn';
 export { HotLeadCard } from './HotLeadCard';
 export { TopLeadCard } from './TopLeadCard';
 export { LeadCard } from './LeadCard';
+export { ColdLeadCard } from './ColdLeadCard';
 export { ProspectCard } from './ProspectCard';
 export { AddContactDialog } from './AddContactDialog';
 export { AddProspectDialog } from './AddProspectDialog';

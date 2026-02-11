@@ -49,7 +49,7 @@ export function ProspectingConvertDialog({
   const [email, setEmail] = useState(prospect.email || '');
   const [phone, setPhone] = useState(prospect.phone || '');
   const [linkedin, setLinkedin] = useState(prospect.linkedin_url || '');
-  const [category, setCategory] = useState<'lead' | 'top' | 'hot'>('lead');
+  const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot'>('cold');
   const [loading, setLoading] = useState(false);
 
   // Duplicate detection
@@ -346,7 +346,7 @@ export function ProspectingConvertDialog({
           <div className="space-y-2">
             <Label>Kategoria na Kanban</Label>
             <div className="flex gap-2">
-              {(['lead', 'top', 'hot'] as const).map((cat) => (
+              {(['cold', 'lead', 'top', 'hot'] as const).map((cat) => (
                 <Button
                   key={cat}
                   variant={category === cat ? 'default' : 'outline'}

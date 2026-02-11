@@ -5,6 +5,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { HotLeadCard } from './HotLeadCard';
 import { TopLeadCard } from './TopLeadCard';
 import { LeadCard } from './LeadCard';
+import { ColdLeadCard } from './ColdLeadCard';
 import { ProspectCard } from './ProspectCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
@@ -36,6 +37,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     () => contacts.filter((c) => c.category === 'lead'),
     [contacts]
   );
+  const coldContacts = useMemo(
+    () => contacts.filter((c) => c.category === 'cold'),
+    [contacts]
+  );
 
   // Calculate total value for HOT
   const hotTotalValue = useMemo(
@@ -60,7 +65,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* HOT column */}
         <KanbanColumn
           title="HOT LEAD"
@@ -101,6 +106,20 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         >
           {leadContacts.map((contact) => (
             <LeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
+          ))}
+        </KanbanColumn>
+
+        {/* COLD column */}
+        <KanbanColumn
+          title="COLD LEAD"
+          icon="❄️"
+          color="slate"
+          count={coldContacts.length}
+          onAdd={() => setAddContactCategory('cold')}
+          emptyMessage="Brak COLD leadów. Dodaj kontakty →"
+        >
+          {coldContacts.map((contact) => (
+            <ColdLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
           ))}
         </KanbanColumn>
 

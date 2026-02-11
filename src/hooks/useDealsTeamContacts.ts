@@ -119,6 +119,7 @@ export function useTeamContactStats(teamId: string | undefined): DealTeamContact
     hot_count: contacts.filter(c => c.category === 'hot').length,
     top_count: contacts.filter(c => c.category === 'top').length,
     lead_count: contacts.filter(c => c.category === 'lead').length,
+    cold_count: contacts.filter(c => c.category === 'cold').length,
     overdue_count: contacts.filter(c => c.status_overdue).length,
     total_value: contacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
     upcoming_meetings: contacts.filter(c =>
@@ -299,6 +300,7 @@ export function usePromoteContact() {
       if (!contact) throw new Error('Kontakt nie został znaleziony');
 
       // Walidacja wymaganych pól w zależności od kategorii docelowej
+      // COLD → LEAD: brak dodatkowych wymagań
       if (newCategory === 'top') {
         if (!contact.assigned_to) {
           throw new Error('Promocja do TOP wymaga przypisania osoby odpowiedzialnej');
