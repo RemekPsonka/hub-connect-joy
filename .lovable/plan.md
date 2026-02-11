@@ -1,33 +1,38 @@
 
-# Poprawa widocznosci przycisku rozwijania sidebara
 
-## Problem
+# Szersze okno briefu z sekcjami jak w PDF
 
-Sidebar jest zwinity do trybu ikon, a przycisk rozwijania (`SidebarTrigger`) w headerze jest malo widoczny lub trudny do znalezienia.
+## Zmiany
 
-## Rozwiazanie
+Plik `ProspectAIBriefDialog.tsx` zostanie zmodyfikowany:
 
-Przycisk `SidebarTrigger` juz istnieje w `HeaderBar.tsx` (linia 36) i powinien dzialac. Jednak moze byc slabo widoczny. Rozwiazanie:
-
-1. Poprawic styl `SidebarTrigger` w headerze, dodajac wyrazniejszy styl (wiekszy rozmiar, lepsza widocznosc).
-2. Opcjonalnie dodac tooltip "Rozwin menu" dla lepszej odkrywalnosci.
-
-## Plik do modyfikacji
-
-| Plik | Zmiana |
-|---|---|
-| `src/components/layout/HeaderBar.tsx` | Dodac klasy stylu do `SidebarTrigger` -- np. `className="h-9 w-9"` oraz tooltip |
+1. **Szersze okno** -- zmiana `sm:max-w-lg` na `sm:max-w-2xl` (z ~32rem na ~42rem)
+2. **Sekcje wizualne** -- zamiast renderowac caly brief jako surowy Markdown, parsujemy go na sekcje (po naglowkach `##`) i wyswietlamy kazda sekcje w osobnej karcie z kolorowym naglowkiem, zgodnie ze stylem PDF:
+   - Fioletowy -- Osoba
+   - Niebieski -- Firma
+   - Pomaranczowy -- Ubezpieczenia
+   - Zielony -- Tematy do rozmowy
+   - Szary -- pozostale
 
 ## Szczegoly techniczne
 
-W `HeaderBar.tsx`, linia 36:
+Wykorzystamy istniejaca logike parsowania z `exportProspectBriefs.ts` (`parseMarkdownBrief` i `getSectionColor`) -- ale zamiast kopiowac, zaimplementujemy prosty parser inline w komponencie.
+
+Struktura sekcji w UI:
 
 ```text
-// Przed:
-<SidebarTrigger />
+[Kolorowy pasek naglowka: "OSOBA -- MICHAL MATEJKA"]
+  Kariera i rola
+  Michal Franciszek Matejka (ur. ok. 1991 r.)...
+  ...
 
-// Po:
-<SidebarTrigger className="h-9 w-9 text-muted-foreground hover:text-foreground" />
+[Kolorowy pasek naglowka: "FIRMA -- EMMA MARKET"]
+  ...
 ```
 
-To jedna mala zmiana -- przycisk hamburger/panel w lewym gornym rogu headera bedzie bardziej widoczny i pozwoli rozwinac sidebar po kliknieciu.
+Kazda sekcja to `div` z:
+- Kolorowym `bg-*` naglowkiem (rounded-t)
+- Bialym/szarym tlem z prosem do renderowania Markdown wewnatrz sekcji
+- Marginesem miedzy sekcjami
+
+Plik do modyfikacji: `src/components/deals-team/ProspectAIBriefDialog.tsx`
