@@ -85,6 +85,54 @@ serve(async (req) => {
     const { data: taskContacts } = await supabase.from('task_contacts').select('task_id, role, tasks(*)').eq('contact_id', contact_id);
     const { data: biData } = await supabase.from('contact_bi_data').select('*').eq('contact_id', contact_id).maybeSingle();
 
+    // Fetch deal team data (weekly statuses + notes)
+    const { data: dealTeamContacts } = await supabase
+      .from('deal_team_contacts')
+      .select('id, notes, category, status')
+      .eq('contact_id', contact_id);
+
+    let weeklyStatusesContext = '';
+    let dealNotesContext = '';
+    if (dealTeamContacts && dealTeamContacts.length > 0) {
+      const dtcIds = dealTeamContacts.map((d: any) => d.id);
+      const { data: weeklyStatuses } = await supabase
+        .from('deal_team_weekly_statuses')
+        .select('week_start, status_summary, next_steps, blockers')
+        .in('team_contact_id', dtcIds)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      if (weeklyStatuses && weeklyStatuses.length > 0) {
+        weeklyStatusesContext = `\n## OSTATNIE STATUSY TYGODNIOWE\n${weeklyStatuses.map((ws: any) => 
+          `- Tydzień ${ws.week_start}: ${ws.status_summary}${ws.next_steps ? ` → ${ws.next_steps}` : ''}`
+        ).join('\n')}`;
+      }
+
+      dealNotesContext = dealTeamContacts
+        .filter((d: any) => d.notes)
+        .map((d: any) => d.notes.substring(0, 200))
+        .join('\n');
+      if (dealNotesContext) {
+        dealNotesContext = `\n## NOTATKI Z PROCESU SPRZEDAŻY\n${dealNotesContext}`;
+      }
+    }
+
+    // Fetch task comments
+    let taskCommentsContext = '';
+    const taskIds = (taskContacts || []).map((t: any) => t.task_id);
+    if (taskIds.length > 0) {
+      const { data: comments } = await supabase
+        .from('task_comments')
+        .select('content, created_at')
+        .in('task_id', taskIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (comments && comments.length > 0) {
+        taskCommentsContext = `\n## KOMENTARZE DO ZADAŃ\n${comments.map((c: any) => `- ${c.content.substring(0, 150)}`).join('\n')}`;
+      }
+    }
+
     // Get conversation history
     let dbConversationHistory: Array<{role: string; content: string}> = [];
     if (session_id) {
@@ -170,6 +218,9 @@ ${services.slice(0, 5).map((s: any) => `- ${s.name || s}`).join('\n') || 'brak'}
 - Kontekst firmy: ${(profile as any).company_context || 'nieznany'}
 ${relationshipContext}
 ${companyContext}
+${dealNotesContext}
+${weeklyStatusesContext}
+${taskCommentsContext}
 
 ## POTRZEBY KONTAKTU (${needs?.length || 0})
 ${(needs || []).map(n => `- [${n.status}] ${n.title}`).join('\n') || 'Brak'}
