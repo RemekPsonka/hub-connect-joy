@@ -1,22 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent } from '@/components/ui/card';
 import { useBusinessInterview, useSaveBusinessInterview, useProcessBIWithAI, validateBIForAI, useFillBIFromNote } from '@/hooks/useBusinessInterview';
 import { BIActionBar } from './BIActionBar';
 import { BIFillFromNoteDialog } from './BIFillFromNoteDialog';
 import {
-  SectionABasic,
-  SectionCCompanyProfile,
-  SectionDScale,
-  SectionFStrategy,
-  SectionGNeeds,
-  SectionHInvestments,
-  SectionJValueForCC,
-  SectionKEngagement,
-  SectionLPersonal,
-  SectionMOrganizations,
-  SectionNFollowup,
+  SmartSectionContext,
+  SmartSectionCompany,
+  SmartSectionStrategy,
+  SmartSectionValue,
+  SmartSectionPersonal,
+  SmartSectionFollowup,
+  SectionProgressBadge,
+  countFilledFields,
 } from './sections';
+import { CONTEXT_FIELDS } from './sections/SmartSectionContext';
+import { COMPANY_FIELDS, SCALE_FIELDS } from './sections/SmartSectionCompany';
+import { STRATEGY_FIELDS, NEEDS_FIELDS, INVESTMENTS_FIELDS } from './sections/SmartSectionStrategy';
+import { VALUE_FIELDS, ENGAGEMENT_FIELDS } from './sections/SmartSectionValue';
+import { PERSONAL_FIELDS, ORGS_FIELDS } from './sections/SmartSectionPersonal';
+import { FOLLOWUP_FIELDS } from './sections/SmartSectionFollowup';
 import type { BusinessInterview, SectionABasic as SectionAType, SectionCCompanyProfile as SectionCType, SectionDScale as SectionDType, SectionFStrategy as SectionFType, SectionGNeeds as SectionGType, SectionHInvestments as SectionHType, SectionJValueForCC as SectionJType, SectionKEngagement as SectionKType, SectionLPersonal as SectionLType, SectionMOrganizations as SectionMType, SectionNFollowup as SectionNType } from './types';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,11 +38,6 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
   const [formData, setFormData] = useState<Partial<BusinessInterview>>({});
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [showFillFromNote, setShowFillFromNote] = useState(false);
-
-  // Sekcje domyślnie otwarte: A, C, G, N
-  const [openSections, setOpenSections] = useState<string[]>([
-    'section-a', 'section-c', 'section-g', 'section-n'
-  ]);
 
   // Initialize form data from loaded biData
   useEffect(() => {
@@ -60,6 +58,29 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
     }
   }, [biData]);
 
+  // Smart auto-open: key sections (context, strategy, followup) always open; others open if they have data
+  const smartOpenSections = useMemo(() => {
+    const open: string[] = ['smart-context', 'smart-strategy', 'smart-followup'];
+
+    const companyFilled = countFilledFields(formData.section_c_company_profile as any, COMPANY_FIELDS) + countFilledFields(formData.section_d_scale as any, SCALE_FIELDS);
+    if (companyFilled > 0) open.push('smart-company');
+
+    const valueFilled = countFilledFields(formData.section_j_value_for_cc as any, VALUE_FIELDS) + countFilledFields(formData.section_k_engagement as any, ENGAGEMENT_FIELDS);
+    if (valueFilled > 0) open.push('smart-value');
+
+    const personalFilled = countFilledFields(formData.section_l_personal as any, PERSONAL_FIELDS) + countFilledFields(formData.section_m_organizations as any, ORGS_FIELDS);
+    if (personalFilled > 0) open.push('smart-personal');
+
+    return open;
+  }, [formData]);
+
+  const [openSections, setOpenSections] = useState<string[]>([]);
+
+  // Set initial open sections once data loads
+  useEffect(() => {
+    setOpenSections(smartOpenSections);
+  }, [smartOpenSections]);
+
   const mergedData: Partial<BusinessInterview> = {
     ...biData,
     ...formData,
@@ -73,37 +94,24 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
 
   const handleSave = async () => {
     try {
-      await saveMutation.mutateAsync({ 
-        contactId, 
-        data: formData, 
-        existingId: biData?.id 
-      });
+      await saveMutation.mutateAsync({ contactId, data: formData, existingId: biData?.id });
       toast.success('Zapisano dane BI');
-    } catch (error) {
+    } catch {
       toast.error('Błąd podczas zapisywania');
     }
   };
 
   const handleSaveAndClose = async () => {
     try {
-      await saveMutation.mutateAsync({ 
-        contactId, 
-        data: formData, 
-        existingId: biData?.id 
-      });
+      await saveMutation.mutateAsync({ contactId, data: formData, existingId: biData?.id });
       toast.success('Zapisano dane BI');
-      // Could navigate back or close modal if needed
-    } catch (error) {
+    } catch {
       toast.error('Błąd podczas zapisywania');
     }
   };
 
   const handleProcessAI = async () => {
-    if (!biData?.id) {
-      toast.error('Najpierw zapisz dane BI');
-      return;
-    }
-    
+    if (!biData?.id) { toast.error('Najpierw zapisz dane BI'); return; }
     setIsProcessingAI(true);
     try {
       await processBI.mutateAsync({ biId: biData.id });
@@ -116,7 +124,6 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
     }
   };
 
-  // Merge AI-filled data into form (only fill empty fields)
   const mergeBIData = (aiData: Record<string, any>) => {
     setFormData(prev => {
       const merged = { ...prev };
@@ -125,13 +132,11 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
         const existing = (prev as any)[sectionKey] || {};
         const incoming = aiData[sectionKey] || {};
         const mergedSection: Record<string, any> = { ...existing };
-
         for (const [field, value] of Object.entries(incoming)) {
           const existingVal = existing[field];
           if (existingVal === undefined || existingVal === null || existingVal === '') {
             mergedSection[field] = value;
           } else if (Array.isArray(existingVal) && Array.isArray(value)) {
-            // Merge arrays, add new unique items
             const combined = [...existingVal, ...value.filter((v: any) => !existingVal.includes(v))];
             mergedSection[field] = combined;
           }
@@ -145,11 +150,10 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
 
   const handleFillFromNote = async (note: string): Promise<Record<string, any> | null> => {
     try {
-      const effectiveCompanyName = companyName || undefined;
       const result = await fillFromNote.mutateAsync({
         note,
         contactName,
-        companyName: effectiveCompanyName,
+        companyName: companyName || undefined,
         existingData: formData,
       });
       return result;
@@ -167,6 +171,14 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
       </div>
     );
   }
+
+  // Progress counts
+  const contextFilled = countFilledFields(formData.section_a_basic as any, CONTEXT_FIELDS);
+  const companyFilled = countFilledFields(formData.section_c_company_profile as any, COMPANY_FIELDS) + countFilledFields(formData.section_d_scale as any, SCALE_FIELDS);
+  const strategyFilled = countFilledFields(formData.section_f_strategy as any, STRATEGY_FIELDS) + countFilledFields(formData.section_g_needs as any, NEEDS_FIELDS) + countFilledFields(formData.section_h_investments as any, INVESTMENTS_FIELDS);
+  const valueFilled = countFilledFields(formData.section_j_value_for_cc as any, VALUE_FIELDS) + countFilledFields(formData.section_k_engagement as any, ENGAGEMENT_FIELDS);
+  const personalFilled = countFilledFields(formData.section_l_personal as any, PERSONAL_FIELDS) + countFilledFields(formData.section_m_organizations as any, ORGS_FIELDS);
+  const followupFilled = countFilledFields(formData.section_n_followup as any, FOLLOWUP_FIELDS);
 
   return (
     <div className="space-y-4">
@@ -193,151 +205,113 @@ export function BITab({ contactId, contactName, companyName }: BITabProps) {
 
       <Card>
         <CardContent className="pt-6">
-          <Accordion 
-            type="multiple" 
-            value={openSections} 
+          <Accordion
+            type="multiple"
+            value={openSections}
             onValueChange={setOpenSections}
             className="space-y-2"
           >
-            {/* Sekcja A: Dane podstawowe */}
-            <AccordionItem value="section-a" className="border rounded-lg px-4">
+            {/* 1. Kontekst spotkania */}
+            <AccordionItem value="smart-context" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                A. Dane podstawowe
+                <span className="flex items-center">
+                  1. Kontekst spotkania
+                  <SectionProgressBadge filled={contextFilled} total={CONTEXT_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionABasic 
-                  data={(formData.section_a_basic || biData?.section_a_basic || {}) as SectionAType}
-                  contactName={contactName}
+                <SmartSectionContext
+                  data={(formData.section_a_basic || {}) as SectionAType}
                   onChange={(data) => handleSectionChange('section_a_basic', data)}
                 />
               </AccordionContent>
             </AccordionItem>
 
-            {/* Sekcja C: Firma główna - profil */}
-            <AccordionItem value="section-c" className="border rounded-lg px-4">
+            {/* 2. Firma i skala */}
+            <AccordionItem value="smart-company" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                C. Firma główna – profil
+                <span className="flex items-center">
+                  2. Firma i skala
+                  <SectionProgressBadge filled={companyFilled} total={COMPANY_FIELDS.length + SCALE_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionCCompanyProfile
-                  data={(formData.section_c_company_profile || biData?.section_c_company_profile || {}) as SectionCType}
-                  onChange={(data) => handleSectionChange('section_c_company_profile', data)}
+                <SmartSectionCompany
+                  companyData={(formData.section_c_company_profile || {}) as SectionCType}
+                  scaleData={(formData.section_d_scale || {}) as SectionDType}
+                  onCompanyChange={(data) => handleSectionChange('section_c_company_profile', data)}
+                  onScaleChange={(data) => handleSectionChange('section_d_scale', data)}
                 />
               </AccordionContent>
             </AccordionItem>
 
-            {/* Sekcja D: Skala działalności */}
-            <AccordionItem value="section-d" className="border rounded-lg px-4">
+            {/* 3. Strategia i potrzeby */}
+            <AccordionItem value="smart-strategy" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                D. Skala działalności
+                <span className="flex items-center">
+                  3. Strategia i potrzeby
+                  <SectionProgressBadge filled={strategyFilled} total={STRATEGY_FIELDS.length + NEEDS_FIELDS.length + INVESTMENTS_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionDScale
-                  data={(formData.section_d_scale || biData?.section_d_scale || {}) as SectionDType}
-                  onChange={(data) => handleSectionChange('section_d_scale', data)}
+                <SmartSectionStrategy
+                  strategyData={(formData.section_f_strategy || {}) as SectionFType}
+                  needsData={(formData.section_g_needs || {}) as SectionGType}
+                  investmentsData={(formData.section_h_investments || {}) as SectionHType}
+                  onStrategyChange={(data) => handleSectionChange('section_f_strategy', data)}
+                  onNeedsChange={(data) => handleSectionChange('section_g_needs', data)}
+                  onInvestmentsChange={(data) => handleSectionChange('section_h_investments', data)}
                 />
               </AccordionContent>
             </AccordionItem>
 
-            {/* Sekcja F: Strategia */}
-            <AccordionItem value="section-f" className="border rounded-lg px-4">
+            {/* 4. Wartość i zaangażowanie */}
+            <AccordionItem value="smart-value" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                F. Strategia 2-3 lata
+                <span className="flex items-center">
+                  4. Wartość i zaangażowanie
+                  <SectionProgressBadge filled={valueFilled} total={VALUE_FIELDS.length + ENGAGEMENT_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionFStrategy
-                  data={(formData.section_f_strategy || biData?.section_f_strategy || {}) as SectionFType}
-                  onChange={(data) => handleSectionChange('section_f_strategy', data)}
+                <SmartSectionValue
+                  valueData={(formData.section_j_value_for_cc || {}) as SectionJType}
+                  engagementData={(formData.section_k_engagement || {}) as SectionKType}
+                  onValueChange={(data) => handleSectionChange('section_j_value_for_cc', data)}
+                  onEngagementChange={(data) => handleSectionChange('section_k_engagement', data)}
                 />
               </AccordionContent>
             </AccordionItem>
 
-            {/* Sekcja G: Potrzeby */}
-            <AccordionItem value="section-g" className="border rounded-lg px-4">
+            {/* 5. Sfera prywatna */}
+            <AccordionItem value="smart-personal" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                G. Czego szuka
+                <span className="flex items-center">
+                  5. Sfera prywatna
+                  <SectionProgressBadge filled={personalFilled} total={PERSONAL_FIELDS.length + ORGS_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionGNeeds
-                  data={(formData.section_g_needs || biData?.section_g_needs || {}) as SectionGType}
-                  onChange={(data) => handleSectionChange('section_g_needs', data)}
+                <SmartSectionPersonal
+                  personalData={(formData.section_l_personal || {}) as SectionLType}
+                  orgsData={(formData.section_m_organizations || {}) as SectionMType}
+                  onPersonalChange={(data) => handleSectionChange('section_l_personal', data)}
+                  onOrgsChange={(data) => handleSectionChange('section_m_organizations', data)}
                 />
               </AccordionContent>
             </AccordionItem>
 
-            {/* Sekcja H: Inwestycje */}
-            <AccordionItem value="section-h" className="border rounded-lg px-4">
+            {/* 6. Follow-up */}
+            <AccordionItem value="smart-followup" className="border rounded-lg px-4">
               <AccordionTrigger className="text-base font-semibold">
-                H. Inwestycje
+                <span className="flex items-center">
+                  6. Follow-up
+                  <SectionProgressBadge filled={followupFilled} total={FOLLOWUP_FIELDS.length} />
+                </span>
               </AccordionTrigger>
               <AccordionContent className="pt-4">
-                <SectionHInvestments
-                  data={(formData.section_h_investments || biData?.section_h_investments || {}) as SectionHType}
-                  onChange={(data) => handleSectionChange('section_h_investments', data)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* Sekcja J: Wartość dla CC */}
-            <AccordionItem value="section-j" className="border rounded-lg px-4">
-              <AccordionTrigger className="text-base font-semibold">
-                J. Wartość dla CC
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                <SectionJValueForCC
-                  data={(formData.section_j_value_for_cc || biData?.section_j_value_for_cc || {}) as SectionJType}
-                  onChange={(data) => handleSectionChange('section_j_value_for_cc', data)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* Sekcja K: Zaangażowanie */}
-            <AccordionItem value="section-k" className="border rounded-lg px-4">
-              <AccordionTrigger className="text-base font-semibold">
-                K. Zaangażowanie w CC
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                <SectionKEngagement
-                  data={(formData.section_k_engagement || biData?.section_k_engagement || {}) as SectionKType}
-                  onChange={(data) => handleSectionChange('section_k_engagement', data)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* Sekcja L: Dane osobiste */}
-            <AccordionItem value="section-l" className="border rounded-lg px-4">
-              <AccordionTrigger className="text-base font-semibold">
-                L. Sfera osobista
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                <SectionLPersonal
-                  data={(formData.section_l_personal || biData?.section_l_personal || {}) as SectionLType}
-                  onChange={(data) => handleSectionChange('section_l_personal', data)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* Sekcja M: Organizacje */}
-            <AccordionItem value="section-m" className="border rounded-lg px-4">
-              <AccordionTrigger className="text-base font-semibold">
-                M. Organizacje i członkostwa
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                <SectionMOrganizations
-                  data={(formData.section_m_organizations || biData?.section_m_organizations || {}) as SectionMType}
-                  onChange={(data) => handleSectionChange('section_m_organizations', data)}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* Sekcja N: Follow-up */}
-            <AccordionItem value="section-n" className="border rounded-lg px-4">
-              <AccordionTrigger className="text-base font-semibold">
-                N. Follow-up i notatki
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                <SectionNFollowup
-                  data={(formData.section_n_followup || biData?.section_n_followup || {}) as SectionNType}
+                <SmartSectionFollowup
+                  data={(formData.section_n_followup || {}) as SectionNType}
                   onChange={(data) => handleSectionChange('section_n_followup', data)}
                 />
               </AccordionContent>
