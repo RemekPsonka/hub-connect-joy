@@ -7,21 +7,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function queryPerplexity(apiKey: string, prompt: string): Promise<string> {
+async function queryPerplexity(apiKey: string, prompt: string, useRecencyFilter = false): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: "sonar-pro",
+    messages: [
+      { role: "system", content: "Odpowiadaj po polsku. Podaj konkretne fakty, dane, liczby, cytaty. Nie spekuluj – pisz tylko to co znajdziesz. Jeśli znajdziesz cokolwiek – napisz, nawet drobny fakt." },
+      { role: "user", content: prompt },
+    ],
+  };
+
+  if (useRecencyFilter) {
+    body.search_recency_filter = "year";
+  }
+
   const res = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: "sonar",
-      messages: [
-        { role: "system", content: "Odpowiadaj po polsku. Podaj konkretne fakty, dane, liczby. Nie spekuluj – pisz tylko to co znajdziesz." },
-        { role: "user", content: prompt },
-      ],
-      search_recency_filter: "year",
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -53,7 +58,6 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch prospect
     const { data: prospect, error: fetchErr } = await supabase
       .from("meeting_prospects")
       .select("*")
@@ -67,38 +71,88 @@ serve(async (req) => {
     const position = prospect.position || "";
     const industry = prospect.industry || "";
 
-    // Step 1: Perplexity — parallel queries
-    const personPrompt = `Znajdź informacje o osobie: ${fullName}${company ? `, firma: ${company}` : ""}${position ? `, stanowisko: ${position}` : ""}.
-Podaj:
-- Kim jest ta osoba, jakie pełni funkcje
-- Jakie inne firmy posiada lub współtworzy
-- Obecność medialna, wywiady, artykuły
-- Pasje, zainteresowania, działalność społeczna
-- Rodzina (jeśli publiczne informacje)
-Pisz konkretnie, krótko, po polsku.`;
+    // ── 4 parallel Perplexity queries ──
 
-    const companyPrompt = company
-      ? `Znajdź informacje o firmie: ${company}${industry ? ` (branża: ${industry})` : ""}.
+    const personProfessionalPrompt = `Znajdź WSZYSTKIE informacje o osobie: ${fullName}${company ? `, firma: ${company}` : ""}${position ? `, stanowisko: ${position}` : ""}.
+
+Szukaj w KRS, CEIDG, LinkedIn, Golden.com, rejestrach publicznych.
+
 Podaj:
-- Czym się zajmuje firma, główna działalność
-- Branża i specyfika (produkcja/handel/usługi/budowlanka)
-- Lokalizacje: siedziba, oddziały, magazyny, hale produkcyjne
-- Majątek: nieruchomości, flota, maszyny, linie produkcyjne
-- Przychody, zatrudnienie (jeśli dostępne)
-- Kontrakty, przetargi, główni klienci
-- Strona WWW i krótki opis z niej
-Pisz konkretnie, krótko, po polsku.`
+- Kim jest ta osoba, jaką pełni funkcję w firmie ${company || "(nieznana)"}
+- Historia kariery — poprzednie stanowiska, firmy
+- Inne firmy które posiada, współtworzy, w których zasiada w zarządzie lub radzie nadzorczej
+- Udziały, akcje, powiązania kapitałowe
+- Wykształcenie, uczelnia, kierunek (jeśli dostępne)
+- Nagrody biznesowe, wyróżnienia, rankingi (np. Forbes, Diamenty)
+
+Pisz konkretnie, krótko, po polsku. Każdy znaleziony fakt jest ważny.`;
+
+    const personPrivatePrompt = `Znajdź informacje PRYWATNE i MEDIALNE o osobie: ${fullName}${company ? ` (firma: ${company})` : ""}.
+
+Szukaj fraz typu: "${fullName} wywiad", "${fullName} pasja", "${fullName} fundacja", "${fullName} hobby", "${fullName} rodzina", "${fullName} sport", "${fullName} charytatywnie".
+
+Podaj WSZYSTKO co znajdziesz:
+- Pasje, hobby, zainteresowania (sport, podróże, motoryzacja, sztuka, wino, etc.)
+- Rodzina: partner/żona/mąż, dzieci — TYLKO jeśli publicznie dostępne (wywiady, social media)
+- Organizacje: izby handlowe, stowarzyszenia branżowe, kluby biznesowe (Rotary, Lions, BNI, YPO, EO)
+- Fundacje, działalność charytatywna, CSR, patronaty
+- Wywiady — cytaty, wypowiedzi w mediach, podcasty, konferencje
+- Social media: aktywność na LinkedIn, Twitter/X, Instagram (jeśli publiczne)
+- Inne ciekawe fakty osobiste
+
+Każdy "smaczek" jest cenny. Pisz po polsku, konkretnie.`;
+
+    const companyProfilePrompt = company
+      ? `Znajdź SZCZEGÓŁOWE informacje o firmie: ${company}${industry ? ` (branża: ${industry})` : ""}.
+
+Szukaj w KRS, CEIDG, GUS, stronach WWW firmy, rejestrach.
+
+Podaj:
+- Czym się zajmuje firma, główna działalność, produkty/usługi
+- Branża i specyfika (produkcja/handel/usługi/budowlanka/IT/finanse)
+- Lokalizacje: siedziba główna, oddziały, filie, magazyny, hale produkcyjne, biura regionalne
+- Majątek: nieruchomości, flota pojazdów, maszyny, linie produkcyjne, infrastruktura IT
+- Przychody, zysk, zatrudnienie (ostatnie dostępne dane)
+- Główni klienci, kontrahenci, partnerzy handlowi
+- Strona WWW — krótki opis z niej
+- Forma prawna, data założenia, kapitał zakładowy
+- Spółki powiązane, grupa kapitałowa, spółki-córki
+
+Pisz konkretnie, po polsku. Każdy fakt jest ważny.`
       : null;
 
-    const [personInfo, companyInfo] = await Promise.all([
-      queryPerplexity(PERPLEXITY_API_KEY, personPrompt),
-      companyPrompt
-        ? queryPerplexity(PERPLEXITY_API_KEY, companyPrompt)
+    const companyNewsPrompt = company
+      ? `Znajdź NAJNOWSZE informacje i aktualności o firmie: ${company}${industry ? ` (branża: ${industry})` : ""}.
+
+Szukaj notek prasowych, artykułów, wpisów z ostatnich 2 lat.
+
+Podaj:
+- Notki prasowe, komunikaty, artykuły w mediach branżowych
+- Przetargi publiczne (TED, BIP, przetargi.info) — wygrane, złożone oferty
+- Inwestycje: nowe zakłady, rozbudowa, akwizycje, fuzje (M&A)
+- Nagrody, wyróżnienia, rankingi branżowe (Gazele Biznesu, Diamenty Forbesa, etc.)
+- Zmiany w KRS: nowi wspólnicy, podwyższenie kapitału, zmiany w zarządzie
+- Eventy: targi, konferencje, sponsoring, organizacja wydarzeń
+- Kontrakty, umowy ramowe, nowi klienci
+- Problemy: spory sądowe, kontrole, kary (jeśli publiczne)
+
+Pisz konkretnie, po polsku. Podaj daty jeśli znane.`
+      : null;
+
+    const [personProfessional, personPrivate, companyProfile, companyNews] = await Promise.all([
+      queryPerplexity(PERPLEXITY_API_KEY, personProfessionalPrompt),
+      queryPerplexity(PERPLEXITY_API_KEY, personPrivatePrompt),
+      companyProfilePrompt
+        ? queryPerplexity(PERPLEXITY_API_KEY, companyProfilePrompt)
+        : Promise.resolve("Brak nazwy firmy — nie wyszukiwano."),
+      companyNewsPrompt
+        ? queryPerplexity(PERPLEXITY_API_KEY, companyNewsPrompt, true)
         : Promise.resolve("Brak nazwy firmy — nie wyszukiwano."),
     ]);
 
-    // Step 2: Lovable AI — synthesis
-    const synthesisPrompt = `Jesteś doświadczonym brokerem ubezpieczeniowym przygotowującym się do pierwszego spotkania z potencjalnym klientem.
+    // ── Synthesis with Lovable AI ──
+
+    const synthesisPrompt = `Jesteś doświadczonym brokerem ubezpieczeniowym przygotowującym się do PIERWSZEGO spotkania z potencjalnym klientem. To Twoja jedyna szansa na dobre pierwsze wrażenie — musisz wiedzieć o nim jak najwięcej.
 
 DANE O OSOBIE:
 Imię i nazwisko: ${fullName}
@@ -106,29 +160,82 @@ Stanowisko: ${position || "brak danych"}
 Firma: ${company || "brak danych"}
 Branża: ${industry || "brak danych"}
 
-WYNIKI WYSZUKIWANIA O OSOBIE:
-${personInfo}
+WYNIKI WYSZUKIWANIA — PROFIL ZAWODOWY OSOBY:
+${personProfessional}
 
-WYNIKI WYSZUKIWANIA O FIRMIE:
-${companyInfo}
+WYNIKI WYSZUKIWANIA — ŻYCIE PRYWATNE I MEDIA:
+${personPrivate}
 
-Na podstawie powyższych danych przygotuj KRÓTKI BRIEF PRZED SPOTKANIEM w formacie markdown. Brief ma pomóc Ci być przygotowanym — wiedzieć kim jest klient, co robi, co posiada, jakie mogą być jego potrzeby ubezpieczeniowe. NIE sprzedajesz — przygotowujesz się.
+WYNIKI WYSZUKIWANIA — PROFIL FIRMY:
+${companyProfile}
+
+WYNIKI WYSZUKIWANIA — AKTUALNOŚCI FIRMY:
+${companyNews}
+
+Na podstawie WSZYSTKICH powyższych danych przygotuj SZCZEGÓŁOWY BRIEF PRZED SPOTKANIEM w formacie markdown. Uwzględnij KAŻDY znaleziony fakt — nawet drobny "smaczek" może być kluczowy w budowaniu relacji.
 
 Struktura briefu:
 
-## 👤 Osoba
-2-3 zdania: kim jest, jaką pełni funkcję, pasje/rodzina/zainteresowania, inne firmy.
+## 👤 Osoba — ${fullName}
 
-## 🏢 Firma
-Działalność, branża, lokalizacje (siedziba, oddziały, magazyny), majątek (nieruchomości, flota, maszyny), skala działalności. Jeśli budowlanka — wspomnij o kontraktach. Jeśli handel — o łańcuchu dostaw. Jeśli produkcja — o liniach i halach.
+### Kariera i rola
+Kim jest, jaką pełni funkcję, historia kariery, poprzednie stanowiska.
+
+### Inne firmy i zarządy
+Jakie inne firmy posiada lub współtworzy, zarządy, rady nadzorcze, powiązania kapitałowe.
+
+### Pasje i zainteresowania
+Hobby, sport, podróże, motoryzacja, kolekcje — wszystko co znaleziono.
+
+### Rodzina
+Partner/żona/mąż, dzieci — TYLKO jeśli publicznie dostępne z wywiadów lub social media. Jeśli brak danych — napisz "brak publicznych informacji".
+
+### Organizacje i fundacje
+Izby handlowe, stowarzyszenia, kluby biznesowe (Rotary, Lions, BNI, YPO), fundacje, CSR, patronaty.
+
+### Wypowiedzi medialne
+Cytaty z wywiadów, wypowiedzi na konferencjach, podcasty — dosłowne cytaty jeśli dostępne.
+
+## 🏢 Firma — ${company || "brak danych"}
+
+### Profil i działalność
+Czym się zajmuje, produkty/usługi, forma prawna, data założenia.
+
+### Lokalizacje i majątek
+Siedziba, oddziały, magazyny, hale, flota, maszyny, infrastruktura. Jeśli budowlanka — plac maszynowy. Jeśli produkcja — linie produkcyjne. Jeśli handel — magazyny i logistyka.
+
+### Skala biznesu
+Przychody, zatrudnienie, kapitał. Grupa kapitałowa, spółki powiązane.
+
+### Aktualności
+Ostatnie inwestycje, przetargi, notki prasowe, nagrody, zmiany w KRS, nowi klienci, kontrakty. Podaj daty.
 
 ## 🛡️ Kontekst ubezpieczeniowy
-Na co zwrócić uwagę jako broker: mienie, OC działalności, OC zawodowe, flota, cyber, D&O, pracownicy (grupowe), cargo, budowlanka (CAR/EAR), gwarancje. Wymień KONKRETNE ryzyka pasujące do tej firmy i branży.
+
+Na co zwrócić uwagę jako broker — KONKRETNE ryzyka pasujące do tej firmy i branży:
+- Mienie (budynki, maszyny, zapasy)
+- OC działalności / OC zawodowe
+- Flota (jeśli posiada pojazdy)
+- Cyber (jeśli IT/dane/e-commerce)
+- D&O (jeśli zarząd/rada nadzorcza)
+- Pracownicy (grupowe, NNW)
+- Cargo/transport (jeśli logistyka)
+- CAR/EAR (jeśli budowlanka)
+- Gwarancje ubezpieczeniowe (jeśli przetargi)
+- Key person (jeśli firma zależna od właściciela)
 
 ## 💬 Tematy do rozmowy
-3-5 tematów do naturalnego nawiązania na spotkaniu — powiązane z tym co wiesz o osobie i firmie. Np. ostatnie inwestycje, ekspansja, branżowe wyzwania, wspólne zainteresowania.
 
-Pisz zwięźle, po polsku, konkretnie. Jeśli czegoś nie wiesz — napisz "brak danych", nie wymyślaj.`;
+5-7 konkretnych tematów do naturalnego nawiązania na spotkaniu. Powiązane z tym co wiesz o osobie i firmie:
+- Ostatnie sukcesy firmy
+- Pasje i zainteresowania (ice-breaker)
+- Wspólne organizacje lub znajomi
+- Branżowe wyzwania
+- Plany rozwoju / inwestycje
+- Rodzina / dzieci (jeśli znane — delikatnie)
+- Aktualne wydarzenia w branży
+
+Pisz zwięźle ale KOMPLETNIE, po polsku. Każdy znaleziony fakt MUSI znaleźć się w briefie. Jeśli czegoś nie znaleziono — napisz "brak danych", nie wymyślaj.`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -166,7 +273,6 @@ Pisz zwięźle, po polsku, konkretnie. Jeśli czegoś nie wiesz — napisz "brak
     const aiData = await aiRes.json();
     const brief = aiData.choices?.[0]?.message?.content || "Nie udało się wygenerować briefu.";
 
-    // Step 3: Save to DB
     const { error: updateErr } = await supabase
       .from("meeting_prospects")
       .update({
