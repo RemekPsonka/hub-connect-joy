@@ -1,41 +1,51 @@
 
-# Naprawa wyświetlania uczestników -- duplikaty kluczy obcych
+# Dodanie opcji "Klient" do konwersji prospektów + ujednolicenie dialogu
 
 ## Problem
 
-W bazie danych istnieją **zduplikowane klucze obce** na tabeli `meeting_participants`:
-- `fk_meeting_participants_contact` i `meeting_participants_contact_id_fkey` -- oba wskazują na `contacts`
-- `fk_meeting_participants_meeting` i `meeting_participants_meeting_id_fkey` -- oba wskazują na `group_meetings`
-- `fk_meeting_participants_prospect` i `meeting_participants_prospect_id_fkey` -- oba wskazują na `meeting_prospects`
+1. W dialogu konwersji prospekta brakuje kategorii **"KLIENT"** -- dostepne sa tylko COLD, LEAD, TOP, HOT
+2. `ProspectCard` na Kanbanie uzywa starego dialogu `ConvertProspectDialog`, ktory **nie sprawdza duplikatow** w bazie kontaktow
+3. Nowy dialog `ProspectingConvertDialog` (z wyszukiwaniem duplikatow) jest uzywany tylko w zakladce Prospecting
 
-PostgREST nie może rozwiązać tej dwuznaczności (nawet z hintem `!contact_id`), więc zapytanie zwraca błąd i lista uczestników jest pusta.
+## Rozwiazanie
 
-Dane są prawidłowo zapisane w bazie (potwierdzono bezpośrednim zapytaniem SQL).
+### 1. Dodanie kategorii "client" do `ProspectingConvertDialog`
 
-## Rozwiązanie
-
-### 1. Migracja SQL -- usunięcie duplikatów
-
-Usunięcie zduplikowanych kluczy obcych (zachowamy te z krótszymi nazwami):
+Rozszerzenie tablicy kategorii z `['cold', 'lead', 'top', 'hot']` o `'client'`:
 
 ```text
-ALTER TABLE meeting_participants DROP CONSTRAINT fk_meeting_participants_contact;
-ALTER TABLE meeting_participants DROP CONSTRAINT fk_meeting_participants_meeting;
-ALTER TABLE meeting_participants DROP CONSTRAINT fk_meeting_participants_prospect;
+{(['cold', 'lead', 'top', 'hot', 'client'] as const).map((cat) => (
+  <Button ...>
+    {cat === 'client' ? 'KLIENT' : cat.toUpperCase()}
+  </Button>
+))}
 ```
 
-### 2. Aktualizacja zapytania w `src/hooks/useMeetings.ts`
+Gdy uzytkownik wybierze "KLIENT", kontakt zostanie dodany do zespolu ze statusem `'won'` (jak w istniejacym `useConvertToClient`).
 
-Zmiana hintów na nazwy pozostałych constraintów:
+### 2. Zamiana dialogu w `ProspectCard` (Kanban)
 
-```text
-contact:contacts!meeting_participants_contact_id_fkey(...)
-prospect:meeting_prospects!meeting_participants_prospect_id_fkey(...)
-```
+`ProspectCard` zostanie przemigrowany ze starego `ConvertProspectDialog` na nowy `ProspectingConvertDialog`, ktory:
+- Automatycznie wyszukuje duplikaty po imieniu/nazwisku
+- Pozwala scalic z istniejacym kontaktem lub utworzyc nowy
+- Sprawdza czy kontakt juz jest dodany do zespolu
+- Tworzy automatycznie arkusz BI z briefem AI
+
+### 3. Logika statusu dla kategorii "client"
+
+W `handleConvert` w `ProspectingConvertDialog`, jesli wybrana kategoria to `'client'`:
+- Ustawic `status: 'won'` zamiast domyslnego `'active'`
+- Zachowac reszte logiki (duplikaty, BI, brief) bez zmian
 
 ## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| Migracja SQL | Usunięcie 3 zduplikowanych FK |
-| `src/hooks/useMeetings.ts` | Aktualizacja hintów PostgREST na nazwy pozostałych constraintów |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie 'client' do kategorii, obsluga statusu 'won' dla klientow |
+| `src/components/deals-team/ProspectCard.tsx` | Zamiana `ConvertProspectDialog` na `ProspectingConvertDialog` z duplikacja |
+
+## Uwagi
+
+- Typ `DealCategory` w `src/types/dealTeam.ts` juz zawiera `'client'` -- bez zmian
+- Hook `useTeamClients` juz obsluguje `category: 'client'` -- bez zmian
+- Stary `ConvertProspectDialog` pozostaje w kodzie (moze byc uzywany gdzie indziej), ale `ProspectCard` przestanie go uzywac
