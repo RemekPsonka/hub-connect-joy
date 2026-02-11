@@ -167,7 +167,7 @@ export default function ContactDetail() {
 
                 {/* Tab: Spotkania — BI + Konsultacje */}
                 <TabsContent value="meetings" className="mt-6">
-                  <MeetingsTab contactId={contact.id} contactName={contact.full_name} />
+                  <MeetingsTab contactId={contact.id} contactName={contact.full_name} companyName={contact.company || undefined} />
                 </TabsContent>
 
                 {/* Tab: Potrzeby i Oferty */}
