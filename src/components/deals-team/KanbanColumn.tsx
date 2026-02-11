@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface KanbanColumnProps {
   title: string;
@@ -15,6 +16,11 @@ interface KanbanColumnProps {
   onAdd: () => void;
   addButtonLabel?: string;
   emptyMessage?: string;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnter?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  isDropTarget?: boolean;
 }
 
 const colorClasses: Record<string, string> = {
@@ -22,6 +28,7 @@ const colorClasses: Record<string, string> = {
   amber: 'border-t-amber-500',
   blue: 'border-t-blue-500',
   purple: 'border-t-purple-500',
+  slate: 'border-t-slate-400',
 };
 
 export function KanbanColumn({
@@ -35,12 +42,25 @@ export function KanbanColumn({
   onAdd,
   addButtonLabel = '+ Dodaj',
   emptyMessage = 'Brak elementów',
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+  onDrop,
+  isDropTarget = false,
 }: KanbanColumnProps) {
   const hasChildren = Children.count(children) > 0;
 
   return (
     <div
-      className={`bg-muted/30 rounded-lg border border-t-2 ${colorClasses[color] || 'border-t-primary'} flex flex-col min-h-[400px] max-h-[calc(100vh-280px)]`}
+      className={cn(
+        `bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-280px)] transition-all`,
+        colorClasses[color] || 'border-t-primary',
+        isDropTarget && 'ring-2 ring-primary/50 bg-primary/5'
+      )}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {/* Header */}
       <div className="p-3 border-b bg-muted/50">

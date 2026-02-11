@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { Calendar } from 'lucide-react';
@@ -15,9 +14,12 @@ interface HotLeadCardProps {
   contact: DealTeamContact;
   teamId: string;
   onClick?: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
 }
 
-export function HotLeadCard({ contact, teamId, onClick }: HotLeadCardProps) {
+export function HotLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, isDragging }: HotLeadCardProps) {
   const { data: assignments = [] } = useContactAssignments(contact.id);
   const updateAssignment = useUpdateAssignment();
   const { data: members = [] } = useTeamMembers(teamId);
@@ -35,17 +37,23 @@ export function HotLeadCard({ contact, teamId, onClick }: HotLeadCardProps) {
   if (!contact.contact) return null;
 
   return (
-    <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow cursor-pointer" onClick={onClick}>
+    <Card
+      className={cn(
+        "border-l-4 border-l-red-500 hover:shadow-md transition-all cursor-pointer",
+        isDragging && "opacity-50 scale-95"
+      )}
+      onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
       <CardContent className="p-3 space-y-2">
         {/* Row 1: Name + status */}
         <div className="flex justify-between items-start gap-2">
           <div className="min-w-0 flex-1">
-            <Link
-              to={`/contacts/${contact.contact_id}`}
-              className="font-medium hover:underline text-sm block truncate"
-            >
+            <span className="font-medium text-sm block truncate">
               {contact.contact?.full_name || 'Nieznany kontakt'}
-            </Link>
+            </span>
             {contact.contact?.company && (
               <p className="text-xs text-muted-foreground truncate">
                 {contact.contact.company}

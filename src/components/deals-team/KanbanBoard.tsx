@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
+import { useMemo, useState, useCallback } from 'react';
+import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { KanbanColumn } from './KanbanColumn';
 import { HotLeadCard } from './HotLeadCard';
@@ -19,10 +19,13 @@ interface KanbanBoardProps {
 export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const { data: contacts = [], isLoading: contactsLoading } = useTeamContacts(teamId);
   const { data: prospects = [], isLoading: prospectsLoading } = useTeamProspects(teamId);
+  const updateContact = useUpdateTeamContact();
 
   const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
   const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
+  const [draggingContactId, setDraggingContactId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
 
   // Filter contacts by category
   const hotContacts = useMemo(
@@ -50,6 +53,47 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   const isLoading = contactsLoading || prospectsLoading;
 
+  // Drag & Drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, contactId: string) => {
+    e.dataTransfer.setData('contactId', contactId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingContactId(contactId);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingContactId(null);
+    setDragOverColumn(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent, category: DealCategory) => {
+    e.preventDefault();
+    setDragOverColumn(category);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const { clientX, clientY } = e;
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      setDragOverColumn(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, newCategory: DealCategory) => {
+    e.preventDefault();
+    const contactId = e.dataTransfer.getData('contactId');
+    const contact = contacts.find(c => c.id === contactId);
+    if (contact && contact.category !== newCategory) {
+      updateContact.mutate({ id: contactId, teamId, category: newCategory });
+    }
+    setDraggingContactId(null);
+    setDragOverColumn(null);
+  }, [contacts, teamId, updateContact]);
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -75,9 +119,22 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           totalValue={hotTotalValue}
           onAdd={() => setAddContactCategory('hot')}
           emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'hot')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'hot')}
+          isDropTarget={dragOverColumn === 'hot'}
         >
           {hotContacts.map((contact) => (
-            <HotLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
+            <HotLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => setSelectedContact(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
           ))}
         </KanbanColumn>
 
@@ -89,9 +146,22 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           count={topContacts.length}
           onAdd={() => setAddContactCategory('top')}
           emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'top')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'top')}
+          isDropTarget={dragOverColumn === 'top'}
         >
           {topContacts.map((contact) => (
-            <TopLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
+            <TopLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => setSelectedContact(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
           ))}
         </KanbanColumn>
 
@@ -103,9 +173,22 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           count={leadContacts.length}
           onAdd={() => setAddContactCategory('lead')}
           emptyMessage="Brak leadów. Dodaj kontakty z CRM →"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'lead')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'lead')}
+          isDropTarget={dragOverColumn === 'lead'}
         >
           {leadContacts.map((contact) => (
-            <LeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
+            <LeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => setSelectedContact(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
           ))}
         </KanbanColumn>
 
@@ -117,9 +200,22 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           count={coldContacts.length}
           onAdd={() => setAddContactCategory('cold')}
           emptyMessage="Brak COLD leadów. Dodaj kontakty →"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'cold')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'cold')}
+          isDropTarget={dragOverColumn === 'cold'}
         >
           {coldContacts.map((contact) => (
-            <ColdLeadCard key={contact.id} contact={contact} teamId={teamId} onClick={() => setSelectedContact(contact)} />
+            <ColdLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => setSelectedContact(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
           ))}
         </KanbanColumn>
 
