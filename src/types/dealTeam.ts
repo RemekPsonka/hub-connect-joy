@@ -80,6 +80,8 @@ export interface DealTeamContact {
   last_status_update: string | null;
   status_overdue: boolean;
   category_changed_at: string;
+  ai_brief: string | null;
+  ai_brief_generated_at: string | null;
   created_at: string;
   updated_at: string;
   // JOIN z contacts

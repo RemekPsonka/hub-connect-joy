@@ -45,8 +45,13 @@ serve(async (req) => {
   }
 
   try {
-    const { prospectId } = await req.json();
-    if (!prospectId) throw new Error("Brak prospectId");
+    const body = await req.json();
+    const source = body.source || "prospect";
+    const prospectId = body.prospectId;
+    const dealContactId = body.dealContactId;
+
+    if (source === "prospect" && !prospectId) throw new Error("Brak prospectId");
+    if (source === "deal_contact" && !dealContactId) throw new Error("Brak dealContactId");
 
     const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
     if (!PERPLEXITY_API_KEY) throw new Error("PERPLEXITY_API_KEY not configured");
@@ -58,13 +63,44 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: prospect, error: fetchErr } = await supabase
-      .from("meeting_prospects")
-      .select("*")
-      .eq("id", prospectId)
-      .single();
+    let fullName = "";
+    let company = "";
+    let position = "";
+    let industry = "";
 
-    if (fetchErr || !prospect) throw new Error("Nie znaleziono prospekta");
+    if (source === "deal_contact") {
+      // Fetch deal_team_contact + joined contact
+      const { data: dtc, error: dtcErr } = await supabase
+        .from("deal_team_contacts")
+        .select("id, contact_id")
+        .eq("id", dealContactId)
+        .single();
+      if (dtcErr || !dtc) throw new Error("Nie znaleziono kontaktu dealowego");
+
+      const { data: contact, error: cErr } = await supabase
+        .from("contacts")
+        .select("full_name, company, position, industry")
+        .eq("id", dtc.contact_id)
+        .single();
+      if (cErr || !contact) throw new Error("Nie znaleziono kontaktu CRM");
+
+      fullName = contact.full_name;
+      company = contact.company || "";
+      position = contact.position || "";
+      industry = contact.industry || "";
+    } else {
+      const { data: prospect, error: fetchErr } = await supabase
+        .from("meeting_prospects")
+        .select("*")
+        .eq("id", prospectId)
+        .single();
+      if (fetchErr || !prospect) throw new Error("Nie znaleziono prospekta");
+
+      fullName = prospect.full_name;
+      company = prospect.company || "";
+      position = prospect.position || "";
+      industry = prospect.industry || "";
+    }
 
     const fullName = prospect.full_name;
     const company = prospect.company || "";
@@ -273,13 +309,16 @@ Pisz zwięźle ale KOMPLETNIE, po polsku. Każdy znaleziony fakt MUSI znaleźć 
     const aiData = await aiRes.json();
     const brief = aiData.choices?.[0]?.message?.content || "Nie udało się wygenerować briefu.";
 
+    const updateTable = source === "deal_contact" ? "deal_team_contacts" : "meeting_prospects";
+    const updateId = source === "deal_contact" ? dealContactId : prospectId;
+
     const { error: updateErr } = await supabase
-      .from("meeting_prospects")
+      .from(updateTable)
       .update({
         ai_brief: brief,
         ai_brief_generated_at: new Date().toISOString(),
       })
-      .eq("id", prospectId);
+      .eq("id", updateId);
 
     if (updateErr) {
       console.error("DB update error:", updateErr);

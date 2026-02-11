@@ -2418,6 +2418,8 @@ export type Database = {
       }
       deal_team_contacts: {
         Row: {
+          ai_brief: string | null
+          ai_brief_generated_at: string | null
           assigned_to: string | null
           category: string
           category_changed_at: string | null
@@ -2442,6 +2444,8 @@ export type Database = {
           value_currency: string | null
         }
         Insert: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
           assigned_to?: string | null
           category?: string
           category_changed_at?: string | null
@@ -2466,6 +2470,8 @@ export type Database = {
           value_currency?: string | null
         }
         Update: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
           assigned_to?: string | null
           category?: string
           category_changed_at?: string | null
