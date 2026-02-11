@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, Plus, Loader2 } from 'lucide-react';
+import { TrendingUp, Plus, Loader2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { DealCategory } from '@/types/dealTeam';
 import { Button } from '@/components/ui/button';
@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactDealTeams } from '@/hooks/useContactDealTeams';
-import { useDealTeams } from '@/hooks/useDealTeams';
-import { useAddContactToTeam } from '@/hooks/useDealsTeamContacts';
+import { useMyDealTeams } from '@/hooks/useDealTeams';
+import { useAddContactToTeam, useRemoveContactFromTeam } from '@/hooks/useDealsTeamContacts';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const CATEGORY_COLORS: Record<string, string> = {
   hot: 'bg-red-500/15 text-red-700 border-red-300',
@@ -29,8 +30,9 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: dealTeamLinks = [], isLoading } = useContactDealTeams(contactId);
-  const { data: allTeams = [] } = useDealTeams();
+  const { data: myTeams = [] } = useMyDealTeams();
   const addContact = useAddContactToTeam();
+  const removeContact = useRemoveContactFromTeam();
 
   const [open, setOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState('');
@@ -47,13 +49,27 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
           setSelectedTeamId('');
           setSelectedCategory('lead');
         },
+        onError: (error: Error) => {
+          toast.error(`Nie udało się dodać: ${error.message}`);
+        },
       },
     );
   };
 
-  // Teams not yet assigned
+  const handleRemove = (dealContactId: string, teamId: string) => {
+    removeContact.mutate(
+      { contactId: dealContactId, teamId },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['contact-deal-teams', contactId] });
+        },
+      },
+    );
+  };
+
+  // Teams not yet assigned (only teams user is member of)
   const assignedTeamIds = new Set(dealTeamLinks.map((l) => l.team_id));
-  const availableTeams = allTeams.filter((t) => !assignedTeamIds.has(t.id));
+  const availableTeams = myTeams.filter((t) => !assignedTeamIds.has(t.id));
 
   return (
     <div className="flex items-center gap-3 flex-wrap rounded-lg border bg-card px-4 py-2.5">
@@ -72,9 +88,20 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
             key={link.id}
             variant="outline"
             className={`cursor-pointer text-xs font-medium ${CATEGORY_COLORS[link.category] || CATEGORY_COLORS.lead}`}
-            onClick={() => navigate(`/deals-team/${link.team_id}`)}
           >
-            {link.team_name} — {link.category.toUpperCase()}
+            <span onClick={() => navigate(`/deals-team/${link.team_id}`)}>
+              {link.team_name} — {link.category.toUpperCase()}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemove(link.id, link.team_id);
+              }}
+              className="ml-1.5 hover:text-destructive transition-colors"
+              title="Usuń z lejka"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </Badge>
         ))
       )}
