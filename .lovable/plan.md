@@ -1,93 +1,90 @@
 
 
-# Panel DEALS na stronie szczegolów kontaktu
+# Edycja grup produktow (Product Categories)
 
 ## Cel
 
-Dodanie panelu "DEALS" na gorze strony kontaktu (`ContactDetail.tsx`), ktory:
-- Pokazuje w jakich zespolach Deals i na jakim etapie lejka znajduje sie kontakt (HOT/TOP/LEAD/COLD/CLIENT)
-- Umozliwia szybkie dodanie kontaktu do wybranego zespolu Deals z wyborem kategorii
-- Umozliwia oznaczenie jako klient w danej grupie
+Dodanie mozliwosci edycji istniejacych grup produktow w `ProductCategoryManager` -- zmiana nazwy, koloru i prowizji. Obecnie kategorie sa wyswietlane jako read-only.
 
-## Nowy komponent
+## Zakres zmian
 
-### `src/components/contacts/ContactDealsPanel.tsx`
+### Plik: `src/components/deals-team/ProductCategoryManager.tsx`
 
-Panel wyswietlany pomiedzy `ContactDetailHeader` a przyciskami OSOBA/FIRMA.
+Dodanie trybu edycji inline dla kazdej kategorii (wzorzec analogiczny do `DefaultPositionsManager`):
 
-**Sekcja informacyjna:**
-- Pobiera dane z `deal_team_contacts` po `contact_id` (nowy hook lub inline query)
-- Dla kazdego powiazania wyswietla: nazwa zespolu, kategoria (badge kolorowy HOT/TOP/LEAD/COLD/CLIENT), status
-- Jesli kontakt nie jest w zadnym lejku -- komunikat "Brak przypisania do lejka"
+**Stan edycji:**
+- `editingId` -- ID aktualnie edytowanej kategorii (lub null)
+- `editName`, `editColor`, `editCommission` -- wartosci formularza edycji
 
-**Akcje:**
-- Przycisk "Dodaj do Deals" -- otwiera maly dialog z:
-  - Dropdown wyboru zespolu Deals (z `useDealTeams`)
-  - Dropdown wyboru kategorii (COLD/LEAD/TOP/HOT/CLIENT)
-  - Przycisk "Dodaj"
-- Korzysta z istniejacego hooka `useAddContactToTeam` z `useDealsTeamContacts.ts`
+**Dla kazdej kategorii w liscie:**
+- Gdy NIE edytowana: wyswietlenie jak dotychczas + przycisk edycji (ikona `Pencil`) i usuwania (ikona `X`)
+- Gdy edytowana: zamiana na formularz inline z:
+  - Input nazwy
+  - Paleta kolorow (te same `colorOptions`)
+  - Input prowizji %
+  - Przycisk zapisu (ikona `Check`) i anulowania (ikona `X`)
 
-## Nowy hook
+**Logika:**
+- Klikniecie `Pencil` ustawia `editingId` i wypelnia pola danymi kategorii
+- Klikniecie `Check` lub Enter wywoluje `updateCategory.mutateAsync`
+- Klikniecie `X` (przy edycji) lub Escape anuluje edycje
+- Usuwanie kategorii uzywa `updateCategory` z `isActive: false` (soft delete)
 
-### `src/hooks/useContactDealTeams.ts`
+### Plik: `src/hooks/useProductCategories.ts`
 
-Prosty hook zwracajacy liste przypisanych zespolow Deals dla danego `contactId`:
-
-```text
-SELECT dtc.*, dt.name as team_name, dt.color as team_color
-FROM deal_team_contacts dtc
-JOIN deal_teams dt ON dtc.team_id = dt.id
-WHERE dtc.contact_id = ?
-```
-
-## Modyfikacja istniejacych plikow
-
-| Plik | Zmiana |
-|---|---|
-| `src/pages/ContactDetail.tsx` | Import i renderowanie `ContactDealsPanel` miedzy headerem a przyciskami OSOBA/FIRMA |
-| `src/hooks/useContactDealTeams.ts` | Nowy plik -- hook do pobierania deal team memberships kontaktu |
-| `src/components/contacts/ContactDealsPanel.tsx` | Nowy plik -- komponent panelu DEALS |
+Bez zmian -- hook `useUpdateProductCategory` juz obsluguje aktualizacje nazwy, koloru, prowizji i `isActive`.
 
 ## Szczegoly techniczne
 
-### ContactDealsPanel -- struktura
-
-- Kompaktowy panel w stylu `DataCard` lub prosty `div` z borderem
-- Naglowek: ikona + "DEALS" + przycisk "Dodaj do Deals"
-- Lista przypisanych zespolow jako badge'e: `[Zespol A - HOT] [Zespol B - CLIENT]`
-- Klikniecie badge otwiera link do dashboardu zespolu
-
-### useContactDealTeams hook
+### Widok kategorii -- tryb normalny
 
 ```text
-useQuery({
-  queryKey: ['contact-deal-teams', contactId],
-  queryFn: async () => {
-    const { data } = await supabase
-      .from('deal_team_contacts')
-      .select('id, team_id, category, status, deal_teams(name, color)')
-      .eq('contact_id', contactId);
-    return data;
-  },
-  enabled: !!contactId,
-});
+<div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
+  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color }} />
+  <span className="text-sm font-medium flex-1">{cat.name}</span>
+  {cat.default_commission_percent > 0 && (
+    <Badge>{cat.default_commission_percent}% prowizji</Badge>
+  )}
+  <Button variant="ghost" size="sm" onClick={() => startEditing(cat)}>
+    <Pencil className="h-3.5 w-3.5" />
+  </Button>
+  <Button variant="ghost" size="sm" onClick={() => handleDelete(cat)}>
+    <X className="h-3.5 w-3.5" />
+  </Button>
+</div>
 ```
 
-### Dialog dodawania
-
-Uzywa `Popover` zamiast pelnego dialogu -- lekki dropdown z:
-1. Select zespolu (z `useDealTeams`)
-2. Select kategorii (COLD / LEAD / TOP / HOT / CLIENT)
-3. Przycisk "Dodaj" wywolujacy `useAddContactToTeam`
-
-Po dodaniu -- invalidacja `['contact-deal-teams', contactId]` + istniejace invalidacje.
-
-### Integracja w ContactDetail.tsx
-
-Wstawienie pomiedzy linia 118 (koniec breadcrumbs) a linia 119 (ContactDetailHeader):
+### Widok kategorii -- tryb edycji
 
 ```text
-<ContactDealsPanel contactId={contact.id} />
+<div className="space-y-2 p-3 border rounded-lg border-primary/50">
+  <Input value={editName} onChange={...} placeholder="Nazwa grupy" />
+  <div className="flex gap-1.5">
+    {colorOptions.map(c => <button ... />)}
+  </div>
+  <Input value={editCommission} onChange={...} placeholder="Prowizja %" type="number" />
+  <div className="flex gap-2">
+    <Button onClick={handleSaveEdit}><Check /> Zapisz</Button>
+    <Button variant="ghost" onClick={cancelEditing}><X /> Anuluj</Button>
+  </div>
+</div>
 ```
 
-Renderowanie tylko dla nie-asystentow (analogicznie do reszty paneli).
+### Usuwanie (soft delete)
+
+```text
+const handleDelete = async (cat: ProductCategory) => {
+  await updateCategory.mutateAsync({
+    id: cat.id,
+    teamId,
+    isActive: false,
+  });
+};
+```
+
+## Podsumowanie
+
+| Plik | Zmiana |
+|---|---|
+| `src/components/deals-team/ProductCategoryManager.tsx` | Tryb edycji inline + przycisk usuwania dla kazdej kategorii |
+
