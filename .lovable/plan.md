@@ -1,60 +1,104 @@
 
-# Przycisk AI na liscie + Brief do pierwszej rozmowy + Export PDF
+
+# Uzupelnij z notatki -- AI wypelnia arkusz BI na podstawie notatki
+
+## Opis
+Nowy przycisk "Uzupelnij z notatki" w pasku akcji BIActionBar. Po kliknieciu otwiera sie dialog z polem tekstowym, w ktore uzytkownik wkleja notatke ze spotkania (luźny tekst). Edge function analizuje notatke, wyciaga dane do poszczegolnych sekcji BI, a brakujace informacje uzupelnia przez Perplexity (np. dane firmy, branza, lokalizacje). Wynik jest mergowany z istniejacymi danymi formularza.
+
+## Przeplyw uzytkownika
+
+1. Uzytkownik klika "Uzupelnij z notatki" w pasku akcji BI
+2. Otwiera sie dialog z duzym polem tekstowym
+3. Uzytkownik wkleja/pisze notatke ze spotkania
+4. Klika "Analizuj i uzupelnij"
+5. Edge function:
+   - Parsuje notatke i mapuje dane na sekcje BI (A-N)
+   - Identyfikuje nazwe firmy, osobe, branze
+   - Odpala Perplexity dla brakujacych danych (firma, branza, lokalizacje, majatek)
+   - Zwraca ustrukturyzowane dane JSON mapowane na sekcje BI
+6. Frontend merguje wynik z formularzem (nie nadpisuje istniejacych danych)
+7. Uzytkownik widzi uzupelnione pola i moze je poprawic przed zapisem
 
 ## Zmiany
 
-### 1. Przycisk "Analiza AI" bezposrednio na karcie (nie w menu)
-- Dodanie widocznego przycisku z ikona Sparkles obok przycisku menu (...)
-- Jesli brief juz istnieje -- przycisk zmienia sie na "Brief" (otwiera dialog)
-- Przycisk z loading spinner podczas generowania
+### 1. Nowa edge function: `bi-fill-from-note`
 
-### 2. Zmiana opisu
-- "Brief AI" -> "Brief do pierwszej rozmowy" w dialogu i na liscie
-- Tytul Sheet: "Brief do pierwszej rozmowy -- {imie}"
+Przyjmuje:
+- `note` (string) -- tresc notatki
+- `contactName` (string) -- imie i nazwisko kontaktu
+- `companyName` (string, opcjonalnie) -- firma kontaktu
+- `existingData` (object) -- aktualne dane BI (zeby nie duplikowac)
 
-### 3. Checkboxy do zaznaczania prospektow + Export PDF
-- Dodanie checkboxow na liscie do zaznaczania osob
-- Przycisk "Eksportuj PDF" nad lista (widoczny gdy zaznaczono >= 1 osobe)
-- Przycisk "Zaznacz wszystkie z briefem" do szybkiego zaznaczenia
+Kroki:
+- **Krok 1 -- Ekstrakcja z notatki (Lovable AI):** Parsowanie notatki na strukturyzowane pola BI (tool calling dla JSON output)
+- **Krok 2 -- Perplexity:** Dla zidentyfikowanej firmy/osoby szuka brakujacych danych (lokalizacje, majatek, branza, skala, kontrakty)
+- **Krok 3 -- Synteza (Lovable AI):** Lacze dane z notatki i Perplexity, zwraca pelny JSON mapowany na sekcje BI
 
-### 4. Nowy plik: `src/utils/exportProspectBriefs.ts`
-Export PDF -- 1 osoba = 1 strona A4, logiczne sekcje:
+Output -- JSON z kluczami odpowiadajacymi sekcjom BI:
+```text
+{
+  "section_a_basic": { ... },
+  "section_c_company_profile": { ... },
+  "section_d_scale": { ... },
+  "section_f_strategy": { ... },
+  "section_g_needs": { ... },
+  "section_h_investments": { ... },
+  "section_l_personal": { ... },
+  "section_m_organizations": { ... },
+  "section_n_followup": { ... },
+  "ai_notes": "co AI znalazlo / czego nie udalo sie uzupelnic"
+}
+```
 
-Kazda strona zawiera:
-- **Naglowek**: Imie i nazwisko, firma, stanowisko, data wygenerowania briefu
-- **Tresc briefu** renderowana z markdown na sekcje PDF:
-  - Osoba (kim jest, pasje, rodzina)
-  - Firma (dzialalnosc, branza, lokalizacje)
-  - Kontekst ubezpieczeniowy (mienie, OC, flota, cyber)
-  - Tematy do rozmowy
-- **Stopka**: Zrodlo (wydarzenie), priorytet, status
+### 2. Nowy komponent: `BIFillFromNoteDialog.tsx`
 
-Wykorzystuje wzorzec z `exportAgentProfile.ts`:
-- Sanityzacja polskich znakow
-- Pomocnicze funkcje checkPageBreak, addSectionHeader, addParagraph
-- Parsowanie markdown (naglowki ##, listy -, pogrubienia **)
+Dialog z:
+- Duze pole tekstowe (Textarea) na notatke
+- Przycisk "Analizuj i uzupelnij" z loading state
+- Po zakonczeniu: podsumowanie co zostalo uzupelnione (lista sekcji)
+- Przycisk "Zastosuj" ktory merguje dane z formularzem
 
-## Pliki do modyfikacji
+### 3. Modyfikacja `BIActionBar.tsx`
+
+- Nowy przycisk "Uzupelnij z notatki" (ikona NotebookPen) obok "Opracuj AI"
+- Otwiera `BIFillFromNoteDialog`
+
+### 4. Modyfikacja `BITab.tsx`
+
+- State do otwierania dialogu
+- Handler `handleFillFromNote` ktory merguje zwrocone dane z `formData`
+- Merge logika: nowe dane uzupelniaja tylko puste pola (nie nadpisuja istniejacych)
+
+### 5. Hook: `useFillBIFromNote`
+
+Mutacja wywolujaca edge function `bi-fill-from-note` i zwracajaca ustrukturyzowane dane.
+
+## Pliki do utworzenia / modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/ProspectingList.tsx` | Checkbox, przycisk AI na karcie, przycisk Export PDF, zmiana etykiet |
-| `src/components/deals-team/ProspectAIBriefDialog.tsx` | Zmiana tytulu na "Brief do pierwszej rozmowy" |
-| `src/utils/exportProspectBriefs.ts` | **NOWY** -- generowanie PDF z briefami (1 osoba = 1 strona) |
+| `supabase/functions/bi-fill-from-note/index.ts` | **NOWY** -- edge function |
+| `src/components/bi/BIFillFromNoteDialog.tsx` | **NOWY** -- dialog z polem na notatke |
+| `src/components/bi/BIActionBar.tsx` | Nowy przycisk "Uzupelnij z notatki" |
+| `src/components/bi/BITab.tsx` | State dialogu, handler merge danych |
+| `src/hooks/useBusinessInterview.ts` | Nowa mutacja `useFillBIFromNote` |
+| `supabase/config.toml` | Rejestracja nowej edge function |
 
-## Szczegoly techniczne
+## Logika merge danych
 
-### ProspectingList.tsx
-- Nowy state: `selectedIds: Set<string>` do sledzenia zaznaczonych
-- Checkbox przy kazdym prospekcie (obok kropki priorytetu)
-- Przycisk Sparkles/Loader2 obok menu (...) -- bezposrednio widoczny
-- Nad filtrami: przycisk "Eksportuj brief PDF (N)" gdy selectedIds.size > 0
-- Filtrowanie: export tylko tych co maja `ai_brief`
+Kluczowa zasada: AI uzupelnia tylko puste/undefined pola. Istniejace dane nie sa nadpisywane.
 
-### exportProspectBriefs.ts
-- Funkcja `exportProspectBriefsPDF(prospects: MeetingProspect[])`
-- Iteracja po prospektach -- kazdy na nowej stronie
-- Parsowanie markdown briefu na sekcje (split po `## `)
-- Uzycie jsPDF + autoTable do formatowania
-- Sanityzacja polskich znakow (wzorzec z exportAgentProfile)
-- Nazwa pliku: `briefs-prospecting-{data}.pdf`
+```text
+dla kazdej sekcji:
+  dla kazdego pola w sekcji:
+    jesli pole jest puste/undefined w formData -> uzupelnij z AI
+    jesli pole ma juz wartosc -> zachowaj istniejaca
+```
+
+Dla tablic (np. branze, hobby, kraje): AI dolacza nowe elementy do istniejacych.
+
+## Sekrety
+Wszystkie potrzebne klucze juz skonfigurowane:
+- `PERPLEXITY_API_KEY` -- wyszukiwanie danych o firmie/osobie
+- `LOVABLE_API_KEY` -- parsowanie notatki i synteza
+
