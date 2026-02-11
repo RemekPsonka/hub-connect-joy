@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { KanbanColumn } from './KanbanColumn';
@@ -54,15 +54,24 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const isLoading = contactsLoading || prospectsLoading;
 
   // Drag & Drop handlers
+  const wasDraggingRef = useRef(false);
+
   const handleDragStart = useCallback((e: React.DragEvent, contactId: string) => {
     e.dataTransfer.setData('contactId', contactId);
     e.dataTransfer.effectAllowed = 'move';
     setDraggingContactId(contactId);
+    wasDraggingRef.current = true;
   }, []);
 
   const handleDragEnd = useCallback(() => {
     setDraggingContactId(null);
     setDragOverColumn(null);
+    setTimeout(() => { wasDraggingRef.current = false; }, 0);
+  }, []);
+
+  const handleCardClick = useCallback((contact: DealTeamContact) => {
+    if (wasDraggingRef.current) return;
+    setSelectedContact(contact);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -130,7 +139,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
               key={contact.id}
               contact={contact}
               teamId={teamId}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => handleCardClick(contact)}
               onDragStart={(e) => handleDragStart(e, contact.id)}
               onDragEnd={handleDragEnd}
               isDragging={draggingContactId === contact.id}
@@ -157,7 +166,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
               key={contact.id}
               contact={contact}
               teamId={teamId}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => handleCardClick(contact)}
               onDragStart={(e) => handleDragStart(e, contact.id)}
               onDragEnd={handleDragEnd}
               isDragging={draggingContactId === contact.id}
@@ -184,7 +193,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
               key={contact.id}
               contact={contact}
               teamId={teamId}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => handleCardClick(contact)}
               onDragStart={(e) => handleDragStart(e, contact.id)}
               onDragEnd={handleDragEnd}
               isDragging={draggingContactId === contact.id}
@@ -211,7 +220,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
               key={contact.id}
               contact={contact}
               teamId={teamId}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => handleCardClick(contact)}
               onDragStart={(e) => handleDragStart(e, contact.id)}
               onDragEnd={handleDragEnd}
               isDragging={draggingContactId === contact.id}

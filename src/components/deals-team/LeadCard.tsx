@@ -54,7 +54,7 @@ export function LeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, isD
                 </p>
               )}
             </div>
-            <Badge className={`text-xs shrink-0 ${priorityColors[contact.priority]}`}>
+            <Badge className={`text-xs shrink-0 ${priorityColors[contact.priority] || ''}`}>
               {contact.priority}
             </Badge>
           </div>

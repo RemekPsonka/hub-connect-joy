@@ -55,7 +55,7 @@ export function TopLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, 
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <Badge className={`text-xs ${priorityColors[contact.priority]}`}>
+              <Badge className={`text-xs ${priorityColors[contact.priority] || ''}`}>
                 {contact.priority}
               </Badge>
               <div
