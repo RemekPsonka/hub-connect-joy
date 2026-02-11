@@ -33,7 +33,7 @@ export function HeaderBar() {
       <header className="sticky top-0 z-30 h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 md:px-6 gap-4">
         {/* Left: sidebar trigger + breadcrumbs */}
         <div className="flex items-center gap-3 min-w-0">
-          <SidebarTrigger />
+          <SidebarTrigger className="h-9 w-9 text-muted-foreground hover:text-foreground" />
           <Breadcrumbs />
         </div>
 
