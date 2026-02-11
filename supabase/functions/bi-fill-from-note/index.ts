@@ -538,13 +538,54 @@ async function updateContactRecord(supabaseAdmin: any, contactId: string, contac
 }
 
 // Update company record with extracted data
-async function updateCompanyRecord(supabaseAdmin: any, companyId: string | null, companyUpdates: any, tenantId: string, companyName: string | null) {
+async function updateCompanyRecord(supabaseAdmin: any, companyIdParam: string | null, companyUpdates: any, tenantId: string, companyName: string | null) {
   if (!companyUpdates || Object.keys(companyUpdates).length === 0) return;
+  let companyId = companyIdParam;
   
-  // If no company_id, try to find or skip
+  // If no company_id, create company from name
   if (!companyId) {
-    console.log("[bi-fill-from-note] No company_id on contact, skipping company updates");
-    return;
+    if (!companyName || !tenantId) {
+      console.log("[bi-fill-from-note] No company_id and no companyName/tenantId, skipping company updates");
+      return;
+    }
+    console.log("[bi-fill-from-note] No company_id, creating company from name:", companyName);
+    
+    const { data: newCompany, error: createError } = await supabaseAdmin
+      .from('companies')
+      .insert({
+        name: companyName,
+        tenant_id: tenantId,
+        company_analysis_status: 'pending',
+        website: companyUpdates.website || null,
+        nip: companyUpdates.nip || null,
+      })
+      .select('id')
+      .single();
+    
+    if (createError || !newCompany) {
+      console.error("[bi-fill-from-note] Failed to create company:", createError);
+      return;
+    }
+    
+    // Assign company to contact - find contactId from the function context
+    // We need to get contactId - it's passed via the outer scope
+    const { data: contactsWithName } = await supabaseAdmin
+      .from('contacts')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('company', companyName)
+      .is('company_id', null)
+      .limit(10);
+    
+    if (contactsWithName && contactsWithName.length > 0) {
+      await supabaseAdmin
+        .from('contacts')
+        .update({ company_id: newCompany.id })
+        .in('id', contactsWithName.map((c: any) => c.id));
+      console.log("[bi-fill-from-note] Assigned", contactsWithName.length, "contacts to new company");
+    }
+    
+    companyId = newCompany.id;
   }
 
   // Get existing company data
