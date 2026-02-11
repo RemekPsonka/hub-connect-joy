@@ -24,9 +24,10 @@ import { toast } from 'sonner';
 interface BITabProps {
   contactId: string;
   contactName: string;
+  companyName?: string;
 }
 
-export function BITab({ contactId, contactName }: BITabProps) {
+export function BITab({ contactId, contactName, companyName }: BITabProps) {
   const { data: biData, isLoading } = useBusinessInterview(contactId);
   const saveMutation = useSaveBusinessInterview();
   const processBI = useProcessBIWithAI();
@@ -144,13 +145,11 @@ export function BITab({ contactId, contactName }: BITabProps) {
 
   const handleFillFromNote = async (note: string): Promise<Record<string, any> | null> => {
     try {
-      const companyName = (formData.section_c_company_profile as any)?.zakres_dzialalnosci
-        || (biData?.section_c_company_profile as any)?.zakres_dzialalnosci
-        || undefined;
+      const effectiveCompanyName = companyName || undefined;
       const result = await fillFromNote.mutateAsync({
         note,
         contactName,
-        companyName,
+        companyName: effectiveCompanyName,
         existingData: formData,
       });
       return result;

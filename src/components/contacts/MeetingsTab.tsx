@@ -9,9 +9,10 @@ import { useGCalConnection } from '@/hooks/useGoogleCalendar';
 interface MeetingsTabProps {
   contactId: string;
   contactName: string;
+  companyName?: string;
 }
 
-export function MeetingsTab({ contactId, contactName }: MeetingsTabProps) {
+export function MeetingsTab({ contactId, contactName, companyName }: MeetingsTabProps) {
   const { isAdmin } = useOwnerPanel();
   const { isConnected: gcalConnected } = useGCalConnection();
 
@@ -29,7 +30,7 @@ export function MeetingsTab({ contactId, contactName }: MeetingsTabProps) {
 
       {isAdmin && (
         <TabsContent value="bi">
-          <BITab contactId={contactId} contactName={contactName} />
+          <BITab contactId={contactId} contactName={contactName} companyName={companyName} />
         </TabsContent>
       )}
 
