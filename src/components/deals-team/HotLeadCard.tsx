@@ -116,6 +116,7 @@ export function HotLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, 
               <div key={a.id} className="flex items-center gap-1.5">
                 <Checkbox
                   checked={a.status === 'done'}
+                  onClick={(e) => e.stopPropagation()}
                   onCheckedChange={() =>
                     updateAssignment.mutate({
                       id: a.id,

@@ -52,7 +52,7 @@ export function ColdLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd,
                 </p>
               )}
             </div>
-            <Badge className={`text-xs shrink-0 ${priorityColors[contact.priority]}`}>
+            <Badge className={`text-xs shrink-0 ${priorityColors[contact.priority] || ''}`}>
               {contact.priority}
             </Badge>
           </div>
