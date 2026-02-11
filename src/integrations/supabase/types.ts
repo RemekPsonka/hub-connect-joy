@@ -2517,6 +2517,7 @@ export type Database = {
           next_meeting_with: string | null
           notes: string | null
           priority: string | null
+          review_frequency: string | null
           status: string
           status_overdue: boolean | null
           team_id: string
@@ -2543,6 +2544,7 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           priority?: string | null
+          review_frequency?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id: string
@@ -2569,6 +2571,7 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           priority?: string | null
+          review_frequency?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id?: string
