@@ -38,7 +38,7 @@ export function ProspectAIBriefDialog({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Brief AI — {prospectName}
+            Brief do pierwszej rozmowy — {prospectName}
           </SheetTitle>
           {company && (
             <p className="text-sm text-muted-foreground">{company}</p>
