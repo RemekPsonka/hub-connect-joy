@@ -4,16 +4,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ParsedPerson } from '@/hooks/useMeetingProspects';
 
-export type ParticipantMatchType = 'member' | 'cc_member' | 'prospect';
+export type ParticipantMatchType = 'member' | 'cc_member' | 'prospect' | 'existing_prospect';
 
 export interface MatchedParticipant {
   parsed: ParsedPerson;
   matchType: ParticipantMatchType;
   contactId?: string;
+  prospectId?: string;
   contactFullName?: string;
   contactCompany?: string | null;
   primaryGroupId?: string | null;
   groupName?: string | null;
+  hasAiBrief?: boolean;
 }
 
 export async function matchContactsFromParsed(
@@ -21,24 +23,31 @@ export async function matchContactsFromParsed(
   tenantId: string,
   directorId: string
 ): Promise<MatchedParticipant[]> {
-  // Fetch all contacts for this tenant (batch, up to 1000)
-  const { data: contacts } = await supabase
-    .from('contacts')
-    .select('id, full_name, company, primary_group_id, director_id, contact_groups(name)')
-    .eq('tenant_id', tenantId)
-    .eq('is_active', true)
-    .limit(1000);
+  // Fetch contacts and existing prospects in parallel
+  const [contactsResult, prospectsResult] = await Promise.all([
+    supabase
+      .from('contacts')
+      .select('id, full_name, company, primary_group_id, director_id, contact_groups(name)')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .limit(1000),
+    supabase
+      .from('meeting_prospects')
+      .select('id, full_name, company, position, industry, ai_brief, prospecting_status')
+      .eq('tenant_id', tenantId)
+      .limit(1000),
+  ]);
 
-  const contactList = contacts || [];
+  const contactList = contactsResult.data || [];
+  const prospectList = prospectsResult.data || [];
 
   return people.map((person) => {
     const nameLower = person.full_name.toLowerCase().trim();
 
-    // Try to find matching contact by name
+    // 1. Try to find matching contact by name
     const match = contactList.find((c) => {
       const cName = c.full_name?.toLowerCase().trim();
       if (cName === nameLower) return true;
-      // Also try partial match if names are close
       if (person.company && c.company) {
         return (
           cName === nameLower &&
@@ -61,6 +70,23 @@ export async function matchContactsFromParsed(
       } as MatchedParticipant;
     }
 
+    // 2. Try to find existing prospect by name
+    const prospectMatch = prospectList.find(
+      (p) => p.full_name?.toLowerCase().trim() === nameLower
+    );
+
+    if (prospectMatch) {
+      return {
+        parsed: person,
+        matchType: 'existing_prospect' as ParticipantMatchType,
+        prospectId: prospectMatch.id,
+        contactFullName: prospectMatch.full_name,
+        contactCompany: prospectMatch.company,
+        hasAiBrief: !!prospectMatch.ai_brief,
+      };
+    }
+
+    // 3. New prospect
     return {
       parsed: person,
       matchType: 'prospect' as ParticipantMatchType,
@@ -94,9 +120,10 @@ export function useImportPDFParticipants() {
 
       const sourceEvent = `${meetingName} (${new Date(meetingDate).toLocaleDateString('pl-PL')})`;
 
-      // Separate contacts from prospects
+      // Separate by type
       const existingContacts = participants.filter((p) => p.contactId);
-      const prospects = participants.filter((p) => !p.contactId);
+      const existingProspects = participants.filter((p) => p.matchType === 'existing_prospect');
+      const newProspects = participants.filter((p) => p.matchType === 'prospect');
 
       // 1. Insert existing contacts as meeting_participants
       if (existingContacts.length > 0) {
@@ -113,9 +140,24 @@ export function useImportPDFParticipants() {
         if (error) throw error;
       }
 
-      // 2. Insert prospects into meeting_prospects + meeting_participants
-      if (prospects.length > 0) {
-        const prospectRows = prospects.map((p) => ({
+      // 2. Insert existing prospects as meeting_participants (reuse prospect_id)
+      if (existingProspects.length > 0) {
+        const rows = existingProspects.map((p) => ({
+          meeting_id: meetingId,
+          prospect_id: p.prospectId!,
+          is_member: false,
+          is_new: false,
+        }));
+
+        const { error } = await supabase
+          .from('meeting_participants')
+          .insert(rows);
+        if (error) throw error;
+      }
+
+      // 3. Insert new prospects into meeting_prospects + meeting_participants
+      if (newProspects.length > 0) {
+        const prospectRows = newProspects.map((p) => ({
           team_id: teamId,
           tenant_id: tenantId,
           full_name: p.parsed.full_name,
@@ -136,7 +178,6 @@ export function useImportPDFParticipants() {
           .select('id');
         if (prospectError) throw prospectError;
 
-        // Create meeting_participants linked to prospects
         if (insertedProspects && insertedProspects.length > 0) {
           const prospectParticipantRows = insertedProspects.map((mp: any) => ({
             meeting_id: meetingId,
@@ -156,15 +197,18 @@ export function useImportPDFParticipants() {
         meetingId,
         teamId,
         contactCount: existingContacts.length,
-        prospectCount: prospects.length,
+        existingProspectCount: existingProspects.length,
+        prospectCount: newProspects.length,
       };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['meeting-participants', result.meetingId] });
       queryClient.invalidateQueries({ queryKey: ['meeting-prospects', result.teamId] });
-      toast.success(
-        `Zaimportowano ${result.contactCount} kontaktów i ${result.prospectCount} prospektów`
-      );
+      const parts = [];
+      if (result.contactCount > 0) parts.push(`${result.contactCount} kontaktów`);
+      if (result.existingProspectCount > 0) parts.push(`${result.existingProspectCount} istn. prospektów`);
+      if (result.prospectCount > 0) parts.push(`${result.prospectCount} nowych prospektów`);
+      toast.success(`Zaimportowano: ${parts.join(', ')}`);
     },
     onError: (error: Error) => {
       toast.error(`Błąd importu: ${error.message}`);

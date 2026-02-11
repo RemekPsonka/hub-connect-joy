@@ -8,6 +8,8 @@ import {
   Sparkles,
   Building2,
   UserPlus,
+  BrainCircuit,
+  DatabaseZap,
 } from 'lucide-react';
 import {
   Dialog,
@@ -49,7 +51,10 @@ interface Props {
 
 const getBadgeInfo = (p: MatchedParticipant) => {
   if (p.matchType === 'prospect') {
-    return { label: 'Prospect', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
+    return { label: 'Nowy prospect', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
+  }
+  if (p.matchType === 'existing_prospect') {
+    return { label: 'Prospect (w bazie)', className: 'bg-violet-500/10 text-violet-600 border-violet-500/20' };
   }
   return {
     label: p.groupName || 'Kontakt CH',
@@ -225,6 +230,7 @@ export function ImportPDFMeetingDialog({
   };
 
   const prospectCount = participants.filter((p) => p.matchType === 'prospect').length;
+  const existingProspectCount = participants.filter((p) => p.matchType === 'existing_prospect').length;
   const contactCount = participants.filter((p) => p.contactId).length;
 
   return (
@@ -274,14 +280,20 @@ export function ImportPDFMeetingDialog({
         {step === 'preview' && (
           <div className="flex-1 min-h-0 space-y-3">
             {/* Stats bar */}
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-4 text-sm flex-wrap">
               <span className="flex items-center gap-1 text-emerald-600">
                 <Users className="h-4 w-4" />
                 {contactCount} kontaktów CH
               </span>
+              {existingProspectCount > 0 && (
+                <span className="flex items-center gap-1 text-violet-600">
+                  <DatabaseZap className="h-4 w-4" />
+                  {existingProspectCount} istn. prospektów
+                </span>
+              )}
               <span className="flex items-center gap-1 text-orange-600">
                 <Sparkles className="h-4 w-4" />
-                {prospectCount} prospektów
+                {prospectCount} nowych prospektów
               </span>
             </div>
 
@@ -309,15 +321,18 @@ export function ImportPDFMeetingDialog({
               <div className="divide-y">
                 {participants.map((p, i) => {
                   const badge = getBadgeInfo(p);
-                  const selectValue = p.matchType === 'prospect' ? 'prospect' : (p.primaryGroupId || 'no-group');
+                  const selectValue = p.matchType === 'prospect' || p.matchType === 'existing_prospect' ? 'prospect' : (p.primaryGroupId || 'no-group');
                   return (
                     <div
                       key={i}
                       className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
+                        <p className="font-medium text-sm truncate flex items-center gap-1">
                           {p.contactFullName || p.parsed.full_name}
+                          {p.hasAiBrief && (
+                            <BrainCircuit className="h-3.5 w-3.5 text-violet-500" />
+                          )}
                         </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {(p.contactCompany || p.parsed.company) && (
