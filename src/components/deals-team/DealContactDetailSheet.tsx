@@ -5,7 +5,7 @@ import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
   Clock, AlertTriangle, MessageSquare, History, ChevronDown,
-  Sparkles, RefreshCw, ArrowLeftRight, Loader2
+  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -32,9 +32,10 @@ import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatus
 import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
 import { WeeklyStatusForm } from './WeeklyStatusForm';
 import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
+import { PromoteDialog } from './PromoteDialog';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
-import type { DealTeamContact, DealContactStatus } from '@/types/dealTeam';
+import type { DealTeamContact, DealContactStatus, DealCategory } from '@/types/dealTeam';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { isPast, isToday } from 'date-fns';
 
@@ -95,6 +96,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [briefDialogOpen, setBriefDialogOpen] = useState(false);
+  const [promoteTarget, setPromoteTarget] = useState<'lead' | 'top' | 'hot' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Sync notes from contact
@@ -222,6 +224,46 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                     ))}
                   </SelectContent>
                 </Select>
+              </section>
+
+              <Separator />
+
+              {/* Category change */}
+              <section>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Kategoria
+                </h4>
+                <div className="flex gap-1.5">
+                  {(['hot', 'top', 'lead', 'cold'] as const).map((cat) => {
+                    const cfg = categoryConfig[cat];
+                    const isCurrent = contact.category === cat;
+                    return (
+                      <Button
+                        key={cat}
+                        variant={isCurrent ? 'default' : 'outline'}
+                        size="sm"
+                        className={cn('flex-1 text-xs h-8', isCurrent && 'pointer-events-none')}
+                        disabled={isCurrent}
+                        onClick={() => {
+                          // Promote to TOP or HOT requires dialog
+                          if (cat === 'top' || cat === 'hot') {
+                            setPromoteTarget(cat);
+                          } else {
+                            // Simple move (to LEAD or COLD)
+                            updateContact.mutate({
+                              id: contact.id,
+                              teamId,
+                              category: cat as DealCategory,
+                            });
+                          }
+                        }}
+                      >
+                        {cfg.icon} {cfg.label}
+                      </Button>
+                    );
+                  })}
+                </div>
               </section>
 
               <Separator />
@@ -591,6 +633,17 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
           generatedAt={contact.ai_brief_generated_at}
           onRegenerate={handleGenerateBrief}
           isRegenerating={generateBrief.isPending}
+        />
+      )}
+
+      {/* Promote Dialog for category change */}
+      {promoteTarget && (
+        <PromoteDialog
+          contact={contact}
+          targetCategory={promoteTarget}
+          teamId={teamId}
+          open={!!promoteTarget}
+          onClose={() => setPromoteTarget(null)}
         />
       )}
     </>

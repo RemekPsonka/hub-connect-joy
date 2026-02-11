@@ -83,7 +83,7 @@ export function KanbanColumn({
       {/* Cards */}
       <ScrollArea className="flex-1 p-2">
         {hasChildren ? (
-          <div className="space-y-2">{children}</div>
+          <div className="space-y-1">{children}</div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center p-4">
             <p className="text-sm text-muted-foreground">{emptyMessage}</p>
