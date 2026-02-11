@@ -209,7 +209,18 @@ export function ProspectingConvertDialog({
 
       if (existingTeamContact) {
         teamContactId = existingTeamContact.id;
-        toast.info('Kontakt już był w zespole — zaktualizowano prospekta');
+        // Update brief if missing
+        if (prospect.ai_brief) {
+          await supabase
+            .from('deal_team_contacts')
+            .update({
+              ai_brief: prospect.ai_brief,
+              ai_brief_generated_at: prospect.ai_brief_generated_at || new Date().toISOString(),
+            })
+            .eq('id', existingTeamContact.id)
+            .is('ai_brief', null);
+        }
+        toast.info('Kontakt już był w zespole — zaktualizowano');
       } else {
         const { data: teamContact, error: teamError } = await supabase
           .from('deal_team_contacts')
@@ -220,6 +231,8 @@ export function ProspectingConvertDialog({
             category,
             priority: 'medium',
             status: 'active',
+            ai_brief: prospect.ai_brief || null,
+            ai_brief_generated_at: prospect.ai_brief_generated_at || null,
           })
           .select('id')
           .single();
