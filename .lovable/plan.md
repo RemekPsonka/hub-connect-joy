@@ -1,67 +1,122 @@
 
-# Implementacja: Poprawa AI na karcie BI
 
-## Zmiany w plikach
+# Smart BI -- konsolidacja arkusza pierwszej rozmowy
 
-### 1. `supabase/functions/bi-fill-from-note/index.ts` -- pelna przebudowa
+## Filozofia zmiany
 
-Kompletny schemat BI_SECTIONS_SCHEMA pokrywajacy WSZYSTKIE pola z typow BI:
-- section_a_basic: + branza_tagi, email_asystenta, telefon_asystenta, rozwaza_aplikacje_cc
-- section_c_company_profile: + lista_wspolnikow (array of objects z nazwa/procent), poziom_decyzyjnosci
-- section_d_scale: + ebitda_ostatni, ebitda_plan, glowna_vs_holding, skala_pl, skala_zagranica (z enum dla przychodow)
-- section_g_needs: + horyzont_czasowy (enum), priorytet (enum), jakich_rekomendacji
-- section_h_investments: + ostatnie_doradcy, ostatnie_decydenci, czego_brakuje, czego_brakuje_typ
-- section_j_value_for_cc: CALA SEKCJA (kontakty, knowhow, zasoby) -- brakuje w obecnym schemacie
-- section_k_engagement: CALA SEKCJA (mentoring, leadership, edukacja, filantropia, integracja + opisy)
-- section_l_personal: + sukcesja (boolean), sukcesja_opis, partner (object), dzieci (array of objects)
-- section_m_organizations: + izby_handlowe
-- section_n_followup: + wizyta_cc, email_podsumowanie
+Obecne 11 sekcji to za duzo na arkusz **pierwszej rozmowy**. Wiele pol nigdy nie zostanie wypelnionych reczenie -- powinny byc uzupelniane automatycznie przez AI/Perplexity. Proponuje zagregowac 11 sekcji do **6 smart sekcji**, gdzie uzytkownik skupia sie na tym, co slyszy na spotkaniu, a reszta wypelnia sie z AI.
 
-**Nowy prompt ekstrakcji** z instrukcjami wnioskowania:
-- Sukcesja: "rodzice na emeryture" -> sukcesja=true + opis
-- Rodzina: "siostra Monika" -> lista_wspolnikow + kontekst rodzinny
-- Przychody: "300 mln zl" -> mapowanie na enum "300_500mln"
-- Wyzwania: "szuka sieci do przejecia" -> czego_poszukuje=["ma","ekspansja"]
-- Lokalizacje: "Opole" -> miasto_bazowe
-- Tagi: produkcja miesa -> branza_tagi=["FMCG","food"]
-- Wartosc dla CC: wnioskowanie knowhow/zasoby z opisu biznesu
+## Nowy uklad: 6 sekcji zamiast 11
 
-**Funkcja buildExistingDataContext** -- buduje liste juz uzupelnionych pol i przekazuje do promptu AI, zeby nie nadpisywalo.
+| Nowa sekcja | Co laczy | Stare sekcje |
+|---|---|---|
+| **1. Kontekst spotkania** | Status relacji, sila, brief, zrodlo, rozw. aplikacje CC | A (kontekst) |
+| **2. Firma i skala** | Profil firmy, rola, wlasnosc, przychody, pracownicy, spolki, inne biznesy | C + D |
+| **3. Strategia i potrzeby** | Cele strategiczne, wyzwania, czego szuka, priorytety, inwestycje | F + G + H |
+| **4. Wartość i zaangażowanie** | Wartosc dla CC + zaangazowanie w CC | J + K |
+| **5. Sfera prywatna** | Rodzina, hobby, sukcesja, organizacje, czlonkostwa | L + M |
+| **6. Follow-up** | Ustalenia, pytania, terminy | N |
 
-**Perplexity -- 2 targetowane zapytania** (rownolegle):
-1. Firma: NIP, www, struktura grupy, organizacje branzowe, izby handlowe, KRS, finanse
-2. Osoba: aktywnosc publiczna, organizacje, hobby, wywiady, rodzina, nagrody
+Sekcja A (dane kontaktowe: email, telefon, NIP, www) -- te pola **usuwamy z BI** bo juz istnieja na glownej karcie kontaktu. Nie ma sensu duplikowac. Branze takze -- to dane firmowe z AI profilu.
 
-**Obsluga pustej notatki** -- jesli note jest puste/brak, wszystko pobierane z Perplexity.
+## Kluczowe zasady "smart"
 
-**Obsluga bledow** -- 429 (rate limit) i 402 (brak srodkow) z czytelnymi komunikatami.
+1. **Pola auto-fill z AI** oznaczone ikonka (Sparkles) -- uzytkownik wie, ze AI je uzupelni
+2. **Sekcje domyslnie zwiniete** jezeli puste -- otwarte tylko te z danymi lub kluczowe (1, 3, 6)
+3. **Wskaznik wypelnienia** na kazdej sekcji -- np. "3/8 pol" jako Badge
+4. **Brief z prospectingu** automatycznie zasilany -- przy konwersji prospect -> contact, `ai_brief` i `prospecting_notes` trafiaja do BI jako zrodlo danych (do pola `podpowiedzi_brief` + AI parsuje je tak samo jak notatke)
 
-### 2. `src/components/bi/BITab.tsx` -- poprawka nazwy firmy
+## Integracja z prospectingiem
 
-Linia 147-149: zamiast uzywac `zakres_dzialalnosci` jako companyName, dodac prop `companyName` do BITab.
+Przy konwersji prospekta na kontakt CRM (ProspectingConvertDialog):
+- `ai_brief` z `meeting_prospects` zapisywany jest w nowo utworzonym BI jako `podpowiedzi_brief` w sekcji A
+- `prospecting_notes` dolaczane do notatki
+- Edge function `bi-fill-from-note` uruchamiana automatycznie z trescia brief + notes
+- Wynik: nowy kontakt ma juz czesciowo uzupelnione BI zanim ktokolwiek otworzy formularz
 
-### 3. `src/components/contacts/MeetingsTab.tsx` -- przekazanie companyName
+## Szczegoly techniczne
 
-Dodanie propa `companyName` i przekazanie go do BITab.
+### Zmiany w typach (`types.ts`)
 
-### 4. `src/pages/ContactDetail.tsx` -- przekazanie companyName
+Typy JSONB w bazie sie NIE zmieniaja -- dane pozostaja w tych samych polach. Zmienia sie tylko UI -- jak sa prezentowane. Dzieki temu:
+- Brak migracji bazy danych
+- Brak utraty istniejacych danych
+- Kompatybilnosc wsteczna z edge functions
 
-Przekazanie `contact.companies?.name` do MeetingsTab.
+### Nowe komponenty sekcji
 
-## Przeplyw danych firmy
+| Nowy komponent | Zastepuje |
+|---|---|
+| `SmartSectionContext.tsx` | SectionABasic (tylko kontekst, bez danych kontaktowych) |
+| `SmartSectionCompany.tsx` | SectionCCompanyProfile + SectionDScale (polaczone) |
+| `SmartSectionStrategy.tsx` | SectionFStrategy + SectionGNeeds + SectionHInvestments |
+| `SmartSectionValue.tsx` | SectionJValueForCC + SectionKEngagement |
+| `SmartSectionPersonal.tsx` | SectionLPersonal + SectionMOrganizations |
+| `SmartSectionFollowup.tsx` | SectionNFollowup (bez zmian) |
+
+### Komponent `SectionProgressBadge`
+
+Maly badge pokazujacy ile pol jest uzupelnionych w sekcji:
 
 ```text
-ContactDetail (contact.companies?.name)
-  -> MeetingsTab (companyName prop)
-    -> BITab (companyName prop)
-      -> handleFillFromNote (companyName do edge function)
+[3/8] -- szary
+[6/8] -- zielony
+[8/8] -- zielony z checkmark
 ```
 
-## Pliki do modyfikacji
+Wyswietlany obok nazwy sekcji w AccordionTrigger.
+
+### Logika auto-open sekcji w `BITab.tsx`
+
+Zamiast statycznej listy `['section-a', 'section-c', 'section-g', 'section-n']`:
+- Sekcja otwarta jezeli: ma dane LUB jest kluczowa (1-Kontekst, 3-Strategia, 6-Follow-up)
+- Sekcja zwinieta jezeli: pusta i nie-kluczowa
+
+### Integracja z ProspectingConvertDialog
+
+W `ProspectingConvertDialog.tsx`, po udanej konwersji:
+1. Jezeli prospect ma `ai_brief` lub `prospecting_notes`:
+   - Utworz rekord w `business_interviews` z `section_a_basic.podpowiedzi_brief = ai_brief`
+   - Wywolaj edge function `bi-fill-from-note` z trescia `ai_brief + prospecting_notes`
+2. Dane z brief automatycznie trafiaja do odpowiednich sekcji BI
+
+### Pliki do modyfikacji
 
 | Plik | Zmiana |
-|------|--------|
-| supabase/functions/bi-fill-from-note/index.ts | Pelna przebudowa edge function |
-| src/components/bi/BITab.tsx | Uzycie propa companyName zamiast zakres_dzialalnosci |
-| src/components/contacts/MeetingsTab.tsx | Dodanie propa companyName |
-| src/pages/ContactDetail.tsx | Przekazanie contact.companies?.name |
+|---|---|
+| `src/components/bi/sections/SmartSectionContext.tsx` | NOWY -- sekcja 1 |
+| `src/components/bi/sections/SmartSectionCompany.tsx` | NOWY -- sekcja 2 (C+D) |
+| `src/components/bi/sections/SmartSectionStrategy.tsx` | NOWY -- sekcja 3 (F+G+H) |
+| `src/components/bi/sections/SmartSectionValue.tsx` | NOWY -- sekcja 4 (J+K) |
+| `src/components/bi/sections/SmartSectionPersonal.tsx` | NOWY -- sekcja 5 (L+M) |
+| `src/components/bi/sections/SmartSectionFollowup.tsx` | NOWY -- sekcja 6 (N) |
+| `src/components/bi/sections/SectionProgressBadge.tsx` | NOWY -- badge postępu |
+| `src/components/bi/sections/index.ts` | Aktualizacja exportow |
+| `src/components/bi/BITab.tsx` | Uzycie nowych 6 sekcji, smart auto-open |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Auto-tworzenie BI z brief |
+| Stare pliki sekcji (SectionA..N) | Pozostaja -- nie usuwamy, ale nie sa juz uzywane w BITab |
+
+### Uklad wewnatrz polaczonych sekcji
+
+Kazda polaczona sekcja uzywa wewnetrznych separatorow z labelkami (jak juz teraz robi SectionC z "Profil dzialalnosci" / "Rola w firmie" / "Struktura wlasnosci"). Dzieki temu sekcja jest dluzsza, ale logicznie podzielona.
+
+Przyklad sekcji 3 (Strategia i potrzeby):
+```text
+--- Cele i kierunki ---
+  cele_strategiczne (textarea)
+  szanse / ryzyka (2 textareas side-by-side)
+  
+--- Potrzeby biznesowe ---
+  top3_priorytety (tags)
+  najwieksze_wyzwanie (textarea)
+  czego_poszukuje (badge multi-select)
+  jakich_kontaktow (textarea)
+  
+--- Inwestycje ---
+  planowane_projekty (textarea)
+  status (select)
+  czego_brakuje_typ (badges)
+```
+
+To daje 1 sekcje zamiast 3, ale z czytelnym wewnetrznym podzialem.
+
