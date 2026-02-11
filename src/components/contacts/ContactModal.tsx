@@ -142,10 +142,19 @@ export function ContactModal({ isOpen, onClose, contact, onCreated }: ContactMod
 
   useEffect(() => {
     if (contact) {
+      // Fallback: parse first_name/last_name from full_name if missing
+      let firstName = contact.first_name || '';
+      let lastName = contact.last_name || '';
+      if (!firstName && !lastName && contact.full_name) {
+        const parts = contact.full_name.trim().split(/\s+/);
+        firstName = parts[0] || '';
+        lastName = parts.slice(1).join(' ') || '';
+      }
+
       form.reset({
         title: contact.title || '',
-        first_name: contact.first_name || '',
-        last_name: contact.last_name || '',
+        first_name: firstName,
+        last_name: lastName,
         email: contact.email || '',
         email_secondary: (contact as any).email_secondary || '',
         phone: contact.phone || '',
