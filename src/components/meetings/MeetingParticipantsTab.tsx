@@ -67,8 +67,8 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
     // Apply search filter
     if (search) {
       const searchLower = search.toLowerCase();
-      const name = p.contact?.full_name?.toLowerCase() ?? '';
-      const company = p.contact?.company?.toLowerCase() ?? '';
+      const name = (p.contact?.full_name ?? (p as any).prospect?.full_name ?? '').toLowerCase();
+      const company = (p.contact?.company ?? (p as any).prospect?.company ?? '').toLowerCase();
       return name.includes(searchLower) || company.includes(searchLower);
     }
 
@@ -209,10 +209,10 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
                   return (
                     <TableRow key={participant.id}>
                       <TableCell className="font-medium">
-                        {participant.contact?.full_name ?? 'Nieznany kontakt'}
+                        {participant.contact?.full_name ?? (participant as any).prospect?.full_name ?? 'Nieznany kontakt'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {participant.contact?.company ?? '—'}
+                        {participant.contact?.company ?? (participant as any).prospect?.company ?? '—'}
                       </TableCell>
                       <TableCell>
                         <ParticipantBadge
