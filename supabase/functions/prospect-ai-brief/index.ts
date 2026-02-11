@@ -102,11 +102,6 @@ serve(async (req) => {
       industry = prospect.industry || "";
     }
 
-    const fullName = prospect.full_name;
-    const company = prospect.company || "";
-    const position = prospect.position || "";
-    const industry = prospect.industry || "";
-
     // ── 4 parallel Perplexity queries ──
 
     const personProfessionalPrompt = `Znajdź WSZYSTKIE informacje o osobie: ${fullName}${company ? `, firma: ${company}` : ""}${position ? `, stanowisko: ${position}` : ""}.
