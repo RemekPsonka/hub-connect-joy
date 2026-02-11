@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Upload, Search, UserPlus, Trash2, FileText, Sparkles } from 'lucide-react';
+import { Plus, Upload, Search, UserPlus, Trash2, FileText, Sparkles, ArrowRightCircle } from 'lucide-react';
 import { ParticipantBadge } from './ParticipantBadge';
 import {
   useMeetingParticipants,
@@ -30,7 +30,10 @@ import { AddParticipantModal } from './AddParticipantModal';
 import { ImportCSVModal } from './ImportCSVModal';
 import { ImportPDFMeetingDialog } from './ImportPDFMeetingDialog';
 import { ProspectAIBriefDialog } from '@/components/deals-team/ProspectAIBriefDialog';
+import { ProspectingConvertDialog } from '@/components/deals-team/ProspectingConvertDialog';
 import { useGenerateProspectBrief } from '@/hooks/useMeetingProspects';
+import type { MeetingProspect } from '@/hooks/useMeetingProspects';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface MeetingParticipantsTabProps {
@@ -48,6 +51,8 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPDFOpen, setImportPDFOpen] = useState(false);
   const [briefProspect, setBriefProspect] = useState<any>(null);
+  const [convertProspect, setConvertProspect] = useState<{ prospectId: string; prospect: MeetingProspect } | null>(null);
+  const [loadingConvertId, setLoadingConvertId] = useState<string | null>(null);
 
   const { data: participants = [], isLoading } = useMeetingParticipants(meetingId);
   const updateAttendance = useUpdateParticipantAttendance();
@@ -90,6 +95,24 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
       toast.success('Uczestnik został usunięty');
     } catch (error) {
       toast.error('Błąd podczas usuwania uczestnika');
+    }
+  };
+
+  const handleOpenConvertDialog = async (prospectId: string) => {
+    setLoadingConvertId(prospectId);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('meeting_prospects')
+        .select('*')
+        .eq('id', prospectId)
+        .single();
+
+      if (error) throw error;
+      setConvertProspect({ prospectId, prospect: data as MeetingProspect });
+    } catch {
+      toast.error('Nie udało się pobrać danych prospekta');
+    } finally {
+      setLoadingConvertId(null);
     }
   };
 
@@ -175,6 +198,7 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
                   <TableHead>Firma</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-12 text-center">Brief</TableHead>
+                  <TableHead className="w-24 text-center">Kanban</TableHead>
                   <TableHead className="text-center">Obecność</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -207,6 +231,20 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
                             onClick={() => setBriefProspect((participant as any).prospect_id)}
                           >
                             <Sparkles className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isProspect && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            disabled={loadingConvertId === (participant as any).prospect_id}
+                            onClick={() => handleOpenConvertDialog((participant as any).prospect_id)}
+                          >
+                            <ArrowRightCircle className="h-3.5 w-3.5" />
+                            Do Kanban
                           </Button>
                         )}
                       </TableCell>
@@ -261,6 +299,15 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
           meetingId={meetingId}
           meetingName={meetingName}
           meetingDate={meetingDate}
+        />
+      )}
+
+      {convertProspect && (
+        <ProspectingConvertDialog
+          open={!!convertProspect}
+          onOpenChange={(isOpen) => { if (!isOpen) setConvertProspect(null); }}
+          prospectId={convertProspect.prospectId}
+          prospect={convertProspect.prospect}
         />
       )}
     </div>
