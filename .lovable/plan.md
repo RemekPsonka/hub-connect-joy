@@ -1,69 +1,60 @@
 
-# Brief AI dla prospektow -- analiza przed spotkaniem
-
-## Opis
-Dodanie przycisku "Analiza AI" na liscie Prospecting, ktory uruchamia edge function. Funkcja uzywa Perplexity do wyszukania informacji o osobie i firmie, a nastepnie Lovable AI do syntezy krotkiego briefu brokerskiego przed pierwszym spotkaniem. Brief jest zapisywany w bazie i wyswietlany w panelu bocznym.
-
-## Perspektywa brokera
-Brief jest pisany z perspektywy brokera ubezpieczeniowego przygotowujacego sie do pierwszego spotkania. Nie chodzi o sprzedaz, ale o:
-- Wiedze o kliencie (kim jest, co robi, co posiada)
-- Zrozumienie branzy i potencjalnych ryzyk ubezpieczeniowych
-- Tematy do rozmowy (pasje, rodzina, zainteresowania)
-- Kontekst biznesowy (lokalizacje, majatek, produkcja, kontrakty, handel)
+# Przycisk AI na liscie + Brief do pierwszej rozmowy + Export PDF
 
 ## Zmiany
 
-### 1. Migracja SQL
-Dodanie kolumny `ai_brief` (TEXT) do tabeli `meeting_prospects`:
-```text
-ALTER TABLE public.meeting_prospects ADD COLUMN ai_brief TEXT DEFAULT NULL;
-ALTER TABLE public.meeting_prospects ADD COLUMN ai_brief_generated_at TIMESTAMPTZ DEFAULT NULL;
-```
+### 1. Przycisk "Analiza AI" bezposrednio na karcie (nie w menu)
+- Dodanie widocznego przycisku z ikona Sparkles obok przycisku menu (...)
+- Jesli brief juz istnieje -- przycisk zmienia sie na "Brief" (otwiera dialog)
+- Przycisk z loading spinner podczas generowania
 
-### 2. Nowa edge function: `prospect-ai-brief`
-Funkcja realizuje 3 kroki:
+### 2. Zmiana opisu
+- "Brief AI" -> "Brief do pierwszej rozmowy" w dialogu i na liscie
+- Tytul Sheet: "Brief do pierwszej rozmowy -- {imie}"
 
-**Krok 1 -- Perplexity (2 zapytania rownolegle):**
-- Zapytanie o osobe: kim jest, stanowisko, pasje, rodzina, inne firmy, obecnosc medialna
-- Zapytanie o firme: dzialalnosc, branza, lokalizacje, majatek, produkcja/handel/budowlanka, kontrakty, strona WWW
+### 3. Checkboxy do zaznaczania prospektow + Export PDF
+- Dodanie checkboxow na liscie do zaznaczania osob
+- Przycisk "Eksportuj PDF" nad lista (widoczny gdy zaznaczono >= 1 osobe)
+- Przycisk "Zaznacz wszystkie z briefem" do szybkiego zaznaczenia
 
-**Krok 2 -- Lovable AI (synteza):**
-System prompt jako broker ubezpieczeniowy, ktory przygotowuje sie do spotkania. Generuje strukturyzowany brief:
-- Osoba (2-3 zdania: kim jest, co robi, pasje/rodzina)
-- Firma (dzialalnosc, branza, lokalizacje, majatek)
-- Kontekst ubezpieczeniowy (na co zwrocic uwage: mienie, OC, flota, cyber, pracownicy)
-- Tematy do rozmowy (co mozna poruszyc na spotkaniu)
+### 4. Nowy plik: `src/utils/exportProspectBriefs.ts`
+Export PDF -- 1 osoba = 1 strona A4, logiczne sekcje:
 
-**Krok 3 -- Zapis do bazy** w kolumnie `ai_brief`
+Kazda strona zawiera:
+- **Naglowek**: Imie i nazwisko, firma, stanowisko, data wygenerowania briefu
+- **Tresc briefu** renderowana z markdown na sekcje PDF:
+  - Osoba (kim jest, pasje, rodzina)
+  - Firma (dzialalnosc, branza, lokalizacje)
+  - Kontekst ubezpieczeniowy (mienie, OC, flota, cyber)
+  - Tematy do rozmowy
+- **Stopka**: Zrodlo (wydarzenie), priorytet, status
 
-### 3. Hook `useMeetingProspects.ts`
-- Dodanie `ai_brief` i `ai_brief_generated_at` do typu `MeetingProspect`
-- Nowa mutacja `useGenerateProspectBrief` wywolujaca edge function
+Wykorzystuje wzorzec z `exportAgentProfile.ts`:
+- Sanityzacja polskich znakow
+- Pomocnicze funkcje checkPageBreak, addSectionHeader, addParagraph
+- Parsowanie markdown (naglowki ##, listy -, pogrubienia **)
 
-### 4. Komponent `ProspectingList.tsx`
-- Przycisk "Analiza AI" (ikona Brain/Sparkles) w menu kontekstowym kazdego prospekta
-- Po kliknieciu: loading spinner, wywolanie edge function
-- Po zakonczeniu: brief wyswietlany pod nazwa prospekta (rozwijalny)
-- Jesli brief juz istnieje: przycisk "Odswież brief"
-
-### 5. Komponent `ProspectAIBriefDialog.tsx` (NOWY)
-Dialog/Sheet wyswietlajacy pelny brief z formatowaniem markdown:
-- Naglowek z imieniem i firma
-- Tresc briefu renderowana przez react-markdown
-- Data wygenerowania
-- Przycisk "Generuj ponownie"
-
-## Pliki do utworzenia / modyfikacji
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| Migracja SQL | Nowe kolumny `ai_brief`, `ai_brief_generated_at` |
-| `supabase/functions/prospect-ai-brief/index.ts` | **NOWY** -- edge function |
-| `src/hooks/useMeetingProspects.ts` | Typ + nowa mutacja |
-| `src/components/deals-team/ProspectingList.tsx` | Przycisk AI, wyswietlanie briefu |
-| `src/components/deals-team/ProspectAIBriefDialog.tsx` | **NOWY** -- dialog z briefem |
+| `src/components/deals-team/ProspectingList.tsx` | Checkbox, przycisk AI na karcie, przycisk Export PDF, zmiana etykiet |
+| `src/components/deals-team/ProspectAIBriefDialog.tsx` | Zmiana tytulu na "Brief do pierwszej rozmowy" |
+| `src/utils/exportProspectBriefs.ts` | **NOWY** -- generowanie PDF z briefami (1 osoba = 1 strona) |
 
-## Sekrety
-Wszystkie potrzebne klucze API sa juz skonfigurowane:
-- `PERPLEXITY_API_KEY` -- wyszukiwanie informacji
-- `LOVABLE_API_KEY` -- synteza briefu
+## Szczegoly techniczne
+
+### ProspectingList.tsx
+- Nowy state: `selectedIds: Set<string>` do sledzenia zaznaczonych
+- Checkbox przy kazdym prospekcie (obok kropki priorytetu)
+- Przycisk Sparkles/Loader2 obok menu (...) -- bezposrednio widoczny
+- Nad filtrami: przycisk "Eksportuj brief PDF (N)" gdy selectedIds.size > 0
+- Filtrowanie: export tylko tych co maja `ai_brief`
+
+### exportProspectBriefs.ts
+- Funkcja `exportProspectBriefsPDF(prospects: MeetingProspect[])`
+- Iteracja po prospektach -- kazdy na nowej stronie
+- Parsowanie markdown briefu na sekcje (split po `## `)
+- Uzycie jsPDF + autoTable do formatowania
+- Sanityzacja polskich znakow (wzorzec z exportAgentProfile)
+- Nazwa pliku: `briefs-prospecting-{data}.pdf`
