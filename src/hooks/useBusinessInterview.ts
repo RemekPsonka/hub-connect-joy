@@ -325,3 +325,29 @@ export function useBIStats(tenantId: string | undefined) {
     enabled: !!tenantId
   });
 }
+
+// Fill BI from note using AI + Perplexity
+export function useFillBIFromNote() {
+  return useMutation({
+    mutationFn: async ({
+      note,
+      contactName,
+      companyName,
+      existingData,
+    }: {
+      note: string;
+      contactName: string;
+      companyName?: string;
+      existingData?: Record<string, any>;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('bi-fill-from-note', {
+        body: { note, contactName, companyName, existingData },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'AI fill failed');
+
+      return data.data as Record<string, any>;
+    },
+  });
+}

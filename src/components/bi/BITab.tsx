@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent } from '@/components/ui/card';
-import { useBusinessInterview, useSaveBusinessInterview, useProcessBIWithAI, validateBIForAI } from '@/hooks/useBusinessInterview';
+import { useBusinessInterview, useSaveBusinessInterview, useProcessBIWithAI, validateBIForAI, useFillBIFromNote } from '@/hooks/useBusinessInterview';
 import { BIActionBar } from './BIActionBar';
+import { BIFillFromNoteDialog } from './BIFillFromNoteDialog';
 import {
   SectionABasic,
   SectionCCompanyProfile,
@@ -29,8 +30,10 @@ export function BITab({ contactId, contactName }: BITabProps) {
   const { data: biData, isLoading } = useBusinessInterview(contactId);
   const saveMutation = useSaveBusinessInterview();
   const processBI = useProcessBIWithAI();
+  const fillFromNote = useFillBIFromNote();
   const [formData, setFormData] = useState<Partial<BusinessInterview>>({});
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [showFillFromNote, setShowFillFromNote] = useState(false);
 
   // Sekcje domyślnie otwarte: A, C, G, N
   const [openSections, setOpenSections] = useState<string[]>([
@@ -112,6 +115,52 @@ export function BITab({ contactId, contactName }: BITabProps) {
     }
   };
 
+  // Merge AI-filled data into form (only fill empty fields)
+  const mergeBIData = (aiData: Record<string, any>) => {
+    setFormData(prev => {
+      const merged = { ...prev };
+      for (const sectionKey of Object.keys(aiData)) {
+        if (!sectionKey.startsWith('section_')) continue;
+        const existing = (prev as any)[sectionKey] || {};
+        const incoming = aiData[sectionKey] || {};
+        const mergedSection: Record<string, any> = { ...existing };
+
+        for (const [field, value] of Object.entries(incoming)) {
+          const existingVal = existing[field];
+          if (existingVal === undefined || existingVal === null || existingVal === '') {
+            mergedSection[field] = value;
+          } else if (Array.isArray(existingVal) && Array.isArray(value)) {
+            // Merge arrays, add new unique items
+            const combined = [...existingVal, ...value.filter((v: any) => !existingVal.includes(v))];
+            mergedSection[field] = combined;
+          }
+        }
+        (merged as any)[sectionKey] = mergedSection;
+      }
+      return merged;
+    });
+    toast.success('Dane z notatki zostały zastosowane');
+  };
+
+  const handleFillFromNote = async (note: string): Promise<Record<string, any> | null> => {
+    try {
+      const companyName = (formData.section_c_company_profile as any)?.zakres_dzialalnosci
+        || (biData?.section_c_company_profile as any)?.zakres_dzialalnosci
+        || undefined;
+      const result = await fillFromNote.mutateAsync({
+        note,
+        contactName,
+        companyName,
+        existingData: formData,
+      });
+      return result;
+    } catch (error) {
+      console.error('Fill from note error:', error);
+      toast.error('Błąd analizy notatki');
+      return null;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -131,6 +180,16 @@ export function BITab({ contactId, contactName }: BITabProps) {
         onSaveAndClose={handleSaveAndClose}
         onProcessAI={handleProcessAI}
         onShowHistory={() => toast.info('Historia wersji zostanie dodana wkrótce')}
+        onFillFromNote={() => setShowFillFromNote(true)}
+      />
+
+      <BIFillFromNoteDialog
+        open={showFillFromNote}
+        onOpenChange={setShowFillFromNote}
+        onApply={mergeBIData}
+        contactName={contactName}
+        isProcessing={fillFromNote.isPending}
+        onProcess={handleFillFromNote}
       />
 
       <Card>
