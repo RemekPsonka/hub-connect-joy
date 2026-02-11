@@ -70,6 +70,7 @@ interface ContactModalProps {
   isOpen: boolean;
   onClose: () => void;
   contact?: ContactWithGroup | null;
+  onCreated?: (contactId: string, contactName: string) => void;
 }
 
 const sourceOptions = [
@@ -80,7 +81,7 @@ const sourceOptions = [
   { value: 'import', label: 'Import' },
 ];
 
-export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
+export function ContactModal({ isOpen, onClose, contact, onCreated }: ContactModalProps) {
   const { data: groups = [] } = useContactGroups();
   const createContact = useCreateContact();
   const updateContact = useUpdateContact();
@@ -234,7 +235,8 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
       setShowMergeModal(true);
     } else {
       // Brak duplikatu - utwórz normalnie
-      await createContact.mutateAsync(submitData);
+      const newContact = await createContact.mutateAsync(submitData);
+      onCreated?.(newContact.id, newContact.full_name);
       onClose();
     }
   };
@@ -264,7 +266,8 @@ export function ContactModal({ isOpen, onClose, contact }: ContactModalProps) {
     const submitData = prepareSubmitData(pendingSubmitData);
     
     try {
-      await createContact.mutateAsync(submitData);
+      const newContact = await createContact.mutateAsync(submitData);
+      onCreated?.(newContact.id, newContact.full_name);
       setShowMergeModal(false);
       onClose();
     } catch (error) {
