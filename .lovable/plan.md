@@ -1,136 +1,197 @@
 
-# Import listy z PDF do spotkania z pelna integracja z Prospecting
+# Zakladka KLIENCI w module Zespol Deals + Grupy produktow i Prognoza dealow
 
 ## Podsumowanie
 
-Dodanie przycisku "Importuj z PDF" na ekranie spotkania (MeetingDetail), ktory wykorzystuje istniejacy modul `parse-meeting-list` (edge function + AI). Po parsowaniu listy uczestnikow, system:
-1. Dopasowuje osoby do istniejacych kontaktow w ConnectHUB (po imieniu/nazwisku/firmie)
-2. Rozpoznaje grupe kontaktowa (badge: Czlonek CC, Moj czlonek, Prospect)
-3. Umozliwia edycje badge i usuniecie z listy przed importem
-4. Importuje uczestnikow pod spotkanie (meeting_participants) -- istniejacy kontakci jako uczestnicy
-5. Rownoczesnie dodaje osoby oznaczone jako "Prospect" do tabeli `meeting_prospects` wskazanego zespolu Deals z polem `source_event` = nazwa + data spotkania
-6. Brief AI wygenerowany na prospekcie jest dostepny wszedzie -- na liscie prospektow, w spotkaniu i po konwersji
+Rozbudowa modulu "Zespol Deals" o nowa zakladke **KLIENCI** (obok Kanban, Tabela, Prospecting). Klienci to kontakty ze statusem `won` (wygrany deal) lub dodane recznie z CRM. Kazdy klient musi istniec w tabeli `contacts`. W zakladce Klienci mozna:
 
-## Schemat dzialania
+- Przypisac grupy produktow (np. Flota, Zycie, Majatkowe) z kwotami deali i oczekiwanymi prowizjami
+- Dodac prognoze deala z rozkladem miesiecznym (12 miesiecy, suwaki procentowe)
+- Przegladac podsumowania per kategoria, per klient, w widoku miesiecznym
+
+Na Kanbanie (leady) rowniez mozna przypisac grupy produktow z oczekiwanymi kwotami -- raportowane w kafelkach z podsumowaniem. Kazda kategoria Kanbana ma przypisany % szans (np. HOT=80%, TOP=50%, LEAD=20%, COLD=5%).
+
+## Nowe tabele
+
+### 1. `deal_team_product_categories` -- grupy produktow per zespol
 
 ```text
-PDF -> parse-meeting-list (AI) -> lista osob
-  |
-  v
-Dopasowanie do contacts (full_name + company)
-  |
-  +-- Znaleziony w CH -> badge grupy kontaktowej -> meeting_participants
-  +-- Nie znaleziony   -> badge "Prospect" -> meeting_participants + meeting_prospects (team)
-  |
-  v
-Po spotkaniu:
-  - Obecnosc (checkbox) -> meeting_participants.attendance_status
-  - Notatki, 1x1 -> jak dotad
-  - Prospekci -> widoczni w zespole Deals, ze zrodlem "Spotkanie CC 12.02.2026"
-  - "Opracowane" -> archiwizacja spotkania -> dalsza praca w zespolach/CRM
+id UUID PK
+team_id UUID FK -> deal_teams
+tenant_id UUID
+name TEXT (np. "Flota", "Zycie", "Majatkowe")
+color TEXT (kolor badge)
+probability_percent INT (domyslny % szans dla tej grupy)
+sort_order INT
+is_active BOOLEAN DEFAULT true
+created_at TIMESTAMPTZ
 ```
 
-## Zmiany w bazie danych
+### 2. `deal_team_client_products` -- przypisanie produktow do klienta/leada
 
-### Tabela `meeting_prospects` -- nowa kolumna
-- `meeting_id UUID REFERENCES group_meetings(id)` -- powiazanie z konkretnym spotkaniem (opcjonalne, NULL jesli importowano recznie w zespole)
+```text
+id UUID PK
+team_id UUID FK -> deal_teams
+team_contact_id UUID FK -> deal_team_contacts
+product_category_id UUID FK -> deal_team_product_categories
+tenant_id UUID
+deal_value NUMERIC (laczna szacowana kwota deala)
+expected_commission NUMERIC (oczekiwana prowizja)
+commission_percent NUMERIC (% prowizji -- opcjonalnie auto-obliczane)
+probability_percent INT (% szans -- domyslnie z kategorii kanban lub z product_category)
+notes TEXT
+created_at TIMESTAMPTZ
+updated_at TIMESTAMPTZ
+```
 
-### Tabela `meeting_participants` -- nowa kolumna
-- `prospect_id UUID REFERENCES meeting_prospects(id)` -- powiazanie uczestnika-prospekta z rekordem w meeting_prospects (umozliwia synchronizacje statusow)
+### 3. `deal_team_revenue_forecasts` -- prognoza miesieczna deala
 
-## Nowe/modyfikowane pliki
+```text
+id UUID PK
+client_product_id UUID FK -> deal_team_client_products
+tenant_id UUID
+month_offset INT (0-11, gdzie 0 = biezacy miesiac)
+month_date DATE (pierwszy dzien miesiaca -- obliczany przy tworzeniu)
+amount NUMERIC (kwota prognozowana na dany miesiac)
+percentage NUMERIC (% z lacznej kwoty -- wyswietlany na suwaku)
+created_at TIMESTAMPTZ
+updated_at TIMESTAMPTZ
+```
 
-### 1. `src/components/meetings/ImportPDFMeetingDialog.tsx` (NOWY)
-Dialog importu PDF specyficzny dla spotkania. Reuse logiki z `ProspectingImportDialog`:
+### 4. `deal_team_clients` -- status klienta w zespole (rozszerzenie deal_team_contacts)
 
-**Krok 1 -- Upload:** Identyczny z ProspectingImportDialog (upload PDF, parsowanie przez edge function)
+Zamiast osobnej tabeli -- wykorzystamy istniejaca `deal_team_contacts` z nowa kategoria `'client'`. To najprostsza droga:
+- Dodajemy wartosc `'client'` do kategorii (obok hot/top/lead/cold)
+- Kontakt ze statusem `won` moze byc "skonwertowany" do klienta
+- Klienci maja inne kolory (zielone) i nie pojawiaja sie na Kanbanie
 
-**Krok 2 -- Podglad z dopasowaniem:**
-- Dla kazdej osoby z PDF: zapytanie do `contacts` po `full_name` (case-insensitive ILIKE) i `company`
-- Jesli znaleziono kontakt:
-  - Wyswietl badge grupy kontaktowej (Czlonek CC / Moj czlonek) na podstawie `primary_group_id` i `director_id`
-  - Participant bedzie dodany do `meeting_participants` z `contact_id`
-- Jesli NIE znaleziono:
-  - Badge "Prospect" (pomaranczowy)
-  - Participant dodany do `meeting_participants` jako nowy kontakt + rekord w `meeting_prospects`
+## Zmiany w istniejacych tabelach
 
-**Krok 2b -- Edycja przed importem:**
-- Klikniecie na badge umozliwia zmiane: Czlonek CC / Moj czlonek / Prospect / Nowy kontakt
-- Przycisk X usuwa osobe z listy
-- Dropdown "Zespol Deals" -- wybor zespolu, do ktorego trafa prospekci
+### `deal_team_contacts`
+- Nowa wartosc category: `'client'` (dodana przez kod, nie constraint -- tabela uzywa TEXT)
+- Pole `estimated_value` bedzie teraz suma z `deal_team_client_products` (obliczana po stronie klienta lub triggerem)
 
-**Krok 3 -- Import:**
-- Istniejacy kontakci -> `meeting_participants` insert
-- Prospekci -> tworzony nowy kontakt (lub nie, jesli chcemy zachowac jako prospect) + `meeting_prospects` insert z `source_event` = "{nazwa spotkania} ({data})" i `meeting_id` = id spotkania + `meeting_participants` insert z `prospect_id`
+## Logika % szans per kategoria Kanban
 
-### 2. `src/components/meetings/MeetingParticipantsTab.tsx` (MODYFIKACJA)
-- Dodanie przycisku "Importuj z PDF" obok istniejacego "Importuj z CSV"
-- Import komponentu `ImportPDFMeetingDialog`
-- Przekazanie `meetingId` + `meetingName` + `meetingDate` do dialogu
+Stale w kodzie (konfigurowalne w TeamSettings):
 
-### 3. `src/pages/MeetingDetail.tsx` (MODYFIKACJA)
-- Przekazanie `meeting.name` i `meeting.scheduled_at` do `MeetingParticipantsTab` (potrzebne do nazwy source_event)
+```text
+HOT  = 80% szans
+TOP  = 50% szans  
+LEAD = 20% szans
+COLD = 5% szans
+```
 
-### 4. `src/components/meetings/MeetingParticipantsTab.tsx` -- rozszerzenie tabeli
-- Dodanie kolumny "Brief AI" -- jesli uczestnik jest powiazany z `meeting_prospects` (prospect_id), wyswietl ikonke Sparkles z linkiem do briefu
-- Klikniecie otwiera `ProspectAIBriefDialog` (ten sam komponent co w deals-team)
+Kafelki TeamStats pokaza: `Wartosc wazona = SUM(deal_value * probability%)` per kategoria.
 
-### 5. `src/hooks/useMeetingParticipantImport.ts` (NOWY)
-Hook obslugujacy:
-- Dopasowanie osob do kontaktow (`matchContactsFromParsed`)
-- Masowy import uczestnikow + prospektow
-- Zapytanie do `contacts` z filtrem po `tenant_id`
+## Nowe / modyfikowane pliki
 
-### 6. `src/components/meetings/ParticipantBadge.tsx` (MODYFIKACJA)
-- Dodanie wariantu "Prospect" (pomaranczowy badge)
+### Nowe pliki
 
-## Synchronizacja danych
+| Plik | Opis |
+|---|---|
+| `src/components/deals-team/ClientsTab.tsx` | Glowna zakladka KLIENCI -- lista klientow z grupami produktow, sumami, prognozami |
+| `src/components/deals-team/ClientCard.tsx` | Karta klienta -- zielona kolorystyka, grupy produktow z kwotami |
+| `src/components/deals-team/AddClientDialog.tsx` | Dialog dodania klienta z CRM (reuse logiki z AddContactDialog) |
+| `src/components/deals-team/ClientProductsPanel.tsx` | Panel zarzadzania grupami produktow klienta -- dodawanie/edycja deal_value, prowizji |
+| `src/components/deals-team/RevenueForecastDialog.tsx` | Dialog z 12 suwakami miesiecznymi -- rozklad przychodu w czasie |
+| `src/components/deals-team/ProductCategoryManager.tsx` | Zarzadzanie kategoriami produktow w TeamSettings |
+| `src/components/deals-team/ClientsSummaryView.tsx` | Widok podsumowujacy: per kategoria produktu, per klient, widok miesieczny |
+| `src/components/deals-team/LeadProductsSection.tsx` | Sekcja w DealContactDetailSheet -- przypisanie produktow do leada |
+| `src/hooks/useTeamClients.ts` | Hook: CRUD klientow, produktow, prognoz |
+| `src/hooks/useProductCategories.ts` | Hook: CRUD kategorii produktow zespolu |
 
-### Prospekci w spotkaniu <-> Zespol Deals
-- `meeting_prospects` jest wspolna tabela -- ten sam rekord widoczny jest w zespole Deals (ProspectingList) i w spotkaniu
-- `source_event` = nazwa spotkania + data -- widoczne jako zrodlo w filtrze zrodel na liscie prospektow
-- `meeting_id` -- pozwala na filtrowanie prospektow per spotkanie
+### Modyfikowane pliki
 
-### Brief AI -- jednolite zrodlo
-- Brief przechowywany w `meeting_prospects.ai_brief`
-- `ProspectAIBriefDialog` (juz istniejacy) dziala identycznie w obu miejscach
-- Raz wygenerowany brief widoczny jest:
-  - Na liscie Prospecting w zespole Deals
-  - Na karcie uczestnika w spotkaniu (przez prospect_id -> meeting_prospects.ai_brief)
-  - W eksporcie PDF (istniejaca funkcja `exportProspectBriefsPDF`)
-
-### Eksport PDF z briefami
-- Dodanie przycisku "Eksportuj briefy PDF" w MeetingParticipantsTab (dla uczestnikow z briefem AI)
-- Reuse istniejacego `exportProspectBriefsPDF` z `src/utils/exportProspectBriefs.ts`
+| Plik | Zmiana |
+|---|---|
+| `src/pages/DealsTeamDashboard.tsx` | Dodanie zakladki "Klienci" (ikona UserCheck, zielona) + ViewMode `'clients'` |
+| `src/components/deals-team/index.ts` | Export nowych komponentow |
+| `src/components/deals-team/TeamStats.tsx` | Nowy kafelek "Klienci" (zielony) + wartosc wazona per kategoria Kanban |
+| `src/components/deals-team/TeamSettings.tsx` | Sekcja "Grupy produktow" -- ProductCategoryManager |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | Sekcja "Produkty" (LeadProductsSection) + przycisk "Konwertuj do klienta" |
+| `src/types/dealTeam.ts` | Nowe typy: `DealCategory` rozszerzony o `'client'`, nowe interfejsy |
+| `src/components/deals-team/KanbanBoard.tsx` | Filtrowanie -- nie pokazuj category='client' na Kanbanie |
+| Migracja SQL | 3 nowe tabele + RLS + indeksy |
 
 ## Workflow uzytkowania
 
 ```text
-PRZED SPOTKANIEM:
-1. Tworze spotkanie (CC 12.02.2026)
-2. Importuje liste z PDF -> system rozpoznaje kontakty i prospektow
-3. Generuje briefy AI dla prospektow (ikona Sparkles)
-4. Drukuje briefy do PDF
+KONFIGURACJA:
+1. W TeamSettings -> "Grupy produktow" -> dodaj: Flota, Zycie, Majatkowe
+2. Kazda grupa ma domyslny kolor i opcjonalny % prowizji
 
-PO SPOTKANIU:
-5. Zaznaczam obecnosc (checkbox)
-6. Dodaje spotkania 1x1
-7. Dodaje notatki
-8. Prospekci automatycznie widoczni w zespole Deals z filtrem zrodla
+PRACA Z LEADAMI (Kanban):
+3. Na karcie leada (DealContactDetailSheet) -> sekcja "Produkty"
+4. Dodaj grupe produktowa: Flota - 500k PLN, prowizja 15k
+5. Kafelki TeamStats pokazuja wartosc wazona: 500k * 20% (LEAD) = 100k
 
-OPRACOWANIE:
-9. W zespole Deals -- konwertujem prospektow do kontaktow (istniejacy flow)
-10. Dane synchronizuja sie z CRM (istniejacy flow)
-11. Archiwizuje spotkanie -> dalsza praca w zespolach i na kartach
+KONWERSJA DO KLIENTA:
+6. Lead ze statusem "won" -> przycisk "Konwertuj do klienta"
+7. Kontakt przenosi sie z Kanban do zakladki KLIENCI (category = 'client')
+8. Produkty i kwoty pozostaja -- szanse zmienaja sie na 100%
+
+PROGNOZA:
+9. Na karcie klienta -> "Dodaj prognoze" -> 12 suwakow miesiecznych
+10. Np. Flota 1M PLN: sty=0%, lut=0%, mar=10%, kwi=20%, maj=30%, cze=40%
+11. Suwaki sumuja sie do 100%
+
+RAPORTY:
+12. Widok "Podsumowanie" w zakladce KLIENCI:
+    - Per kategoria: Flota=2.5M, Zycie=800k, Majatkowe=1.2M
+    - Per klient: Firma A=1M, Firma B=500k
+    - Widok miesieczny: sty=200k, lut=350k, mar=500k...
 ```
 
-## Podsumowanie plikow
+## UI zakladki KLIENCI
 
-| Plik | Typ | Opis |
-|---|---|---|
-| Migracja SQL | nowa | Dodanie `meeting_id` do `meeting_prospects`, `prospect_id` do `meeting_participants` |
-| `src/components/meetings/ImportPDFMeetingDialog.tsx` | nowy | Dialog importu PDF z dopasowaniem kontaktow |
-| `src/hooks/useMeetingParticipantImport.ts` | nowy | Hook dopasowania i importu |
-| `src/components/meetings/MeetingParticipantsTab.tsx` | zmiana | Przycisk PDF, kolumna Brief AI, eksport PDF |
-| `src/pages/MeetingDetail.tsx` | zmiana | Przekazanie nazwy/daty spotkania |
-| `src/components/meetings/ParticipantBadge.tsx` | zmiana | Wariant "Prospect" |
+```text
++--------------------------------------------------+
+| [Dodaj klienta z CRM] [Podsumowanie]             |
++--------------------------------------------------+
+| Szukaj klienta...                                 |
++--------------------------------------------------+
+| Firma ABC                                    ✅   |
+| Jan Kowalski · Dyrektor                           |
+| [Flota: 500k PLN | Prowizja: 15k]                |
+| [Zycie: 200k PLN | Prowizja: 8k]                 |
+| Prognoza: mar 50k, kwi 100k, maj 150k...         |
++--------------------------------------------------+
+| Firma XYZ                                    ✅   |
+| Anna Nowak · Prezes                               |
+| [Majatkowe: 1M PLN | Prowizja: 45k]              |
+| Prognoza: lut 200k, mar 300k, kwi 500k...        |
++--------------------------------------------------+
+| PODSUMOWANIE                                      |
+| Flota:      2.5M PLN  | Prowizja: 85k            |
+| Zycie:      800k PLN  | Prowizja: 32k            |
+| Majatkowe:  1.2M PLN  | Prowizja: 54k            |
+| RAZEM:      4.5M PLN  | Prowizja: 171k           |
++--------------------------------------------------+
+```
+
+## Dialog prognozy (suwaki)
+
+```text
++-- Prognoza: Flota - 1,000,000 PLN ----------------+
+|                                                     |
+| Luty 2026    [====-------] 10%    100,000 PLN      |
+| Marzec 2026  [========---] 20%    200,000 PLN      |
+| Kwiecień     [==========] 30%     300,000 PLN      |
+| Maj          [============] 40%   400,000 PLN      |
+| Czerwiec     [--] 0%              0 PLN             |
+| ...                                                 |
+| Suma: 100% = 1,000,000 PLN                         |
+|                                        [Zapisz]    |
++-----------------------------------------------------+
+```
+
+## Kolorystyka
+
+- **Klienci**: zielony (`emerald-500`) -- sukces, wygrany deal
+- **HOT**: czerwony (bez zmian)
+- **TOP**: bursztynowy (bez zmian)
+- **LEAD**: niebieski (bez zmian)
+- **COLD**: szary (bez zmian)
+
+Kafelek "Klienci" w TeamStats: zielona ramka, ikona UserCheck, liczba klientow + laczna wartosc.
