@@ -3851,6 +3851,8 @@ export type Database = {
       }
       meeting_prospects: {
         Row: {
+          ai_brief: string | null
+          ai_brief_generated_at: string | null
           company: string | null
           converted_at: string | null
           converted_to_contact_id: string | null
@@ -3876,6 +3878,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
           company?: string | null
           converted_at?: string | null
           converted_to_contact_id?: string | null
@@ -3901,6 +3905,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
           company?: string | null
           converted_at?: string | null
           converted_to_contact_id?: string | null
