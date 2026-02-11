@@ -1,116 +1,84 @@
 
 
-# Naprawa panelu DEALS -- przypisania nie widac + brakujace funkcje
+# Usuni&#x119;cie widoku "Kategoria" dla klient&#xf3;w + dodanie "Rozliczenie"
 
-## Problem
+## Cel
 
-1. **Deals sie nie przypisuje / nie widac**: Polityki RLS na tabeli `deal_team_contacts` wymagaja `is_deal_team_member(team_id)` dla WSZYSTKICH operacji (SELECT, INSERT, UPDATE, DELETE). Jezeli uzytkownik nie jest czlonkiem zespolu Deals, to:
-   - INSERT (dodawanie) konczy sie bledem RLS (cichy blad)
-   - SELECT (wyswietlanie) nie zwraca wierszy -- panel pokazuje "Brak przypisania"
+Gdy kontakt ma kategori&#x119; `client`, nie jest ju&#x17c; w lejku sprzeda&#x17c;owym. Dlatego:
+1. Ukrycie sekcji "KATEGORIA" (HOT/TOP/LEAD/COLD) dla klient&#xf3;w
+2. Zamiana sekcji "Statusy tygodniowe" na "Rozliczenie" z wyborem cz&#x119;stotliwo&#x15b;ci: miesi&#x119;czne, kwartalne, p&#xf3;&#x142;roczne, roczne
 
-2. **Brak mozliwosci usuwania z lejka**: Panel nie ma opcji usuwania powiazania.
+## Zakres zmian
 
-## Rozwiazanie
+### 1. Migracja bazy danych
 
-### 1. Zmiana polityk RLS (migracja SQL)
-
-Dodanie alternatywnych polityk pozwalajacych na operacje rowniez dla administratorow tenanta (np. dyrektorow), nie tylko czlonkow zespolu:
+Dodanie kolumny `review_frequency` do tabeli `deal_team_contacts`:
 
 ```text
--- Nowa polityka SELECT: tenant member moze czytac swoje kontakty
-CREATE POLICY "dtc_select_own_contacts" ON deal_team_contacts
-  FOR SELECT USING (
-    tenant_id = get_current_tenant_id()
-    AND contact_id IN (
-      SELECT id FROM contacts WHERE tenant_id = get_current_tenant_id()
-    )
-  );
-
--- Nowa polityka INSERT: tenant member moze dodawac
-CREATE POLICY "dtc_insert_tenant" ON deal_team_contacts
-  FOR INSERT WITH CHECK (
-    tenant_id = get_current_tenant_id()
-  );
+ALTER TABLE deal_team_contacts 
+ADD COLUMN review_frequency text DEFAULT 'quarterly' 
+CHECK (review_frequency IN ('monthly', 'quarterly', 'semi_annual', 'annual'));
 ```
 
-Alternatywnie (prostsze): zmiana istniejacych polityk aby usunac wymog `is_deal_team_member` lub dodac OR z dodatkowym warunkiem.
+Domy&#x15b;lna warto&#x15b;&#x107;: `quarterly` (kwartalne).
 
-### 2. Poprawka `ContactDealsPanel.tsx`
+### 2. Modyfikacja `DealContactDetailSheet.tsx`
 
-- **Filtrowanie zespolow**: W dropdownie "Dodaj" pokazywac tylko zespoly, w ktorych uzytkownik jest czlonkiem (uzyc `useMyDealTeams` zamiast `useDealTeams`)
-- **Przycisk usuwania**: Dodac ikonke `X` przy kazdym badge'u umozliwiajaca usuniecie kontaktu z zespolu
-- **Lepsza obsluga bledow**: Wyswietlanie toast z bledem jesli insert sie nie powiedzie
+**Sekcja KATEGORIA (linie 247-283):**
+- Owin&#x105;&#x107; warunkiem `{contact.category !== 'client' && (...)}` -- ukrycie dla klient&#xf3;w
 
-### 3. Poprawka cache invalidation
+**Sekcja STATUSY TYGODNIOWE (linie 362-410):**
+- Dla klient&#xf3;w (`contact.category === 'client'`): zast&#x105;pi&#x107; nag&#x142;&#xf3;wek na "ROZLICZENIE" i wy&#x15b;wietli&#x107; selector cz&#x119;stotliwo&#x15b;ci:
+  - Miesi&#x119;czne
+  - Kwartalne
+  - P&#xf3;&#x142;roczne
+  - Roczne
+- Zmiana cz&#x119;stotliwo&#x15b;ci zapisuje si&#x119; przez `updateContact.mutate` do nowej kolumny `review_frequency`
+- Dla nie-klient&#xf3;w: bez zmian (dalej "Statusy tygodniowe")
 
-W `useAddContactToTeam` (hook mutacji) dodac invalidacje `['contact-deal-teams']` w `onSuccess` aby panel DEALS na karcie kontaktu automatycznie sie odswiezal.
+### 3. Aktualizacja typu `DealTeamContact` w `src/types/dealTeam.ts`
+
+Dodanie pola:
+```text
+review_frequency: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
+```
+
+### 4. Aktualizacja hooka `useUpdateTeamContact`
+
+Dodanie obs&#x142;ugi pola `reviewFrequency` w mapowaniu na kolumn&#x119; `review_frequency`.
 
 ## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| Migracja SQL | Rozszerzenie polityk RLS na `deal_team_contacts` -- dodanie polityki SELECT dla tenant members (bez wymogu `is_deal_team_member`) |
-| `src/components/contacts/ContactDealsPanel.tsx` | 1) Zamiana `useDealTeams` na `useMyDealTeams` 2) Dodanie przycisku usuwania z lejka 3) Lepsza obsluga bledow |
-| `src/hooks/useDealsTeamContacts.ts` | Dodanie invalidacji `['contact-deal-teams']` w `onSuccess` mutacji `useAddContactToTeam` |
+| Migracja SQL | Dodanie kolumny `review_frequency` do `deal_team_contacts` |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | Ukrycie "Kategoria" dla klient&#xf3;w, zamiana "Statusy tygodniowe" na "Rozliczenie" z selectorem cz&#x119;stotliwo&#x15b;ci |
+| `src/types/dealTeam.ts` | Dodanie pola `review_frequency` do interfejsu `DealTeamContact` |
+| `src/hooks/useDealsTeamContacts.ts` | Dodanie `reviewFrequency` do `useUpdateTeamContact` |
 
-## Szczegoly techniczne
+## Szczeg&#xf3;&#x142;y techniczne
 
-### Migracja RLS
-
-Istniejace polityki wymagaja `is_deal_team_member(team_id)` co blokuje uzytkownikow nie-czlonkow. Rozwiazanie:
-
-```text
--- Usun stara politke SELECT
-DROP POLICY IF EXISTS "dtc_select" ON deal_team_contacts;
-
--- Nowa polityka: czlonek zespolu LUB wlasciciel kontaktu w tenancie
-CREATE POLICY "dtc_select" ON deal_team_contacts
-  FOR SELECT USING (
-    tenant_id = get_current_tenant_id()
-    AND (
-      is_deal_team_member(team_id)
-      OR contact_id IN (SELECT id FROM contacts WHERE director_id = get_current_director_id())
-    )
-  );
-
--- Analogicznie dla INSERT -- pozwol dodawac do zespolow ktorych jestes czlonkiem
--- (tu bez zmian, ale filtrujemy w UI po useMyDealTeams)
-```
-
-### ContactDealsPanel -- przycisk usuwania
+### UI sekcji Rozliczenie (dla klient&#xf3;w)
 
 ```text
-<Badge ...>
-  {link.team_name} -- {link.category.toUpperCase()}
-  <button onClick={() => handleRemove(link.id, link.team_id)} className="ml-1">
-    <X className="h-3 w-3" />
-  </button>
-</Badge>
+ROZLICZENIE
+
+[Miesi&#x119;czne] [Kwartalne] [P&#xf3;&#x142;roczne] [Roczne]
 ```
 
-Funkcja `handleRemove` uzywa `useRemoveContactFromTeam` z `useDealsTeamContacts.ts`.
+Przyciski dzia&#x142;aj&#x105; jak radio -- aktywny jest pod&#x15b;wietlony (variant="default"), pozosta&#x142;e outline. Klikni&#x119;cie zmienia `review_frequency` w bazie.
 
-### Cache invalidation w useAddContactToTeam
+### Logika warunkowa w DealContactDetailSheet
 
 ```text
-onSuccess: (result) => {
-  queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
-  queryClient.invalidateQueries({ queryKey: ['deal-team-clients', result.teamId] });
-  queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] }); // NOWE
-  toast.success('Kontakt zostal dodany do zespolu');
-},
+{contact.category !== 'client' && (
+  // Sekcja KATEGORIA -- HOT/TOP/LEAD/COLD
+)}
+
+{contact.category === 'client' ? (
+  // Sekcja ROZLICZENIE -- selector cz&#x119;stotliwo&#x15b;ci
+) : (
+  // Sekcja STATUSY TYGODNIOWE -- bez zmian
+)}
 ```
-
-### useMyDealTeams zamiast useDealTeams
-
-W `ContactDealsPanel` zamiana:
-```text
-// PRZED:
-const { data: allTeams = [] } = useDealTeams();
-
-// PO:
-const { data: allTeams = [] } = useMyDealTeams();
-```
-
-Dzieki temu uzytkownik widzi w dropdownie tylko zespoly, do ktorych nalezy, i nie napotka bledow RLS przy insercie.
 
