@@ -34,6 +34,7 @@ import { AIProfileRenderer } from '@/components/contacts/AIProfileRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
+import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
 
 // List of public email domains that should not enable company view
 const PUBLIC_EMAIL_DOMAINS = [
@@ -121,6 +122,8 @@ export default function ContactDetail() {
         onEdit={() => setIsEditModalOpen(true)}
         viewMode={viewMode}
       />
+
+      {!isAssistant && <ContactDealsPanel contactId={contact.id} />}
 
       {/* Main View Toggle: OSOBA / FIRMA */}
       <div className="flex items-center gap-2">
