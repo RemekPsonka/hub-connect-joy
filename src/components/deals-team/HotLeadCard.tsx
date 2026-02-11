@@ -1,13 +1,5 @@
-import { useMemo } from 'react';
-import { format } from 'date-fns';
-import { pl } from 'date-fns/locale';
-import { Calendar } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useContactAssignments, useUpdateAssignment } from '@/hooks/useDealsTeamAssignments';
-import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import type { DealTeamContact } from '@/types/dealTeam';
 
 interface HotLeadCardProps {
@@ -19,27 +11,13 @@ interface HotLeadCardProps {
   isDragging?: boolean;
 }
 
-export function HotLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, isDragging }: HotLeadCardProps) {
-  const { data: assignments = [] } = useContactAssignments(contact.id);
-  const updateAssignment = useUpdateAssignment();
-  const { data: members = [] } = useTeamMembers(teamId);
-
-  const memberMap = useMemo(
-    () => new Map(members.map((m) => [m.director_id, m.director?.full_name || 'Nieznany'])),
-    [members]
-  );
-
-  const meetingWithName = contact.next_meeting_with
-    ? memberMap.get(contact.next_meeting_with) || null
-    : null;
-
-  // Guard: don't render if contact data is missing (RLS filtered)
+export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging }: HotLeadCardProps) {
   if (!contact.contact) return null;
 
   return (
     <Card
       className={cn(
-        "border-l-4 border-l-red-500 hover:shadow-md transition-all cursor-pointer",
+        "border-l-2 border-l-red-500 hover:bg-muted/50 transition-all cursor-pointer",
         isDragging && "opacity-50 scale-95"
       )}
       onClick={onClick}
@@ -47,103 +25,26 @@ export function HotLeadCard({ contact, teamId, onClick, onDragStart, onDragEnd, 
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <CardContent className="p-3 space-y-2">
-        {/* Row 1: Name + status */}
-        <div className="flex justify-between items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <span className="font-medium text-sm block truncate">
-              {contact.contact?.full_name || 'Nieznany kontakt'}
+      <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
+        <span className="text-xs font-medium truncate">
+          {contact.contact.full_name}
+        </span>
+        {contact.contact.company && (
+          <>
+            <span className="text-muted-foreground text-xs shrink-0">·</span>
+            <span className="text-xs text-muted-foreground truncate">
+              {contact.contact.company}
             </span>
-            {contact.contact?.company && (
-              <p className="text-xs text-muted-foreground truncate">
-                {contact.contact.company}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Badge
-              variant={contact.status === 'active' ? 'default' : 'secondary'}
-              className="text-xs"
-            >
-              {contact.status === 'active' ? 'Aktywny' : contact.status}
-            </Badge>
-            <div
-              className={`w-2 h-2 rounded-full ${
-                contact.status_overdue ? 'bg-destructive' : 'bg-primary'
-              }`}
-              title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
-            />
-          </div>
-        </div>
-
-        {/* Row 2: Next meeting */}
-        {contact.next_meeting_date && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3" />
-            <span>
-              {format(new Date(contact.next_meeting_date), 'dd MMM', { locale: pl })}
-            </span>
-            {meetingWithName && (
-              <span className="truncate">z {meetingWithName}</span>
-            )}
-          </div>
+          </>
         )}
-
-        {/* Row 3: Next action */}
-        {contact.next_action && (
-          <div className="text-xs bg-muted rounded p-1.5">
-            <span className="font-medium">→ </span>
-            <span className="truncate">{contact.next_action}</span>
-            {contact.next_action_date && (
-              <span className="text-muted-foreground ml-1">
-                (do {format(new Date(contact.next_action_date), 'dd.MM')})
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Row 4: Estimated value */}
-        {contact.estimated_value && contact.estimated_value > 0 && (
-          <div className="text-xs font-medium text-primary">
-            {contact.estimated_value.toLocaleString('pl-PL')} {contact.value_currency}
-          </div>
-        )}
-
-        {/* Row 5: Mini task list */}
-        {assignments.length > 0 && (
-          <div className="space-y-1 pt-1 border-t">
-            {assignments.slice(0, 3).map((a) => (
-              <div key={a.id} className="flex items-center gap-1.5">
-                <Checkbox
-                  checked={a.status === 'done'}
-                  onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={() =>
-                    updateAssignment.mutate({
-                      id: a.id,
-                      teamContactId: contact.id,
-                      status: a.status === 'done' ? 'pending' : 'done',
-                    })
-                  }
-                  className="h-3 w-3"
-                />
-                <span
-                  className={cn(
-                    'text-xs truncate',
-                    a.status === 'done' && 'line-through text-muted-foreground'
-                  )}
-                >
-                  {a.title}
-                </span>
-              </div>
-            ))}
-            {assignments.length > 3 && (
-              <p className="text-xs text-muted-foreground">
-                +{assignments.length - 3} więcej
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
+        <div
+          className={cn(
+            "w-1.5 h-1.5 rounded-full shrink-0 ml-auto",
+            contact.status_overdue ? 'bg-destructive' : 'bg-primary'
+          )}
+          title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
+        />
+      </div>
     </Card>
   );
 }

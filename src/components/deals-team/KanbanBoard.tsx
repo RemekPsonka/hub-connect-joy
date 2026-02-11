@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
+import { Search, X } from 'lucide-react';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { KanbanColumn } from './KanbanColumn';
@@ -10,6 +11,9 @@ import { ProspectCard } from './ProspectCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
 import { DealContactDetailSheet } from './DealContactDetailSheet';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { DealCategory, DealTeamContact } from '@/types/dealTeam';
 
 interface KanbanBoardProps {
@@ -26,23 +30,34 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
   const [draggingContactId, setDraggingContactId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter contacts by category
+  // Filter contacts
+  const filteredContacts = useMemo(() => {
+    if (!searchQuery.trim()) return contacts;
+    const q = searchQuery.toLowerCase();
+    return contacts.filter(
+      (c) =>
+        c.contact?.full_name?.toLowerCase().includes(q) ||
+        c.contact?.company?.toLowerCase().includes(q)
+    );
+  }, [contacts, searchQuery]);
+
   const hotContacts = useMemo(
-    () => contacts.filter((c) => c.category === 'hot'),
-    [contacts]
+    () => filteredContacts.filter((c) => c.category === 'hot'),
+    [filteredContacts]
   );
   const topContacts = useMemo(
-    () => contacts.filter((c) => c.category === 'top'),
-    [contacts]
+    () => filteredContacts.filter((c) => c.category === 'top'),
+    [filteredContacts]
   );
   const leadContacts = useMemo(
-    () => contacts.filter((c) => c.category === 'lead'),
-    [contacts]
+    () => filteredContacts.filter((c) => c.category === 'lead'),
+    [filteredContacts]
   );
   const coldContacts = useMemo(
-    () => contacts.filter((c) => c.category === 'cold'),
-    [contacts]
+    () => filteredContacts.filter((c) => c.category === 'cold'),
+    [filteredContacts]
   );
 
   // Calculate total value for HOT
@@ -118,6 +133,25 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   return (
     <>
+      {/* Search bar */}
+      <div className="mb-3 relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Szukaj kontakt po nazwie lub firmie..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-8 h-8 text-xs"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* HOT column */}
         <KanbanColumn
