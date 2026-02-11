@@ -11,9 +11,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { useDealTeams } from '@/hooks/useDealTeams';
 import { toast } from 'sonner';
 import type { MeetingProspect } from '@/hooks/useMeetingProspects';
 
@@ -30,7 +38,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prospectId: string;
-  teamId: string;
+  teamId?: string;
   prospect: MeetingProspect;
 }
 
@@ -45,6 +53,11 @@ export function ProspectingConvertDialog({
   const tenantId = director?.tenant_id || assistant?.tenant_id;
   const directorId = director?.id;
   const queryClient = useQueryClient();
+
+  // Team selection (when teamId not provided)
+  const { data: dealTeams = [] } = useDealTeams();
+  const [selectedTeamId, setSelectedTeamId] = useState(teamId || '');
+  const effectiveTeamId = teamId || selectedTeamId;
 
   const [email, setEmail] = useState(prospect.email || '');
   const [phone, setPhone] = useState(prospect.phone || '');
@@ -197,11 +210,16 @@ export function ProspectingConvertDialog({
         contactId = contact.id;
       }
 
+      if (!effectiveTeamId) {
+        toast.error('Wybierz zespół Deals');
+        return;
+      }
+
       // Check if contact already in team
       const { data: existingTeamContact } = await supabase
         .from('deal_team_contacts')
         .select('id')
-        .eq('team_id', teamId)
+        .eq('team_id', effectiveTeamId)
         .eq('contact_id', contactId)
         .maybeSingle();
 
@@ -225,7 +243,7 @@ export function ProspectingConvertDialog({
         const { data: teamContact, error: teamError } = await supabase
           .from('deal_team_contacts')
           .insert({
-            team_id: teamId,
+            team_id: effectiveTeamId,
             contact_id: contactId,
             tenant_id: tenantId,
             category,
@@ -261,8 +279,9 @@ export function ProspectingConvertDialog({
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['meeting-prospects', teamId] });
-      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', teamId] });
+      queryClient.invalidateQueries({ queryKey: ['meeting-prospects', effectiveTeamId] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', effectiveTeamId] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-clients', effectiveTeamId] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
 
       const action = mode !== 'new' ? 'scalony' : 'utworzony';
@@ -283,6 +302,25 @@ export function ProspectingConvertDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Team selection (when no fixed teamId) */}
+          {!teamId && (
+            <div className="space-y-2">
+              <Label>Zespół Deals *</Label>
+              <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz zespół..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {dealTeams.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Prospect info */}
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="font-medium">{prospect.full_name}</p>
@@ -377,7 +415,7 @@ export function ProspectingConvertDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Anuluj
           </Button>
-          <Button onClick={handleConvert} disabled={loading}>
+          <Button onClick={handleConvert} disabled={loading || (!teamId && !selectedTeamId)}>
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {mode !== 'new' ? 'Scal i konwertuj' : 'Konwertuj'}
           </Button>
