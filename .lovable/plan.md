@@ -1,141 +1,93 @@
 
 
-# Naprawa badge'ow w imporcie PDF -- prawdziwe nazwy grup + "Dodaj do bazy"
+# Panel DEALS na stronie szczegolów kontaktu
 
-## Problem
+## Cel
 
-1. Badge'e po imporcie PDF sa generyczne ("Moj czlonek", "Czlonek CC") zamiast uzywac prawdziwych nazw grup z tabeli `contact_groups` (np. "CZLONEK REMEK CC", "CZLONEK CC Katowice").
-2. Brak przycisku "Dodaj do bazy" -- dla uczestnikow nie-prospektow, ktorzy nie maja jeszcze `contactId`, powinno byc mozliwe utworzenie kontaktu w CRM z przypisana grupa.
+Dodanie panelu "DEALS" na gorze strony kontaktu (`ContactDetail.tsx`), ktory:
+- Pokazuje w jakich zespolach Deals i na jakim etapie lejka znajduje sie kontakt (HOT/TOP/LEAD/COLD/CLIENT)
+- Umozliwia szybkie dodanie kontaktu do wybranego zespolu Deals z wyborem kategorii
+- Umozliwia oznaczenie jako klient w danej grupie
 
-## Rozwiazanie
+## Nowy komponent
 
-### 1. `src/hooks/useMeetingParticipantImport.ts`
+### `src/components/contacts/ContactDealsPanel.tsx`
 
-- Rozszerzyc interfejs `MatchedParticipant` o pole `groupName?: string | null`
-- W `matchContactsFromParsed` zmienic SELECT na join z `contact_groups`:
-  ```text
-  .select('id, full_name, company, primary_group_id, director_id, contact_groups(name)')
-  ```
-- Przy dopasowaniu ustawiac `groupName` z `match.contact_groups?.name`
+Panel wyswietlany pomiedzy `ContactDetailHeader` a przyciskami OSOBA/FIRMA.
 
-### 2. `src/components/meetings/ImportPDFMeetingDialog.tsx`
+**Sekcja informacyjna:**
+- Pobiera dane z `deal_team_contacts` po `contact_id` (nowy hook lub inline query)
+- Dla kazdego powiazania wyswietla: nazwa zespolu, kategoria (badge kolorowy HOT/TOP/LEAD/COLD/CLIENT), status
+- Jesli kontakt nie jest w zadnym lejku -- komunikat "Brak przypisania do lejka"
 
-**Badge z prawdziwa nazwa grupy:**
-- Zamiast statycznego `BADGE_CONFIG[p.matchType]` -- wyswietlac `p.groupName` jesli dostepne
-- Dla prospektow -- badge "Prospect" (pomaranczowy) bez zmian
-- Dla dopasowanych kontaktow -- badge z nazwa grupy (np. "CZLONEK REMEK CC")
+**Akcje:**
+- Przycisk "Dodaj do Deals" -- otwiera maly dialog z:
+  - Dropdown wyboru zespolu Deals (z `useDealTeams`)
+  - Dropdown wyboru kategorii (COLD/LEAD/TOP/HOT/CLIENT)
+  - Przycisk "Dodaj"
+- Korzysta z istniejacego hooka `useAddContactToTeam` z `useDealsTeamContacts.ts`
 
-**Dropdown badge -- lista grup z CRM:**
-- Import `useContactGroups` do pobrania listy grup
-- W Select zamiast 3 opcji (member/cc_member/prospect) -- wyswietlic liste wszystkich grup kontaktowych + opcje "Prospect"
-- Zmiana grupy aktualizuje `primaryGroupId` i `groupName` na uczestniku
-- Nowy typ matchType rozszerzony -- albo zamiast matchType uzywamy `groupId` do rozpoznania
+## Nowy hook
 
-**Przycisk "Dodaj do bazy":**
-- Widoczny TYLKO dla uczestnikow ze statusem INNYM niz "prospect" i BEZ `contactId`
-- Klikniecie tworzy kontakt w tabeli `contacts` z danymi z PDF:
-  - `full_name`, `company`, `position` z parsowania
-  - `primary_group_id` z wybranej grupy
-  - `tenant_id`, `director_id` z kontekstu
-  - `source: 'meeting_import'`
-- Po utworzeniu -- aktualizuje `contactId` na uczestniku w liscie (bez odswiezania)
+### `src/hooks/useContactDealTeams.ts`
 
-## Pliki do modyfikacji
+Prosty hook zwracajacy liste przypisanych zespolow Deals dla danego `contactId`:
+
+```text
+SELECT dtc.*, dt.name as team_name, dt.color as team_color
+FROM deal_team_contacts dtc
+JOIN deal_teams dt ON dtc.team_id = dt.id
+WHERE dtc.contact_id = ?
+```
+
+## Modyfikacja istniejacych plikow
 
 | Plik | Zmiana |
 |---|---|
-| `src/hooks/useMeetingParticipantImport.ts` | Dodanie `groupName` do interfejsu, join do `contact_groups` w SELECT |
-| `src/components/meetings/ImportPDFMeetingDialog.tsx` | Badge z nazwa grupy, dropdown z lista grup z CRM, przycisk "Dodaj do bazy" |
+| `src/pages/ContactDetail.tsx` | Import i renderowanie `ContactDealsPanel` miedzy headerem a przyciskami OSOBA/FIRMA |
+| `src/hooks/useContactDealTeams.ts` | Nowy plik -- hook do pobierania deal team memberships kontaktu |
+| `src/components/contacts/ContactDealsPanel.tsx` | Nowy plik -- komponent panelu DEALS |
 
 ## Szczegoly techniczne
 
-### matchContactsFromParsed -- zmiana query i mapping
+### ContactDealsPanel -- struktura
+
+- Kompaktowy panel w stylu `DataCard` lub prosty `div` z borderem
+- Naglowek: ikona + "DEALS" + przycisk "Dodaj do Deals"
+- Lista przypisanych zespolow jako badge'e: `[Zespol A - HOT] [Zespol B - CLIENT]`
+- Klikniecie badge otwiera link do dashboardu zespolu
+
+### useContactDealTeams hook
 
 ```text
-const { data: contacts } = await supabase
-  .from('contacts')
-  .select('id, full_name, company, primary_group_id, director_id, contact_groups(name)')
-  .eq('tenant_id', tenantId)
-  .eq('is_active', true)
-  .limit(1000);
-
-// W match:
-groupName: (match as any).contact_groups?.name || null,
+useQuery({
+  queryKey: ['contact-deal-teams', contactId],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from('deal_team_contacts')
+      .select('id, team_id, category, status, deal_teams(name, color)')
+      .eq('contact_id', contactId);
+    return data;
+  },
+  enabled: !!contactId,
+});
 ```
 
-### ImportPDFMeetingDialog -- badge z nazwa grupy
+### Dialog dodawania
+
+Uzywa `Popover` zamiast pelnego dialogu -- lekki dropdown z:
+1. Select zespolu (z `useDealTeams`)
+2. Select kategorii (COLD / LEAD / TOP / HOT / CLIENT)
+3. Przycisk "Dodaj" wywolujacy `useAddContactToTeam`
+
+Po dodaniu -- invalidacja `['contact-deal-teams', contactId]` + istniejace invalidacje.
+
+### Integracja w ContactDetail.tsx
+
+Wstawienie pomiedzy linia 118 (koniec breadcrumbs) a linia 119 (ContactDetailHeader):
 
 ```text
-// Logika wyswietlania badge:
-const getBadgeInfo = (p: MatchedParticipant) => {
-  if (p.matchType === 'prospect') {
-    return { label: 'Prospect', className: 'bg-orange-500/10 text-orange-600 ...' };
-  }
-  return {
-    label: p.groupName || 'Kontakt CH',
-    className: p.matchType === 'member'
-      ? 'bg-emerald-500/10 text-emerald-600 ...'
-      : 'bg-indigo-500/10 text-indigo-600 ...',
-  };
-};
+<ContactDealsPanel contactId={contact.id} />
 ```
 
-### Dropdown -- grupy z CRM + Prospect
-
-```text
-const { data: contactGroups = [] } = useContactGroups();
-
-<Select
-  value={p.matchType === 'prospect' ? 'prospect' : (p.primaryGroupId || p.matchType)}
-  onValueChange={(v) => handleChangeBadge(i, v)}
->
-  <SelectContent>
-    {contactGroups.map(g => (
-      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-    ))}
-    <SelectItem value="prospect">Prospect</SelectItem>
-  </SelectContent>
-</Select>
-```
-
-Zmiana badge aktualizuje `primaryGroupId`, `groupName` i `matchType` na uczestniku.
-
-### Przycisk "Dodaj do bazy"
-
-```text
-{p.matchType !== 'prospect' && !p.contactId && (
-  <Button size="sm" variant="outline" onClick={() => handleAddToDatabase(i)}>
-    <UserPlus className="h-3 w-3 mr-1" /> Dodaj do bazy
-  </Button>
-)}
-```
-
-Funkcja `handleAddToDatabase`:
-
-```text
-const handleAddToDatabase = async (index: number) => {
-  const p = participants[index];
-  const { data, error } = await supabase
-    .from('contacts')
-    .insert({
-      tenant_id: tenantId,
-      director_id: directorId,
-      full_name: p.parsed.full_name,
-      company: p.parsed.company || null,
-      position: p.parsed.position || null,
-      primary_group_id: p.primaryGroupId || null,
-      source: 'meeting_import',
-    })
-    .select('id')
-    .single();
-
-  if (error) { toast.error('Blad dodawania'); return; }
-
-  // Aktualizuj uczestnika w liscie
-  setParticipants(prev => prev.map((pp, i) =>
-    i === index ? { ...pp, contactId: data.id } : pp
-  ));
-  toast.success('Kontakt dodany do bazy');
-};
-```
-
+Renderowanie tylko dla nie-asystentow (analogicznie do reszty paneli).
