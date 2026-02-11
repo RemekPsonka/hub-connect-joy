@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { MoreHorizontal, MessageSquare, UserPlus, Trash2, Circle, Sparkles, Loader2 } from 'lucide-react';
+import { MoreHorizontal, MessageSquare, UserPlus, Trash2, Circle, Sparkles, Loader2, FileDown, CheckSquare } from 'lucide-react';
 import {
   useMeetingProspects,
   useUpdateMeetingProspect,
@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/select';
 import { ProspectingConvertDialog } from './ProspectingConvertDialog';
 import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
+import { exportProspectBriefsPDF } from '@/utils/exportProspectBriefs';
 
 const PRIORITY_CYCLE: (string | null)[] = [null, 'high', 'medium', 'low'];
 const PRIORITY_COLORS: Record<string, string> = {
@@ -73,6 +75,7 @@ export function ProspectingList({ teamId }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const uniqueSources = Array.from(
     new Set(prospects.map((p) => p.source_event).filter(Boolean))
@@ -112,6 +115,25 @@ export function ProspectingList({ teamId }: Props) {
     deleteMutation.mutate({ id, teamId });
   };
 
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllWithBrief = () => {
+    const ids = filtered.filter(p => p.ai_brief).map(p => p.id);
+    setSelectedIds(new Set(ids));
+  };
+
+  const handleExportPDF = () => {
+    const selected = prospects.filter(p => selectedIds.has(p.id));
+    exportProspectBriefsPDF(selected);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -132,8 +154,26 @@ export function ProspectingList({ teamId }: Props) {
     );
   }
 
+  const prospectsWithBrief = filtered.filter(p => p.ai_brief).length;
+
   return (
     <div className="space-y-4">
+      {/* Export bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 bg-muted/50 border rounded-lg px-3 py-2">
+          <span className="text-sm text-muted-foreground">
+            Zaznaczono: {selectedIds.size}
+          </span>
+          <Button size="sm" variant="outline" onClick={handleExportPDF}>
+            <FileDown className="h-4 w-4 mr-1.5" />
+            Eksportuj brief PDF ({prospects.filter(p => selectedIds.has(p.id) && p.ai_brief).length})
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            Odznacz
+          </Button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -184,6 +224,13 @@ export function ProspectingList({ teamId }: Props) {
             </SelectContent>
           </Select>
         )}
+
+        {prospectsWithBrief > 0 && (
+          <Button size="sm" variant="outline" onClick={selectAllWithBrief}>
+            <CheckSquare className="h-4 w-4 mr-1.5" />
+            Zaznacz z briefem ({prospectsWithBrief})
+          </Button>
+        )}
       </div>
 
       {/* List */}
@@ -194,166 +241,207 @@ export function ProspectingList({ teamId }: Props) {
             className="border rounded-lg p-4 hover:border-primary/30 transition-colors"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                   <button
-                     type="button"
-                     title={prospect.priority ? PRIORITY_LABELS[prospect.priority] : 'Ustaw priorytet'}
-                     className="shrink-0 cursor-pointer hover:scale-125 transition-transform"
-                     onClick={() => handlePriorityToggle(prospect.id, prospect.priority)}
-                   >
-                     <Circle className={`h-3.5 w-3.5 ${prospect.priority ? PRIORITY_COLORS[prospect.priority] : 'text-muted-foreground/30'}`} />
-                   </button>
-                   <span className="font-medium">{prospect.full_name}</span>
-                  <Badge
-                    variant="secondary"
-                    className={STATUS_COLORS[prospect.prospecting_status]}
-                  >
-                    {STATUS_LABELS[prospect.prospecting_status]}
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
-                  {prospect.company && <span>{prospect.company}</span>}
-                  {prospect.position && <span>• {prospect.position}</span>}
-                  {prospect.industry && <span>• {prospect.industry}</span>}
-                </div>
-                {prospect.source_event && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Źródło: {prospect.source_event}
-                  </p>
-                )}
-
-                {/* Notes */}
-                {editingNotes === prospect.id ? (
-                  <div className="mt-2 space-y-2">
-                    <Textarea
-                      value={notesText}
-                      onChange={(e) => setNotesText(e.target.value)}
-                      placeholder="Notatki..."
-                      rows={2}
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleSaveNotes(prospect.id)}>
-                        Zapisz
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingNotes(null)}
-                      >
-                        Anuluj
-                      </Button>
-                    </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  checked={selectedIds.has(prospect.id)}
+                  onCheckedChange={() => toggleSelected(prospect.id)}
+                  className="mt-1"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                     <button
+                       type="button"
+                       title={prospect.priority ? PRIORITY_LABELS[prospect.priority] : 'Ustaw priorytet'}
+                       className="shrink-0 cursor-pointer hover:scale-125 transition-transform"
+                       onClick={() => handlePriorityToggle(prospect.id, prospect.priority)}
+                     >
+                       <Circle className={`h-3.5 w-3.5 ${prospect.priority ? PRIORITY_COLORS[prospect.priority] : 'text-muted-foreground/30'}`} />
+                     </button>
+                     <span className="font-medium">{prospect.full_name}</span>
+                    <Badge
+                      variant="secondary"
+                      className={STATUS_COLORS[prospect.prospecting_status]}
+                    >
+                      {STATUS_LABELS[prospect.prospecting_status]}
+                    </Badge>
                   </div>
-                ) : prospect.prospecting_notes ? (
-                  <p
-                    className="text-sm mt-2 text-muted-foreground bg-muted/50 p-2 rounded cursor-pointer"
-                    onClick={() => {
-                      setEditingNotes(prospect.id);
-                      setNotesText(prospect.prospecting_notes || '');
-                    }}
-                  >
-                    {prospect.prospecting_notes}
-                  </p>
-                ) : null}
-
-                {/* AI Brief indicator */}
-                {prospect.ai_brief && (
-                  <button
-                    type="button"
-                    className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer"
-                    onClick={() => setBriefProspect(prospect.id)}
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Zobacz brief AI
-                  </button>
-                )}
-              </div>
-
-              {/* Actions */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="shrink-0">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      briefMutation.mutate({ prospectId: prospect.id, teamId });
-                    }}
-                    disabled={briefMutation.isPending}
-                  >
-                    {briefMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 mr-2" />
-                    )}
-                    {prospect.ai_brief ? 'Odśwież brief AI' : 'Analiza AI'}
-                  </DropdownMenuItem>
-
-                  {prospect.ai_brief && (
-                    <DropdownMenuItem onClick={() => setBriefProspect(prospect.id)}>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Zobacz brief
-                    </DropdownMenuItem>
+                  <div className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+                    {prospect.company && <span>{prospect.company}</span>}
+                    {prospect.position && <span>• {prospect.position}</span>}
+                    {prospect.industry && <span>• {prospect.industry}</span>}
+                  </div>
+                  {prospect.source_event && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Źródło: {prospect.source_event}
+                    </p>
                   )}
 
-                  <DropdownMenuSeparator />
-
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setEditingNotes(prospect.id);
-                      setNotesText(prospect.prospecting_notes || '');
-                    }}
-                  >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    {prospect.prospecting_notes ? 'Edytuj notatkę' : 'Dodaj notatkę'}
-                  </DropdownMenuItem>
-
-                  <DropdownMenuSeparator />
-
-                  {(['high', 'medium', 'low'] as const).map((p) => (
-                    <DropdownMenuItem
-                      key={p}
-                      onClick={() => updateMutation.mutate({ id: prospect.id, teamId, priority: prospect.priority === p ? null : p })}
+                  {/* Notes */}
+                  {editingNotes === prospect.id ? (
+                    <div className="mt-2 space-y-2">
+                      <Textarea
+                        value={notesText}
+                        onChange={(e) => setNotesText(e.target.value)}
+                        placeholder="Notatki..."
+                        rows={2}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleSaveNotes(prospect.id)}>
+                          Zapisz
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingNotes(null)}
+                        >
+                          Anuluj
+                        </Button>
+                      </div>
+                    </div>
+                  ) : prospect.prospecting_notes ? (
+                    <p
+                      className="text-sm mt-2 text-muted-foreground bg-muted/50 p-2 rounded cursor-pointer"
+                      onClick={() => {
+                        setEditingNotes(prospect.id);
+                        setNotesText(prospect.prospecting_notes || '');
+                      }}
                     >
-                      <Circle className={`h-3.5 w-3.5 mr-2 ${PRIORITY_COLORS[p]}`} />
-                      {PRIORITY_LABELS[p]} {prospect.priority === p && '✓'}
-                    </DropdownMenuItem>
-                  ))}
+                      {prospect.prospecting_notes}
+                    </p>
+                  ) : null}
 
-                  <DropdownMenuSeparator />
+                  {/* AI Brief indicator */}
+                  {prospect.ai_brief && (
+                    <button
+                      type="button"
+                      className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer"
+                      onClick={() => setBriefProspect(prospect.id)}
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Brief do pierwszej rozmowy
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                  {(['new', 'contacted', 'interested', 'not_interested'] as ProspectingStatus[])
-                    .filter((s) => s !== prospect.prospecting_status)
-                    .map((status) => (
+              {/* Actions: AI button + menu */}
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Direct AI button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={prospect.ai_brief ? 'Zobacz brief' : 'Analiza AI'}
+                  onClick={() => {
+                    if (prospect.ai_brief) {
+                      setBriefProspect(prospect.id);
+                    } else {
+                      briefMutation.mutate({ prospectId: prospect.id, teamId });
+                    }
+                  }}
+                  disabled={briefMutation.isPending}
+                >
+                  {briefMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className={`h-4 w-4 ${prospect.ai_brief ? 'text-primary' : ''}`} />
+                  )}
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {prospect.ai_brief ? (
+                      <>
+                        <DropdownMenuItem onClick={() => setBriefProspect(prospect.id)}>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Zobacz brief
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => briefMutation.mutate({ prospectId: prospect.id, teamId })}
+                          disabled={briefMutation.isPending}
+                        >
+                          {briefMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-2" />
+                          )}
+                          Odśwież brief
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
                       <DropdownMenuItem
-                        key={status}
-                        onClick={() => handleStatusChange(prospect.id, status)}
+                        onClick={() => briefMutation.mutate({ prospectId: prospect.id, teamId })}
+                        disabled={briefMutation.isPending}
                       >
-                        → {STATUS_LABELS[status]}
+                        {briefMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 mr-2" />
+                        )}
+                        Analiza AI
+                      </DropdownMenuItem>
+                    )}
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditingNotes(prospect.id);
+                        setNotesText(prospect.prospecting_notes || '');
+                      }}
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      {prospect.prospecting_notes ? 'Edytuj notatkę' : 'Dodaj notatkę'}
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {(['high', 'medium', 'low'] as const).map((p) => (
+                      <DropdownMenuItem
+                        key={p}
+                        onClick={() => updateMutation.mutate({ id: prospect.id, teamId, priority: prospect.priority === p ? null : p })}
+                      >
+                        <Circle className={`h-3.5 w-3.5 mr-2 ${PRIORITY_COLORS[p]}`} />
+                        {PRIORITY_LABELS[p]} {prospect.priority === p && '✓'}
                       </DropdownMenuItem>
                     ))}
 
-                  <DropdownMenuSeparator />
+                    <DropdownMenuSeparator />
 
-                  <DropdownMenuItem onClick={() => setConvertProspect(prospect.id)}>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Konwertuj na kontakt
-                  </DropdownMenuItem>
+                    {(['new', 'contacted', 'interested', 'not_interested'] as ProspectingStatus[])
+                      .filter((s) => s !== prospect.prospecting_status)
+                      .map((status) => (
+                        <DropdownMenuItem
+                          key={status}
+                          onClick={() => handleStatusChange(prospect.id, status)}
+                        >
+                          → {STATUS_LABELS[status]}
+                        </DropdownMenuItem>
+                      ))}
 
-                  <DropdownMenuSeparator />
+                    <DropdownMenuSeparator />
 
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => handleDelete(prospect.id)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Usuń
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuItem onClick={() => setConvertProspect(prospect.id)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Konwertuj na kontakt
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => handleDelete(prospect.id)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Usuń
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
         ))}
