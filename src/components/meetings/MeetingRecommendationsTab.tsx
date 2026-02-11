@@ -239,7 +239,7 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
                 />
               )}
               <Label htmlFor={showCheckbox ? `member-${p.id}` : undefined} className="text-sm cursor-pointer flex-1 truncate">
-                {p.contact?.full_name || 'Nieznany'}
+                {p.contact?.full_name ?? (p as any).prospect?.full_name ?? 'Nieznany'}
               </Label>
               <ParticipantBadge
                 isMember={!!p.is_member}

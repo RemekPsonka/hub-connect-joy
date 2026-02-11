@@ -40,6 +40,13 @@ export interface MeetingParticipant {
     email: string | null;
     primary_group_id: string | null;
   };
+  prospect?: {
+    id: string;
+    full_name: string;
+    company: string | null;
+    position: string | null;
+    industry: string | null;
+  } | null;
 }
 
 export interface MeetingRecommendation {
@@ -240,7 +247,8 @@ export function useMeetingParticipants(meetingId: string | undefined) {
         .from('meeting_participants')
         .select(`
           *,
-          contact:contacts(id, full_name, company, email, primary_group_id)
+          contact:contacts(id, full_name, company, email, primary_group_id),
+          prospect:meeting_prospects(id, full_name, company, position, industry)
         `)
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: true });
