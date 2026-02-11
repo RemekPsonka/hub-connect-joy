@@ -1,86 +1,69 @@
 
-
-# Panel szczegolowy kontaktu na Kanban -- usuwanie, statusy, notatki, zadania
+# Brief AI dla prospektow -- analiza przed spotkaniem
 
 ## Opis
-Po kliknieciu karty kontaktu na Kanban otwiera sie panel boczny (Sheet) z pelnym widokiem kontaktu: statusy, notatki, historia aktywnosci, cotygodniowe statusy, powiazane zadania CRM, oraz opcje usuwania.
+Dodanie przycisku "Analiza AI" na liscie Prospecting, ktory uruchamia edge function. Funkcja uzywa Perplexity do wyszukania informacji o osobie i firmie, a nastepnie Lovable AI do syntezy krotkiego briefu brokerskiego przed pierwszym spotkaniem. Brief jest zapisywany w bazie i wyswietlany w panelu bocznym.
 
-## Nowy komponent: `DealContactDetailSheet`
+## Perspektywa brokera
+Brief jest pisany z perspektywy brokera ubezpieczeniowego przygotowujacego sie do pierwszego spotkania. Nie chodzi o sprzedaz, ale o:
+- Wiedze o kliencie (kim jest, co robi, co posiada)
+- Zrozumienie branzy i potencjalnych ryzyk ubezpieczeniowych
+- Tematy do rozmowy (pasje, rodzina, zainteresowania)
+- Kontekst biznesowy (lokalizacje, majatek, produkcja, kontrakty, handel)
 
-Panel boczny (Sheet) wyswietlajacy:
+## Zmiany
 
-### Sekcja 1: Naglowek
-- Nazwa kontaktu, firma, kategoria (HOT/TOP/LEAD)
-- Badge statusu (Aktywny, Wstrzymany, Wygrany, Przegrany)
-- Link do pelnego profilu kontaktu w CRM
-
-### Sekcja 2: Zmiana statusu
-- Przyciski/dropdown do zmiany statusu: Active, On Hold, Won, Lost, Disqualified
-- Wykorzystuje istniejacy hook `useChangeContactStatus`
-
-### Sekcja 3: Notatki
-- Pole tekstowe z auto-zapisem (debounce) -- wzorowane na `ContactNotesTab`
-- Zapisywane w `deal_team_contacts.notes`
-
-### Sekcja 4: Cotygodniowy status
-- Przycisk "Dodaj status tygodniowy" otwierajacy istniejacy `WeeklyStatusForm`
-- Lista ostatnich 5 statusow tygodniowych (z `deal_team_weekly_statuses`)
-- Wskaznik czy status jest aktualny / przeterminowany
-
-### Sekcja 5: Zadania CRM
-- Lista zadan powiazanych z tym kontaktem (przez `task_contacts` -- kontakt CRM)
-- Mozliwosc dodania nowego zadania (otwiera `TaskModal` z preselected contact)
-- Checkbox do oznaczania wykonania
-- Wzorowane na `ContactTasksPanel`
-
-### Sekcja 6: Historia aktywnosci
-- Chronologiczna lista z `deal_team_activity_log` filtrowana po `team_contact_id`
-- Zmiany kategorii, statusow, dodane notatki, statusy tygodniowe
-- Nowy hook: `useContactActivityLog(teamContactId)`
-
-### Sekcja 7: Akcje
-- Przycisk "Usun z zespolu" (z potwierdzeniem) -- wykorzystuje `useRemoveContactFromTeam`
-
-## Modyfikacje istniejacych komponentow
-
-Karty Kanban (`HotLeadCard`, `TopLeadCard`, `LeadCard`) -- dodanie `onClick` otwierajacego `DealContactDetailSheet` zamiast (lub obok) linka do profilu CRM.
-
-## Nowy hook: `useContactActivityLog`
-
+### 1. Migracja SQL
+Dodanie kolumny `ai_brief` (TEXT) do tabeli `meeting_prospects`:
 ```text
-useContactActivityLog(teamContactId: string)
-  -> SELECT * FROM deal_team_activity_log 
-     WHERE team_contact_id = teamContactId
-     ORDER BY created_at DESC LIMIT 50
+ALTER TABLE public.meeting_prospects ADD COLUMN ai_brief TEXT DEFAULT NULL;
+ALTER TABLE public.meeting_prospects ADD COLUMN ai_brief_generated_at TIMESTAMPTZ DEFAULT NULL;
 ```
 
-## Nowy hook: `useTeamContactWeeklyStatuses`
+### 2. Nowa edge function: `prospect-ai-brief`
+Funkcja realizuje 3 kroki:
 
-```text
-useTeamContactWeeklyStatuses(teamContactId: string)
-  -> SELECT * FROM deal_team_weekly_statuses
-     WHERE team_contact_id = teamContactId
-     ORDER BY created_at DESC LIMIT 10
-```
+**Krok 1 -- Perplexity (2 zapytania rownolegle):**
+- Zapytanie o osobe: kim jest, stanowisko, pasje, rodzina, inne firmy, obecnosc medialna
+- Zapytanie o firme: dzialalnosc, branza, lokalizacje, majatek, produkcja/handel/budowlanka, kontrakty, strona WWW
+
+**Krok 2 -- Lovable AI (synteza):**
+System prompt jako broker ubezpieczeniowy, ktory przygotowuje sie do spotkania. Generuje strukturyzowany brief:
+- Osoba (2-3 zdania: kim jest, co robi, pasje/rodzina)
+- Firma (dzialalnosc, branza, lokalizacje, majatek)
+- Kontekst ubezpieczeniowy (na co zwrocic uwage: mienie, OC, flota, cyber, pracownicy)
+- Tematy do rozmowy (co mozna poruszyc na spotkaniu)
+
+**Krok 3 -- Zapis do bazy** w kolumnie `ai_brief`
+
+### 3. Hook `useMeetingProspects.ts`
+- Dodanie `ai_brief` i `ai_brief_generated_at` do typu `MeetingProspect`
+- Nowa mutacja `useGenerateProspectBrief` wywolujaca edge function
+
+### 4. Komponent `ProspectingList.tsx`
+- Przycisk "Analiza AI" (ikona Brain/Sparkles) w menu kontekstowym kazdego prospekta
+- Po kliknieciu: loading spinner, wywolanie edge function
+- Po zakonczeniu: brief wyswietlany pod nazwa prospekta (rozwijalny)
+- Jesli brief juz istnieje: przycisk "Odswież brief"
+
+### 5. Komponent `ProspectAIBriefDialog.tsx` (NOWY)
+Dialog/Sheet wyswietlajacy pelny brief z formatowaniem markdown:
+- Naglowek z imieniem i firma
+- Tresc briefu renderowana przez react-markdown
+- Data wygenerowania
+- Przycisk "Generuj ponownie"
 
 ## Pliki do utworzenia / modyfikacji
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/DealContactDetailSheet.tsx` | **NOWY** -- panel boczny z sekcjami |
-| `src/hooks/useContactActivityLog.ts` | **NOWY** -- pobieranie logu aktywnosci |
-| `src/hooks/useTeamContactWeeklyStatuses.ts` | **NOWY** -- pobieranie statusow tygodniowych per kontakt |
-| `src/components/deals-team/HotLeadCard.tsx` | Dodanie onClick -> otwiera detail sheet |
-| `src/components/deals-team/TopLeadCard.tsx` | Dodanie onClick -> otwiera detail sheet |
-| `src/components/deals-team/LeadCard.tsx` | Dodanie onClick -> otwiera detail sheet |
-| `src/components/deals-team/KanbanBoard.tsx` | State dla wybranego kontaktu, renderowanie DealContactDetailSheet |
+| Migracja SQL | Nowe kolumny `ai_brief`, `ai_brief_generated_at` |
+| `supabase/functions/prospect-ai-brief/index.ts` | **NOWY** -- edge function |
+| `src/hooks/useMeetingProspects.ts` | Typ + nowa mutacja |
+| `src/components/deals-team/ProspectingList.tsx` | Przycisk AI, wyswietlanie briefu |
+| `src/components/deals-team/ProspectAIBriefDialog.tsx` | **NOWY** -- dialog z briefem |
 
-## Brak zmian w bazie danych
-Wszystkie potrzebne tabele i kolumny juz istnieja:
-- `deal_team_contacts.notes` -- notatki
-- `deal_team_activity_log` -- historia
-- `deal_team_weekly_statuses` -- statusy tygodniowe
-- `task_contacts` -- powiazanie zadan CRM z kontaktami
-- `deal_team_contacts.status` -- status kontaktu
-
-Zadania CRM sa linkowane przez `contact_id` (kontakt CRM) w tabeli `task_contacts` -- bez potrzeby dodatkowej kolumny.
+## Sekrety
+Wszystkie potrzebne klucze API sa juz skonfigurowane:
+- `PERPLEXITY_API_KEY` -- wyszukiwanie informacji
+- `LOVABLE_API_KEY` -- synteza briefu
