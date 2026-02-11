@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Flame, Star, ClipboardList, Search, AlertTriangle } from 'lucide-react';
+import { Flame, Star, ClipboardList, Search, AlertTriangle, Snowflake } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
@@ -26,8 +26,8 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
   if (prospectsLoading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
           <Skeleton key={i} className="h-24" />
         ))}
       </div>
@@ -35,7 +35,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       {/* HOT Leads */}
       <Card className="border-l-4 border-l-red-500">
         <CardContent className="p-4">
@@ -98,6 +98,24 @@ export function TeamStats({ teamId }: TeamStatsProps) {
             </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">W kolejce</p>
+        </CardContent>
+      </Card>
+
+      {/* COLD Leads */}
+      <Card className="border-l-4 border-l-slate-400">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Snowflake className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  Cold Leads
+                </span>
+              </div>
+              <p className="text-2xl font-bold">{contactStats.cold_count}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Do kwalifikacji</p>
         </CardContent>
       </Card>
 

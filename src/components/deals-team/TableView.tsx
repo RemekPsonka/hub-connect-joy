@@ -49,6 +49,7 @@ const categoryConfig: Record<DealCategory, { label: string; color: string; icon:
   hot: { label: 'HOT', color: 'bg-red-100 text-red-800 border-red-200', icon: '🔥' },
   top: { label: 'TOP', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: '⭐' },
   lead: { label: 'LEAD', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📋' },
+  cold: { label: 'COLD', color: 'bg-slate-100 text-slate-800 border-slate-200', icon: '❄️' },
 };
 
 const priorityConfig: Record<DealPriority, { label: string; color: string }> = {
@@ -131,9 +132,9 @@ export function TableView({ teamId }: TableViewProps) {
           bVal = b.contact?.company || '';
           break;
         case 'category':
-          const categoryOrder = { hot: 3, top: 2, lead: 1 };
-          aVal = categoryOrder[a.category];
-          bVal = categoryOrder[b.category];
+          const categoryOrder: Record<string, number> = { hot: 4, top: 3, lead: 2, cold: 1 };
+          aVal = categoryOrder[a.category] ?? 0;
+          bVal = categoryOrder[b.category] ?? 0;
           break;
         case 'status':
           aVal = a.status;
@@ -267,6 +268,7 @@ export function TableView({ teamId }: TableViewProps) {
             <SelectItem value="hot">🔥 HOT</SelectItem>
             <SelectItem value="top">⭐ TOP</SelectItem>
             <SelectItem value="lead">📋 LEAD</SelectItem>
+            <SelectItem value="cold">❄️ COLD</SelectItem>
           </SelectContent>
         </Select>
 

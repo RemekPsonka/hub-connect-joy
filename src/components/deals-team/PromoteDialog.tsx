@@ -32,7 +32,7 @@ import type { DealTeamContact, DealCategory, DealPriority } from '@/types/dealTe
 
 interface PromoteDialogProps {
   contact: DealTeamContact;
-  targetCategory: 'top' | 'hot';
+  targetCategory: 'lead' | 'top' | 'hot';
   teamId: string;
   open: boolean;
   onClose: () => void;
@@ -70,13 +70,14 @@ export function PromoteDialog({
     contact.value_currency || 'PLN'
   );
 
+  const isToLead = targetCategory === 'lead';
   const isToTop = targetCategory === 'top';
   const isToHot = targetCategory === 'hot';
 
   // Validation
   const canSubmitToTop = !!assignedTo && !!nextAction.trim();
   const canSubmitToHot = !!nextMeetingDate;
-  const canSubmit = isToTop ? canSubmitToTop : canSubmitToHot;
+  const canSubmit = isToLead ? true : isToTop ? canSubmitToTop : canSubmitToHot;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -114,7 +115,7 @@ export function PromoteDialog({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            {isToTop ? 'Awansuj do TOP LEAD ⭐' : 'Awansuj do HOT LEAD 🔥'}
+            {isToLead ? 'Awansuj do LEAD 📋' : isToTop ? 'Awansuj do TOP LEAD ⭐' : 'Awansuj do HOT LEAD 🔥'}
           </DialogTitle>
           <div className="text-sm text-muted-foreground">
             <p className="font-medium text-foreground">
@@ -288,7 +289,7 @@ export function PromoteDialog({
             {updateContact.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            {isToTop ? '⬆️ Awansuj do TOP' : '🔥 Awansuj do HOT'}
+            {isToLead ? '📋 Awansuj do LEAD' : isToTop ? '⬆️ Awansuj do TOP' : '🔥 Awansuj do HOT'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -49,6 +49,7 @@ const categoryConfig: Record<string, { label: string; icon: string; color: strin
   hot: { label: 'HOT', icon: '🔥', color: 'bg-red-100 text-red-800' },
   top: { label: 'TOP', icon: '⭐', color: 'bg-amber-100 text-amber-800' },
   lead: { label: 'LEAD', icon: '📋', color: 'bg-blue-100 text-blue-800' },
+  cold: { label: 'COLD', icon: '❄️', color: 'bg-slate-100 text-slate-800' },
 };
 
 const statusLabels: Record<DealContactStatus, string> = {

@@ -222,6 +222,7 @@ export function AddContactDialog({
                 <SelectItem value="hot">🔥 HOT</SelectItem>
                 <SelectItem value="top">⭐ TOP</SelectItem>
                 <SelectItem value="lead">📋 LEAD</SelectItem>
+                <SelectItem value="cold">❄️ COLD</SelectItem>
               </SelectContent>
             </Select>
           </div>
