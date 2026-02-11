@@ -6,6 +6,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Sparkles,
   Check,
   X,
@@ -15,6 +28,9 @@ import {
   Lightbulb,
   Brain,
   Loader2,
+  Search,
+  ChevronDown,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   useMeetingParticipants,
@@ -25,30 +41,46 @@ import {
 } from '@/hooks/useMeetings';
 import { toast } from 'sonner';
 import { streamAIChat } from '@/hooks/useAIChat';
+import { ParticipantBadge } from './ParticipantBadge';
+import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface MeetingRecommendationsTabProps {
   meetingId: string;
 }
 
-const statusLabels: Record<RecommendationStatus, { label: string; color: string }> = {
-  pending: { label: 'Oczekująca', color: 'bg-muted text-muted-foreground' },
-  accepted: { label: 'Zaakceptowana', color: 'bg-emerald-500/10 text-emerald-600' },
-  rejected: { label: 'Odrzucona', color: 'bg-destructive/10 text-destructive' },
-  completed: { label: 'Zrealizowana', color: 'bg-primary/10 text-primary' },
+const statusLabels: Record<RecommendationStatus, { label: string; color: string; icon: typeof Check }> = {
+  pending: { label: 'Oczekująca', color: 'bg-muted text-muted-foreground', icon: Loader2 },
+  accepted: { label: 'Zaakceptowana', color: 'bg-emerald-500/10 text-emerald-600', icon: Check },
+  rejected: { label: 'Odrzucona', color: 'bg-destructive/10 text-destructive', icon: X },
+  completed: { label: 'Zrealizowana', color: 'bg-primary/10 text-primary', icon: CheckCircle2 },
+};
+
+const matchTypeLabels: Record<string, string> = {
+  'need-offer': 'Potrzeba↔Oferta',
+  'offer-need': 'Oferta↔Potrzeba',
+  'synergy': 'Synergia',
+  'networking': 'Networking',
 };
 
 export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsTabProps) {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [loadingExplanation, setLoadingExplanation] = useState<string | null>(null);
+  const [searchDialogRec, setSearchDialogRec] = useState<string | null>(null);
+  const [searchContactId, setSearchContactId] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const { data: participants = [] } = useMeetingParticipants(meetingId);
   const { data: recommendations = [], isLoading } = useMeetingRecommendations(meetingId);
   const generateRecommendations = useGenerateRecommendations();
   const updateStatus = useUpdateRecommendationStatus();
 
-  // Get only "my members" from participants
+  // Group participants by type
   const members = participants.filter((p) => p.is_member);
+  const prospects = participants.filter((p) => !!(p as any).prospect_id);
+  const others = participants.filter((p) => !p.is_member && !(p as any).prospect_id);
 
   // Group recommendations by for_contact_id
   const groupedRecommendations = recommendations.reduce((acc, rec) => {
@@ -63,6 +95,13 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
       prev.includes(contactId)
         ? prev.filter((id) => id !== contactId)
         : [...prev, contactId]
+    );
+  };
+
+  const handleSelectAllMembers = () => {
+    const memberIds = members.map(m => m.contact_id).filter(Boolean) as string[];
+    setSelectedMembers(prev => 
+      prev.length === memberIds.length ? [] : memberIds
     );
   };
 
@@ -90,6 +129,23 @@ export function MeetingRecommendationsTab({ meetingId }: MeetingRecommendationsT
       toast.success('Status został zaktualizowany');
     } catch (error) {
       toast.error('Błąd podczas aktualizacji statusu');
+    }
+  };
+
+  const handleLinkContact = async () => {
+    if (!searchDialogRec || !searchContactId) return;
+    try {
+      const { error } = await supabase
+        .from('meeting_recommendations')
+        .update({ recommended_contact_id: searchContactId })
+        .eq('id', searchDialogRec);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['meeting-recommendations', meetingId] });
+      toast.success('Kontakt został powiązany');
+      setSearchDialogRec(null);
+      setSearchContactId(null);
+    } catch (error) {
+      toast.error('Błąd podczas powiązania kontaktu');
     }
   };
 
@@ -138,6 +194,18 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
     }
   };
 
+  // Find participant info for a contact to render badge
+  const getParticipantInfo = (contactId: string) => {
+    const p = participants.find(pp => pp.contact_id === contactId);
+    if (!p) return null;
+    return {
+      isMember: !!p.is_member,
+      isNew: !!p.is_new,
+      isProspect: !!(p as any).prospect_id,
+      primaryGroupId: p.contact?.primary_group_id,
+    };
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -151,37 +219,72 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
     );
   }
 
+  const renderParticipantGroup = (
+    title: string,
+    items: typeof participants,
+    showCheckbox: boolean,
+  ) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{title} ({items.length})</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {items.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 p-2 rounded-md border bg-card">
+              {showCheckbox && p.contact_id && (
+                <Checkbox
+                  id={`member-${p.id}`}
+                  checked={selectedMembers.includes(p.contact_id)}
+                  onCheckedChange={() => handleMemberToggle(p.contact_id)}
+                />
+              )}
+              <Label htmlFor={showCheckbox ? `member-${p.id}` : undefined} className="text-sm cursor-pointer flex-1 truncate">
+                {p.contact?.full_name || 'Nieznany'}
+              </Label>
+              <ParticipantBadge
+                isMember={!!p.is_member}
+                isNew={!!p.is_new}
+                isProspect={!!(p as any).prospect_id}
+                primaryGroupId={p.contact?.primary_group_id}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Member selection */}
+      {/* Participant selection */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Wybierz członków do rekomendacji
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Uczestnicy spotkania
+            </CardTitle>
+            {members.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleSelectAllMembers}>
+                {selectedMembers.length === members.filter(m => m.contact_id).length
+                  ? 'Odznacz wszystkich'
+                  : 'Zaznacz wszystkich członków'}
+              </Button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          {members.length === 0 ? (
+        <CardContent className="space-y-4">
+          {participants.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Brak członków oznaczonych jako "Mój członek" na liście uczestników.
+              Brak uczestników na liście spotkania.
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-                {members.map((member) => (
-                  <div key={member.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`member-${member.id}`}
-                      checked={selectedMembers.includes(member.contact_id)}
-                      onCheckedChange={() => handleMemberToggle(member.contact_id)}
-                    />
-                    <Label htmlFor={`member-${member.id}`} className="text-sm cursor-pointer">
-                      {member.contact?.full_name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
+              {renderParticipantGroup('Moi członkowie', members, true)}
+              {renderParticipantGroup('Pozostali uczestnicy', others, false)}
+              {renderParticipantGroup('Prospekty', prospects, false)}
+
+              <Separator />
 
               <div className="flex gap-3">
                 <Button
@@ -190,7 +293,7 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
                   className="gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {generateRecommendations.isPending ? 'Generowanie...' : 'Generuj rekomendacje'}
+                  {generateRecommendations.isPending ? 'Generowanie...' : `Generuj rekomendacje (${selectedMembers.length})`}
                 </Button>
 
                 <Button variant="outline" disabled className="gap-2">
@@ -218,111 +321,137 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
                         ({forContact.company})
                       </span>
                     )}
+                    <Badge variant="secondary" className="ml-2">{recs.length} rekomendacji</Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="space-y-3">
-                    {recs.map((rec, index) => (
-                      <div key={rec.id}>
-                        {index > 0 && <Separator className="my-3" />}
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-sm font-medium text-muted-foreground">
-                                #{rec.rank}
-                              </span>
-                              <span className="font-medium">
-                                {rec.recommended_contact?.full_name}
-                              </span>
-                              {rec.recommended_contact?.company && (
-                                <span className="text-sm text-muted-foreground">
-                                  ({rec.recommended_contact.company})
+                    {recs.map((rec, index) => {
+                      const pInfo = rec.recommended_contact ? getParticipantInfo(rec.recommended_contact.id) : null;
+                      return (
+                        <div key={rec.id}>
+                          {index > 0 && <Separator className="my-3" />}
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="text-sm font-medium text-muted-foreground">
+                                  #{rec.rank}
                                 </span>
-                              )}
-                              <Badge className={statusLabels[rec.status].color}>
-                                {statusLabels[rec.status].label}
-                              </Badge>
-                              {rec.match_type && rec.match_type !== 'ai_placeholder' && (
-                                <Badge variant="outline" className="text-xs">
-                                  {rec.match_type === 'need-offer' ? 'Potrzeba↔Oferta' :
-                                   rec.match_type === 'offer-need' ? 'Oferta↔Potrzeba' :
-                                   rec.match_type === 'synergy' ? 'Synergia' : 'Networking'}
-                                </Badge>
-                              )}
-                            </div>
-
-                            {rec.reasoning && (
-                              <div className="flex items-start gap-2 text-sm text-muted-foreground mt-2">
-                                <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                <span>{rec.reasoning}</span>
-                              </div>
-                            )}
-
-                            {rec.talking_points && (
-                              <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
-                                <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                <span>{rec.talking_points}</span>
-                              </div>
-                            )}
-
-                            {/* Explain button */}
-                            <div className="mt-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => handleExplainMatch(rec)}
-                                disabled={loadingExplanation === rec.id}
-                              >
-                                {loadingExplanation === rec.id ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Generowanie...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Brain className="h-3 w-3" />
-                                    Wyjaśnij dopasowanie
-                                  </>
+                                <span className="font-medium">
+                                  {rec.recommended_contact?.full_name || 'Nieznany kontakt'}
+                                </span>
+                                {rec.recommended_contact?.company && (
+                                  <span className="text-sm text-muted-foreground">
+                                    ({rec.recommended_contact.company})
+                                  </span>
                                 )}
-                              </Button>
-                            </div>
-
-                            {/* AI Explanation */}
-                            {explanations[rec.id] && (
-                              <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
-                                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                                  <Sparkles className="h-3 w-3" />
-                                  Szczegółowe wyjaśnienie AI
-                                </div>
-                                <p className="text-sm whitespace-pre-wrap">{explanations[rec.id]}</p>
+                                {/* Participant type badge */}
+                                {pInfo && (
+                                  <ParticipantBadge
+                                    isMember={pInfo.isMember}
+                                    isNew={pInfo.isNew}
+                                    isProspect={pInfo.isProspect}
+                                    primaryGroupId={pInfo.primaryGroupId}
+                                  />
+                                )}
+                                {/* Match type badge */}
+                                {rec.match_type && rec.match_type !== 'ai_placeholder' && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {matchTypeLabels[rec.match_type] || rec.match_type}
+                                  </Badge>
+                                )}
+                                {/* Status badge with dropdown */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="inline-flex items-center gap-1 cursor-pointer">
+                                      <Badge className={statusLabels[rec.status].color}>
+                                        {statusLabels[rec.status].label}
+                                        <ChevronDown className="h-3 w-3 ml-1" />
+                                      </Badge>
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    {(Object.keys(statusLabels) as RecommendationStatus[]).map(s => (
+                                      <DropdownMenuItem
+                                        key={s}
+                                        onClick={() => handleStatusUpdate(rec.id, s)}
+                                        disabled={s === rec.status}
+                                      >
+                                        {statusLabels[s].label}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
-                            )}
-                          </div>
 
-                          {rec.status === 'pending' && (
-                            <div className="flex gap-1 flex-shrink-0">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
-                                onClick={() => handleStatusUpdate(rec.id, 'accepted')}
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                onClick={() => handleStatusUpdate(rec.id, 'rejected')}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              {/* Search in database button for unlinked contacts */}
+                              {!rec.recommended_contact && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 mt-1"
+                                  onClick={() => {
+                                    setSearchDialogRec(rec.id);
+                                    setSearchContactId(null);
+                                  }}
+                                >
+                                  <Search className="h-3 w-3" />
+                                  Wyszukaj w bazie
+                                </Button>
+                              )}
+
+                              {rec.reasoning && (
+                                <div className="flex items-start gap-2 text-sm text-muted-foreground mt-2">
+                                  <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <span>{rec.reasoning}</span>
+                                </div>
+                              )}
+
+                              {rec.talking_points && (
+                                <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
+                                  <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <span>{rec.talking_points}</span>
+                                </div>
+                              )}
+
+                              {/* Explain button */}
+                              <div className="mt-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1"
+                                  onClick={() => handleExplainMatch(rec)}
+                                  disabled={loadingExplanation === rec.id || !rec.recommended_contact}
+                                >
+                                  {loadingExplanation === rec.id ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Generowanie...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Brain className="h-3 w-3" />
+                                      Wyjaśnij dopasowanie
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              {/* AI Explanation */}
+                              {explanations[rec.id] && (
+                                <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
+                                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
+                                    <Sparkles className="h-3 w-3" />
+                                    Szczegółowe wyjaśnienie AI
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap">{explanations[rec.id]}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -342,6 +471,31 @@ Odpowiedz po polsku, profesjonalnie ale przystępnie.`;
           </CardContent>
         </Card>
       )}
+
+      {/* Contact search dialog */}
+      <Dialog open={!!searchDialogRec} onOpenChange={(open) => { if (!open) { setSearchDialogRec(null); setSearchContactId(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Wyszukaj kontakt w bazie</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <Label>Wybierz istniejący kontakt</Label>
+            <ConnectionContactSelect
+              value={searchContactId}
+              onChange={setSearchContactId}
+              placeholder="Szukaj kontaktu..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSearchDialogRec(null); setSearchContactId(null); }}>
+              Anuluj
+            </Button>
+            <Button onClick={handleLinkContact} disabled={!searchContactId}>
+              Powiąż kontakt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
