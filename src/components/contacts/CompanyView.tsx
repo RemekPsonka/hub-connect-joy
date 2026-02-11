@@ -15,7 +15,8 @@ import {
   useAssignContactsByDomain,
   useUpdateCompanyRevenue,
   useRemoveGroupCompany,
-  useCreateCompanyFromDomain
+  useCreateCompanyFromDomain,
+  useCreateCompanyFromName
 } from '@/hooks/useCompanies';
 
 import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
@@ -52,6 +53,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
   const updateRevenue = useUpdateCompanyRevenue();
   const removeGroupCompany = useRemoveGroupCompany();
   const createCompanyFromDomain = useCreateCompanyFromDomain();
+  const createCompanyFromName = useCreateCompanyFromName();
   
   // Count unassigned contacts (those with matching domain but no company_id)
   const unassignedContacts = useMemo(() => {
@@ -108,6 +110,38 @@ export function CompanyView({ contact }: CompanyViewProps) {
       );
     }
     
+    if (contact.company) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <Building className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Firma: {contact.company}</h3>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                  Firma nie została jeszcze powiązana z rekordem w systemie. Utwórz rekord firmy i uruchom analizę AI.
+                </p>
+                <Button 
+                  onClick={() => createCompanyFromName.mutate({ 
+                    companyName: contact.company!, 
+                    contactId: contact.id 
+                  })}
+                  disabled={createCompanyFromName.isPending}
+                >
+                  {createCompanyFromName.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Utwórz firmę „{contact.company}" i analizuj AI
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <Card>
@@ -116,11 +150,7 @@ export function CompanyView({ contact }: CompanyViewProps) {
               <Building className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">Brak przypisanej firmy</h3>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                {contact.company ? (
-                  <>Firma "{contact.company}" nie została jeszcze powiązana z rekordem w systemie.</>
-                ) : (
-                  <>Ten kontakt nie ma przypisanej firmy. Możesz dodać firmę edytując kontakt.</>
-                )}
+                Ten kontakt nie ma przypisanej firmy. Możesz dodać firmę edytując kontakt.
               </p>
             </div>
           </CardContent>

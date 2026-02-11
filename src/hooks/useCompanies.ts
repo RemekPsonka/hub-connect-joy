@@ -940,6 +940,99 @@ export function useCreateCompanyFromDomain() {
   });
 }
 
+// ============= CREATE COMPANY FROM NAME (no domain) =============
+export function useCreateCompanyFromName() {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+
+  return useMutation({
+    mutationFn: async ({ 
+      companyName, 
+      contactId 
+    }: { 
+      companyName: string; 
+      contactId: string;
+    }) => {
+      if (!tenantId) throw new Error('No tenant');
+
+      // 1. Create company with name only
+      const { data: newCompany, error: createError } = await supabase
+        .from('companies')
+        .insert({
+          name: companyName,
+          tenant_id: tenantId,
+          company_analysis_status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      // 2. Assign contact to company
+      const { error: updateError } = await supabase
+        .from('contacts')
+        .update({ company_id: newCompany.id })
+        .eq('id', contactId);
+
+      if (updateError) {
+        console.warn('Failed to assign contact:', updateError);
+      }
+
+      // 3. Trigger AI enrichment
+      const { data: enrichResult, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
+        body: {
+          company_name: companyName,
+          company_id: newCompany.id,
+        }
+      });
+
+      if (enrichError) {
+        console.error('Enrichment failed:', enrichError);
+      } else if (enrichResult) {
+        const enriched = enrichResult?.data || enrichResult;
+        
+        const updateData = {
+          description: enriched.description || null,
+          ai_analysis: enriched,
+          company_analysis_status: 'completed',
+          company_analysis_date: new Date().toISOString(),
+          industry: enriched.industry || null,
+          logo_url: enriched.logo_url || null,
+          name: enriched.name || companyName,
+          nip: enriched.nip || null,
+          regon: enriched.regon || null,
+          krs: enriched.krs || null,
+          website: enriched.website || enriched.suggested_website || null,
+          address: enriched.headquarters?.address || null,
+          city: enriched.headquarters?.city || null,
+          postal_code: enriched.headquarters?.postal_code || null,
+          updated_at: new Date().toISOString()
+        };
+
+        await supabase
+          .from('companies')
+          .update(updateData)
+          .eq('id', newCompany.id);
+      }
+
+      return newCompany;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['contact'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['company', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['companies_list'] });
+      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
+      toast.success(`Firma "${data.name}" została utworzona i analiza AI uruchomiona`);
+    },
+    onError: (error) => {
+      console.error('Error creating company from name:', error);
+      toast.error('Błąd podczas tworzenia firmy');
+    },
+  });
+}
+
 // ============= UPDATE COMPANY REVENUE =============
 export function useUpdateCompanyRevenue() {
   const queryClient = useQueryClient();
