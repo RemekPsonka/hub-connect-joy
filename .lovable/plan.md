@@ -1,78 +1,78 @@
 
-
-# Wzmocnienie briefu pierwszej rozmowy -- glebokie wyszukiwanie osoby i firmy
+# Dodanie "Cofnij na Prospecting" i Brief AI na karcie Deal Contact
 
 ## Problem
 
-Obecne prompty Perplexity sa zbyt ogolne i krotkie. Wynik: "Brak danych o pasjach, rodzinie czy zainteresowaniach" -- bo Perplexity nie dostaje wystarczajaco precyzyjnych instrukcji wyszukiwania. Brief jest powierzchowny.
+Na panelu bocznym kontaktu w Kanbanie (DealContactDetailSheet) brakuje dwoch funkcji:
+1. **Brak przycisku "Cofnij na liste Prospecting"** -- nie mozna przeniesc kontaktu z powrotem na liste prospektow
+2. **Brak analizy AI (Brief)** -- nie mozna wygenerowac briefu do pierwszej rozmowy, a jezeli brief istnieje, nie ma gdzie go zobaczyc
 
 ## Rozwiazanie
 
-Zmiana w jednym pliku: `supabase/functions/prospect-ai-brief/index.ts`
+### 1. Nowe kolumny w bazie: `deal_team_contacts`
 
-### 1. Perplexity: z 2 zapytan na 4 rownolegle
+Dodanie `ai_brief` (text) i `ai_brief_generated_at` (timestamptz) do tabeli `deal_team_contacts` -- analogicznie jak w `meeting_prospects`.
 
-Zamiast 2 ogolnych zapytan (osoba + firma), rozbijamy na 4 wyspecjalizowane:
+### 2. Modyfikacja edge function `prospect-ai-brief`
 
-| Zapytanie | Cel |
-|---|---|
-| **Osoba -- profil zawodowy** | Rola, historia kariery, inne firmy, zarzady, rady nadzorcze, KRS |
-| **Osoba -- prywatnie** | Pasje, hobby, rodzina, organizacje, fundacje, wywiady, wypowiedzi medialne, social media |
-| **Firma -- profil** | Dzialalnosc, lokalizacje, majatek, skala, przychody, zatrudnienie, www |
-| **Firma -- aktualnosci** | Notki prasowe, przetargi, inwestycje, nagrody, eventy, kontrakty, zmiany wlascicielskie |
+Obecna funkcja dziala tylko z tabela `meeting_prospects`. Rozszerzenie o parametr `source`:
+- `source: "prospect"` + `prospectId` -- obecna logika (odczyt/zapis z `meeting_prospects`)
+- `source: "deal_contact"` + `dealContactId` -- nowa logika (odczyt z `deal_team_contacts` JOIN `contacts`, zapis do `deal_team_contacts`)
 
-Wszystkie 4 zapytania lecą rownolegle przez `Promise.all`.
+Prompty Perplexity i synteza AI pozostaja identyczne -- zmienia sie tylko skad pobieramy dane osoby i gdzie zapisujemy brief.
 
-### 2. Prompty Perplexity -- znacznie bardziej szczegolowe
+### 3. Nowy hook: `useGenerateDealContactBrief`
 
-Kazdy prompt bedzie zawieral konkretne instrukcje wyszukiwania, np.:
+W `useMeetingProspects.ts` (lub nowy plik) -- mutation analogiczny do `useGenerateProspectBrief`, ale wysylajacy `source: "deal_contact"` i `dealContactId`.
 
-**Osoba -- prywatnie:**
-- Szukaj wynikow typu: "imie nazwisko + wywiad", "imie nazwisko + pasja", "imie nazwisko + fundacja"
-- Sprawdz LinkedIn, Golden.com, social media
-- Rodzina: partner/zona/maz, dzieci (jezeli publicznie dostepne)
-- Organizacje: izby handlowe, stowarzyszenia, kluby biznesowe, rotary, lions
-- Cytaty z wywiadow, wypowiedzi na konferencjach
+### 4. Nowy hook: `useRevertToProspecting`
 
-**Firma -- aktualnosci:**
-- Notki prasowe z ostatnich 2 lat
-- Przetargi publiczne (TED, BIP)
-- Nagrody, wyroznienia, rankingi
-- Zmiany w KRS, nowi wspolnicy, podwyzszenie kapitalu
-- Eventy, sponsoring, targi branżowe
+Mutation ktory:
+- Pobiera dane kontaktu z `contacts` (full_name, company, position, industry, email, phone, linkedin)
+- Tworzy nowy rekord w `meeting_prospects` z tymi danymi i `is_prospecting: true`, `prospecting_status: 'new'`
+- Usuwa rekord z `deal_team_contacts`
+- Loguje akcje w activity log
 
-### 3. Prompt syntezy AI -- rozbudowany
+### 5. UI w DealContactDetailSheet
 
-Sekcja **Osoba** z "2-3 zdan" na pelny profil z podsekcjami:
-- Kariera i rola
-- Inne firmy i zarzady
-- Pasje, zainteresowania, hobby
-- Rodzina (jezeli znane)
-- Organizacje, fundacje, CSR
-- Cytaty / wypowiedzi medialne
+Dodanie dwoch nowych sekcji:
 
-Sekcja **Firma** z pelnym rozbudowaniem:
-- Profil i dzialalnosc
-- Lokalizacje i majatek
-- Skala (przychody, zatrudnienie)
-- Aktualnosci: ostatnie inwestycje, przetargi, notki prasowe
-- Spolki powiazane, grupa kapitalowa
+**Sekcja "Brief AI"** (miedzy Notatki a Statusy tygodniowe):
+- Przycisk "Generuj Brief AI" (ikona Sparkles) -- uruchamia `useGenerateDealContactBrief`
+- Jezeli brief istnieje: wyswietla tresc w markdown + date generowania + przycisk "Odswiez"
+- Klikniecie w tytul otwiera `ProspectAIBriefDialog` z pelna trescia
 
-### 4. Upgrade modelu Perplexity
+**Przycisk "Cofnij na Prospecting"** (obok "Usun z zespolu"):
+- AlertDialog z potwierdzeniem
+- Po kliknieciu: tworzy prospect, usuwa z Kanbana, zamyka panel
 
-Zmiana z `sonar` na `sonar-pro` -- model z wielokrokowym rozumowaniem i 2x wiecej cytatow. Lepiej radzi sobie ze znajdowaniem ukrytych informacji.
-
-### 5. Usuniecie filtra czasowego
-
-Obecny `search_recency_filter: "year"` ogranicza wyniki do ostatniego roku. Dla zapytan o osobe (kariera, rodzina) to za malo. Filtr roczny pozostaje tylko dla zapytania o aktualnosci firmy.
-
-## Zmiana w pliku
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `supabase/functions/prospect-ai-brief/index.ts` | Nowe 4 prompty Perplexity, nowy prompt syntezy, model sonar-pro |
+| Migracja SQL | Dodanie `ai_brief`, `ai_brief_generated_at` do `deal_team_contacts` |
+| `supabase/functions/prospect-ai-brief/index.ts` | Obsluga `source: "deal_contact"` obok istniejacego `source: "prospect"` |
+| `src/hooks/useDealsTeamContacts.ts` | Nowe hooki: `useGenerateDealContactBrief`, `useRevertToProspecting` |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | Sekcja Brief AI + przycisk Cofnij na Prospecting |
 
-## Efekt
+## Logika cofania na Prospecting
 
-Brief bedzie zawieral znacznie wiecej "smaczkow" -- cytaty z wywiadow, informacje o rodzinie, pasjach, organizacjach, ostatnich inwestycjach firmy, notkach prasowych. Kazdy znaleziony fakt pojawi sie w briefie.
+```text
+1. Pobierz dane z contacts (full_name, company, position, industry)
+2. INSERT do meeting_prospects (team_id, tenant_id, dane osoby, is_prospecting=true, status='new')
+3. DELETE z deal_team_contacts
+4. INSERT do deal_team_activity_log (action='contact_removed', note='Cofnieto na liste prospecting')
+5. Invalidate queries
+```
 
+## Logika Brief AI na Deal Contact
+
+```text
+1. Frontend wywoluje edge function z { source: "deal_contact", dealContactId }
+2. Edge function: SELECT z deal_team_contacts JOIN contacts WHERE id = dealContactId
+3. Pobiera full_name, company, position, industry z kontaktu
+4. 4x Perplexity queries (identyczne jak dla prospekta)
+5. Synteza AI (identyczna)
+6. UPDATE deal_team_contacts SET ai_brief = ..., ai_brief_generated_at = now()
+7. Zwraca brief do frontendu
+```
