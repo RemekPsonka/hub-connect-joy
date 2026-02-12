@@ -1,20 +1,43 @@
 
-# Prowizja zawsze w % -- dla wszystkich kategorii
+
+# Sumowanie wartosci produktow dla wszystkich kategorii
 
 ## Problem
 
-Obecnie tylko kategoria `client` traktuje pole prowizji jako procent. Dla pozostalych (HOT, TOP, LEAD, COLD) pole jest oznaczone "Prowizja (PLN)" i wartosc jest zapisywana jako kwota. Na przykladzie ze screenshota: wpisano 18 (myslac o 18%), ale system zapisal 18 PLN zamiast 90 000 PLN (18% z 500K).
+Karty statystyk HOT/TOP/LEAD/COLD pokazuja "0 PLN" bo uzywaja pola `estimated_value` z tabeli kontaktow (ktore nie jest wypelniane). Karta "Klienci" dziala poprawnie, bo liczy sume z tabeli produktow (`deal_team_client_products`). Dane produktow sa juz pobierane (`allProducts`, `allContacts`) -- brakuje tylko obliczen per-kategoria.
 
 ## Rozwiazanie
 
-Ujednolicenie logiki -- pole prowizji **zawsze** przyjmuje procent, niezaleznie od kategorii. Kwota prowizji (`expectedCommission`) jest obliczana automatycznie.
+W `TeamStats.tsx` dodac obliczenia wartosci produktow per kategoria (HOT, TOP, LEAD, COLD) analogicznie do `clientTotalValue`, i wyswietlic je w odpowiednich kartach.
 
-## Zmiany w pliku `src/components/deals-team/ClientProductsPanel.tsx`
+## Zmiany
 
-1. **Usuniecie warunku `isClient`** z logiki obliczen -- ta sama formula dla wszystkich:
-   - `commissionPercent = parseFloat(commission)` (wpisany procent)
-   - `expectedCommission = dealValue * (commissionPercent / 100)` (obliczona kwota)
+**Plik: `src/components/deals-team/TeamStats.tsx`**
 
-2. **Etykieta pola**: zawsze "Prowizja (%)" -- usuniecie warunkowego przelaczania
+1. Dodac `useMemo` obliczajacy sume `deal_value` produktow per kategoria:
 
-3. **Placeholder i walidacja**: zawsze `min=0`, `max=100`, placeholder "np. 8"
+```text
+const categoryValues = useMemo(() => {
+  const values: Record<string, number> = { hot: 0, top: 0, lead: 0, cold: 0 };
+  allProducts.forEach((p) => {
+    const contact = allContacts.find((c) => c.id === p.team_contact_id);
+    if (contact && contact.category in values) {
+      values[contact.category] += p.deal_value;
+    }
+  });
+  return values;
+}, [allProducts, allContacts]);
+```
+
+2. Zaktualizowac karty HOT, TOP, LEAD, COLD -- zamiast `contactStats.total_value` wyswietlac `categoryValues.hot` / `.top` / `.lead` / `.cold`
+
+3. Dodac sekcje "Wartosc" do kart TOP, LEAD, COLD (obecnie maja tylko tekst "Gotowe do awansu" / "W kolejce" / "Do kwalifikacji") -- analogicznie do karty HOT i Klienci
+
+| Karta | Obecna wartosc | Po zmianie |
+|---|---|---|
+| HOT Leads | `contactStats.total_value` (0 PLN) | `categoryValues.hot` (suma produktow HOT) |
+| TOP Leads | brak wartosci | `categoryValues.top` |
+| Leads | brak wartosci | `categoryValues.lead` |
+| Cold Leads | brak wartosci | `categoryValues.cold` |
+| Klienci | `clientTotalValue` | bez zmian |
+
