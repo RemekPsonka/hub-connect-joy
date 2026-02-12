@@ -1,99 +1,82 @@
 
-# Rozbudowa widoku statystyk + Modul Prowizje
 
-## Czesc 1: Rozdzielenie Wartosc / Prowizja w kartach statystyk
+# Etap 1: Naprawa polityk RLS -- INSERT z `WITH CHECK (true)`
 
-Obecnie karty HOT/TOP/LEAD/COLD/Klienci pokazuja tylko "Wartosc". Dodamy druga linijke "Prowizja" pod wartoscia, obliczana z sumy `expected_commission` produktow per kategoria.
+## Zakres
 
-**Plik: `src/components/deals-team/TeamStats.tsx`**
-- Rozszerzenie `categoryValues` o pole `commission` per kategoria
-- Analogiczne rozszerzenie `clientTotalValue` o `clientTotalCommission`
-- W kazdej karcie wyswietlenie dwoch linii: Wartosc + Prowizja (jesli > 0)
+Dwie zmiany w bazie danych (jedna migracja SQL) oraz jedna drobna zmiana w kodzie frontend.
 
 ---
 
-## Czesc 2: Nowy modul "Prowizje" -- nowa zakladka w Zespol Deals
+## Zmiana 1a: Tabela `error_logs` -- ograniczenie INSERT
 
-### 2a. Nowa tabela w bazie danych
+**Obecny stan**: Polityka `"Anyone can insert error logs"` z `WITH CHECK (true)` -- kazdy moze wstawiac logi bez autentykacji.
 
-Tabela `deal_team_actual_commissions` do rejestrowania rzeczywistych skladek i prowizji:
+**Nowa polityka**:
 
 ```text
-id              uuid PK
-team_id         uuid FK -> deal_teams
-team_contact_id uuid FK -> deal_team_contacts
-client_product_id uuid FK -> deal_team_client_products (nullable)
-tenant_id       uuid FK -> tenants
-month_date      date         -- miesiac rozliczenia (np. 2026-02-01)
-actual_premium  numeric      -- realna skladka otrzymana
-actual_commission numeric    -- realna prowizja otrzymana
-notes           text         -- komentarz
-created_at      timestamptz
-updated_at      timestamptz
+DROP POLICY "Anyone can insert error logs" ON public.error_logs;
+CREATE POLICY "Authenticated users insert own errors" ON public.error_logs
+  FOR INSERT
+  WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND (user_id IS NULL OR user_id = auth.uid())
+  );
 ```
 
-RLS: tenant_id = auth.uid() tenant pattern (analogicznie do istniejacych tabel).
+**Wplyw na kod**: Komponent `ErrorBoundary.tsx` (linia 47-55) wstawia logi z `user_id: user?.id || null`. Po zmianie:
+- Zalogowany uzytkownik -- INSERT przejdzie (auth.uid() = user.id)
+- Niezalogowany uzytkownik -- INSERT zostanie zablokowany (auth.uid() IS NULL)
 
-### 2b. Nowa zakladka "Prowizje" w dashboardzie
-
-**Plik: `src/pages/DealsTeamDashboard.tsx`**
-- Dodanie nowej opcji `viewMode = 'commissions'` do istniejacych zakladek
-- Ikona: `Wallet` lub `Receipt`
-
-### 2c. Nowy komponent `CommissionsTab`
-
-**Plik: `src/components/deals-team/CommissionsTab.tsx`**
-
-Glowny widok z trzema sekcjami:
-
-1. **KPI karty** (gora):
-   - Prognozowana prowizja (suma `expected_commission` z produktow klientow)
-   - Otrzymana prowizja (suma `actual_commission` z nowej tabeli)
-   - Roznica (prognoza - realne) z kolorowym wskaznikiem
-   - % realizacji
-
-2. **Tabela miesieczna** (srodek):
-   - Wiersze = miesiace (12 miesiecy)
-   - Kolumny: Miesiac | Prognoza skladki | Realna skladka | Prognoza prowizji | Realna prowizja | Roznica | %
-   - Prognoza pobierana z `deal_team_revenue_forecasts` (piki miesieczne)
-   - Prowizja prognozowana = prognoza skladki * sredni % prowizji
-   - Realne wartosci z `deal_team_actual_commissions`
-   - Mozliwosc edycji realnych wartosci inline (klikniecie w komorke)
-
-3. **Szczegoly per klient** (dol):
-   - Rozwijana lista klientow z ich produktami
-   - Przy kazdym produkcie: prognoza vs realne
-   - Kolorowe oznaczenie rozjezdzania sie (zielony = w normie, zolty = -10-20%, czerwony = >20% roznica)
-
-### 2d. Hook `useCommissions`
-
-**Plik: `src/hooks/useCommissions.ts`**
-
-- `useActualCommissions(teamId, year)` -- pobieranie realnych danych
-- `useUpsertActualCommission()` -- wstawianie/aktualizacja miesiecznych danych
-- `useCommissionsSummary(teamId, year)` -- obliczanie podsumowania prognoza vs realne
-
-### 2e. Eksport i rejestracja
-
-**Plik: `src/components/deals-team/index.ts`** -- eksport `CommissionsTab`
+Aby uniknac cichego bledu w konsoli gdy uzytkownik nie jest zalogowany, dodamy warunek `if (user)` przed insertem w `ErrorBoundary.tsx` (linia 47). Bledy niezalogowanych uzytkownikow beda logowane tylko w konsoli przegladarki.
 
 ---
 
-## Podsumowanie zmian
+## Zmiana 1b: Tabela `user_password_policies` -- ograniczenie INSERT
 
-| Element | Typ | Opis |
+**Obecny stan**: Polityka `"Service can insert password policy"` z `WITH CHECK (true)` -- kazdy moze wstawiac/modyfikowac polityki hasel dowolnego uzytkownika.
+
+**Nowa polityka**:
+
+```text
+DROP POLICY "Service can insert password policy" ON public.user_password_policies;
+CREATE POLICY "Users insert own password policy" ON public.user_password_policies
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+```
+
+**Wplyw na kod**: Hook `usePasswordPolicy.ts` (linia 58-63) wstawia rekord z `user_id: user.id` -- zawsze `auth.uid() = user_id`. Zmiana nie zlamie zadnej logiki. Komponenty `ForcePasswordChange.tsx` i `PasswordChangeForm.tsx` uzywaja tylko UPDATE (ktory juz ma poprawna polityke `auth.uid() = user_id`).
+
+---
+
+## Zmiana 1c: Zabezpieczenie `ErrorBoundary.tsx`
+
+Dodac warunek `if (user)` przed insertem do `error_logs`, zeby uniknac bledu RLS w konsoli gdy uzytkownik nie jest zalogowany:
+
+```text
+// Przed:
+await supabase.from('error_logs').insert({
+  user_id: user?.id || null,
+  ...
+});
+
+// Po:
+if (user) {
+  await supabase.from('error_logs').insert({
+    user_id: user.id,
+    tenant_id: tenantId,
+    ...
+  });
+}
+```
+
+---
+
+## Podsumowanie
+
+| Zmiana | Typ | Ryzyko zlamania |
 |---|---|---|
-| `deal_team_actual_commissions` | Nowa tabela DB | Realne skladki i prowizje per miesiac/klient/produkt |
-| `TeamStats.tsx` | Modyfikacja | Dodanie linii "Prowizja" w kartach |
-| `DealsTeamDashboard.tsx` | Modyfikacja | Nowa zakladka "Prowizje" |
-| `CommissionsTab.tsx` | Nowy komponent | Glowny widok modulu prowizji |
-| `useCommissions.ts` | Nowy hook | Logika pobierania i zapisywania prowizji |
-| `index.ts` | Modyfikacja | Eksport nowego komponentu |
+| 1a: error_logs INSERT policy | Migracja SQL | Niskie -- bledy niezalogowanych nie beda w bazie (tylko konsola) |
+| 1b: user_password_policies INSERT policy | Migracja SQL | Zerowe -- kod juz ustawia user_id = auth.uid() |
+| 1c: ErrorBoundary warunek if(user) | Kod frontend | Zerowe -- zapobiega bledowi RLS w konsoli |
 
-## Logika kontrolna
-
-System pozwoli na:
-- Porownanie prognozowanych prowizji (z istniejacych prognoz klientow) z realnymi
-- Identyfikacje rozjezdzania sie na poziomie: miesiaca, klienta, produktu
-- Wpisywanie realnych skladek i prowizji per miesiac
-- Wizualne oznaczenie odchylen (kolorystyka)
