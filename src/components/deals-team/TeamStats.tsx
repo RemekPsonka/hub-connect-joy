@@ -42,6 +42,17 @@ export function TeamStats({ teamId }: TeamStatsProps) {
     return total;
   }, [allProducts, allContacts]);
 
+  const categoryValues = useMemo(() => {
+    const values: Record<string, number> = { hot: 0, top: 0, lead: 0, cold: 0 };
+    allProducts.forEach((p) => {
+      const contact = allContacts.find((c) => c.id === p.team_contact_id);
+      if (contact && contact.category in values) {
+        values[contact.category] += p.deal_value;
+      }
+    });
+    return values;
+  }, [allProducts, allContacts]);
+
   const clientTotalValue = useMemo(() => {
     return allProducts
       .filter((p) => {
@@ -80,7 +91,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           <div className="mt-2 space-y-1">
             <p className="text-xs text-muted-foreground">Wartość</p>
             <p className="text-sm font-semibold">
-              {contactStats.total_value.toLocaleString('pl-PL')} PLN
+              {formatCompactCurrency(categoryValues.hot)}
             </p>
           </div>
           {contactStats.overdue_count > 0 && (
@@ -106,7 +117,12 @@ export function TeamStats({ teamId }: TeamStatsProps) {
               <p className="text-2xl font-bold">{contactStats.top_count}</p>
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Gotowe do awansu</p>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-muted-foreground">Wartość</p>
+            <p className="text-sm font-semibold">
+              {formatCompactCurrency(categoryValues.top)}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -124,7 +140,12 @@ export function TeamStats({ teamId }: TeamStatsProps) {
               <p className="text-2xl font-bold">{contactStats.lead_count}</p>
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">W kolejce</p>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-muted-foreground">Wartość</p>
+            <p className="text-sm font-semibold">
+              {formatCompactCurrency(categoryValues.lead)}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -142,7 +163,12 @@ export function TeamStats({ teamId }: TeamStatsProps) {
               <p className="text-2xl font-bold">{contactStats.cold_count}</p>
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Do kwalifikacji</p>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-muted-foreground">Wartość</p>
+            <p className="text-sm font-semibold">
+              {formatCompactCurrency(categoryValues.cold)}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
