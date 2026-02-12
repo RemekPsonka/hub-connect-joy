@@ -27,7 +27,7 @@ export async function verifyAuth(
     return { error: "Missing authorization header", status: 401 };
   }
 
-  // 2. Verify the token using getClaims (more reliable than getUser)
+  // 2. Verify the token using getClaims (faster, works with signing-keys)
   const token = authHeader.replace("Bearer ", "");
   
   // Create a client with the user's token to validate it
@@ -37,14 +37,14 @@ export async function verifyAuth(
     global: { headers: { Authorization: authHeader } }
   });
   
-  const { data: claimsData, error: claimsError } = await userClient.auth.getUser();
+  const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
 
-  if (claimsError || !claimsData?.user) {
-    console.error('Auth error:', claimsError?.message || 'No user found');
+  if (claimsError || !claimsData?.claims) {
+    console.error('Auth error:', claimsError?.message || 'No claims found');
     return { error: "Invalid or expired token", status: 401 };
   }
 
-  const user = claimsData.user;
+  const user = { id: claimsData.claims.sub as string, email: claimsData.claims.email as string | undefined };
 
   // 3. Get tenant_id from directors table (using service role client for DB access)
   const { data: director } = await supabase
