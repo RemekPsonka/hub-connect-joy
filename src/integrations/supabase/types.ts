@@ -7676,9 +7676,14 @@ export type Database = {
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
+      is_contact_in_my_deal_team: {
+        Args: { _contact_id: string }
+        Returns: boolean
+      }
       is_deal_team_member:
         | { Args: { _team_id: string; _user_id: string }; Returns: boolean }
         | { Args: { p_team_id: string }; Returns: boolean }
+      is_group_shared_to_me: { Args: { _group_id: string }; Returns: boolean }
       is_sales_representative: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin:
         | { Args: never; Returns: boolean }
