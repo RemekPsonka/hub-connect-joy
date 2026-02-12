@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -12,12 +12,13 @@ import {
   TeamSettings,
   ProspectingTab,
   ClientsTab,
+  CommissionsTab,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions';
 
 const STORAGE_KEY = 'deals-team-selected';
 
@@ -159,6 +160,10 @@ export default function DealsTeamDashboard() {
                 <UserCheck className="h-4 w-4" />
                 <span className="hidden sm:inline">Klienci</span>
               </TabsTrigger>
+              <TabsTrigger value="commissions" className="gap-2">
+                <Receipt className="h-4 w-4" />
+                <span className="hidden sm:inline">Prowizje</span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -186,6 +191,10 @@ export default function DealsTeamDashboard() {
 
       {selectedTeamId && viewMode === 'clients' && (
         <ClientsTab teamId={selectedTeamId} />
+      )}
+
+      {selectedTeamId && viewMode === 'commissions' && (
+        <CommissionsTab teamId={selectedTeamId} />
       )}
 
       {/* Create Team Dialog */}

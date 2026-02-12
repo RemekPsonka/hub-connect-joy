@@ -43,23 +43,33 @@ export function TeamStats({ teamId }: TeamStatsProps) {
   }, [allProducts, allContacts]);
 
   const categoryValues = useMemo(() => {
-    const values: Record<string, number> = { hot: 0, top: 0, lead: 0, cold: 0 };
+    const values: Record<string, { value: number; commission: number }> = {
+      hot: { value: 0, commission: 0 },
+      top: { value: 0, commission: 0 },
+      lead: { value: 0, commission: 0 },
+      cold: { value: 0, commission: 0 },
+    };
     allProducts.forEach((p) => {
       const contact = allContacts.find((c) => c.id === p.team_contact_id);
       if (contact && contact.category in values) {
-        values[contact.category] += p.deal_value;
+        values[contact.category].value += p.deal_value;
+        values[contact.category].commission += p.expected_commission;
       }
     });
     return values;
   }, [allProducts, allContacts]);
 
-  const clientTotalValue = useMemo(() => {
-    return allProducts
-      .filter((p) => {
-        const contact = clients.find((c) => c.id === p.team_contact_id);
-        return !!contact;
-      })
-      .reduce((s, p) => s + p.deal_value, 0);
+  const { clientTotalValue, clientTotalCommission } = useMemo(() => {
+    let value = 0;
+    let commission = 0;
+    allProducts.forEach((p) => {
+      const contact = clients.find((c) => c.id === p.team_contact_id);
+      if (contact) {
+        value += p.deal_value;
+        commission += p.expected_commission;
+      }
+    });
+    return { clientTotalValue: value, clientTotalCommission: commission };
   }, [allProducts, clients]);
 
   if (prospectsLoading) {
@@ -91,8 +101,16 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           <div className="mt-2 space-y-1">
             <p className="text-xs text-muted-foreground">Wartość</p>
             <p className="text-sm font-semibold">
-              {formatCompactCurrency(categoryValues.hot)}
+              {formatCompactCurrency(categoryValues.hot.value)}
             </p>
+            {categoryValues.hot.commission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-red-500">
+                  {formatCompactCurrency(categoryValues.hot.commission)}
+                </p>
+              </>
+            )}
           </div>
           {contactStats.overdue_count > 0 && (
             <div className="mt-2 flex items-center gap-1 text-xs text-destructive font-medium">
@@ -120,8 +138,16 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           <div className="mt-2 space-y-1">
             <p className="text-xs text-muted-foreground">Wartość</p>
             <p className="text-sm font-semibold">
-              {formatCompactCurrency(categoryValues.top)}
+              {formatCompactCurrency(categoryValues.top.value)}
             </p>
+            {categoryValues.top.commission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-amber-500">
+                  {formatCompactCurrency(categoryValues.top.commission)}
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -143,8 +169,16 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           <div className="mt-2 space-y-1">
             <p className="text-xs text-muted-foreground">Wartość</p>
             <p className="text-sm font-semibold">
-              {formatCompactCurrency(categoryValues.lead)}
+              {formatCompactCurrency(categoryValues.lead.value)}
             </p>
+            {categoryValues.lead.commission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-blue-500">
+                  {formatCompactCurrency(categoryValues.lead.commission)}
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -166,8 +200,16 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           <div className="mt-2 space-y-1">
             <p className="text-xs text-muted-foreground">Wartość</p>
             <p className="text-sm font-semibold">
-              {formatCompactCurrency(categoryValues.cold)}
+              {formatCompactCurrency(categoryValues.cold.value)}
             </p>
+            {categoryValues.cold.commission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-slate-500">
+                  {formatCompactCurrency(categoryValues.cold.commission)}
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -191,6 +233,14 @@ export function TeamStats({ teamId }: TeamStatsProps) {
             <p className="text-sm font-semibold text-emerald-600">
               {formatCompactCurrency(clientTotalValue)}
             </p>
+            {clientTotalCommission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-emerald-500">
+                  {formatCompactCurrency(clientTotalCommission)}
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
