@@ -36,10 +36,12 @@ import {
 import { GroupBadge } from './GroupBadge';
 import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { BulkMergeContactModal } from './BulkMergeContactModal';
+import { DealFunnelBadges } from './DealFunnelBadges';
 import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, useGenerateContactProfile, type ContactWithGroup } from '@/hooks/useContacts';
+import type { ContactsTableColumns } from '@/hooks/useContactsTableSettings';
+import type { BulkContactDealTeam } from '@/hooks/useContactsDealTeamsBulk';
 
 const ROW_HEIGHT = 56;
-const CONTACTS_MIN_WIDTH = 1190;
 
 interface ContactsTableProps {
   contacts: ContactWithGroup[];
@@ -52,7 +54,22 @@ interface ContactsTableProps {
   onPageSizeChange: (size: number) => void;
   onSortChange: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
   isLoading: boolean;
+  columns: ContactsTableColumns;
+  dealTeamsMap: Map<string, BulkContactDealTeam[]>;
 }
+
+// Column width definitions
+const COL_WIDTHS = {
+  checkbox: 50,
+  name: 220,
+  company: 180,
+  funnels: 200,
+  phone: 150,
+  email: 180,
+  group: 100,
+  aiProfile: 140,
+  relationshipStrength: 130,
+};
 
 export function ContactsTable({
   contacts,
@@ -65,6 +82,8 @@ export function ContactsTable({
   onPageSizeChange,
   onSortChange,
   isLoading,
+  columns,
+  dealTeamsMap,
 }: ContactsTableProps) {
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -84,6 +103,16 @@ export function ContactsTable({
   });
 
   const totalPages = Math.ceil(totalCount / pageSize);
+
+  // Compute dynamic min width based on visible columns
+  const minWidth = COL_WIDTHS.checkbox + COL_WIDTHS.name
+    + (columns.company ? COL_WIDTHS.company : 0)
+    + (columns.funnels ? COL_WIDTHS.funnels : 0)
+    + (columns.phone ? COL_WIDTHS.phone : 0)
+    + (columns.email ? COL_WIDTHS.email : 0)
+    + (columns.group ? COL_WIDTHS.group : 0)
+    + (columns.aiProfile ? COL_WIDTHS.aiProfile : 0)
+    + (columns.relationshipStrength ? COL_WIDTHS.relationshipStrength : 0);
 
   const getInitials = (name: string) => {
     return name
@@ -241,43 +270,47 @@ export function ContactsTable({
       {/* Table */}
       <div className="border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <div style={{ minWidth: CONTACTS_MIN_WIDTH }}>
+          <div style={{ minWidth }}>
             {/* Header */}
             <div className="flex items-center border-b bg-muted/50 h-12 text-sm font-medium text-muted-foreground">
-              <div className="px-4 w-[50px] flex-shrink-0">
+              <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.checkbox }}>
                 <Checkbox
                   checked={selectedIds.length === contacts.length && contacts.length > 0}
                   onCheckedChange={handleSelectAll}
                 />
               </div>
-              <div className="px-4 w-[220px] flex-shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 -ml-3"
-                  onClick={() => handleSort('full_name')}
-                >
+              <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.name }}>
+                <Button variant="ghost" size="sm" className="gap-1 -ml-3" onClick={() => handleSort('full_name')}>
                   Imię i nazwisko
                   <ArrowUpDown className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="px-4 w-[180px] flex-shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 -ml-3"
-                  onClick={() => handleSort('company')}
-                >
-                  Firma
-                  <ArrowUpDown className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="px-4 w-[140px] flex-shrink-0">Stanowisko</div>
-              <div className="px-4 w-[150px] flex-shrink-0">Telefon prywatny</div>
-              <div className="px-4 w-[180px] flex-shrink-0">Email</div>
-              <div className="px-4 w-[100px] flex-shrink-0">Grupa</div>
-              <div className="px-4 w-[140px] flex-shrink-0">Profil AI</div>
-              <div className="px-4 w-[130px] flex-shrink-0">Siła relacji</div>
+              {columns.company && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.company }}>
+                  <Button variant="ghost" size="sm" className="gap-1 -ml-3" onClick={() => handleSort('company')}>
+                    Firma
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              {columns.funnels && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.funnels }}>Lejki</div>
+              )}
+              {columns.phone && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.phone }}>Telefon prywatny</div>
+              )}
+              {columns.email && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.email }}>Email</div>
+              )}
+              {columns.group && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.group }}>Grupa</div>
+              )}
+              {columns.aiProfile && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.aiProfile }}>Profil AI</div>
+              )}
+              {columns.relationshipStrength && (
+                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.relationshipStrength }}>Siła relacji</div>
+              )}
             </div>
 
             {/* Virtualized Body */}
@@ -289,6 +322,7 @@ export function ContactsTable({
               <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((virtualItem) => {
                   const contact = contacts[virtualItem.index];
+                  const contactDealTeams = dealTeamsMap.get(contact.id) || [];
                   return (
                     <div
                       key={contact.id}
@@ -299,13 +333,13 @@ export function ContactsTable({
                       }}
                       onClick={() => navigate(`/contacts/${contact.id}`)}
                     >
-                      <div className="px-4 w-[50px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.checkbox }} onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedIds.includes(contact.id)}
                           onCheckedChange={(checked) => handleSelectOne(contact.id, checked as boolean)}
                         />
                       </div>
-                      <div className="px-4 w-[220px] flex-shrink-0">
+                      <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.name }}>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="text-xs bg-primary text-primary-foreground">
@@ -315,68 +349,78 @@ export function ContactsTable({
                           <span className="font-medium truncate">{contact.full_name}</span>
                         </div>
                       </div>
-                      <div className="px-4 w-[180px] flex-shrink-0 text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          {contact.company && <CompanyLogo companyName={contact.company} size="sm" />}
-                          <span className="truncate">{contact.company || '-'}</span>
+                      {columns.company && (
+                        <div className="px-4 flex-shrink-0 text-muted-foreground" style={{ width: COL_WIDTHS.company }}>
+                          <div className="flex items-center gap-2">
+                            {contact.company && <CompanyLogo companyName={contact.company} size="sm" />}
+                            <span className="truncate">{contact.company || '-'}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="px-4 w-[140px] flex-shrink-0 text-muted-foreground truncate">{contact.position || '-'}</div>
-                      <div className="px-4 w-[150px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {contact.phone ? (
-                          <a
-                            href={`tel:${contact.phone}`}
-                            className="text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Phone className="h-3 w-3" />
-                            <span className="truncate">{contact.phone}</span>
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </div>
-                      <div className="px-4 w-[180px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {contact.email ? (
-                          <a
-                            href={`mailto:${contact.email}`}
-                            className="text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Mail className="h-3 w-3" />
-                            <span className="truncate">{contact.email}</span>
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </div>
-                      <div className="px-4 w-[100px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <GroupBadge group={contact.contact_groups} compact />
-                      </div>
-                      <div className="px-4 w-[140px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {contact.profile_summary ? (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Check className="h-3 w-3 text-green-600" />
-                            Wygenerowano
-                          </span>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={generatingId === contact.id}
-                            onClick={(e) => handleGenerateProfile(e, contact.id)}
-                            className="gap-1"
-                          >
-                            {generatingId === contact.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-3 w-3" />
-                            )}
-                            Generuj AI
-                          </Button>
-                        )}
-                      </div>
-                      <div className="px-4 w-[130px] flex-shrink-0">
-                        <RelationshipStrengthBar value={contact.relationship_strength || 5} />
-                      </div>
+                      )}
+                      {columns.funnels && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.funnels }} onClick={(e) => e.stopPropagation()}>
+                          <DealFunnelBadges contactId={contact.id} dealTeams={contactDealTeams} />
+                        </div>
+                      )}
+                      {columns.phone && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.phone }} onClick={(e) => e.stopPropagation()}>
+                          {contact.phone ? (
+                            <a href={`tel:${contact.phone}`} className="text-primary hover:underline flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              <span className="truncate">{contact.phone}</span>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </div>
+                      )}
+                      {columns.email && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.email }} onClick={(e) => e.stopPropagation()}>
+                          {contact.email ? (
+                            <a href={`mailto:${contact.email}`} className="text-primary hover:underline flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              <span className="truncate">{contact.email}</span>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </div>
+                      )}
+                      {columns.group && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.group }} onClick={(e) => e.stopPropagation()}>
+                          <GroupBadge group={contact.contact_groups} compact />
+                        </div>
+                      )}
+                      {columns.aiProfile && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.aiProfile }} onClick={(e) => e.stopPropagation()}>
+                          {contact.profile_summary ? (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Check className="h-3 w-3 text-green-600" />
+                              Wygenerowano
+                            </span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={generatingId === contact.id}
+                              onClick={(e) => handleGenerateProfile(e, contact.id)}
+                              className="gap-1"
+                            >
+                              {generatingId === contact.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3 w-3" />
+                              )}
+                              Generuj AI
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      {columns.relationshipStrength && (
+                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.relationshipStrength }}>
+                          <RelationshipStrengthBar value={contact.relationship_strength || 5} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}

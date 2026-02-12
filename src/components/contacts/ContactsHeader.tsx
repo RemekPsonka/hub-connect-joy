@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Building2, Users, Link2, GitMerge } from 'lucide-react';
+import { Search, Plus, Filter, Building2, Users, Link2, GitMerge, GitBranchPlus } from 'lucide-react';
 import { AIImportContactsModal } from './AIImportContactsModal';
+import { ColumnConfigPopover } from './ColumnConfigPopover';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,17 +15,32 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContactGroups } from '@/hooks/useContacts';
 import { useCompaniesList } from '@/hooks/useCompanies';
+import { useDealTeams } from '@/hooks/useDealTeams';
+import type { ContactsTableColumns, ContactsTableFilters } from '@/hooks/useContactsTableSettings';
 
 export type ViewMode = 'people' | 'companies';
+
+const DEAL_CATEGORIES = [
+  { value: 'cold', label: 'COLD' },
+  { value: 'lead', label: 'LEAD' },
+  { value: 'top', label: 'TOP' },
+  { value: 'hot', label: 'HOT' },
+  { value: 'client', label: 'CLIENT' },
+];
+
+const AI_PROFILE_OPTIONS = [
+  { value: 'generated', label: 'Wygenerowano' },
+  { value: 'missing', label: 'Brak profilu' },
+];
 
 interface ContactsHeaderProps {
   totalCount: number;
   search: string;
   onSearchChange: (value: string) => void;
-  groupId: string;
-  onGroupChange: (value: string) => void;
-  companyId: string;
-  onCompanyChange: (value: string) => void;
+  filters: ContactsTableFilters;
+  onFiltersChange: (filters: Partial<ContactsTableFilters>) => void;
+  columns: ContactsTableColumns;
+  onColumnsChange: (columns: Partial<ContactsTableColumns>) => void;
   onImportSuccess?: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -36,10 +52,10 @@ export function ContactsHeader({
   totalCount,
   search,
   onSearchChange,
-  groupId,
-  onGroupChange,
-  companyId,
-  onCompanyChange,
+  filters,
+  onFiltersChange,
+  columns,
+  onColumnsChange,
   onImportSuccess,
   viewMode,
   onViewModeChange,
@@ -48,6 +64,7 @@ export function ContactsHeader({
 }: ContactsHeaderProps) {
   const { data: groups = [] } = useContactGroups();
   const { data: companies = [] } = useCompaniesList();
+  const { data: dealTeams = [] } = useDealTeams();
   const [searchInput, setSearchInput] = useState(search);
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
 
@@ -73,6 +90,7 @@ export function ContactsHeader({
         <div className="flex gap-2">
           {viewMode === 'people' && (
             <>
+              <ColumnConfigPopover columns={columns} onToggle={onColumnsChange} />
               {onFindDuplicates && (
                 <Button variant="outline" onClick={onFindDuplicates} className="gap-2">
                   <GitMerge className="h-4 w-4" />
@@ -108,8 +126,8 @@ export function ContactsHeader({
         </TabsList>
       </Tabs>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={viewMode === 'people' ? "Szukaj po imieniu, firmie lub email..." : "Szukaj po nazwie firmy..."}
@@ -120,8 +138,8 @@ export function ContactsHeader({
         </div>
         {viewMode === 'people' && (
           <>
-            <Select value={groupId} onValueChange={onGroupChange}>
-              <SelectTrigger className="w-full sm:w-[200px]">
+            <Select value={filters.groupId || 'all'} onValueChange={(v) => onFiltersChange({ groupId: v === 'all' ? '' : v })}>
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Wszystkie grupy" />
               </SelectTrigger>
@@ -140,8 +158,8 @@ export function ContactsHeader({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={companyId} onValueChange={onCompanyChange}>
-              <SelectTrigger className="w-full sm:w-[200px]">
+            <Select value={filters.companyId || 'all'} onValueChange={(v) => onFiltersChange({ companyId: v === 'all' ? '' : v })}>
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <Building2 className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Wszystkie firmy" />
               </SelectTrigger>
@@ -151,6 +169,45 @@ export function ContactsHeader({
                   <SelectItem key={company.id} value={company.id}>
                     {company.name}
                   </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filters.dealTeamId || 'all'} onValueChange={(v) => onFiltersChange({ dealTeamId: v === 'all' ? '' : v })}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <GitBranchPlus className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Wszystkie lejki" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Wszystkie lejki</SelectItem>
+                {dealTeams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
+                      {team.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filters.dealCategory || 'all'} onValueChange={(v) => onFiltersChange({ dealCategory: v === 'all' ? '' : v })}>
+              <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectValue placeholder="Kategoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Wszystkie kategorie</SelectItem>
+                {DEAL_CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filters.aiProfileStatus || 'all'} onValueChange={(v) => onFiltersChange({ aiProfileStatus: v === 'all' ? '' : v })}>
+              <SelectTrigger className="w-full sm:w-[160px]">
+                <SelectValue placeholder="Profil AI" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Profil AI: Wszystkie</SelectItem>
+                {AI_PROFILE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
