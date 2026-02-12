@@ -1554,6 +1554,69 @@ export type Database = {
           },
         ]
       }
+      contact_group_shares: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          shared_with_director_id: string | null
+          shared_with_team_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          shared_with_director_id?: string | null
+          shared_with_team_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          shared_with_director_id?: string | null
+          shared_with_team_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_group_shares_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "contact_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_group_shares_shared_with_director_id_fkey"
+            columns: ["shared_with_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_group_shares_shared_with_team_id_fkey"
+            columns: ["shared_with_team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_group_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "contact_group_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_groups: {
         Row: {
           color: string | null

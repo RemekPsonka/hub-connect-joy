@@ -40,6 +40,7 @@ import EditUserModal from '@/components/owner/EditUserModal';
 import { AssistantsList } from '@/components/owner/AssistantsList';
 import { DealTeamsManager } from '@/components/owner/DealTeamsManager';
 import { RoleAuditLog } from '@/components/owner/RoleAuditLog';
+import { ContactGroupSharingPanel } from '@/components/owner/ContactGroupSharingPanel';
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'Właściciel',
@@ -280,6 +281,9 @@ const getHighestRole = (roles: AppRole[]): AppRole => {
 
       {/* Assistants Section */}
       <AssistantsList />
+
+      {/* Contact Group Sharing Section */}
+      <ContactGroupSharingPanel />
 
       {/* Deal Teams Section */}
       <DealTeamsManager />
