@@ -1,86 +1,41 @@
 
 
-# Zamiana kolumny "Stanowisko" na "Lejki" + filtry/sortowania/konfiguracja kolumn
+# Dodanie opcji przesuwania w lejku (zmiana kategorii)
 
-## Zakres zmian
+## Problem
 
-### 1. Kolumna "Lejki" zamiast "Stanowisko" w `ContactsTable.tsx`
+Aktualnie badge'e lejkowe sa statyczne -- mozna tylko dodac kontakt do lejka lub go usunac. Brakuje mozliwosci zmiany kategorii (np. COLD -> LEAD -> TOP) bezposrednio z poziomu badge'a.
 
-Zastapienie kolumny "Stanowisko" kolumna "Lejki", ktora wyswietla badge'e z przypisanymi lejkami (nazwa zespolu + kategoria, np. "SGU - LEAD"). Kazdy wiersz bedzie mial przycisk **+** do szybkiego dodawania kontaktu do lejka (mini-popover z wyborem zespolu i kategorii).
+## Rozwiazanie
 
-Dane o lejkach beda pobierane hurtowo -- jeden dodatkowy query w `useContacts` lub osobny hook `useContactsDealTeams` pobierajacy dane `deal_team_contacts` + `deal_teams` dla wszystkich widocznych kontaktow na stronie.
+Klikniecie na badge lejkowy otworzy maly popover z lista kategorii (COLD/LEAD/TOP/HOT/CLIENT), pozwalajacy na szybka zmiane etapu. Hook `useUpdateTeamContact` juz istnieje i obsluguje zmiane kategorii -- trzeba tylko dodac UI.
 
-### 2. System filtrowania i sortowania w `ContactsHeader.tsx`
+### 1. `DealFunnelBadges.tsx` (widok listy kontaktow)
 
-Rozbudowanie naglowka o:
-- **Filtr po lejku** (dropdown z lista zespolow Deals)
-- **Filtr po kategorii lejka** (COLD/LEAD/TOP/HOT/CLIENT)
-- **Filtr po profilu AI** (wygenerowany / brak)
-- **Sortowanie** po: imieniu, firmie, sile relacji, dacie dodania
+Zamiana statycznych Badge na klikalne elementy otwierajace Popover z przyciskami kategorii:
+- Klikniecie badge'a otwiera mini-popover z 5 przyciskami kategorii
+- Wybranie nowej kategorii wywoluje `useUpdateTeamContact` z nowa kategoria
+- Po zmianie popover sie zamyka, badge odswieza sie automatycznie
+- Dodanie invalidacji `contact-deal-teams-bulk` w `useUpdateTeamContact` (brakuje tam tego klucza)
 
-Filtry beda przekazywane do `useContacts` i obslugiwane po stronie zapytania Supabase (tam gdzie to mozliwe) lub po stronie klienta (dla filtra po lejku -- wymaga joina z `deal_team_contacts`).
+### 2. `ContactDealsPanel.tsx` (widok szczegolowy kontaktu)
 
-### 3. Konfiguracja widocznosci kolumn
+Podobna zmiana -- klikniecie badge'a otwiera popover ze zmiana kategorii:
+- Badge staje sie triggerem Popover
+- Popover zawiera przyciski kategorii + przycisk usuwania
+- Nawigacja do zespolu przeniesiona na ikone lub osobny link
 
-Dodanie przycisku "Kolumny" (ikona szpaltek) otwierajacego popover z checkboxami:
-- Imie i nazwisko (zawsze widoczne)
-- Firma
-- Lejki
-- Telefon prywatny
-- Email
-- Grupa
-- Profil AI
-- Sila relacji
+### 3. Cache invalidation w `useUpdateTeamContact`
 
-### 4. Zapamietywanie ustawien filtrow w `localStorage`
+Dodanie brakujacych kluczy invalidacji:
+- `contact-deal-teams` (panel szczegolowy)
+- `contact-deal-teams-bulk` (lista kontaktow)
 
-Klucz `contacts-table-settings` w localStorage przechowujacy:
-- Widoczne kolumny
-- Aktywne filtry (grupa, firma, lejek, kategoria)
-- Sortowanie
-- Rozmiar strony
-
-Ustawienia beda odczytywane przy montowaniu komponentu i zapisywane przy kazdej zmianie.
-
-## Szczegoly techniczne
-
-### Nowy hook: `useContactsDealTeamsBulk`
-
-```text
-// Pobiera deal_team_contacts dla listy contact_id
-// Zwraca Map<contact_id, ContactDealTeam[]>
-useContactsDealTeamsBulk(contactIds: string[])
-```
-
-### Nowy hook: `useContactsTableSettings`
-
-```text
-// Odczyt/zapis ustawien tabeli z localStorage
-// Zwraca { columns, filters, sort, pageSize, update }
-useContactsTableSettings()
-```
-
-### Komponent `DealFunnelBadges`
-
-Maly komponent wyswietlajacy liste badge'ow lejkowych + przycisk "+":
-
-```text
-<DealFunnelBadges contactId={...} dealTeams={[...]} onAdd={() => ...} />
-```
-
-### Komponent `ColumnConfigPopover`
-
-Popover z checkboxami do wlaczania/wylaczania kolumn.
-
-## Pliki do modyfikacji/utworzenia
+## Pliki do modyfikacji
 
 | Plik | Zmiana |
 |---|---|
-| `src/hooks/useContactsDealTeamsBulk.ts` | NOWY -- hurtowe pobieranie lejkow dla kontaktow |
-| `src/hooks/useContactsTableSettings.ts` | NOWY -- persystencja ustawien tabeli w localStorage |
-| `src/components/contacts/DealFunnelBadges.tsx` | NOWY -- badge'e lejkowe + przycisk dodawania |
-| `src/components/contacts/ColumnConfigPopover.tsx` | NOWY -- konfiguracja widocznosci kolumn |
-| `src/components/contacts/ContactsTable.tsx` | Zamiana "Stanowisko" na "Lejki", dynamiczne kolumny, integracja z nowym hookiem |
-| `src/components/contacts/ContactsHeader.tsx` | Dodanie filtrow po lejku/kategorii/profilu AI |
-| `src/pages/Contacts.tsx` | Integracja nowych filtrow i ustawien z localStorage |
+| `src/components/contacts/DealFunnelBadges.tsx` | Badge klikalny z popoverem do zmiany kategorii |
+| `src/components/contacts/ContactDealsPanel.tsx` | Badge klikalny z popoverem do zmiany kategorii |
+| `src/hooks/useDealsTeamContacts.ts` | Dodanie invalidacji `contact-deal-teams` i `contact-deal-teams-bulk` w `useUpdateTeamContact` |
 
