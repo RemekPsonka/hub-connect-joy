@@ -44,15 +44,17 @@ export class ErrorBoundary extends Component<Props, State> {
         tenantId = director?.tenant_id || null;
       }
       
-      await supabase.from('error_logs').insert({
-        user_id: user?.id || null,
-        tenant_id: tenantId,
-        error_message: error.message,
-        error_stack: error.stack?.substring(0, 5000),
-        component_stack: errorInfo.componentStack?.substring(0, 5000),
-        url: window.location.href,
-        user_agent: navigator.userAgent,
-      });
+      if (user) {
+        await supabase.from('error_logs').insert({
+          user_id: user.id,
+          tenant_id: tenantId,
+          error_message: error.message,
+          error_stack: error.stack?.substring(0, 5000),
+          component_stack: errorInfo.componentStack?.substring(0, 5000),
+          url: window.location.href,
+          user_agent: navigator.userAgent,
+        });
+      }
     } catch (logError) {
       console.error('Failed to log error to database:', logError);
     }
