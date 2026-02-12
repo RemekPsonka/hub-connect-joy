@@ -24,6 +24,14 @@ export function ClientProductsPanel({ teamContactId, teamId, category }: ClientP
 
   const [showAdd, setShowAdd] = useState(false);
   const [catId, setCatId] = useState('');
+
+  const handleCategoryChange = (id: string) => {
+    setCatId(id);
+    const selected = categories.find(c => c.id === id);
+    if (selected && selected.default_commission_percent > 0) {
+      setCommission(String(selected.default_commission_percent));
+    }
+  };
   const [dealValue, setDealValue] = useState('');
   const [commission, setCommission] = useState('');
   const [forecastProductId, setForecastProductId] = useState<string | null>(null);
@@ -124,7 +132,7 @@ export function ClientProductsPanel({ teamContactId, teamId, category }: ClientP
       {showAdd && (
         <div className="space-y-2 p-3 border rounded-lg">
           <Label className="text-xs">Grupa produktów</Label>
-          <Select value={catId} onValueChange={setCatId}>
+          <Select value={catId} onValueChange={handleCategoryChange}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Wybierz grupę..." />
             </SelectTrigger>
