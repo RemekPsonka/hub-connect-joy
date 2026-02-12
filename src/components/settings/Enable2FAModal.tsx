@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Copy, Check, QrCode, KeyRound } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import {
   Dialog,
   DialogContent,
@@ -114,7 +115,7 @@ export function Enable2FAModal({ isOpen, onClose }: Enable2FAModalProps) {
             <div className="flex justify-center">
               <div
                 className="p-4 bg-white rounded-lg"
-                dangerouslySetInnerHTML={{ __html: enrollmentData.qrCode }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(enrollmentData.qrCode, { USE_PROFILES: { svg: true } }) }}
               />
             </div>
 

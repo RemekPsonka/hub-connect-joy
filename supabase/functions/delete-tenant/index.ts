@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
     // Verify the user is a superadmin
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const supabaseUser = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseUser = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? supabaseServiceKey, {
       global: { headers: { Authorization: authHeader } }
     });
 

@@ -23,6 +23,50 @@ Deno.serve(async (req) => {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // === AUTHORIZATION CHECK ===
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const isServiceRole = token === supabaseKey;
+
+  // For non-service-role calls, verify user belongs to the tenant
+  if (!isServiceRole) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // We need to peek at the body to check tenant_id, so clone the request
+    const body = await req.clone().json().catch(() => ({}));
+    const requestedTenantId = body?.tenant_id;
+
+    if (requestedTenantId) {
+      const { data: director } = await supabase
+        .from('directors')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .eq('tenant_id', requestedTenantId)
+        .maybeSingle();
+
+      if (!director) {
+        return new Response(
+          JSON.stringify({ error: 'Access denied: tenant mismatch' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+  }
+  // === END AUTHORIZATION CHECK ===
+
   try {
     // Zod validation
     const body = await req.json().catch(() => ({}));
