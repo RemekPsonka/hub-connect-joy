@@ -27,3 +27,4 @@ export { ClientProductsPanel } from './ClientProductsPanel';
 export { RevenueForecastDialog } from './RevenueForecastDialog';
 export { ProductCategoryManager } from './ProductCategoryManager';
 export { ClientsSummaryView } from './ClientsSummaryView';
+export { CommissionsTab } from './CommissionsTab';
