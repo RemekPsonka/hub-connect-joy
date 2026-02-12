@@ -31,17 +31,23 @@ export function ClientProductsPanel({ teamContactId, teamId, category }: ClientP
 
   const probability = CATEGORY_PROBABILITY[category] || 100;
 
+  const isClient = category === 'client';
+
   const handleAdd = async () => {
     if (!catId || !dealValue) return;
     const val = parseFloat(dealValue);
-    const com = parseFloat(commission) || 0;
+    const rawCom = parseFloat(commission) || 0;
+
+    const commissionPercent = isClient ? rawCom : (val > 0 ? (rawCom / val) * 100 : 0);
+    const expectedCommission = isClient ? val * (rawCom / 100) : rawCom;
+
     await addProduct.mutateAsync({
       teamId,
       teamContactId,
       productCategoryId: catId,
       dealValue: val,
-      expectedCommission: com,
-      commissionPercent: val > 0 ? (com / val) * 100 : 0,
+      expectedCommission,
+      commissionPercent,
       probabilityPercent: probability,
     });
     setShowAdd(false);
@@ -140,8 +146,8 @@ export function ClientProductsPanel({ teamContactId, teamId, category }: ClientP
               <Input value={dealValue} onChange={(e) => setDealValue(e.target.value)} type="number" className="h-8 text-xs" placeholder="0" />
             </div>
             <div>
-              <Label className="text-xs">Prowizja (PLN)</Label>
-              <Input value={commission} onChange={(e) => setCommission(e.target.value)} type="number" className="h-8 text-xs" placeholder="0" />
+              <Label className="text-xs">{isClient ? 'Prowizja (%)' : 'Prowizja (PLN)'}</Label>
+              <Input value={commission} onChange={(e) => setCommission(e.target.value)} type="number" className="h-8 text-xs" placeholder={isClient ? 'np. 8' : '0'} min={isClient ? 0 : undefined} max={isClient ? 100 : undefined} />
             </div>
           </div>
 
