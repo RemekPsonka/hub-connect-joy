@@ -1,9 +1,18 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const updateUserSchema = z.object({
+  userId: z.string().uuid("userId musi być poprawnym UUID"),
+  tenantId: z.string().uuid("tenantId musi być poprawnym UUID"),
+  email: z.string().email("Nieprawidłowy email").max(320).optional(),
+  fullName: z.string().min(1).max(200).optional(),
+  password: z.string().min(12, "Hasło musi mieć min. 12 znaków").max(128).optional(),
+});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -38,16 +47,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { userId, email, fullName, password, tenantId } = await req.json();
+    const rawBody = await req.json();
+    const validation = updateUserSchema.safeParse(rawBody);
     
-    console.log('Update user request:', { userId, email, fullName, hasPassword: !!password, tenantId, requestingUserId: requestingUser.id });
-
-    if (!userId || !tenantId) {
+    if (!validation.success) {
       return new Response(
-        JSON.stringify({ error: 'Brak wymaganych danych (userId, tenantId)' }),
+        JSON.stringify({ error: 'Nieprawidłowe dane wejściowe', details: validation.error.format() }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { userId, email, fullName, password, tenantId } = validation.data;
+    
+    console.log('Update user request:', { userId, email, fullName, hasPassword: !!password, tenantId, requestingUserId: requestingUser.id });
 
     // Check if requesting user is admin/owner OR is editing themselves
     const isSelf = requestingUser.id === userId;
