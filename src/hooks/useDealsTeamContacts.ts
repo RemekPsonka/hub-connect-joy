@@ -185,6 +185,7 @@ export function useAddContactToTeam() {
       queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
       queryClient.invalidateQueries({ queryKey: ['deal-team-clients', result.teamId] });
       queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-deal-teams-bulk'] });
       toast.success('Kontakt został dodany do zespołu');
     },
     onError: (error: Error) => {
