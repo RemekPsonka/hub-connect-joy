@@ -250,6 +250,8 @@ export function useUpdateTeamContact() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
       queryClient.invalidateQueries({ queryKey: ['deal-team-contact', result.id] });
+      queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-deal-teams-bulk'] });
       toast.success('Kontakt został zaktualizowany');
     },
     onError: (error: Error) => {

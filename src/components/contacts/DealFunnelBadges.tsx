@@ -6,7 +6,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDealTeams } from '@/hooks/useDealTeams';
 import { useAddContactToTeam } from '@/hooks/useDealsTeamContacts';
+import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import type { BulkContactDealTeam } from '@/hooks/useContactsDealTeamsBulk';
+import type { DealCategory } from '@/types/dealTeam';
 
 const CATEGORIES = ['COLD', 'LEAD', 'TOP', 'HOT', 'CLIENT'] as const;
 
@@ -24,11 +26,13 @@ interface DealFunnelBadgesProps {
 }
 
 export function DealFunnelBadges({ contactId, dealTeams }: DealFunnelBadgesProps) {
-  const [open, setOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [changingId, setChangingId] = useState<string | null>(null);
   const { data: teams = [] } = useDealTeams();
   const addToTeam = useAddContactToTeam();
+  const updateContact = useUpdateTeamContact();
 
   const handleAdd = async () => {
     if (!selectedTeam || !selectedCategory) return;
@@ -36,26 +40,70 @@ export function DealFunnelBadges({ contactId, dealTeams }: DealFunnelBadgesProps
       await addToTeam.mutateAsync({
         teamId: selectedTeam,
         contactId,
-        category: selectedCategory.toLowerCase() as any,
+        category: selectedCategory.toLowerCase() as DealCategory,
       });
-      setOpen(false);
+      setAddOpen(false);
       setSelectedTeam('');
       setSelectedCategory('');
     } catch {}
   };
 
+  const handleChangeCategory = async (dt: BulkContactDealTeam, newCategory: string) => {
+    if (newCategory.toUpperCase() === dt.category.toUpperCase()) {
+      setChangingId(null);
+      return;
+    }
+    try {
+      await updateContact.mutateAsync({
+        id: dt.id,
+        teamId: dt.team_id,
+        category: newCategory.toLowerCase() as DealCategory,
+      });
+    } catch {}
+    setChangingId(null);
+  };
+
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {dealTeams.map((dt) => (
-        <Badge
+        <Popover
           key={dt.id}
-          variant="outline"
-          className={`text-[10px] px-1.5 py-0 ${CATEGORY_COLORS[dt.category.toUpperCase()] || ''}`}
+          open={changingId === dt.id}
+          onOpenChange={(open) => setChangingId(open ? dt.id : null)}
         >
-          {dt.team_name} · {dt.category.toUpperCase()}
-        </Badge>
+          <PopoverTrigger asChild>
+            <Badge
+              variant="outline"
+              className={`text-[10px] px-1.5 py-0 cursor-pointer hover:opacity-80 transition-opacity ${CATEGORY_COLORS[dt.category.toUpperCase()] || ''}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {dt.team_name} · {dt.category.toUpperCase()}
+            </Badge>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-auto p-1.5"
+            align="start"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex gap-1">
+              {CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => handleChangeCategory(dt, c)}
+                  className={`text-[10px] font-medium px-2 py-1 rounded transition-colors ${
+                    c === dt.category.toUpperCase()
+                      ? 'ring-1 ring-foreground/30 ' + (CATEGORY_COLORS[c] || '')
+                      : 'hover:bg-muted ' + (CATEGORY_COLORS[c] || '')
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       ))}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={addOpen} onOpenChange={setAddOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"

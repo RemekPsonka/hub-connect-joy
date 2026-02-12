@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, Plus, Loader2, X } from 'lucide-react';
+import { TrendingUp, Plus, Loader2, X, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { DealCategory } from '@/types/dealTeam';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactDealTeams } from '@/hooks/useContactDealTeams';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
-import { useAddContactToTeam, useRemoveContactFromTeam } from '@/hooks/useDealsTeamContacts';
+import { useAddContactToTeam, useRemoveContactFromTeam, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -33,10 +33,12 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
   const { data: myTeams = [] } = useMyDealTeams();
   const addContact = useAddContactToTeam();
   const removeContact = useRemoveContactFromTeam();
+  const updateContact = useUpdateTeamContact();
 
   const [open, setOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('lead');
+  const [changingId, setChangingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!selectedTeamId || !selectedCategory) return;
@@ -62,6 +64,23 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['contact-deal-teams', contactId] });
+          setChangingId(null);
+        },
+      },
+    );
+  };
+
+  const handleChangeCategory = (link: typeof dealTeamLinks[0], newCategory: string) => {
+    if (newCategory === link.category) {
+      setChangingId(null);
+      return;
+    }
+    updateContact.mutate(
+      { id: link.id, teamId: link.team_id, category: newCategory as DealCategory },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['contact-deal-teams', contactId] });
+          setChangingId(null);
         },
       },
     );
@@ -84,25 +103,57 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
         <span className="text-xs text-muted-foreground">Brak przypisania do lejka</span>
       ) : (
         dealTeamLinks.map((link) => (
-          <Badge
+          <Popover
             key={link.id}
-            variant="outline"
-            className={`cursor-pointer text-xs font-medium ${CATEGORY_COLORS[link.category] || CATEGORY_COLORS.lead}`}
+            open={changingId === link.id}
+            onOpenChange={(o) => setChangingId(o ? link.id : null)}
           >
-            <span onClick={() => navigate(`/deals-team/${link.team_id}`)}>
-              {link.team_name} — {link.category.toUpperCase()}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRemove(link.id, link.team_id);
-              }}
-              className="ml-1.5 hover:text-destructive transition-colors"
-              title="Usuń z lejka"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
+            <PopoverTrigger asChild>
+              <Badge
+                variant="outline"
+                className={`cursor-pointer text-xs font-medium hover:opacity-80 transition-opacity ${CATEGORY_COLORS[link.category] || CATEGORY_COLORS.lead}`}
+              >
+                {link.team_name} — {link.category.toUpperCase()}
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2 space-y-2" align="start">
+              <div className="flex gap-1">
+                {CATEGORIES.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => handleChangeCategory(link, c)}
+                    className={`text-[11px] font-medium px-2 py-1 rounded transition-colors ${
+                      c === link.category
+                        ? 'ring-1 ring-foreground/30 ' + (CATEGORY_COLORS[c] || '')
+                        : 'hover:bg-muted ' + (CATEGORY_COLORS[c] || '')
+                    }`}
+                  >
+                    {c.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 border-t pt-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px] gap-1 text-muted-foreground"
+                  onClick={() => navigate(`/deals-team/${link.team_id}`)}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Otwórz zespół
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px] gap-1 text-destructive hover:text-destructive ml-auto"
+                  onClick={() => handleRemove(link.id, link.team_id)}
+                >
+                  <X className="h-3 w-3" />
+                  Usuń
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         ))
       )}
 
