@@ -72,13 +72,13 @@ export function DealFunnelBadges({ contactId, dealTeams }: DealFunnelBadgesProps
           onOpenChange={(open) => setChangingId(open ? dt.id : null)}
         >
           <PopoverTrigger asChild>
-            <Badge
-              variant="outline"
-              className={`text-[10px] px-1.5 py-0 cursor-pointer hover:opacity-80 transition-opacity ${CATEGORY_COLORS[dt.category.toUpperCase()] || ''}`}
+            <button
+              type="button"
+              className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold cursor-pointer hover:opacity-80 transition-opacity ${CATEGORY_COLORS[dt.category.toUpperCase()] || ''}`}
               onClick={(e) => e.stopPropagation()}
             >
               {dt.team_name} · {dt.category.toUpperCase()}
-            </Badge>
+            </button>
           </PopoverTrigger>
           <PopoverContent
             className="w-auto p-1.5"
