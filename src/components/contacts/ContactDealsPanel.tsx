@@ -109,12 +109,12 @@ export function ContactDealsPanel({ contactId }: ContactDealsPanelProps) {
             onOpenChange={(o) => setChangingId(o ? link.id : null)}
           >
             <PopoverTrigger asChild>
-              <Badge
-                variant="outline"
-                className={`cursor-pointer text-xs font-medium hover:opacity-80 transition-opacity ${CATEGORY_COLORS[link.category] || CATEGORY_COLORS.lead}`}
+              <button
+                type="button"
+                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 cursor-pointer text-xs font-medium hover:opacity-80 transition-opacity ${CATEGORY_COLORS[link.category] || CATEGORY_COLORS.lead}`}
               >
                 {link.team_name} — {link.category.toUpperCase()}
-              </Badge>
+              </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-2 space-y-2" align="start">
               <div className="flex gap-1">
