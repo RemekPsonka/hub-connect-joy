@@ -1,38 +1,20 @@
 
-
-# Auto-wypelnianie prowizji z grupy produktow
+# Prowizja zawsze w % -- dla wszystkich kategorii
 
 ## Problem
 
-Grupy produktow (np. Majatek 20%, Finansowe 18%, Grupowe na zycie 10%) maja juz ustalone domyslne prowizje. Przy dodawaniu produktu pole prowizji jest puste -- uzytkownik musi recznie wpisywac wartosc, ktora i tak jest znana.
+Obecnie tylko kategoria `client` traktuje pole prowizji jako procent. Dla pozostalych (HOT, TOP, LEAD, COLD) pole jest oznaczone "Prowizja (PLN)" i wartosc jest zapisywana jako kwota. Na przykladzie ze screenshota: wpisano 18 (myslac o 18%), ale system zapisal 18 PLN zamiast 90 000 PLN (18% z 500K).
 
 ## Rozwiazanie
 
-Gdy uzytkownik wybierze grupe produktow z listy rozwijanej, pole "Prowizja (%)" zostanie automatycznie wypelnione wartoscia `default_commission_percent` z wybranej kategorii. Uzytkownik moze ja zmienic przed zapisaniem.
+Ujednolicenie logiki -- pole prowizji **zawsze** przyjmuje procent, niezaleznie od kategorii. Kwota prowizji (`expectedCommission`) jest obliczana automatycznie.
 
-## Zmiana w kodzie
+## Zmiany w pliku `src/components/deals-team/ClientProductsPanel.tsx`
 
-**Plik: `src/components/deals-team/ClientProductsPanel.tsx`**
+1. **Usuniecie warunku `isClient`** z logiki obliczen -- ta sama formula dla wszystkich:
+   - `commissionPercent = parseFloat(commission)` (wpisany procent)
+   - `expectedCommission = dealValue * (commissionPercent / 100)` (obliczona kwota)
 
-1. W obsludze `onValueChange` selecta grupy produktow (`setCatId`) -- dodanie logiki, ktora znajduje wybrana kategorie i ustawia `setCommission(String(category.default_commission_percent))` jesli wartosc > 0
-2. Wyodrebnienie do funkcji:
+2. **Etykieta pola**: zawsze "Prowizja (%)" -- usuniecie warunkowego przelaczania
 
-```text
-const handleCategoryChange = (id: string) => {
-  setCatId(id);
-  const selected = categories.find(c => c.id === id);
-  if (selected && selected.default_commission_percent > 0) {
-    setCommission(String(selected.default_commission_percent));
-  }
-};
-```
-
-3. Zamiana `onValueChange={setCatId}` na `onValueChange={handleCategoryChange}` w Select
-
-## Zakres zmian
-
-| Plik | Zmiana |
-|---|---|
-| `src/components/deals-team/ClientProductsPanel.tsx` | Dodanie `handleCategoryChange` z auto-wypelnianiem prowizji |
-
-Jedna drobna zmiana -- okolo 8 linii kodu.
+3. **Placeholder i walidacja**: zawsze `min=0`, `max=100`, placeholder "np. 8"
