@@ -1,41 +1,86 @@
 
-# Naprawa panelu DEALS -- brakujący klucz obcy
 
-## Problem
+# Zamiana kolumny "Stanowisko" na "Lejki" + filtry/sortowania/konfiguracja kolumn
 
-Zapytanie `useContactDealTeams` zwraca **błąd 400**: `Could not find a relationship between 'deal_team_contacts' and 'deal_teams'`.
+## Zakres zmian
 
-Przyczyna: tabela `deal_team_contacts` nie ma **żadnych kluczy obcych** -- wszystkie FK zostały prawdopodobnie przypadkowo usunięte w poprzedniej migracji (usuwanie duplikatów na `meeting_participants`). PostgREST wymaga FK do wykonania joinów.
+### 1. Kolumna "Lejki" zamiast "Stanowisko" w `ContactsTable.tsx`
 
-Dane Roberta Kiepury **są poprawnie zapisane** w bazie (team: SGU, kategoria: lead), ale panel DEALS nie może ich pobrać z powodu brakującego joina.
+Zastapienie kolumny "Stanowisko" kolumna "Lejki", ktora wyswietla badge'e z przypisanymi lejkami (nazwa zespolu + kategoria, np. "SGU - LEAD"). Kazdy wiersz bedzie mial przycisk **+** do szybkiego dodawania kontaktu do lejka (mini-popover z wyborem zespolu i kategorii).
 
-## Rozwiązanie
+Dane o lejkach beda pobierane hurtowo -- jeden dodatkowy query w `useContacts` lub osobny hook `useContactsDealTeams` pobierajacy dane `deal_team_contacts` + `deal_teams` dla wszystkich widocznych kontaktow na stronie.
 
-### 1. Migracja SQL -- odtworzenie kluczy obcych
+### 2. System filtrowania i sortowania w `ContactsHeader.tsx`
 
-Dodanie brakujących FK na tabeli `deal_team_contacts`:
+Rozbudowanie naglowka o:
+- **Filtr po lejku** (dropdown z lista zespolow Deals)
+- **Filtr po kategorii lejka** (COLD/LEAD/TOP/HOT/CLIENT)
+- **Filtr po profilu AI** (wygenerowany / brak)
+- **Sortowanie** po: imieniu, firmie, sile relacji, dacie dodania
+
+Filtry beda przekazywane do `useContacts` i obslugiwane po stronie zapytania Supabase (tam gdzie to mozliwe) lub po stronie klienta (dla filtra po lejku -- wymaga joina z `deal_team_contacts`).
+
+### 3. Konfiguracja widocznosci kolumn
+
+Dodanie przycisku "Kolumny" (ikona szpaltek) otwierajacego popover z checkboxami:
+- Imie i nazwisko (zawsze widoczne)
+- Firma
+- Lejki
+- Telefon prywatny
+- Email
+- Grupa
+- Profil AI
+- Sila relacji
+
+### 4. Zapamietywanie ustawien filtrow w `localStorage`
+
+Klucz `contacts-table-settings` w localStorage przechowujacy:
+- Widoczne kolumny
+- Aktywne filtry (grupa, firma, lejek, kategoria)
+- Sortowanie
+- Rozmiar strony
+
+Ustawienia beda odczytywane przy montowaniu komponentu i zapisywane przy kazdej zmianie.
+
+## Szczegoly techniczne
+
+### Nowy hook: `useContactsDealTeamsBulk`
 
 ```text
-ALTER TABLE deal_team_contacts
-  ADD CONSTRAINT deal_team_contacts_team_id_fkey 
-    FOREIGN KEY (team_id) REFERENCES deal_teams(id) ON DELETE CASCADE;
-
-ALTER TABLE deal_team_contacts
-  ADD CONSTRAINT deal_team_contacts_contact_id_fkey 
-    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE;
-
-ALTER TABLE deal_team_contacts
-  ADD CONSTRAINT deal_team_contacts_tenant_id_fkey 
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+// Pobiera deal_team_contacts dla listy contact_id
+// Zwraca Map<contact_id, ContactDealTeam[]>
+useContactsDealTeamsBulk(contactIds: string[])
 ```
 
-### 2. Brak zmian w kodzie
+### Nowy hook: `useContactsTableSettings`
 
-Hook `useContactDealTeams` jest poprawny -- join `deal_teams(name, color)` zadziała automatycznie po przywróceniu FK.
+```text
+// Odczyt/zapis ustawien tabeli z localStorage
+// Zwraca { columns, filters, sort, pageSize, update }
+useContactsTableSettings()
+```
 
-## Pliki do modyfikacji
+### Komponent `DealFunnelBadges`
 
-| Element | Zmiana |
+Maly komponent wyswietlajacy liste badge'ow lejkowych + przycisk "+":
+
+```text
+<DealFunnelBadges contactId={...} dealTeams={[...]} onAdd={() => ...} />
+```
+
+### Komponent `ColumnConfigPopover`
+
+Popover z checkboxami do wlaczania/wylaczania kolumn.
+
+## Pliki do modyfikacji/utworzenia
+
+| Plik | Zmiana |
 |---|---|
-| Migracja SQL | Dodanie 3 kluczy obcych na `deal_team_contacts` |
-| Kod frontend | Bez zmian |
+| `src/hooks/useContactsDealTeamsBulk.ts` | NOWY -- hurtowe pobieranie lejkow dla kontaktow |
+| `src/hooks/useContactsTableSettings.ts` | NOWY -- persystencja ustawien tabeli w localStorage |
+| `src/components/contacts/DealFunnelBadges.tsx` | NOWY -- badge'e lejkowe + przycisk dodawania |
+| `src/components/contacts/ColumnConfigPopover.tsx` | NOWY -- konfiguracja widocznosci kolumn |
+| `src/components/contacts/ContactsTable.tsx` | Zamiana "Stanowisko" na "Lejki", dynamiczne kolumny, integracja z nowym hookiem |
+| `src/components/contacts/ContactsHeader.tsx` | Dodanie filtrow po lejku/kategorii/profilu AI |
+| `src/pages/Contacts.tsx` | Integracja nowych filtrow i ustawien z localStorage |
+
