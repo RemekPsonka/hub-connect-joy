@@ -1,48 +1,38 @@
 
-# Prowizja w % dla klientow
+
+# Auto-wypelnianie prowizji z grupy produktow
 
 ## Problem
 
-W panelu klienta pole "Prowizja" jest traktowane jako kwota w PLN. Uzytkownik wpisuje np. `8` oczekujac 8%, ale system zapisuje to jako 8 PLN.
+Grupy produktow (np. Majatek 20%, Finansowe 18%, Grupowe na zycie 10%) maja juz ustalone domyslne prowizje. Przy dodawaniu produktu pole prowizji jest puste -- uzytkownik musi recznie wpisywac wartosc, ktora i tak jest znana.
 
 ## Rozwiazanie
 
-Zmiana w `ClientProductsPanel.tsx`:
+Gdy uzytkownik wybierze grupe produktow z listy rozwijanej, pole "Prowizja (%)" zostanie automatycznie wypelnione wartoscia `default_commission_percent` z wybranej kategorii. Uzytkownik moze ja zmienic przed zapisaniem.
 
-1. **Zmiana etykiety** pola z "Prowizja (PLN)" na "Prowizja (%)" dla kategorii `client`
-2. **Zmiana logiki obliczen** przy dodawaniu produktu:
-   - Dla klientow: uzytkownik podaje procent, system oblicza kwote: `expectedCommission = dealValue * (commissionPercent / 100)`
-   - Dla pozostalych kategorii (hot/top/lead/cold): bez zmian -- prowizja podawana w PLN
-3. **Walidacja zakresu** -- dla klientow ograniczenie do 0-100%
+## Zmiana w kodzie
 
-### Zmiana w kodzie (`ClientProductsPanel.tsx`)
+**Plik: `src/components/deals-team/ClientProductsPanel.tsx`**
 
-Funkcja `handleAdd`:
+1. W obsludze `onValueChange` selecta grupy produktow (`setCatId`) -- dodanie logiki, ktora znajduje wybrana kategorie i ustawia `setCommission(String(category.default_commission_percent))` jesli wartosc > 0
+2. Wyodrebnienie do funkcji:
 
 ```text
-// Dla klientow:
-commissionPercent = parseFloat(commission)        // np. 8
-expectedCommission = val * (commissionPercent / 100) // np. 6000000 * 0.08 = 480000
-
-// Dla pozostalych (bez zmian):
-expectedCommission = parseFloat(commission)        // kwota PLN
-commissionPercent = val > 0 ? (com / val) * 100 : 0
+const handleCategoryChange = (id: string) => {
+  setCatId(id);
+  const selected = categories.find(c => c.id === id);
+  if (selected && selected.default_commission_percent > 0) {
+    setCommission(String(selected.default_commission_percent));
+  }
+};
 ```
 
-Etykieta pola:
+3. Zamiana `onValueChange={setCatId}` na `onValueChange={handleCategoryChange}` w Select
 
-```text
-category === 'client' ? "Prowizja (%)" : "Prowizja (PLN)"
-```
-
-Placeholder pola:
-
-```text
-category === 'client' ? "np. 8" : "0"
-```
-
-## Plik do modyfikacji
+## Zakres zmian
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/deals-team/ClientProductsPanel.tsx` | Logika obliczen prowizji, etykieta pola |
+| `src/components/deals-team/ClientProductsPanel.tsx` | Dodanie `handleCategoryChange` z auto-wypelnianiem prowizji |
+
+Jedna drobna zmiana -- okolo 8 linii kodu.
