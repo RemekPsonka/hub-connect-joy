@@ -37,3 +37,4 @@ export { OfferingTab } from './OfferingTab';
 export { FunnelConversionChart } from './FunnelConversionChart';
 export { SalesFunnelDashboard } from './SalesFunnelDashboard';
 export { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';
+export { StatusFrequencyConfig } from './StatusFrequencyConfig';
