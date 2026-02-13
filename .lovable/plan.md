@@ -1,41 +1,31 @@
 
-# Poprawa widocznosci sekcji ZADANIA w panelu bocznym kontaktu
+# Poszerzenie panelu bocznego kontaktu
 
 ## Problem
-
-Przycisk "Nowe zadanie", ikony edycji i statusu **istnieja i dzialaja poprawnie** w kodzie. Problem polega na tym, ze sekcja ZADANIA jest **szosta sekcja od gory** panelu bocznego. Uzytkownik musi scrollowac bardzo daleko w dol, zeby do niej dotrzec. Kolejnosc sekcji w panelu:
-
-1. Status
-2. Kategoria
-3. Notatki
-4. Brief AI
-5. Statusy tygodniowe
-6. **ZADANIA** (tutaj jest przycisk "Nowe zadanie")
-7. Historia aktywnosci
-8. Produkty / Deale
+Panel boczny ma ustawione `sm:max-w-lg` (512px), przez co elementy sa ucinane na prawej krawedzi — przyciski "Nowe zadanie", badge kategorii i inne elementy nie mieszcza sie w widoku.
 
 ## Rozwiazanie
 
-Przesuniecie sekcji ZADANIA **na trzecie miejsce** (zaraz po Notatki), poniewaz zadania sa najczesciej uzywana funkcja i powinny byc latwo dostepne bez scrollowania.
+Jedna zmiana w pliku `src/components/deals-team/DealContactDetailSheet.tsx`:
 
-Nowa kolejnosc:
-1. Status
-2. Kategoria
-3. Notatki
-4. **ZADANIA** (przesuniety wyzej)
-5. Brief AI
-6. Statusy tygodniowe
-7. Historia aktywnosci
-8. Produkty / Deale
+### Zmiana szerokosci panelu (linia 204)
+
+Zmiana klasy z `sm:max-w-lg` na `sm:max-w-xl` (640px) lub `sm:max-w-2xl` (672px):
+
+```
+Przed: className="w-full sm:max-w-lg p-0 flex flex-col"
+Po:    className="w-full sm:max-w-xl p-0 flex flex-col"
+```
+
+To da dodatkowe ~128px szerokosci, dzieki czemu:
+- Przyciski "Nowe zadanie" i inne beda widoczne
+- Badge kategorii (HOT, OFERTOWANIE, TOP, LEAD, 10x, COLD) beda sie miescily w jednym wierszu
+- Sekcje nie beda ucinane na prawej krawedzi
 
 ## Szczegoly techniczne
 
-Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
+| Plik | Linia | Zmiana |
+|------|-------|--------|
+| `src/components/deals-team/DealContactDetailSheet.tsx` | 204 | `sm:max-w-lg` na `sm:max-w-xl` |
 
-Zmiana polega na **przeniesieniu bloku kodu** sekcji ZADANIA (linie ~462-590, od `<Separator />` przed `{/* Tasks */}` do konca zamkniecia `</section>` z zamknietymi zadaniami) w inne miejsce w pliku — **przed sekcje Brief AI** (obecnie linia ~307).
-
-| Element | Obecna pozycja | Nowa pozycja |
-|---------|---------------|-------------|
-| Sekcja ZADANIA (caly blok ~462-590) | Po "Statusy tygodniowe" | Po "Notatki" (przed "Brief AI") |
-
-Zadne inne zmiany nie sa wymagane — przycisk "Nowe zadanie", inline edycja, status cycling i priorytety sa juz poprawnie zaimplementowane.
+Jedna linia do zmiany, zero nowych zaleznosci.
