@@ -130,7 +130,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
             <p className="text-muted-foreground">Twoja baza kontaktów jest czysta!</p>
           </div>
         ) : (
-          <>
+          <div className="flex flex-col min-h-0 flex-1">
             {/* Stats */}
             <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2">
@@ -166,7 +166,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
             </div>
 
             {/* Duplicate groups list */}
-            <ScrollArea className="flex-1 -mx-6 px-6">
+            <ScrollArea className="max-h-[50vh] -mx-6 px-6">
               <div className="space-y-3 pb-4">
                 {duplicateGroups.map((group) => {
                   const isMerged = mergedGroups.has(group.key);
@@ -296,7 +296,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
                 })}
               </div>
             </ScrollArea>
-          </>
+          </div>
         )}
       </DialogContent>
     </Dialog>
