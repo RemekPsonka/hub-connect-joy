@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon, Briefcase } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon, Briefcase, PieChart } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -17,12 +17,13 @@ import {
   MyTeamTasksView,
   SnoozedTeamView,
   OfferingTab,
+  SalesFunnelDashboard,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed' | 'offering';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
 
 const STORAGE_KEY = 'deals-team-selected';
 
@@ -35,7 +36,7 @@ export default function DealsTeamDashboard() {
     return localStorage.getItem(STORAGE_KEY) || '';
   });
 
-  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering'];
+  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
   const initialView = searchParams.get('view') as ViewMode;
   const [viewMode, setViewMode] = useState<ViewMode>(
     validViews.includes(initialView) ? initialView : 'kanban'
@@ -153,6 +154,10 @@ export default function DealsTeamDashboard() {
 
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             <TabsList>
+              <TabsTrigger value="dashboard" className="gap-2">
+                <PieChart className="h-4 w-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </TabsTrigger>
               <TabsTrigger value="kanban" className="gap-2">
                 <LayoutGrid className="h-4 w-4" />
                 <span className="hidden sm:inline">Kanban</span>
@@ -194,10 +199,14 @@ export default function DealsTeamDashboard() {
         </div>
       </div>
 
-      {/* Stats - always visible when team selected */}
-      {selectedTeamId && <TeamStats teamId={selectedTeamId} />}
+      {/* Stats - always visible when team selected (except dashboard) */}
+      {selectedTeamId && viewMode !== 'dashboard' && <TeamStats teamId={selectedTeamId} />}
 
       {/* Content */}
+      {selectedTeamId && viewMode === 'dashboard' && (
+        <SalesFunnelDashboard teamId={selectedTeamId} />
+      )}
+
       {selectedTeamId && viewMode === 'kanban' && (
         <KanbanBoard teamId={selectedTeamId} />
       )}
