@@ -36,3 +36,4 @@ export { SnoozedTeamView } from './SnoozedTeamView';
 export { OfferingTab } from './OfferingTab';
 export { FunnelConversionChart } from './FunnelConversionChart';
 export { SalesFunnelDashboard } from './SalesFunnelDashboard';
+export { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';

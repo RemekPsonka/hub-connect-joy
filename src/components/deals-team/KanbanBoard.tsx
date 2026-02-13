@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
+import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
 import { KanbanColumn } from './KanbanColumn';
 import { HotLeadCard } from './HotLeadCard';
 import { TopLeadCard } from './TopLeadCard';
@@ -12,6 +13,7 @@ import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
 import { DealContactDetailSheet } from './DealContactDetailSheet';
 import { SnoozedContactsBar } from './SnoozedContactsBar';
+import { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -25,7 +27,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const { data: contacts = [], isLoading: contactsLoading } = useTeamContacts(teamId);
   const { data: prospects = [], isLoading: prospectsLoading } = useTeamProspects(teamId);
   const updateContact = useUpdateTeamContact();
-
+  const { columns: visibleColumns, toggleColumn, visibleCount } = useKanbanColumnSettings();
   const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
   const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
@@ -161,23 +163,26 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   return (
     <>
-      {/* Search bar */}
-      <div className="mb-3 relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Szukaj kontakt po nazwie lub firmie..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-8 h-8 text-xs"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+      {/* Search bar + column config */}
+      <div className="mb-3 flex gap-2 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Szukaj kontakt po nazwie lub firmie..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 text-xs"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <KanbanColumnConfigPopover columns={visibleColumns} onToggle={toggleColumn} />
       </div>
 
       {/* Snoozed contacts bar */}
@@ -187,211 +192,234 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         onContactClick={handleCardClick}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4">
+      <div className={cn(
+        "grid grid-cols-1 sm:grid-cols-2 gap-4",
+        visibleCount <= 4 && "lg:grid-cols-4",
+        visibleCount === 5 && "lg:grid-cols-5",
+        visibleCount === 6 && "lg:grid-cols-6",
+        visibleCount === 7 && "lg:grid-cols-7",
+        visibleCount >= 8 && "lg:grid-cols-8"
+      )}>
         {/* HOT column */}
-        <KanbanColumn
-          title="HOT LEAD"
-          icon="🔥"
-          color="red"
-          count={hotContacts.length}
-          totalValue={hotTotalValue}
-          onAdd={() => setAddContactCategory('hot')}
-          emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'hot')}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'hot')}
-          isDropTarget={dragOverColumn === 'hot'}
-        >
-          {hotContacts.map((contact) => (
-            <HotLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.hot && (
+          <KanbanColumn
+            title="HOT LEAD"
+            icon="🔥"
+            color="red"
+            count={hotContacts.length}
+            totalValue={hotTotalValue}
+            onAdd={() => setAddContactCategory('hot')}
+            emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'hot')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'hot')}
+            isDropTarget={dragOverColumn === 'hot'}
+          >
+            {hotContacts.map((contact) => (
+              <HotLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* OFFERING column */}
-        <KanbanColumn
-          title="OFERTOWANIE"
-          icon="📝"
-          color="emerald"
-          count={offeringContacts.length}
-          onAdd={() => setAddContactCategory('offering')}
-          emptyMessage="Brak kontaktów w ofertowaniu"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'offering')}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'offering')}
-          isDropTarget={dragOverColumn === 'offering'}
-        >
-          {offeringContacts.map((contact) => (
-            <HotLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.offering && (
+          <KanbanColumn
+            title="OFERTOWANIE"
+            icon="📝"
+            color="emerald"
+            count={offeringContacts.length}
+            onAdd={() => setAddContactCategory('offering')}
+            emptyMessage="Brak kontaktów w ofertowaniu"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'offering')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'offering')}
+            isDropTarget={dragOverColumn === 'offering'}
+          >
+            {offeringContacts.map((contact) => (
+              <HotLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* TOP column */}
-        <KanbanColumn
-          title="TOP LEAD"
-          icon="⭐"
-          color="amber"
-          count={topContacts.length}
-          onAdd={() => setAddContactCategory('top')}
-          emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'top')}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'top')}
-          isDropTarget={dragOverColumn === 'top'}
-        >
-          {topContacts.map((contact) => (
-            <TopLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.top && (
+          <KanbanColumn
+            title="TOP LEAD"
+            icon="⭐"
+            color="amber"
+            count={topContacts.length}
+            onAdd={() => setAddContactCategory('top')}
+            emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'top')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'top')}
+            isDropTarget={dragOverColumn === 'top'}
+          >
+            {topContacts.map((contact) => (
+              <TopLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* LEAD column */}
-        <KanbanColumn
-          title="LEAD"
-          icon="📋"
-          color="blue"
-          count={leadContacts.length}
-          onAdd={() => setAddContactCategory('lead')}
-          emptyMessage="Brak leadów. Dodaj kontakty z CRM →"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'lead')}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'lead')}
-          isDropTarget={dragOverColumn === 'lead'}
-        >
-          {leadContacts.map((contact) => (
-            <LeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.lead && (
+          <KanbanColumn
+            title="LEAD"
+            icon="📋"
+            color="blue"
+            count={leadContacts.length}
+            onAdd={() => setAddContactCategory('lead')}
+            emptyMessage="Brak leadów. Dodaj kontakty z CRM →"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'lead')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'lead')}
+            isDropTarget={dragOverColumn === 'lead'}
+          >
+            {leadContacts.map((contact) => (
+              <LeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* 10x column */}
-        <KanbanColumn
-          title="10x"
-          icon="🔄"
-          color="cyan"
-          count={tenxContacts.length}
-          onAdd={() => setAddContactCategory('10x' as DealCategory)}
-          emptyMessage="Brak kontaktów 10x. Buduj relacje →"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, '10x' as DealCategory)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, '10x' as DealCategory)}
-          isDropTarget={dragOverColumn === ('10x' as DealCategory)}
-        >
-          {tenxContacts.map((contact) => (
-            <ColdLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.tenx && (
+          <KanbanColumn
+            title="10x"
+            icon="🔄"
+            color="cyan"
+            count={tenxContacts.length}
+            onAdd={() => setAddContactCategory('10x' as DealCategory)}
+            emptyMessage="Brak kontaktów 10x. Buduj relacje →"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, '10x' as DealCategory)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, '10x' as DealCategory)}
+            isDropTarget={dragOverColumn === ('10x' as DealCategory)}
+          >
+            {tenxContacts.map((contact) => (
+              <ColdLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* COLD column */}
-        <KanbanColumn
-          title="COLD LEAD"
-          icon="❄️"
-          color="slate"
-          count={coldContacts.length}
-          onAdd={() => setAddContactCategory('cold')}
-          emptyMessage="Brak COLD leadów. Dodaj kontakty →"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'cold')}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'cold')}
-          isDropTarget={dragOverColumn === 'cold'}
-        >
-          {coldContacts.map((contact) => (
-            <ColdLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.cold && (
+          <KanbanColumn
+            title="COLD LEAD"
+            icon="❄️"
+            color="slate"
+            count={coldContacts.length}
+            onAdd={() => setAddContactCategory('cold')}
+            emptyMessage="Brak COLD leadów. Dodaj kontakty →"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'cold')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'cold')}
+            isDropTarget={dragOverColumn === 'cold'}
+          >
+            {coldContacts.map((contact) => (
+              <ColdLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* LOST column */}
-        <KanbanColumn
-          title="PRZEGRANE"
-          icon="✖️"
-          color="gray"
-          count={lostContacts.length}
-          onAdd={() => setAddContactCategory('lost' as DealCategory)}
-          emptyMessage="Brak przegranych kontaktów"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, 'lost' as DealCategory)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, 'lost' as DealCategory)}
-          isDropTarget={dragOverColumn === ('lost' as DealCategory)}
-        >
-          {lostContacts.map((contact) => (
-            <ColdLeadCard
-              key={contact.id}
-              contact={contact}
-              teamId={teamId}
-              onClick={() => handleCardClick(contact)}
-              onDragStart={(e) => handleDragStart(e, contact.id)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggingContactId === contact.id}
-            />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.lost && (
+          <KanbanColumn
+            title="PRZEGRANE"
+            icon="✖️"
+            color="gray"
+            count={lostContacts.length}
+            onAdd={() => setAddContactCategory('lost' as DealCategory)}
+            emptyMessage="Brak przegranych kontaktów"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'lost' as DealCategory)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'lost' as DealCategory)}
+            isDropTarget={dragOverColumn === ('lost' as DealCategory)}
+          >
+            {lostContacts.map((contact) => (
+              <ColdLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+              />
+            ))}
+          </KanbanColumn>
+        )}
 
         {/* PROSPECTS column */}
-        <KanbanColumn
-          title="POSZUKIWANI"
-          icon="🔍"
-          color="purple"
-          count={prospects.length}
-          onAdd={() => setShowAddProspect(true)}
-          addButtonLabel="+ Szukaj"
-          emptyMessage="Brak poszukiwanych. Dodaj osobę/firmę do znalezienia →"
-        >
-          {prospects.map((prospect) => (
-            <ProspectCard key={prospect.id} prospect={prospect} teamId={teamId} />
-          ))}
-        </KanbanColumn>
+        {visibleColumns.prospecting && (
+          <KanbanColumn
+            title="POSZUKIWANI"
+            icon="🔍"
+            color="purple"
+            count={prospects.length}
+            onAdd={() => setShowAddProspect(true)}
+            addButtonLabel="+ Szukaj"
+            emptyMessage="Brak poszukiwanych. Dodaj osobę/firmę do znalezienia →"
+          >
+            {prospects.map((prospect) => (
+              <ProspectCard key={prospect.id} prospect={prospect} teamId={teamId} />
+            ))}
+          </KanbanColumn>
+        )}
       </div>
 
       {/* Add Contact Dialog */}
