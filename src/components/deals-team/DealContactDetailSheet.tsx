@@ -38,6 +38,7 @@ import { WeeklyStatusForm } from './WeeklyStatusForm';
 import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
 import { PromoteDialog } from './PromoteDialog';
 import { SnoozeDialog } from './SnoozeDialog';
+import { ConvertToClientDialog } from './ConvertToClientDialog';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import type { DealTeamContact, DealContactStatus, DealCategory } from '@/types/dealTeam';
@@ -105,6 +106,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [briefDialogOpen, setBriefDialogOpen] = useState(false);
   const [promoteTarget, setPromoteTarget] = useState<'lead' | 'top' | 'hot' | null>(null);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Sync notes from contact
@@ -614,16 +616,13 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                     {contact.snoozed_until ? `Odłożony do ${contact.snoozed_until}` : 'Odłóż kontakt'}
                   </Button>
                 )}
-                {/* Convert to Client */}
+              {/* Convert to Client */}
                 {contact.category !== 'client' && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                    onClick={() => {
-                      convertToClient.mutate({ id: contact.id, teamId });
-                      onOpenChange(false);
-                    }}
+                    onClick={() => setConvertDialogOpen(true)}
                     disabled={convertToClient.isPending}
                   >
                     <UserCheck className="h-3.5 w-3.5 mr-1.5" />
@@ -694,8 +693,18 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
         teamId={teamId}
         contactName={contact.contact.full_name}
         contactCompany={contact.contact.company}
+        currentCategory={contact.category}
         open={showWeeklyForm}
         onClose={() => setShowWeeklyForm(false)}
+      />
+
+      {/* Convert to Client Dialog */}
+      <ConvertToClientDialog
+        open={convertDialogOpen}
+        onOpenChange={setConvertDialogOpen}
+        teamContactId={contact.id}
+        teamId={teamId}
+        contactName={contact.contact.full_name}
       />
 
       {/* Task Modal */}
