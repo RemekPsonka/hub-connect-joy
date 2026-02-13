@@ -35,7 +35,7 @@ export function ContactTasksPanel({ contactId }: ContactTasksPanelProps) {
   const completedTasks = tasks.filter(t => t.status === 'completed' || t.status === 'cancelled');
 
   const handleToggleStatus = (taskId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    const newStatus = currentStatus === 'completed' ? 'todo' : 'completed';
     updateTask.mutate({ id: taskId, status: newStatus });
   };
 

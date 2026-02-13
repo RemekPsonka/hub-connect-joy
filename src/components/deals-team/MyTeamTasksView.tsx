@@ -42,13 +42,13 @@ const priorityConfig: Record<string, { label: string; color: string; dot: string
 };
 
 const statusConfig: Record<string, { label: string; icon: typeof Circle; iconColor: string }> = {
-  pending: { label: 'Do zrobienia', icon: Circle, iconColor: 'text-muted-foreground' },
+  todo: { label: 'Do zrobienia', icon: Circle, iconColor: 'text-muted-foreground' },
   in_progress: { label: 'W trakcie', icon: Clock, iconColor: 'text-blue-500' },
-  done: { label: 'Zrobione', icon: CheckCircle2, iconColor: 'text-green-600' },
+  completed: { label: 'Zakończone', icon: CheckCircle2, iconColor: 'text-green-600' },
   cancelled: { label: 'Anulowane', icon: AlertTriangle, iconColor: 'text-muted-foreground' },
 };
 
-const statusCycle = ['pending', 'in_progress', 'done'] as const;
+const statusCycle = ['todo', 'in_progress', 'completed'] as const;
 
 // ─── Inline Quick-Add ────────────────────────────────────────
 function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
@@ -156,10 +156,10 @@ function TaskRow({
   const updateAssignment = useUpdateAssignment();
 
   const pri = priorityConfig[task.priority || 'medium'];
-  const st = statusConfig[task.status || 'pending'];
+  const st = statusConfig[task.status || 'todo'];
   const StatusIcon = st?.icon || Circle;
-  const isOverdue = task.due_date && isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'done';
-  const isDone = task.status === 'done';
+  const isOverdue = task.due_date && isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed';
+  const isDone = task.status === 'completed';
 
   const assignedMember = members.find(m => m.director_id === task.assigned_to);
   const initials = assignedMember?.director?.full_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || '?';
@@ -178,7 +178,7 @@ function TaskRow({
   const getDueDateDisplay = () => {
     if (!task.due_date) return null;
     const d = new Date(task.due_date);
-    const colorClass = isPast(d) && !isToday(d) && task.status !== 'done'
+    const colorClass = isPast(d) && !isToday(d) && task.status !== 'completed'
       ? 'text-destructive'
       : isToday(d) ? 'text-amber-600' : 'text-muted-foreground';
     return (
@@ -384,7 +384,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
     // Status filter
     if (filterStatus === 'active') {
-      result = result.filter((a) => a.status !== 'done' && a.status !== 'cancelled');
+      result = result.filter((a) => a.status !== 'completed' && a.status !== 'cancelled');
     } else if (filterStatus !== 'all') {
       result = result.filter((a) => a.status === filterStatus);
     }
@@ -442,7 +442,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   };
 
   const overdueCount = assignments.filter(
-    (a) => a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)) && a.status !== 'done' && a.status !== 'cancelled'
+    (a) => a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)) && a.status !== 'completed' && a.status !== 'cancelled'
   ).length;
 
   // Build a "fake" TaskWithDetails from the selected assignment for TaskDetailSheet
@@ -455,7 +455,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       id: a.id,
       title: a.title,
       description: a.description,
-      status: a.status === 'pending' ? 'pending' : a.status === 'done' ? 'completed' : a.status,
+      status: a.status,
       priority: a.priority,
       due_date: a.due_date,
       task_type: 'standard',
@@ -526,9 +526,9 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           <SelectContent className="bg-popover z-50">
             <SelectItem value="active">Aktywne</SelectItem>
             <SelectItem value="all">Wszystkie</SelectItem>
-            <SelectItem value="pending">Do zrobienia</SelectItem>
+            <SelectItem value="todo">Do zrobienia</SelectItem>
             <SelectItem value="in_progress">W trakcie</SelectItem>
-            <SelectItem value="done">Zrobione</SelectItem>
+            <SelectItem value="completed">Zakończone</SelectItem>
           </SelectContent>
         </Select>
 

@@ -6,8 +6,13 @@ interface TaskStatusBadgeProps {
 }
 
 const statusConfig: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+  todo: {
+    label: 'Do zrobienia',
+    className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
+    icon: <Clock className="h-3 w-3" />,
+  },
   pending: {
-    label: 'Oczekujące',
+    label: 'Do zrobienia',
     className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
     icon: <Clock className="h-3 w-3" />,
   },
@@ -20,6 +25,11 @@ const statusConfig: Record<string, { label: string; className: string; icon: Rea
     label: 'Zakończone',
     className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     icon: <CheckCircle className="h-3 w-3" />,
+  },
+  cancelled: {
+    label: 'Anulowane',
+    className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    icon: <Clock className="h-3 w-3" />,
   },
 };
 
