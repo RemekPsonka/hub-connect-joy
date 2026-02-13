@@ -1,62 +1,18 @@
 
 
-# Dodanie edycji, zmiany statusu i szczegolowego zarzadzania zadaniami w widoku "Zadania"
+# Naprawa przewijania w modalu "Znajdz i scal duplikaty"
 
-## Obecny stan
-Widok "Zadania" w zakladce Deals (`MyTeamTasksView`) wyswietla zadania pogrupowane po kontaktach, ale jedyna interakcja to checkbox (toggle done/pending). Brak mozliwosci:
-- Edycji tytulu, opisu, priorytetu, terminu
-- Zmiany statusu na posredni (np. "W trakcie")
-- Przypisania do innego czlonka zespolu
-- Otwarcia szczegolow zadania
+## Problem
+`ScrollArea` uzywa `flex-1` bez jawnie okreslnej wysokosci, przez co lista duplikatow rozciaga modal poza ekran i nie mozna go przewinac.
 
 ## Rozwiazanie
-Dodanie interaktywnego menu kontekstowego i dialogu edycji do kazdego zadania w liscie.
+Zmiana w `src/components/contacts/FindDuplicatesModal.tsx`:
 
-### 1. Menu kontekstowe na kazdym zadaniu
+1. Zamiana `ScrollArea` z `flex-1` na wersje z jawna maksymalna wysokoscia (`max-h-[50vh]`) i wlasnym `overflow-y-auto`, co zagwarantuje przewijanie niezaleznie od ilosci grup duplikatow.
 
-Po kliknieciu na wiersz zadania (lub ikone "...") pojawi sie `DropdownMenu` z opcjami:
-- **Status**: Zmiana miedzy "Do zrobienia", "W trakcie", "Zrobione"
-- **Priorytet**: Zmiana miedzy "Niski", "Sredni", "Wysoki", "Pilny"
-- **Przypisz do**: Lista czlonkow zespolu
-- **Edytuj**: Otwiera dialog edycji (tytul, opis, termin)
-
-### 2. Inline status change
-
-Klikniecie na ikone statusu (Circle/Clock/CheckCircle2) obok checkboxa przelacza cyklicznie: pending -> in_progress -> done -> pending.
-
-### 3. Dialog edycji zadania
-
-Prosty dialog (`Dialog`) z polami:
-- Tytul (Input)
-- Opis (Textarea)
-- Priorytet (Select)
-- Termin (DatePicker)
-- Status (Select)
-- Przypisany do (Select z czlonkami zespolu)
-
-Zapisywanie przez istniejacy `useUpdateAssignment` hook.
-
-## Szczegoly techniczne
+2. Alternatywnie: dodanie `overflow-hidden` do sekcji wrappera i ustawienie `min-h-0` na kontenerze flex, aby `flex-1` prawidlowo ograniczal wysokosc.
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/MyTeamTasksView.tsx` | (1) Dodanie DropdownMenu z opcjami statusu, priorytetu, przypisania. (2) Dodanie stanu `editingTask` i dialogu edycji z formularzem. (3) Rozszerzenie `handleToggle` o cykliczne przelaczanie statusow. (4) Invalidacja kluczy `deal-team-assignments-all` po edycji. |
-
-### Interakcje uzytkownika
-
-- **Klikniecie ikony statusu**: Cykliczna zmiana pending -> in_progress -> done
-- **Klikniecie tytulu lub ikony "..."**: Otwiera dropdown z akcjami
-- **"Edytuj" z dropdown**: Otwiera dialog z pelnym formularzem edycji
-- **Zmiana priorytetu/przypisania z dropdown**: Natychmiastowa aktualizacja
-
-### Nowe importy w MyTeamTasksView
-
-```text
-DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent
-Dialog, DialogContent, DialogHeader, DialogTitle
-Input, Textarea, Select
-MoreHorizontal, Edit, ArrowRight icons
-```
-
-Wszystkie komponenty juz istnieja w projekcie (shadcn/ui), wiec nie ma potrzeby instalacji nowych zaleznosci.
+| `src/components/contacts/FindDuplicatesModal.tsx` | Linia 169: zmiana `<ScrollArea className="flex-1 -mx-6 px-6">` na `<ScrollArea className="max-h-[50vh] -mx-6 px-6">`. Dodanie `min-h-0` do fragmentu `<>` wrappera (zamiana na `<div className="flex flex-col min-h-0 flex-1">`). |
 
