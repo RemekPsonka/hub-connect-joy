@@ -1,83 +1,47 @@
 
 
-# Dodanie sekcji zadania w ProspectingConvertDialog
+# Dodanie linków do zadań zespołowych w nawigacji
 
-## Co sie zmieni
+## Co się zmieni
 
-W dialogu konwersji prospekta (`ProspectingConvertDialog.tsx`) zostanie dodana nowa sekcja **"Pierwsze zadanie"** pod kategoria Kanban, identyczna logicznie z ta dodana w `WeeklyStatusForm`.
+### 1. Menu główne (AppSidebar) -- nowy link w sekcji "Sprzedaż"
 
-## Nowa sekcja w dialogu
+Dodanie pozycji **"Zadania zespołu"** w sekcji `salesItems`, kierującej na `/deals-team` z automatycznym przełączeniem na zakładkę "Zadania":
 
 ```text
-+-----------------------------------------------+
-| Pierwsze zadanie                    [x] Dodaj  |
-+-----------------------------------------------+
-| Zadanie:  [Umowic spotkanie       v]           |
-| Przypisz: [Wybierz osobe...       v]           |
-| Termin:   [__ / __ / ____]                     |
-| Uwagi:    [________________________]           |
-+-----------------------------------------------+
+Sprzedaż
+  Deals
+  Zespół Deals
+  Zadania zespołu   <-- NOWY (ikona ClipboardList, url: /deals-team?view=tasks)
+  Ofertowanie
+  Dopasowania
 ```
 
-### Elementy:
-1. **Checkbox "Dodaj zadanie"** -- domyslnie wlaczony
-2. **Tytul zadania** -- Select z opcjami: "Umowic spotkanie" (domyslne), "Zadzwonic", "Wyslac oferte", "Przygotowac audyt", "Inne..." (pokazuje Input)
-3. **Przypisz do** -- Select z czlonkami zespolu (z `useTeamMembers(effectiveTeamId)`)
-4. **Termin** -- input type="date"
-5. **Uwagi** -- Textarea (2 linie, opcjonalne)
+### 2. Widok DealsTeamDashboard -- link do "Moje zadania"
 
-### Logika po kliknieciu "Konwertuj":
-- Proces konwersji dziala jak dotychczas
-- Po uzyskaniu `teamContactId`, jesli checkbox wlaczony i jest tytul + przypisana osoba:
-  - Wywolanie `useCreateAssignment` z danymi zadania
-- Jesli sekcja pusta/wylaczona -- pomijamy
+W headerze widoku `/deals-team`, obok przycisków Kanban/Tabela/Prospecting, zakładka "Zadania" już istnieje w TabsList. Natomiast dodamy obsługę query parametru `?view=tasks`, żeby link z menu głównego automatycznie otwierał zakładkę zadań.
 
-## Szczegoly techniczne
+## Szczegóły techniczne
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/ProspectingConvertDialog.tsx` | Dodanie sekcji zadania z przypisaniem, uwagami i domyslnymi opcjami |
+| `src/components/layout/AppSidebar.tsx` | Dodanie "Zadania zespołu" do `salesItems` z url `/deals-team?view=tasks` + import `ClipboardList` |
+| `src/pages/DealsTeamDashboard.tsx` | Odczyt query param `view` z URL i ustawienie początkowego `viewMode` na jego podstawie |
 
-### Nowe importy
-- `useTeamMembers` z `@/hooks/useDealsTeamMembers`
-- `useCreateAssignment` z `@/hooks/useDealsTeamAssignments`
-- `Checkbox` z `@/components/ui/checkbox`
-- `Textarea` z `@/components/ui/textarea`
-- `ClipboardList` ikona z `lucide-react`
+### AppSidebar.tsx
 
-### Nowe stany
-- `createTask` (boolean, domyslnie `true`)
-- `taskTitle` (string, domyslnie `'Umówić spotkanie'`)
-- `customTaskTitle` (string, pusty)
-- `taskAssignedTo` (string, pusty)
-- `taskDueDate` (string, pusty)
-- `taskNotes` (string, pusty)
+- Import `ClipboardList` z `lucide-react`
+- Dodanie do tablicy `salesItems`:
+  ```
+  { title: 'Zadania zespołu', url: '/deals-team?view=tasks', icon: ClipboardList }
+  ```
 
-### Zmiana w handleConvert
-Po uzyskaniu `teamContactId`, dodanie bloku:
+### DealsTeamDashboard.tsx
 
-```text
-if (createTask && finalTaskTitle && taskAssignedTo) {
-  await createAssignment.mutateAsync({
-    teamContactId,
-    teamId: effectiveTeamId,
-    assignedTo: taskAssignedTo,
-    title: finalTaskTitle,
-    description: taskNotes || undefined,
-    dueDate: taskDueDate || undefined,
-    priority: 'medium',
-  });
-}
-```
+- Import `useSearchParams` z `react-router-dom`
+- Odczyt `searchParams.get('view')` do ustawienia domyślnego `viewMode`
+- Jeśli URL zawiera `?view=tasks`, widok startuje od razu na zakładce "Zadania"
 
-### Predefiniowane opcje zadan
-- "Umówić spotkanie"
-- "Zadzwonić"
-- "Wysłać ofertę"
-- "Przygotować audyt"
-- "Inne..." (otwiera pole tekstowe)
-
-### Zero migracji SQL
-Hook `useCreateAssignment` i tabela `deal_team_assignments` juz istnieja.
+Zero migracji SQL, zero nowych komponentów.
