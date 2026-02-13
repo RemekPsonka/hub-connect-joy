@@ -49,7 +49,9 @@ const categoryConfig: Record<DealCategory, { label: string; color: string; icon:
   hot: { label: 'HOT', color: 'bg-red-100 text-red-800 border-red-200', icon: '🔥' },
   top: { label: 'TOP', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: '⭐' },
   lead: { label: 'LEAD', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📋' },
+  '10x': { label: '10x', color: 'bg-cyan-100 text-cyan-800 border-cyan-200', icon: '🔄' },
   cold: { label: 'COLD', color: 'bg-slate-100 text-slate-800 border-slate-200', icon: '❄️' },
+  lost: { label: 'PRZEGRANE', color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '✖️' },
   client: { label: 'KLIENT', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: '✅' },
   offering: { label: 'OFERTOWANIE', color: 'bg-green-100 text-green-800 border-green-200', icon: '📝' },
 };
@@ -134,7 +136,7 @@ export function TableView({ teamId }: TableViewProps) {
           bVal = b.contact?.company || '';
           break;
         case 'category':
-          const categoryOrder: Record<string, number> = { hot: 4, top: 3, lead: 2, cold: 1 };
+          const categoryOrder: Record<string, number> = { offering: 7, hot: 6, top: 5, lead: 4, '10x': 3, cold: 2, lost: 1 };
           aVal = categoryOrder[a.category] ?? 0;
           bVal = categoryOrder[b.category] ?? 0;
           break;
@@ -270,7 +272,9 @@ export function TableView({ teamId }: TableViewProps) {
             <SelectItem value="hot">🔥 HOT</SelectItem>
             <SelectItem value="top">⭐ TOP</SelectItem>
             <SelectItem value="lead">📋 LEAD</SelectItem>
+            <SelectItem value="10x">🔄 10x</SelectItem>
             <SelectItem value="cold">❄️ COLD</SelectItem>
+            <SelectItem value="lost">✖️ PRZEGRANE</SelectItem>
           </SelectContent>
         </Select>
 

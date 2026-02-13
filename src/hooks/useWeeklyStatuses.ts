@@ -42,7 +42,7 @@ export interface SubmitWeeklyStatusInput {
   blockers?: string;
   meetingHappened?: boolean;
   meetingOutcome?: string;
-  categoryRecommendation?: 'keep' | 'promote' | 'demote' | 'close_won' | 'close_lost' | 'hot' | 'cold' | 'snooze' | 'convert_client';
+  categoryRecommendation?: 'keep' | 'promote' | 'demote' | 'close_won' | 'close_lost' | 'hot' | 'cold' | '10x' | 'snooze' | 'convert_client';
 }
 
 // ===== QUERIES =====

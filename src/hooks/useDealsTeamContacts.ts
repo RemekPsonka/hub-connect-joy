@@ -119,7 +119,9 @@ export function useTeamContactStats(teamId: string | undefined): DealTeamContact
     hot_count: contacts.filter(c => c.category === 'hot').length,
     top_count: contacts.filter(c => c.category === 'top').length,
     lead_count: contacts.filter(c => c.category === 'lead').length,
+    tenx_count: contacts.filter(c => c.category === '10x').length,
     cold_count: contacts.filter(c => c.category === 'cold').length,
+    lost_count: contacts.filter(c => c.category === 'lost').length,
     overdue_count: contacts.filter(c => c.status_overdue).length,
     total_value: contacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
     upcoming_meetings: contacts.filter(c =>
