@@ -40,6 +40,7 @@ export const CATEGORY_PROBABILITY: Record<string, number> = {
   top: 50,
   lead: 20,
   cold: 5,
+  offering: 90,
   client: 100,
 };
 

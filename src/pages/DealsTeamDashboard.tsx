@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon, Briefcase } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -16,12 +16,13 @@ import {
   CommissionsTab,
   MyTeamTasksView,
   SnoozedTeamView,
+  OfferingTab,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed' | 'offering';
 
 const STORAGE_KEY = 'deals-team-selected';
 
@@ -34,7 +35,7 @@ export default function DealsTeamDashboard() {
     return localStorage.getItem(STORAGE_KEY) || '';
   });
 
-  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed'];
+  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering'];
   const initialView = searchParams.get('view') as ViewMode;
   const [viewMode, setViewMode] = useState<ViewMode>(
     validViews.includes(initialView) ? initialView : 'kanban'
@@ -168,6 +169,10 @@ export default function DealsTeamDashboard() {
                 <UserCheck className="h-4 w-4" />
                 <span className="hidden sm:inline">Klienci</span>
               </TabsTrigger>
+              <TabsTrigger value="offering" className="gap-2">
+                <Briefcase className="h-4 w-4" />
+                <span className="hidden sm:inline">Ofertowanie</span>
+              </TabsTrigger>
               <TabsTrigger value="tasks" className="gap-2">
                 <ClipboardList className="h-4 w-4" />
                 <span className="hidden sm:inline">Zadania</span>
@@ -219,6 +224,10 @@ export default function DealsTeamDashboard() {
 
       {selectedTeamId && viewMode === 'snoozed' && (
         <SnoozedTeamView teamId={selectedTeamId} />
+      )}
+
+      {selectedTeamId && viewMode === 'offering' && (
+        <OfferingTab teamId={selectedTeamId} />
       )}
 
       {/* Create Team Dialog */}
