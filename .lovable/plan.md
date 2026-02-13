@@ -1,84 +1,60 @@
 
 
-# Etap 3: Spojne wykresy i dashboardy
+# Fix: Zadania ze statusu nie widoczne na karcie kontaktu
 
-## Cel
+## Problem
 
-Dodac wizualne wykresy (recharts) do modulu lejka sprzedazowego, aby dane z Kanbana, Ofertowania, Klientow i harmonogramow platnosci byly przedstawione graficznie w sposob spojny. Rozszerzyc TeamStats o kartke "Ofertowanie" i dodac wykresy do zakladek.
+Formularz statusu tygodniowego (WeeklyStatusForm) tworzy zadania w starej tabeli `deal_team_assignments`, natomiast karta kontaktu (DealContactDetailSheet) odczytuje zadania z tabeli `tasks` przez hook `useContactTasksWithCross`. To sa dwie rozne tabele -- zadania utworzone z formularza statusu nigdy nie pojawiaja sie w sekcji "ZADANIA" na karcie.
 
-## Co sie zmieni dla uzytkownika
+## Rozwiazanie
 
-1. **TeamStats** -- nowa karta "Ofertowanie" (emerald, ikona Briefcase) z wartoscia i liczba kontaktow w ofertowaniu
-2. **ClientsSummaryView** -- dodanie wykresu slupkowego (BarChart) prognozy miesiecznej zamiast samych kafelkow + wykres kolowy kategorii produktow
-3. **OfferingTab** -- dodanie wykresu liniowego (AreaChart) timeline platnosci na najblizsze 24 miesiace, z rozroznieniem typow (cykliczne, jednorazowe, lump sum)
-4. **TeamStats** -- wykres lejka konwersji (COLD -> LEAD -> TOP -> HOT -> OFERTOWANIE -> KLIENT) z liczbami na kazdym etapie
+Zmienic WeeklyStatusForm tak, aby tworzyl zadania w tabeli `tasks` (z powiazaniem przez `task_contacts`), zamiast w `deal_team_assignments`. Dzieki temu zadania beda widoczne zarowno na karcie kontaktu, jak i w globalnym systemie zadan.
 
 ## Szczegoly techniczne
 
-### 1. TeamStats -- karta Ofertowanie
+### Plik: `src/components/deals-team/WeeklyStatusForm.tsx`
 
-Plik: `src/components/deals-team/TeamStats.tsx`
+Zamienic blok tworzenia zadania (linie 176-203) z:
+```
+await supabase.from('deal_team_assignments').insert({...})
+```
+na logike tworzaca zadanie w tabeli `tasks` + powiazanie w `task_contacts`:
 
-Dodanie karty miedzy "Klienci" a "Poszukiwani":
-- Ikona: Briefcase (emerald)
-- Liczba kontaktow w kategorii `offering`
-- Wartosc produktow z ofertowania
-- Prowizja z ofertowania
+1. Wstawic do `tasks`:
+   - `title`: tytul zadania
+   - `tenant_id`: z danych directora
+   - `owner_id`: director.id (tworca statusu)
+   - `assigned_to`: taskAssignedTo (wybrany czlonek zespolu)
+   - `due_date`: taskDueDate
+   - `status`: 'todo'
+   - `priority`: 'medium'
 
-Rozszerzenie `categoryValues` o klucz `offering` (obecnie brakuje).
-Zmiana gridu z `grid-cols-6` na `grid-cols-7`.
+2. Wstawic do `task_contacts`:
+   - `task_id`: id nowo utworzonego zadania
+   - `contact_id`: contact_id kontaktu (potrzebne przekazanie do komponentu)
+   - `role`: 'primary'
 
-### 2. OfferingTab -- wykres timeline platnosci
+3. Po sukcesie: `invalidateQueries(['contact-tasks-with-cross', contactId])` aby odswiezyc liste zadan na karcie
 
-Plik: `src/components/deals-team/OfferingTab.tsx`
+### Plik: `src/components/deals-team/WeeklyStatusForm.tsx` (props)
 
-Dodanie nad lista kontaktow wykresu AreaChart (recharts):
-- Os X: miesiace (24 do przodu)
-- Os Y: kwoty PLN
-- 3 serie danych: "Cykliczne" (niebieskie), "Jednorazowe" (fioletowe), "Dodatkowe/lump sum" (zolte)
-- Agregacja `payments` po miesiacu i typie
-- Wykorzystanie istniejacego ChartContainer z `src/components/ui/chart.tsx`
+Dodac nowy prop `contactId: string` (contact_id z deal_team_contacts) aby moc utworzyc powiazanie w `task_contacts`.
 
-### 3. ClientsSummaryView -- wykres slupkowy prognozy
+### Pliki wywolujace WeeklyStatusForm
 
-Plik: `src/components/deals-team/ClientsSummaryView.tsx`
+Sprawdzic i zaktualizowac wszystkie miejsca, ktore renderuja `<WeeklyStatusForm>`, aby przekazywaly `contactId`:
+- `DealContactDetailSheet.tsx` -- przekazac `contact.contact_id`
+- `WeeklyStatusPanel.tsx` -- przekazac contact_id z danych kontaktu
 
-Zamiana statycznych kafelkow prognozy miesiecznej na wykres BarChart:
-- Os X: miesiace
-- Os Y: kwoty
-- Tooltip z formatowaniem walutowym
-- Zachowanie kafelkow kategorii produktow (z kolorami) jako mini-wykres kolowy (PieChart)
+### Invalidacja cache
 
-### 4. Nowy komponent: FunnelChart
-
-Plik: `src/components/deals-team/FunnelConversionChart.tsx` (NOWY)
-
-Wizualizacja lejka konwersji:
-- Uzycie BarChart z recharts (poziomy) jako zastepnik funnela
-- Etapy: COLD -> LEAD -> TOP -> HOT -> OFERTOWANIE -> KLIENT
-- Kazdy etap z kolorem odpowiadajacym kolumnce Kanban
-- Wyswietlany na dole TeamStats jako pelna szerokosc
+Po utworzeniu zadania wywolac `queryClient.invalidateQueries` z kluczem `['contact-tasks-with-cross', contactId]` zeby lista zadan odswiezyla sie natychmiast.
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/TeamStats.tsx` | Karta Ofertowanie + FunnelChart na dole |
-| `src/components/deals-team/OfferingTab.tsx` | Wykres timeline platnosci (AreaChart) |
-| `src/components/deals-team/ClientsSummaryView.tsx` | BarChart prognozy + PieChart kategorii |
-| `src/components/deals-team/FunnelConversionChart.tsx` | NOWY -- wykres lejka konwersji |
-| `src/components/deals-team/index.ts` | Export FunnelConversionChart |
-
-### Biblioteka
-
-Recharts jest juz zainstalowany. ChartContainer, ChartTooltip, ChartTooltipContent sa juz dostepne w `src/components/ui/chart.tsx`.
-
-### Dane -- skad bierzemy
-
-- **Lejek konwersji**: z `useTeamContactStats` (hot_count, top_count itd.) + dodanie offering_count
-- **Timeline platnosci**: z `useTeamPaymentSchedule` (juz istnieje)
-- **Prognoza miesieczna**: z `useAllTeamForecasts` (juz istnieje)
-- **Kategorie produktow**: z `useAllTeamClientProducts` (juz istnieje)
-
-Nie wymaga zmian w bazie danych.
+| `src/components/deals-team/WeeklyStatusForm.tsx` | Zmiana insert z `deal_team_assignments` na `tasks` + `task_contacts`, dodanie prop `contactId` |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | Przekazanie `contactId` do WeeklyStatusForm |
+| `src/components/deals-team/WeeklyStatusPanel.tsx` | Przekazanie `contactId` do WeeklyStatusForm |
 
