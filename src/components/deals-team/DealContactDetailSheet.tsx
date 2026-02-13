@@ -11,8 +11,8 @@ import {
   Circle, CheckCircle2, Pencil
 } from 'lucide-react';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
-} from '@/components/ui/sheet';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -200,22 +200,22 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b">
-            <div className="flex items-start justify-between gap-3">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <div className="flex items-start justify-between gap-3 pr-8">
               <div className="min-w-0 flex-1">
-                <SheetTitle className="text-lg truncate">
+                <DialogTitle className="text-lg truncate">
                   {contact.contact.full_name}
-                </SheetTitle>
-                <SheetDescription className="mt-0.5">
+                </DialogTitle>
+                <DialogDescription className="mt-0.5">
                   {contact.contact.company && (
                     <span className="block text-sm truncate">{contact.contact.company}</span>
                   )}
                   {contact.contact.position && (
                     <span className="block text-xs truncate">{contact.contact.position}</span>
                   )}
-                </SheetDescription>
+                </DialogDescription>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <Badge className={cn('text-xs', cat.color)}>
@@ -231,7 +231,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
               <ExternalLink className="h-3 w-3" />
               Otwórz profil CRM
             </Link>
-          </SheetHeader>
+          </DialogHeader>
 
           <ScrollArea className="flex-1">
             <div className="px-6 py-4 space-y-5">
@@ -715,8 +715,8 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
               </section>
             </div>
           </ScrollArea>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Weekly Status Form */}
       <WeeklyStatusForm
