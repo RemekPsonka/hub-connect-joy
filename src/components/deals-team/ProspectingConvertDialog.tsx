@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, CheckCircle, UserPlus } from 'lucide-react';
+import { Loader2, CheckCircle, UserPlus, ClipboardList } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -18,12 +18,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDealTeams } from '@/hooks/useDealTeams';
+import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
+import { useCreateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { toast } from 'sonner';
 import type { MeetingProspect } from '@/hooks/useMeetingProspects';
+
+const TASK_OPTIONS = [
+  'Umówić spotkanie',
+  'Zadzwonić',
+  'Wysłać ofertę',
+  'Przygotować audyt',
+  'Inne...',
+] as const;
 
 interface FoundContact {
   id: string;
@@ -64,6 +76,16 @@ export function ProspectingConvertDialog({
   const [linkedin, setLinkedin] = useState(prospect.linkedin_url || '');
   const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot' | 'client'>('cold');
   const [loading, setLoading] = useState(false);
+
+  // Task assignment
+  const createAssignment = useCreateAssignment();
+  const { data: teamMembers = [] } = useTeamMembers(effectiveTeamId || undefined);
+  const [createTask, setCreateTask] = useState(true);
+  const [taskTitle, setTaskTitle] = useState('Umówić spotkanie');
+  const [customTaskTitle, setCustomTaskTitle] = useState('');
+  const [taskAssignedTo, setTaskAssignedTo] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskNotes, setTaskNotes] = useState('');
 
   // Duplicate detection
   const [duplicates, setDuplicates] = useState<FoundContact[]>([]);
@@ -270,6 +292,24 @@ export function ProspectingConvertDialog({
         })
         .eq('id', prospectId);
 
+      // Create task assignment if enabled
+      const finalTaskTitle = taskTitle === 'Inne...' ? customTaskTitle.trim() : taskTitle;
+      if (createTask && finalTaskTitle && taskAssignedTo && effectiveTeamId) {
+        try {
+          await createAssignment.mutateAsync({
+            teamContactId,
+            teamId: effectiveTeamId,
+            assignedTo: taskAssignedTo,
+            title: finalTaskTitle,
+            description: taskNotes.trim() || undefined,
+            dueDate: taskDueDate || undefined,
+            priority: 'medium',
+          });
+        } catch (taskError) {
+          console.warn('Task creation failed (non-critical):', taskError);
+        }
+      }
+
       // Auto-create BI with brief data from prospecting
       if (prospect.ai_brief || prospect.prospecting_notes) {
         try {
@@ -408,6 +448,81 @@ export function ProspectingConvertDialog({
                 </Button>
               ))}
             </div>
+          </div>
+
+          {/* Task assignment */}
+          <div className="space-y-3 border rounded-lg p-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="create-task"
+                checked={createTask}
+                onCheckedChange={(v) => setCreateTask(!!v)}
+              />
+              <label htmlFor="create-task" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                Pierwsze zadanie
+              </label>
+            </div>
+
+            {createTask && (
+              <div className="space-y-3 pl-6">
+                <div className="space-y-2">
+                  <Label className="text-xs">Zadanie</Label>
+                  <Select value={taskTitle} onValueChange={setTaskTitle}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TASK_OPTIONS.map((opt) => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {taskTitle === 'Inne...' && (
+                    <Input
+                      value={customTaskTitle}
+                      onChange={(e) => setCustomTaskTitle(e.target.value)}
+                      placeholder="Wpisz tytuł zadania..."
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Przypisz do</Label>
+                  <Select value={taskAssignedTo} onValueChange={setTaskAssignedTo}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Wybierz osobę..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamMembers.map((m) => (
+                        <SelectItem key={m.director?.id || m.id} value={m.director?.id || m.id}>
+                          {m.director?.full_name || 'Członek zespołu'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Termin</Label>
+                  <Input
+                    type="date"
+                    value={taskDueDate}
+                    onChange={(e) => setTaskDueDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Uwagi</Label>
+                  <Textarea
+                    value={taskNotes}
+                    onChange={(e) => setTaskNotes(e.target.value)}
+                    placeholder="Dodatkowe informacje..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
