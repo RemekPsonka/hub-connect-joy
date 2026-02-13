@@ -61,11 +61,11 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const grouped = useMemo(() => {
     const map = new Map<string, { contactName: string; company: string | null; tasks: DealTeamAssignment[] }>();
     for (const a of filtered) {
-      const key = a.team_contact_id;
+      const key = a.deal_team_contact_id || 'unknown';
       if (!map.has(key)) {
         map.set(key, {
-          contactName: (a as any).contact_name || 'Kontakt',
-          company: (a as any).contact_company || null,
+          contactName: a.contact_name || 'Kontakt',
+          company: a.contact_company || null,
           tasks: [],
         });
       }
@@ -77,7 +77,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const handleToggle = (assignment: DealTeamAssignment) => {
     updateAssignment.mutate({
       id: assignment.id,
-      teamContactId: assignment.team_contact_id,
+      teamContactId: assignment.deal_team_contact_id || '',
       status: assignment.status === 'done' ? 'pending' : 'done',
     });
   };

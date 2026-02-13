@@ -7090,6 +7090,8 @@ export type Database = {
           category_id: string | null
           consultation_id: string | null
           created_at: string | null
+          deal_team_contact_id: string | null
+          deal_team_id: string | null
           description: string | null
           due_date: string | null
           estimated_hours: number | null
@@ -7118,6 +7120,8 @@ export type Database = {
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
+          deal_team_contact_id?: string | null
+          deal_team_id?: string | null
           description?: string | null
           due_date?: string | null
           estimated_hours?: number | null
@@ -7146,6 +7150,8 @@ export type Database = {
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
+          deal_team_contact_id?: string | null
+          deal_team_id?: string | null
           description?: string | null
           due_date?: string | null
           estimated_hours?: number | null
@@ -7188,6 +7194,20 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_deal_team_id_fkey"
+            columns: ["deal_team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
           {
