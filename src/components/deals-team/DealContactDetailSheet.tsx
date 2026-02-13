@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
   Clock, AlertTriangle, MessageSquare, History, ChevronDown,
-  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck, Moon
+  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck, Moon,
+  Circle, CheckCircle2
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -476,7 +477,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-xs"
-                    onClick={() => setTaskModalOpen(true)}
+                    onClick={() => { setSelectedTask(null); setTaskModalOpen(true); }}
                   >
                     <Plus className="h-3 w-3 mr-1" />
                     Nowe
@@ -495,14 +496,29 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                           setTaskDetailOpen(true);
                         }}
                       >
-                        <Checkbox
-                          checked={false}
-                          onCheckedChange={() => handleToggleTask(task.id, task.status)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-0.5 h-3.5 w-3.5"
-                        />
+                      <button
+                          className="mt-0.5 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = task.status === 'pending' ? 'in_progress' : task.status === 'in_progress' ? 'completed' : 'pending';
+                            updateTask.mutate({ id: task.id, status: next });
+                          }}
+                          title={task.status === 'pending' ? 'Oczekujące' : task.status === 'in_progress' ? 'W trakcie' : 'Zakończone'}
+                        >
+                          {task.status === 'pending' && <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                          {task.status === 'in_progress' && <Clock className="h-3.5 w-3.5 text-blue-500" />}
+                          {task.status !== 'pending' && task.status !== 'in_progress' && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
+                        </button>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{task.title}</p>
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn(
+                              'h-1.5 w-1.5 rounded-full shrink-0',
+                              task.priority === 'urgent' ? 'bg-red-500' :
+                              task.priority === 'high' ? 'bg-orange-500' :
+                              task.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                            )} />
+                            <p className="text-xs font-medium truncate">{task.title}</p>
+                          </div>
                           {task.due_date && (
                             <div className={cn('flex items-center gap-1 text-xs', getDueDateClass(task.due_date))}>
                               <Clock className="h-2.5 w-2.5" />
@@ -715,7 +731,11 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
       {/* Task Modal */}
       <TaskModal
         open={taskModalOpen}
-        onOpenChange={setTaskModalOpen}
+        onOpenChange={(o) => {
+          setTaskModalOpen(o);
+          if (!o) setSelectedTask(null);
+        }}
+        task={selectedTask}
         preselectedContactId={contact.contact_id}
         dealTeamId={teamId}
         dealTeamContactId={contact.id}
