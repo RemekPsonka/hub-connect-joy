@@ -31,6 +31,7 @@ import { FunnelConversionChart } from './FunnelConversionChart';
 
 interface SalesFunnelDashboardProps {
   teamId: string;
+  onNavigate?: (view: string) => void;
 }
 
 type PeriodType = 'month' | 'quarter' | 'year';
@@ -58,7 +59,7 @@ function getPeriodRange(type: PeriodType, offset: number) {
   };
 }
 
-export function SalesFunnelDashboard({ teamId }: SalesFunnelDashboardProps) {
+export function SalesFunnelDashboard({ teamId, onNavigate }: SalesFunnelDashboardProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('year');
   const [periodOffset, setPeriodOffset] = useState(0);
 
@@ -239,15 +240,15 @@ export function SalesFunnelDashboard({ teamId }: SalesFunnelDashboardProps) {
 
       {/* Section 1: KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-9 gap-3">
-        <KPICard icon={Flame} label="HOT Leads" count={contactStats.hot_count} value={categoryValues.hot.value} commission={categoryValues.hot.commission} color="text-red-500" borderColor="border-l-red-500" overdue={contactStats.overdue_count} />
-        <KPICard icon={Star} label="TOP Leads" count={contactStats.top_count} value={categoryValues.top.value} commission={categoryValues.top.commission} color="text-amber-500" borderColor="border-l-amber-500" />
-        <KPICard icon={ClipboardList} label="Leads" count={contactStats.lead_count} value={categoryValues.lead.value} commission={categoryValues.lead.commission} color="text-blue-500" borderColor="border-l-blue-500" />
-        <KPICard icon={RefreshCw} label="10x" count={contactStats.tenx_count} value={categoryValues['10x'].value} color="text-cyan-500" borderColor="border-l-cyan-500" />
-        <KPICard icon={Snowflake} label="Cold" count={contactStats.cold_count} value={categoryValues.cold.value} color="text-slate-500" borderColor="border-l-slate-400" />
-        <KPICard icon={XCircle} label="Przegrane" count={contactStats.lost_count} color="text-gray-500" borderColor="border-l-gray-400" />
-        <KPICard icon={UserCheck} label="Klienci" count={clients.length} value={clientTotalValue} commission={clientTotalCommission} color="text-emerald-500" borderColor="border-l-emerald-500" />
-        <KPICard icon={Briefcase} label="Ofertowanie" count={offeringCount} value={categoryValues.offering.value} commission={categoryValues.offering.commission} color="text-teal-500" borderColor="border-l-teal-500" />
-        <KPICard icon={Search} label="Poszukiwani" count={prospectStats.total} color="text-purple-500" borderColor="border-l-purple-500" subtitle={`${prospectStats.converted} skonw.`} />
+        <KPICard icon={Flame} label="HOT Leads" count={contactStats.hot_count} value={categoryValues.hot.value} commission={categoryValues.hot.commission} color="text-red-500" borderColor="border-l-red-500" overdue={contactStats.overdue_count} onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={Star} label="TOP Leads" count={contactStats.top_count} value={categoryValues.top.value} commission={categoryValues.top.commission} color="text-amber-500" borderColor="border-l-amber-500" onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={ClipboardList} label="Leads" count={contactStats.lead_count} value={categoryValues.lead.value} commission={categoryValues.lead.commission} color="text-blue-500" borderColor="border-l-blue-500" onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={RefreshCw} label="10x" count={contactStats.tenx_count} value={categoryValues['10x'].value} color="text-cyan-500" borderColor="border-l-cyan-500" onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={Snowflake} label="Cold" count={contactStats.cold_count} value={categoryValues.cold.value} color="text-slate-500" borderColor="border-l-slate-400" onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={XCircle} label="Przegrane" count={contactStats.lost_count} color="text-gray-500" borderColor="border-l-gray-400" onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={UserCheck} label="Klienci" count={clients.length} value={clientTotalValue} commission={clientTotalCommission} color="text-emerald-500" borderColor="border-l-emerald-500" onClick={() => onNavigate?.('clients')} />
+        <KPICard icon={Briefcase} label="Ofertowanie" count={offeringCount} value={categoryValues.offering.value} commission={categoryValues.offering.commission} color="text-teal-500" borderColor="border-l-teal-500" onClick={() => onNavigate?.('offering')} />
+        <KPICard icon={Search} label="Poszukiwani" count={prospectStats.total} color="text-purple-500" borderColor="border-l-purple-500" subtitle={`${prospectStats.converted} skonw.`} onClick={() => onNavigate?.('prospecting')} />
       </div>
 
       {/* Weighted pipeline */}
@@ -382,13 +383,16 @@ export function SalesFunnelDashboard({ teamId }: SalesFunnelDashboardProps) {
 // === Helper components ===
 
 function KPICard({
-  icon: Icon, label, count, value, commission, color, borderColor, overdue, subtitle,
+  icon: Icon, label, count, value, commission, color, borderColor, overdue, subtitle, onClick,
 }: {
   icon: any; label: string; count: number; value?: number; commission?: number;
-  color: string; borderColor: string; overdue?: number; subtitle?: string;
+  color: string; borderColor: string; overdue?: number; subtitle?: string; onClick?: () => void;
 }) {
   return (
-    <Card className={`border-l-4 ${borderColor}`}>
+    <Card
+      className={`border-l-4 ${borderColor} ${onClick ? 'cursor-pointer hover:shadow-md hover:bg-accent/50 transition-all duration-150' : ''}`}
+      onClick={onClick}
+    >
       <CardContent className="p-3">
         <div className="flex items-center gap-1.5 mb-1">
           <Icon className={`h-3.5 w-3.5 ${color}`} />

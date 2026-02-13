@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -24,12 +25,14 @@ import {
   Sun,
   Sparkles,
   ClipboardList,
+  ChevronDown,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { NavLink } from '@/components/NavLink';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import {
   Sidebar,
   SidebarContent,
@@ -138,12 +141,16 @@ function NavItem({ item }: { item: { title: string; url: string; icon: typeof Se
   );
 }
 
-function GroupLabel({ children, isCollapsed }: { children: string; isCollapsed: boolean }) {
+function CollapsibleGroupLabel({ children, isCollapsed, isOpen, onToggle }: { children: string; isCollapsed: boolean; isOpen: boolean; onToggle: () => void }) {
   if (isCollapsed) return null;
   return (
-    <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/35 px-3 mb-1 font-semibold">
-      {children}
-    </SidebarGroupLabel>
+    <button
+      onClick={onToggle}
+      className="flex items-center justify-between w-full text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/35 px-3 mb-1 font-semibold hover:text-sidebar-foreground/60 transition-colors"
+    >
+      <span>{children}</span>
+      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+    </button>
   );
 }
 
@@ -153,6 +160,7 @@ export function AppSidebar() {
   const { isAdmin } = useOwnerPanel();
   const { isAssistant, director, assistant } = useAuth();
   const { isSuperadmin } = useSuperadmin();
+  const location = useLocation();
 
   const getUserRole = () => {
     if (isSuperadmin) return 'Superadmin';
@@ -194,6 +202,30 @@ export function AppSidebar() {
         { label: 'System', items: systemItems },
       ];
 
+  // Determine which groups should be open based on active route
+  const initialOpenGroups = useMemo(() => {
+    const open: Record<string, boolean> = {};
+    navGroups.forEach(group => {
+      const hasActiveItem = group.items.some(item => {
+        const basePath = item.url.split('?')[0];
+        if (item.url === '/') return location.pathname === '/';
+        return location.pathname.startsWith(basePath);
+      });
+      open[group.label] = hasActiveItem;
+    });
+    // If no group is active, open all
+    if (!Object.values(open).some(v => v)) {
+      navGroups.forEach(g => { open[g.label] = true; });
+    }
+    return open;
+  }, []); // Only compute on mount
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpenGroups);
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       {/* Logo area */}
@@ -213,16 +245,20 @@ export function AppSidebar() {
       <SidebarContent className="px-2 py-3 scrollbar-thin">
         {navGroups.map((group) => (
           <SidebarGroup key={group.label} className="mb-1">
-            <GroupLabel isCollapsed={isCollapsed}>{group.label}</GroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="space-y-0.5">
-                {group.items
-                  .filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin)
-                  .map((item) => (
-                  <NavItem key={item.title + item.url} item={item} />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <CollapsibleGroupLabel isCollapsed={isCollapsed} isOpen={openGroups[group.label] ?? true} onToggle={() => toggleGroup(group.label)}>
+              {group.label}
+            </CollapsibleGroupLabel>
+            {(isCollapsed || openGroups[group.label] !== false) && (
+              <SidebarGroupContent>
+                <SidebarMenu className="space-y-0.5">
+                  {group.items
+                    .filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin)
+                    .map((item) => (
+                    <NavItem key={item.title + item.url} item={item} />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            )}
           </SidebarGroup>
         ))}
       </SidebarContent>
