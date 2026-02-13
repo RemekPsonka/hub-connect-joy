@@ -8,7 +8,7 @@ import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
   Clock, AlertTriangle, MessageSquare, History, ChevronDown,
   Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck, Moon,
-  Circle, CheckCircle2
+  Circle, CheckCircle2, Pencil
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -474,13 +474,13 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                     )}
                   </h4>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="h-7 px-2.5 text-xs gap-1"
                     onClick={() => { setSelectedTask(null); setTaskModalOpen(true); }}
                   >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Nowe
+                    <Plus className="h-3 w-3" />
+                    Nowe zadanie
                   </Button>
                 </div>
                 {openTasks.length === 0 && completedTasks.length === 0 ? (
@@ -490,13 +490,13 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                     {openTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="flex items-start gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1.5 -mx-1"
+                        className="group flex items-start gap-2 py-1.5 cursor-pointer hover:bg-muted/50 rounded px-1.5 -mx-1"
                         onClick={() => {
                           setSelectedTask(task);
                           setTaskDetailOpen(true);
                         }}
                       >
-                      <button
+                        <button
                           className="mt-0.5 shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -505,14 +505,14 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                           }}
                           title={task.status === 'pending' ? 'Oczekujące' : task.status === 'in_progress' ? 'W trakcie' : 'Zakończone'}
                         >
-                          {task.status === 'pending' && <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
-                          {task.status === 'in_progress' && <Clock className="h-3.5 w-3.5 text-blue-500" />}
-                          {task.status !== 'pending' && task.status !== 'in_progress' && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
+                          {task.status === 'pending' && <Circle className="h-4 w-4 text-muted-foreground" />}
+                          {task.status === 'in_progress' && <Clock className="h-4 w-4 text-blue-500" />}
+                          {task.status !== 'pending' && task.status !== 'in_progress' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                         </button>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className={cn(
-                              'h-1.5 w-1.5 rounded-full shrink-0',
+                              'h-2 w-2 rounded-full shrink-0',
                               task.priority === 'urgent' ? 'bg-red-500' :
                               task.priority === 'high' ? 'bg-orange-500' :
                               task.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
@@ -526,6 +526,17 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                             </div>
                           )}
                         </div>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTask(task);
+                            setTaskModalOpen(true);
+                          }}
+                          title="Edytuj zadanie"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </button>
                       </div>
                     ))}
                     {completedTasks.length > 0 && (
