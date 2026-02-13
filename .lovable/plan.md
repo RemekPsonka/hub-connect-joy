@@ -1,42 +1,53 @@
 
 
-# Zamiana panelu bocznego kontaktu na popup (Dialog)
+# Ujednolicenie statusow zadan miedzy widokami
 
 ## Problem
-Panel boczny (Sheet) ucina dane po prawej stronie - przyciski kategorii, "+ Nowe zadanie" i inne elementy sa obciete. Mimo wielu poprawek szerokosci, Sheet z ScrollArea nadal nie wyswietla pelnej zawartosci.
+
+Istnieja dwie rozne konwencje nazewnictwa statusow:
+
+```text
+Baza danych:     todo  |  in_progress  |  completed  |  cancelled
+deals-team UI:   pending  |  in_progress  |  done  |  cancelled
+TaskDetailSheet: pending  |  in_progress  |  completed
+```
+
+Warstwa mapowania (`fromTaskStatus`/`toTaskStatus`) w `useDealsTeamAssignments.ts` tlumczy miedzy nimi, ale to prowadzi do bledow gdy TaskDetailSheet otwierany z MyTeamTasksView probuje aktualizowac status wartosciami, ktorych baza nie rozpoznaje.
 
 ## Rozwiazanie
-Zamiana komponentu `Sheet` na `Dialog` (popup wycentrowany na ekranie) w pliku `DealContactDetailSheet.tsx`. Dialog daje pelna kontrole nad szerokoscia i nie ma problemow z ucinaniem zawartosci.
 
-## Szczegoly techniczne
+Ujednolicenie do wartosci bazodanowych (`todo`, `in_progress`, `completed`, `cancelled`) we wszystkich komponentach. Warstwa mapowania zostaje usunieta - etykiety wyswietlane sa przez konfiguracje UI.
 
-### Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
+## Zmiany w plikach
 
-**Zmiany:**
+### 1. `src/hooks/useDealsTeamAssignments.ts`
+- Usuniecie funkcji `toTaskStatus` i `fromTaskStatus`
+- Usuniecie wszystkich wywolan `.map(... fromTaskStatus ...)` w hookach `useContactAssignments`, `useMyTeamAssignments`, `useDealContactAllTasks`
+- W `useUpdateAssignment`: zamiana `toTaskStatus(params.status)` na bezposrednie uzycie `params.status`, zamiana warunku `completed_at` z `params.status === 'done'` na `params.status === 'completed'`
 
-1. Zamiana importow:
-   - Usuniecie: `Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription`
-   - Dodanie: `Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription` z `@/components/ui/dialog`
+### 2. `src/components/deals-team/MyTeamTasksView.tsx`
+- Zamiana `statusConfig` z kluczami `pending/done` na `todo/completed`:
+  - `pending` -> `todo` (label: "Do zrobienia")
+  - `done` -> `todo` zostaje, `done` -> `completed`
+- Zamiana `statusCycle` z `['pending', 'in_progress', 'done']` na `['todo', 'in_progress', 'completed']`
+- Wszystkie porownania `task.status === 'done'` -> `task.status === 'completed'`
+- Usuniecie mapowania w `selectedTask` (linia 458) - status przekazywany bez konwersji
+- Warunek `overdue` - zamiana `!== 'done'` na `!== 'completed'`
 
-2. Zamiana struktury JSX (linie 202-718):
-   - `Sheet` -> `Dialog`
-   - `SheetContent` -> `DialogContent` z klasa `max-w-2xl w-full max-h-[85vh] flex flex-col p-0 overflow-hidden`
-   - `SheetHeader` -> `DialogHeader`
-   - `SheetTitle` -> `DialogTitle`
-   - `SheetDescription` -> `DialogDescription`
-   - Usuniecie `side="right"` (Dialog nie ma tego propa)
+### 3. `src/components/tasks/TaskStatusBadge.tsx`
+- Dodanie obslugi statusu `todo` (ten sam styl co `pending`, label "Do zrobienia")
+- Dodanie obslugi statusu `cancelled` (szary styl, label "Anulowane")
+- Zachowanie `pending` jako alias (fallback) dla kompatybilnosci
 
-3. ScrollArea pozostaje bez zmian - opakowuje zawartosc ponizej headera
+### 4. `src/components/tasks/TaskActivityLog.tsx`
+- Dodanie `todo: 'Do zrobienia'` i `cancelled: 'Anulowane'` do `statusLabels`
 
-4. Usuniecie propa `side` z interfejsu (nie jest potrzebny)
+### 5. `src/components/deals-team/DealContactDetailSheet.tsx`
+- Zamiana porownania statusow z `pending/done` na `todo/completed` w sekcji zadan (ikony statusu, cykliczne przelaczanie)
 
-**Efekt koncowy:**
-- Popup wycentrowany na ekranie, 672px szerokosci (max-w-2xl)
-- Maksymalna wysokosc 85% viewportu z wewnetrznym scrollem
-- Wszystkie dane widoczne: kategorie, przyciski, notatki, zadania
-- Zero uciecia po prawej stronie
-- Zachowana cala dotychczasowa funkcjonalnosc (edycja statusu, kategorie, notatki, zadania, brief AI, statusy tygodniowe, historia)
-
-### Zadne inne pliki nie wymagaja zmian
-Komponent jest uzywany w innych miejscach przez te same propsy (`open`, `onOpenChange`, `contact`, `teamId`) - interfejs nie ulega zmianie.
+## Efekt
+- Jeden zestaw wartosci statusow (`todo`, `in_progress`, `completed`, `cancelled`) uzyty wszedzie
+- Brak warstwy tlumaczenia = brak bledow synchronizacji
+- TaskDetailSheet otwarty z dowolnego widoku operuje na tych samych wartosciach co baza
+- Pelna funkcjonalnosc zachowana: cykliczne przelaczanie, edycja, drag-and-drop, subtaski
 
