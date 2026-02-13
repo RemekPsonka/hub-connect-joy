@@ -58,6 +58,22 @@ export function useTeamContacts(
         .select('id, full_name, company, position, email, phone, city, company_id')
         .in('id', contactIds);
 
+      // Resolve company name from companies table when missing
+      const needCompanyResolve = contacts?.filter(c => !c.company && c.company_id) || [];
+      if (needCompanyResolve.length > 0) {
+        const companyIds = [...new Set(needCompanyResolve.map(c => c.company_id!))];
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('id, name')
+          .in('id', companyIds);
+        const companyMap = new Map(companies?.map(co => [co.id, co.name]) || []);
+        for (const c of contacts || []) {
+          if (!c.company && c.company_id) {
+            (c as any).company = companyMap.get(c.company_id) || null;
+          }
+        }
+      }
+
       // Mapuj kontakty do deal contacts
       const contactMap = new Map(contacts?.map(c => [c.id, c]) || []);
       
@@ -98,6 +114,18 @@ export function useTeamContact(contactId: string | undefined) {
         .select('id, full_name, company, position, email, phone, city, company_id')
         .eq('id', dealContact.contact_id)
         .single();
+
+      // Resolve company name from companies table when missing
+      if (contact && !contact.company && contact.company_id) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('name')
+          .eq('id', contact.company_id)
+          .single();
+        if (company) {
+          (contact as any).company = company.name;
+        }
+      }
 
       return {
         ...dealContact,

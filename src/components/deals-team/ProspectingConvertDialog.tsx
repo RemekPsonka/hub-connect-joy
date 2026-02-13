@@ -210,12 +210,37 @@ export function ProspectingConvertDialog({
           await supabase.from('contacts').update(updates).eq('id', contactId);
         }
       } else {
+        // Resolve company_id before creating contact
+        let companyId: string | null = null;
+        if (prospect.company && tenantId) {
+          const trimmedName = prospect.company.trim();
+          const { data: existingCompany } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', tenantId)
+            .ilike('name', trimmedName)
+            .limit(1)
+            .maybeSingle();
+
+          if (existingCompany) {
+            companyId = existingCompany.id;
+          } else {
+            const { data: newCompany } = await supabase
+              .from('companies')
+              .insert({ name: trimmedName, tenant_id: tenantId, company_status: 'pending' })
+              .select('id')
+              .single();
+            companyId = newCompany?.id || null;
+          }
+        }
+
         // CREATE new contact
         const { data: contact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             full_name: prospect.full_name,
             company: prospect.company,
+            company_id: companyId,
             position: prospect.position,
             email: email || null,
             phone: phone || null,
