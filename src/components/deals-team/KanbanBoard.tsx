@@ -11,6 +11,7 @@ import { ProspectCard } from './ProspectCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
 import { DealContactDetailSheet } from './DealContactDetailSheet';
+import { SnoozedContactsBar } from './SnoozedContactsBar';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -32,16 +33,31 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter contacts
+  // Separate snoozed contacts
+  const { activeContacts, snoozedContacts } = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const active: DealTeamContact[] = [];
+    const snoozed: DealTeamContact[] = [];
+    for (const c of contacts) {
+      if (c.snoozed_until && c.snoozed_until > today) {
+        snoozed.push(c);
+      } else {
+        active.push(c);
+      }
+    }
+    return { activeContacts: active, snoozedContacts: snoozed };
+  }, [contacts]);
+
+  // Filter active contacts by search
   const filteredContacts = useMemo(() => {
-    if (!searchQuery.trim()) return contacts;
+    if (!searchQuery.trim()) return activeContacts;
     const q = searchQuery.toLowerCase();
-    return contacts.filter(
+    return activeContacts.filter(
       (c) =>
         c.contact?.full_name?.toLowerCase().includes(q) ||
         c.contact?.company?.toLowerCase().includes(q)
     );
-  }, [contacts, searchQuery]);
+  }, [activeContacts, searchQuery]);
 
   const hotContacts = useMemo(
     () => filteredContacts.filter((c) => c.category === 'hot'),
@@ -151,6 +167,13 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           </button>
         )}
       </div>
+
+      {/* Snoozed contacts bar */}
+      <SnoozedContactsBar
+        snoozedContacts={snoozedContacts}
+        teamId={teamId}
+        onContactClick={handleCardClick}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* HOT column */}

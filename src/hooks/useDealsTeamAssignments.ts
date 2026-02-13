@@ -130,3 +130,56 @@ export function useUpdateAssignment() {
     },
   });
 }
+
+/**
+ * Pobiera wszystkie zadania dla zespołu (z danymi kontaktu)
+ * Używane w widoku "Moje zadania w lejku"
+ */
+export function useMyTeamAssignments(teamId: string | undefined) {
+  return useQuery({
+    queryKey: ['deal-team-assignments-all', teamId],
+    queryFn: async () => {
+      if (!teamId) return [];
+
+      // Fetch all assignments for team
+      const { data: assignments, error } = await supabase
+        .from('deal_team_assignments')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('status', { ascending: true })
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (!assignments || assignments.length === 0) return [];
+
+      // Fetch contact names for each team_contact_id
+      const teamContactIds = [...new Set(assignments.map((a: DealTeamAssignment) => a.team_contact_id))];
+      const { data: teamContacts } = await supabase
+        .from('deal_team_contacts')
+        .select('id, contact_id')
+        .in('id', teamContactIds);
+
+      const contactIds = [...new Set((teamContacts || []).map((tc: { contact_id: string }) => tc.contact_id))];
+      const { data: contacts } = await supabase
+        .from('contacts')
+        .select('id, full_name, company')
+        .in('id', contactIds);
+
+      const contactMap = new Map((contacts || []).map((c: { id: string; full_name: string; company: string | null }) => [c.id, c]));
+      const tcMap = new Map((teamContacts || []).map((tc: { id: string; contact_id: string }) => [tc.id, tc.contact_id]));
+
+      return assignments.map((a: DealTeamAssignment) => {
+        const contactId = tcMap.get(a.team_contact_id);
+        const contact = contactId ? contactMap.get(contactId) : null;
+        return {
+          ...a,
+          contact_name: contact?.full_name || 'Kontakt',
+          contact_company: contact?.company || null,
+        };
+      }) as DealTeamAssignment[];
+    },
+    enabled: !!teamId,
+    staleTime: 60 * 1000,
+  });
+}

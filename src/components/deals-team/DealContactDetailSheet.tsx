@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { pl } from 'date-fns/locale';
+import { toast } from 'sonner';
 import {
   ExternalLink, Trash2, Calendar, CheckSquare, Plus,
   Clock, AlertTriangle, MessageSquare, History, ChevronDown,
-  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck
+  Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck, Moon
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -36,6 +37,7 @@ import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
 import { WeeklyStatusForm } from './WeeklyStatusForm';
 import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
 import { PromoteDialog } from './PromoteDialog';
+import { SnoozeDialog } from './SnoozeDialog';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import type { DealTeamContact, DealContactStatus, DealCategory } from '@/types/dealTeam';
@@ -102,6 +104,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [briefDialogOpen, setBriefDialogOpen] = useState(false);
   const [promoteTarget, setPromoteTarget] = useState<'lead' | 'top' | 'hot' | null>(null);
+  const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Sync notes from contact
@@ -599,6 +602,18 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
               {/* Actions */}
               <section className="pb-4 space-y-2">
+                {/* Snooze */}
+                {contact.category !== 'client' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => setSnoozeDialogOpen(true)}
+                  >
+                    <Moon className="h-3.5 w-3.5 mr-1.5" />
+                    {contact.snoozed_until ? `Odłożony do ${contact.snoozed_until}` : 'Odłóż kontakt'}
+                  </Button>
+                )}
                 {/* Convert to Client */}
                 {contact.category !== 'client' && (
                   <Button
@@ -727,6 +742,30 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
           onClose={() => setPromoteTarget(null)}
         />
       )}
+
+      {/* Snooze Dialog */}
+      <SnoozeDialog
+        open={snoozeDialogOpen}
+        onOpenChange={setSnoozeDialogOpen}
+        contactName={contact.contact.full_name}
+        onSnooze={async (until, reason) => {
+          const { error } = await supabase
+            .from('deal_team_contacts')
+            .update({
+              snoozed_until: until,
+              snooze_reason: reason || null,
+              snoozed_from_category: contact.category,
+            } as any)
+            .eq('id', contact.id);
+          if (error) {
+            toast.error('Błąd odkładania kontaktu');
+          } else {
+            toast.success('Kontakt odłożony');
+            onOpenChange(false);
+          }
+          setSnoozeDialogOpen(false);
+        }}
+      />
     </>
   );
 }

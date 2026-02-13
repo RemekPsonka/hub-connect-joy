@@ -28,3 +28,6 @@ export { RevenueForecastDialog } from './RevenueForecastDialog';
 export { ProductCategoryManager } from './ProductCategoryManager';
 export { ClientsSummaryView } from './ClientsSummaryView';
 export { CommissionsTab } from './CommissionsTab';
+export { SnoozeDialog } from './SnoozeDialog';
+export { SnoozedContactsBar } from './SnoozedContactsBar';
+export { MyTeamTasksView } from './MyTeamTasksView';
