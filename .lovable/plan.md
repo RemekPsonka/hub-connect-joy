@@ -1,44 +1,49 @@
 
-# Konfiguracja widocznych kolumn w Kanban
+# Poprawka gornego menu -- problem z szerokoscia
 
-## Cel
+## Problem
 
-Dodanie popovera z checkboxami umozliwiajacego wybor widocznych kolumn w widoku Kanban (HOT, Ofertowanie, TOP, LEAD, 10x, COLD, Przegrane, Poszukiwani). Ustawienia zapisywane w localStorage.
+Pasek naglowka (TeamSelector + przycisk Statusy + Tabs z zakladkami) nie miesci sie w jednym wierszu. TeamSelector i przycisk "Statusy" zajmuja sporo miejsca, a Tabs z 9 zakladkami jest zbyt szeroki -- elementy wychodza poza ekran (widac uciete "tatusy 107" po lewej stronie).
 
 ## Rozwiazanie
 
-Wzorzec identyczny jak `ColumnConfigPopover` w kontaktach -- przycisk z ikona Settings2, popover z checkboxami.
+Rozdzielic naglowek na **dwa wiersze**:
+- **Wiersz 1**: TeamSelector (lewo) + przycisk Statusy + przycisk "+" (prawo)
+- **Wiersz 2**: Tabs z zakladkami na pelna szerokosc z `overflow-x-auto`
+
+Dzieki temu zakladki beda mialy pelna szerokosc kontenera, a nie tylko to co zostanie po TeamSelector i Statusy.
 
 ## Szczegoly techniczne
 
-### 1. Nowy hook: `src/hooks/useKanbanColumnSettings.ts`
+### Plik: `src/pages/DealsTeamDashboard.tsx`
 
-- Interfejs `KanbanColumnVisibility` z 8 kluczami: `hot`, `offering`, `top`, `lead`, `tenx`, `cold`, `lost`, `prospecting` -- kazdy boolean, domyslnie true
-- Zapis/odczyt z `localStorage` pod kluczem `kanban-column-visibility`
-- Zwraca `{ columns, toggleColumn }` analogicznie do `useContactsTableSettings`
+Zmiana struktury sekcji Header (linie 130-202):
 
-### 2. Nowy komponent: `src/components/deals-team/KanbanColumnConfigPopover.tsx`
+**Obecna struktura:**
+```
+flex-row
+  ├── TeamSelector
+  └── flex-row
+        ├── Button "Statusy"
+        ├── div overflow-x-auto
+        │     └── Tabs (9 zakladek)
+        └── Button "+"
+```
 
-- Popover z checkboxami dla kazdej kolumny (etykiety: HOT LEAD, OFERTOWANIE, TOP LEAD, LEAD, 10x, COLD LEAD, PRZEGRANE, POSZUKIWANI)
-- Wzorzec 1:1 z `ColumnConfigPopover` z kontaktow
-- Przycisk "Kolumny" z ikona Settings2
+**Nowa struktura:**
+```
+flex-col gap-4
+  ├── flex-row justify-between
+  │     ├── TeamSelector
+  │     └── flex-row
+  │           ├── Button "Statusy"
+  │           └── Button "+"
+  └── div overflow-x-auto w-full
+        └── Tabs (9 zakladek)
+```
 
-### 3. Zmiana: `src/components/deals-team/KanbanBoard.tsx`
-
-- Import i uzycie hooka `useKanbanColumnSettings`
-- Dodanie `KanbanColumnConfigPopover` obok paska wyszukiwania (po prawej stronie)
-- Warunkowe renderowanie kazdej kolumny KanbanColumn na podstawie `columns.hot`, `columns.top` itd.
-- Dynamiczne dostosowanie gridu: `lg:grid-cols-{N}` gdzie N = liczba widocznych kolumn
-
-### 4. Zmiana: `src/components/deals-team/index.ts`
-
-- Export `KanbanColumnConfigPopover`
-
-### Zmieniane pliki
-
-| Plik | Zmiana |
-|------|--------|
-| `src/hooks/useKanbanColumnSettings.ts` | NOWY -- hook z localStorage |
-| `src/components/deals-team/KanbanColumnConfigPopover.tsx` | NOWY -- popover z checkboxami |
-| `src/components/deals-team/KanbanBoard.tsx` | Filtrowanie kolumn + przycisk konfiguracji |
-| `src/components/deals-team/index.ts` | Export nowego komponentu |
+Konkretne zmiany:
+- Przeniesienie `Tabs` na osobny wiersz pod TeamSelector
+- Usuniecie `max-w-[calc(100vw-300px)]` -- zakladki beda mialy pelna szerokosc
+- Dodanie `w-full overflow-x-auto` do kontenera z Tabs
+- Przycisk "+" pozostaje obok "Statusy" w gornym wierszu
