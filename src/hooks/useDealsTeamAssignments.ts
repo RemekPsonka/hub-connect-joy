@@ -3,13 +3,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+/**
+ * Unified interface mapping tasks table fields to deal team assignment context.
+ * After consolidation, all deal team assignments live in the `tasks` table.
+ */
 export interface DealTeamAssignment {
   id: string;
-  team_contact_id: string;
-  team_id: string;
+  deal_team_contact_id: string | null;
+  deal_team_id: string | null;
   tenant_id: string;
-  assigned_to: string;
-  assigned_by: string;
+  assigned_to: string | null;
+  owner_id: string | null;
   title: string;
   description: string | null;
   due_date: string | null;
@@ -17,7 +21,27 @@ export interface DealTeamAssignment {
   priority: string | null;
   completed_at: string | null;
   created_at: string | null;
+  // Enriched fields from joins
+  contact_name?: string;
+  contact_company?: string | null;
 }
+
+// Status mapping helpers
+const toTaskStatus = (dealStatus: string): string => {
+  switch (dealStatus) {
+    case 'pending': return 'todo';
+    case 'done': return 'completed';
+    default: return dealStatus; // in_progress, cancelled stay the same
+  }
+};
+
+const fromTaskStatus = (taskStatus: string): string => {
+  switch (taskStatus) {
+    case 'todo': return 'pending';
+    case 'completed': return 'done';
+    default: return taskStatus;
+  }
+};
 
 export function useContactAssignments(teamContactId: string | undefined) {
   return useQuery({
@@ -26,14 +50,17 @@ export function useContactAssignments(teamContactId: string | undefined) {
       if (!teamContactId) return [];
 
       const { data, error } = await supabase
-        .from('deal_team_assignments')
+        .from('tasks')
         .select('*')
-        .eq('team_contact_id', teamContactId)
-        .order('status', { ascending: true }) // pending first
+        .eq('deal_team_contact_id', teamContactId)
+        .order('status', { ascending: true })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as DealTeamAssignment[];
+      return (data || []).map((t: any) => ({
+        ...t,
+        status: fromTaskStatus(t.status || 'todo'),
+      })) as DealTeamAssignment[];
     },
     enabled: !!teamContactId,
   });
@@ -58,18 +85,18 @@ export function useCreateAssignment() {
       if (!director?.id || !director?.tenant_id) throw new Error('Brak autoryzacji');
 
       const { data, error } = await supabase
-        .from('deal_team_assignments')
+        .from('tasks')
         .insert({
-          team_contact_id: params.teamContactId,
-          team_id: params.teamId,
+          deal_team_contact_id: params.teamContactId,
+          deal_team_id: params.teamId,
           tenant_id: director.tenant_id,
           assigned_to: params.assignedTo,
-          assigned_by: director.id,
+          owner_id: director.id,
           title: params.title,
           description: params.description || null,
           due_date: params.dueDate || null,
           priority: params.priority || 'medium',
-          status: 'pending',
+          status: 'todo',
         })
         .select()
         .single();
@@ -79,6 +106,7 @@ export function useCreateAssignment() {
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['deal-team-assignments', params.teamContactId] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all', params.teamId] });
       toast.success('Zadanie dodane');
     },
     onError: (error: Error) => {
@@ -106,7 +134,7 @@ export function useUpdateAssignment() {
       const updates: Record<string, unknown> = {};
 
       if (params.status !== undefined) {
-        updates.status = params.status;
+        updates.status = toTaskStatus(params.status);
         updates.completed_at = params.status === 'done' ? new Date().toISOString() : null;
       }
       if (params.title !== undefined) updates.title = params.title;
@@ -116,7 +144,7 @@ export function useUpdateAssignment() {
       if (params.assignedTo !== undefined) updates.assigned_to = params.assignedTo;
 
       const { error } = await supabase
-        .from('deal_team_assignments')
+        .from('tasks')
         .update(updates)
         .eq('id', params.id);
 
@@ -141,20 +169,29 @@ export function useMyTeamAssignments(teamId: string | undefined) {
     queryFn: async () => {
       if (!teamId) return [];
 
-      // Fetch all assignments for team
-      const { data: assignments, error } = await supabase
-        .from('deal_team_assignments')
+      const { data: tasks, error } = await supabase
+        .from('tasks')
         .select('*')
-        .eq('team_id', teamId)
+        .eq('deal_team_id', teamId)
         .order('status', { ascending: true })
         .order('due_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (!assignments || assignments.length === 0) return [];
+      if (!tasks || tasks.length === 0) return [];
 
-      // Fetch contact names for each team_contact_id
-      const teamContactIds = [...new Set(assignments.map((a: DealTeamAssignment) => a.team_contact_id))];
+      // Fetch contact names for each deal_team_contact_id
+      const teamContactIds = [...new Set(tasks.map((t: any) => t.deal_team_contact_id).filter(Boolean))];
+      
+      if (teamContactIds.length === 0) {
+        return tasks.map((t: any) => ({
+          ...t,
+          status: fromTaskStatus(t.status || 'todo'),
+          contact_name: 'Kontakt',
+          contact_company: null,
+        })) as DealTeamAssignment[];
+      }
+
       const { data: teamContacts } = await supabase
         .from('deal_team_contacts')
         .select('id, contact_id')
@@ -169,11 +206,12 @@ export function useMyTeamAssignments(teamId: string | undefined) {
       const contactMap = new Map((contacts || []).map((c: { id: string; full_name: string; company: string | null }) => [c.id, c]));
       const tcMap = new Map((teamContacts || []).map((tc: { id: string; contact_id: string }) => [tc.id, tc.contact_id]));
 
-      return assignments.map((a: DealTeamAssignment) => {
-        const contactId = tcMap.get(a.team_contact_id);
+      return tasks.map((t: any) => {
+        const contactId = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
         const contact = contactId ? contactMap.get(contactId) : null;
         return {
-          ...a,
+          ...t,
+          status: fromTaskStatus(t.status || 'todo'),
           contact_name: contact?.full_name || 'Kontakt',
           contact_company: contact?.company || null,
         };
