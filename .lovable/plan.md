@@ -1,31 +1,44 @@
 
-# Poszerzenie panelu bocznego kontaktu
+# Naprawa panelu bocznego kontaktu - pelna widocznosc
 
 ## Problem
-Panel boczny ma ustawione `sm:max-w-lg` (512px), przez co elementy sa ucinane na prawej krawedzi — przyciski "Nowe zadanie", badge kategorii i inne elementy nie mieszcza sie w widoku.
+Panel boczny uzywa komponentu `Sheet` z bazowym wariantem `right`, ktory ma twardo ustawione `sm:max-w-sm` (384px). Mimo ze `DealContactDetailSheet` nadpisuje to na `sm:max-w-xl`, ScrollArea wewnatrz zabiera dodatkowa przestrzen na scrollbar, co powoduje ucinanie zawartosci (np. przycisk "+ Nowe zadanie").
 
-## Rozwiazanie
+## Rozwiazanie - 2 zmiany
 
-Jedna zmiana w pliku `src/components/deals-team/DealContactDetailSheet.tsx`:
+### 1. Plik: `src/components/ui/sheet.tsx` (linia 40-41)
 
-### Zmiana szerokosci panelu (linia 204)
-
-Zmiana klasy z `sm:max-w-lg` na `sm:max-w-xl` (640px) lub `sm:max-w-2xl` (672px):
+Usuniecie restrykcyjnego `sm:max-w-sm` z wariantu `right`, aby klasy nadpisujace w komponentach potomnych dzialaly poprawnie:
 
 ```
-Przed: className="w-full sm:max-w-lg p-0 flex flex-col"
-Po:    className="w-full sm:max-w-xl p-0 flex flex-col"
+Przed:
+right: "inset-y-0 right-0 h-full w-3/4  border-l ... sm:max-w-sm"
+
+Po:
+right: "inset-y-0 right-0 h-full w-3/4  border-l ..."
 ```
 
-To da dodatkowe ~128px szerokosci, dzieki czemu:
-- Przyciski "Nowe zadanie" i inne beda widoczne
-- Badge kategorii (HOT, OFERTOWANIE, TOP, LEAD, 10x, COLD) beda sie miescily w jednym wierszu
-- Sekcje nie beda ucinane na prawej krawedzi
+Analogiczna zmiana dla wariantu `left` (linia 39), aby zachowac spojnosc.
 
-## Szczegoly techniczne
+### 2. Plik: `src/components/deals-team/DealContactDetailSheet.tsx` (linia 204)
 
-| Plik | Linia | Zmiana |
-|------|-------|--------|
-| `src/components/deals-team/DealContactDetailSheet.tsx` | 204 | `sm:max-w-lg` na `sm:max-w-xl` |
+Ustawienie konkretnej szerokosci panelu na 640px (`sm:max-w-xl`) z dodatkowym `overflow-hidden` dla pewnosci:
 
-Jedna linia do zmiany, zero nowych zaleznosci.
+```
+Przed:
+className="w-full sm:max-w-xl p-0 flex flex-col"
+
+Po:
+className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden"
+```
+
+## Efekt
+
+- Panel bedzie mial 640px szerokosci (xl) bez konfliktu z bazowym sm:max-w-sm
+- Przycisk "+ Nowe zadanie" bedzie w pelni widoczny
+- Badge kategorii (HOT, OFERTOWANIE, TOP itd.) beda sie miescily
+- ScrollArea nie bedzie ucinac zawartosci po prawej stronie
+
+## Uwaga
+
+Zmiana w `sheet.tsx` usuwa domyslne ograniczenie `sm:max-w-sm` — inne komponenty uzywajace Sheet powinny same ustawiac max-width w className (co jest standardowa praktyka w shadcn).
