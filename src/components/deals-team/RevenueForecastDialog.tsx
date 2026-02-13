@@ -18,13 +18,13 @@ export function RevenueForecastDialog({ open, onOpenChange, clientProduct }: Rev
   const { data: existingForecasts = [] } = useRevenueForecast(clientProduct.id);
   const saveForecast = useSaveRevenueForecast();
 
-  const [percentages, setPercentages] = useState<number[]>(Array(12).fill(0));
+  const [percentages, setPercentages] = useState<number[]>(Array(24).fill(0));
 
   // Initialize from existing
   useEffect(() => {
-    const p = Array(12).fill(0);
+    const p = Array(24).fill(0);
     existingForecasts.forEach((f) => {
-      if (f.month_offset >= 0 && f.month_offset < 12) {
+      if (f.month_offset >= 0 && f.month_offset < 24) {
         p[f.month_offset] = f.percentage;
       }
     });
@@ -33,7 +33,7 @@ export function RevenueForecastDialog({ open, onOpenChange, clientProduct }: Rev
 
   const months = useMemo(() => {
     const now = startOfMonth(new Date());
-    return Array.from({ length: 12 }, (_, i) => ({
+    return Array.from({ length: 24 }, (_, i) => ({
       offset: i,
       date: addMonths(now, i),
       label: format(addMonths(now, i), 'LLLL yyyy', { locale: pl }),

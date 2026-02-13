@@ -2560,11 +2560,16 @@ export type Database = {
       deal_team_client_products: {
         Row: {
           commission_percent: number
+          contract_duration_months: number | null
+          contract_end_date: string | null
+          contract_start_date: string | null
           created_at: string
           deal_value: number
           expected_commission: number
           id: string
           notes: string | null
+          offering_start_date: string | null
+          policy_id: string | null
           probability_percent: number
           product_category_id: string
           team_contact_id: string
@@ -2574,11 +2579,16 @@ export type Database = {
         }
         Insert: {
           commission_percent?: number
+          contract_duration_months?: number | null
+          contract_end_date?: string | null
+          contract_start_date?: string | null
           created_at?: string
           deal_value?: number
           expected_commission?: number
           id?: string
           notes?: string | null
+          offering_start_date?: string | null
+          policy_id?: string | null
           probability_percent?: number
           product_category_id: string
           team_contact_id: string
@@ -2588,11 +2598,16 @@ export type Database = {
         }
         Update: {
           commission_percent?: number
+          contract_duration_months?: number | null
+          contract_end_date?: string | null
+          contract_start_date?: string | null
           created_at?: string
           deal_value?: number
           expected_commission?: number
           id?: string
           notes?: string | null
+          offering_start_date?: string | null
+          policy_id?: string | null
           probability_percent?: number
           product_category_id?: string
           team_contact_id?: string
@@ -2601,6 +2616,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "deal_team_client_products_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deal_team_client_products_product_category_id_fkey"
             columns: ["product_category_id"]
@@ -2804,6 +2826,93 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_team_payment_schedule: {
+        Row: {
+          amount: number
+          client_product_id: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          is_paid: boolean
+          paid_at: string | null
+          payment_type: string
+          scheduled_date: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          client_product_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_paid?: boolean
+          paid_at?: string | null
+          payment_type?: string
+          scheduled_date: string
+          team_contact_id: string
+          team_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_product_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_paid?: boolean
+          paid_at?: string | null
+          payment_type?: string
+          scheduled_date?: string
+          team_contact_id?: string
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_payment_schedule_client_product_id_fkey"
+            columns: ["client_product_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_client_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_payment_schedule_team_contact_id_fkey"
+            columns: ["team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_payment_schedule_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_payment_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_payment_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -3647,7 +3756,10 @@ export type Database = {
           closed_at: string | null
           commission_rate: number | null
           company_id: string
+          contact_id: string | null
           created_at: string | null
+          deal_team_contact_id: string | null
+          deal_team_id: string | null
           end_date: string
           forecasted_commission: number | null
           forecasted_premium: number | null
@@ -3675,7 +3787,10 @@ export type Database = {
           closed_at?: string | null
           commission_rate?: number | null
           company_id: string
+          contact_id?: string | null
           created_at?: string | null
+          deal_team_contact_id?: string | null
+          deal_team_id?: string | null
           end_date: string
           forecasted_commission?: number | null
           forecasted_premium?: number | null
@@ -3703,7 +3818,10 @@ export type Database = {
           closed_at?: string | null
           commission_rate?: number | null
           company_id?: string
+          contact_id?: string | null
           created_at?: string | null
+          deal_team_contact_id?: string | null
+          deal_team_id?: string | null
           end_date?: string
           forecasted_commission?: number | null
           forecasted_premium?: number | null
@@ -3730,6 +3848,27 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_policies_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_policies_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_policies_deal_team_id_fkey"
+            columns: ["deal_team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
           {
