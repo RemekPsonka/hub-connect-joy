@@ -186,9 +186,15 @@ export default function MyTasks() {
     const other: TaskWithDetails[] = [];
 
     for (const task of allTasks) {
-      if (task.owner_id === directorId || task.assigned_to === directorId) {
+      const isOwner = task.owner_id === directorId;
+      const isAssignee = task.assigned_to === directorId;
+      const isDelegated = isOwner && task.assigned_to && task.assigned_to !== directorId;
+
+      if (isDelegated) {
+        team.push(task);
+      } else if (isOwner || isAssignee) {
         my.push(task);
-      } else if (task.visibility === 'team') {
+      } else if (task.visibility === 'team' || task.deal_team_id) {
         team.push(task);
       } else {
         other.push(task);
