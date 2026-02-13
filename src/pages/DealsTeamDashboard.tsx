@@ -127,77 +127,78 @@ export default function DealsTeamDashboard() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <TeamSelector
-          selectedTeamId={selectedTeamId}
-          onTeamChange={handleTeamChange}
-          teams={teams}
-          contactStats={contactStats}
-          onSettingsClick={handleSettingsClick}
-        />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <TeamSelector
+            selectedTeamId={selectedTeamId}
+            onTeamChange={handleTeamChange}
+            teams={teams}
+            contactStats={contactStats}
+            onSettingsClick={handleSettingsClick}
+          />
 
-        <div className="flex items-center gap-2">
-          {/* Weekly Status Button */}
-          <Button
-            variant="outline"
-            onClick={() => setShowWeeklyStatus(true)}
-            className="gap-2"
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Statusy</span>
-            {overdueCount > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                {overdueCount}
-              </Badge>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowWeeklyStatus(true)}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Statusy</span>
+              {overdueCount > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  {overdueCount}
+                </Badge>
+              )}
+            </Button>
 
-          <div className="overflow-x-auto max-w-[calc(100vw-300px)]">
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-              <TabsList className="w-max">
-                <TabsTrigger value="dashboard" className="gap-1.5 px-2.5">
-                  <PieChart className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Dashboard</span>
-                </TabsTrigger>
-                <TabsTrigger value="kanban" className="gap-1.5 px-2.5">
-                  <LayoutGrid className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Kanban</span>
-                </TabsTrigger>
-                <TabsTrigger value="table" className="gap-1.5 px-2.5">
-                  <List className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Tabela</span>
-                </TabsTrigger>
-                <TabsTrigger value="prospecting" className="gap-1.5 px-2.5">
-                  <Search className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Prospecting</span>
-                </TabsTrigger>
-                <TabsTrigger value="clients" className="gap-1.5 px-2.5">
-                  <UserCheck className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Klienci</span>
-                </TabsTrigger>
-                <TabsTrigger value="offering" className="gap-1.5 px-2.5">
-                  <Briefcase className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Ofertowanie</span>
-                </TabsTrigger>
-                <TabsTrigger value="tasks" className="gap-1.5 px-2.5">
-                  <ClipboardList className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Zadania</span>
-                </TabsTrigger>
-                <TabsTrigger value="commissions" className="gap-1.5 px-2.5">
-                  <Receipt className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Prowizje</span>
-                </TabsTrigger>
-                <TabsTrigger value="snoozed" className="gap-1.5 px-2.5">
-                  <Moon className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Odłożone</span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
+        </div>
 
-          <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
+        <div className="w-full overflow-x-auto">
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+            <TabsList className="w-max">
+              <TabsTrigger value="dashboard" className="gap-1.5 px-2.5">
+                <PieChart className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Dashboard</span>
+              </TabsTrigger>
+              <TabsTrigger value="kanban" className="gap-1.5 px-2.5">
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Kanban</span>
+              </TabsTrigger>
+              <TabsTrigger value="table" className="gap-1.5 px-2.5">
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Tabela</span>
+              </TabsTrigger>
+              <TabsTrigger value="prospecting" className="gap-1.5 px-2.5">
+                <Search className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Prospecting</span>
+              </TabsTrigger>
+              <TabsTrigger value="clients" className="gap-1.5 px-2.5">
+                <UserCheck className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Klienci</span>
+              </TabsTrigger>
+              <TabsTrigger value="offering" className="gap-1.5 px-2.5">
+                <Briefcase className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Ofertowanie</span>
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="gap-1.5 px-2.5">
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Zadania</span>
+              </TabsTrigger>
+              <TabsTrigger value="commissions" className="gap-1.5 px-2.5">
+                <Receipt className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Prowizje</span>
+              </TabsTrigger>
+              <TabsTrigger value="snoozed" className="gap-1.5 px-2.5">
+                <Moon className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Odłożone</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </div>
 
