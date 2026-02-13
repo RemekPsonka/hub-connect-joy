@@ -35,6 +35,8 @@ export default function Login() {
     if (msg) {
       setRejectionMessage(msg);
       sessionStorage.removeItem('auth_rejection');
+      setIsGoogleLoading(false);
+      setIsSubmitting(false);
     }
   }, []);
 
@@ -118,8 +120,8 @@ export default function Login() {
       } else {
         setError('Wystąpił błąd podczas logowania przez Google.');
       }
-      setIsGoogleLoading(false);
     }
+    setIsGoogleLoading(false);
   };
 
   return (
