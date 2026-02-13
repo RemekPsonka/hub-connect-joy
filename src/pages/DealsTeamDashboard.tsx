@@ -204,7 +204,7 @@ export default function DealsTeamDashboard() {
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
-        <SalesFunnelDashboard teamId={selectedTeamId} />
+        <SalesFunnelDashboard teamId={selectedTeamId} onNavigate={(v) => setViewMode(v as ViewMode)} />
       )}
 
       {selectedTeamId && viewMode === 'kanban' && (
