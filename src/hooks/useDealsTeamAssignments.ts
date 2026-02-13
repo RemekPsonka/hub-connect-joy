@@ -26,22 +26,6 @@ export interface DealTeamAssignment {
   contact_company?: string | null;
 }
 
-// Status mapping helpers
-const toTaskStatus = (dealStatus: string): string => {
-  switch (dealStatus) {
-    case 'pending': return 'todo';
-    case 'done': return 'completed';
-    default: return dealStatus; // in_progress, cancelled stay the same
-  }
-};
-
-const fromTaskStatus = (taskStatus: string): string => {
-  switch (taskStatus) {
-    case 'todo': return 'pending';
-    case 'completed': return 'done';
-    default: return taskStatus;
-  }
-};
 
 export function useContactAssignments(teamContactId: string | undefined) {
   return useQuery({
@@ -57,10 +41,7 @@ export function useContactAssignments(teamContactId: string | undefined) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data || []).map((t: any) => ({
-        ...t,
-        status: fromTaskStatus(t.status || 'todo'),
-      })) as DealTeamAssignment[];
+      return (data || []) as unknown as DealTeamAssignment[];
     },
     enabled: !!teamContactId,
   });
@@ -134,8 +115,8 @@ export function useUpdateAssignment() {
       const updates: Record<string, unknown> = {};
 
       if (params.status !== undefined) {
-        updates.status = toTaskStatus(params.status);
-        updates.completed_at = params.status === 'done' ? new Date().toISOString() : null;
+        updates.status = params.status;
+        updates.completed_at = params.status === 'completed' ? new Date().toISOString() : null;
       }
       if (params.title !== undefined) updates.title = params.title;
       if (params.description !== undefined) updates.description = params.description;
@@ -186,7 +167,6 @@ export function useMyTeamAssignments(teamId: string | undefined) {
       if (teamContactIds.length === 0) {
         return tasks.map((t: any) => ({
           ...t,
-          status: fromTaskStatus(t.status || 'todo'),
           contact_name: 'Kontakt',
           contact_company: null,
         })) as DealTeamAssignment[];
@@ -211,7 +191,6 @@ export function useMyTeamAssignments(teamId: string | undefined) {
         const contact = contactId ? contactMap.get(contactId) : null;
         return {
           ...t,
-          status: fromTaskStatus(t.status || 'todo'),
           contact_name: contact?.full_name || 'Kontakt',
           contact_company: contact?.company || null,
         };
@@ -246,7 +225,7 @@ export function useDealContactAllTasks(contactId: string | undefined, teamContac
 
         if (dealError) throw dealError;
         (dealTasks || []).forEach((t: any) => {
-          taskMap.set(t.id, { ...t, status: t.status === 'todo' ? 'pending' : t.status === 'done' ? 'completed' : t.status });
+          taskMap.set(t.id, t);
         });
       }
 

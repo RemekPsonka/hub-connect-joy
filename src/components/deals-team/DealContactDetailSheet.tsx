@@ -157,8 +157,8 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   if (!contact || !contact.contact) return null;
 
   const cat = categoryConfig[contact.category] || categoryConfig.lead;
-  const openTasks = tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'done');
-  const completedTasks = tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled' || t.status === 'done');
+  const openTasks = tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled');
+  const completedTasks = tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled');
   const visibleActivity = showAllActivity ? activityLog : activityLog.slice(0, 5);
 
   const handleStatusChange = (newStatus: string) => {
@@ -186,7 +186,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const handleToggleTask = (taskId: string, currentStatus: string) => {
     updateTask.mutate({
       id: taskId,
-      status: currentStatus === 'completed' ? 'pending' : 'completed',
+      status: currentStatus === 'completed' ? 'todo' : 'completed',
     });
   };
 
@@ -351,14 +351,14 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                           className="mt-0.5 shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const next = task.status === 'pending' ? 'in_progress' : task.status === 'in_progress' ? 'completed' : 'pending';
+                            const next = task.status === 'todo' ? 'in_progress' : task.status === 'in_progress' ? 'completed' : 'todo';
                             updateTask.mutate({ id: task.id, status: next });
                           }}
-                          title={task.status === 'pending' ? 'Oczekujące' : task.status === 'in_progress' ? 'W trakcie' : 'Zakończone'}
+                          title={task.status === 'todo' ? 'Do zrobienia' : task.status === 'in_progress' ? 'W trakcie' : 'Zakończone'}
                         >
-                          {task.status === 'pending' && <Circle className="h-4 w-4 text-muted-foreground" />}
+                          {task.status === 'todo' && <Circle className="h-4 w-4 text-muted-foreground" />}
                           {task.status === 'in_progress' && <Clock className="h-4 w-4 text-blue-500" />}
-                          {task.status !== 'pending' && task.status !== 'in_progress' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                          {task.status !== 'todo' && task.status !== 'in_progress' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                         </button>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">

@@ -18,9 +18,11 @@ const actionLabels: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  todo: 'Do zrobienia',
   pending: 'Oczekujące',
   in_progress: 'W trakcie',
   completed: 'Zakończone',
+  cancelled: 'Anulowane',
 };
 
 const priorityLabels: Record<string, string> = {
