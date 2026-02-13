@@ -1,40 +1,23 @@
 
-# Uproszczenie widoku "Zadania sprzedazy" + bloker osoby
+# Uproszczenie widoku Kanban (Lejek)
 
-## Zmiany
+## Cel
+Usuniecie kart statystyk (TeamStats), pipeline wazonego i lejka konwersji z widoku Kanban -- te dane sa juz dostepne na zakladce Dashboard. Widok Kanban powinien pokazywac tylko sam lejek (kolumny Kanban z kontaktami).
 
-### 1. Ukrycie TeamStats w widoku Zadania
+## Zmiana
 
-W `DealsTeamDashboard.tsx` zmiana warunku wyswietlania TeamStats -- wykluczenie rowniez widoku `tasks`:
+### `src/pages/DealsTeamDashboard.tsx`
 
-```
-viewMode !== 'dashboard' && viewMode !== 'tasks'
-```
-
-### 2. Dodanie "blokera" osoby w MyTeamTasksView
-
-Zamiana obecnego dropdowna filtra na widoczny pasek z avatarami/przyciskami czlonkow zespolu. Klikniecie w osobe "blokuje" widok na jej zadania. Aktywna osoba jest podswietlona. Przycisk "Wszyscy" resetuje filtr.
-
-Wizualnie: pasek z przyciskami na gorze widoku zadań:
+Dodanie `viewMode !== 'kanban'` do warunku wyswietlania `TeamStats` (linia 206):
 
 ```
-[Wszyscy] [Ja] [Adam K.] [Maria S.] [Tomek W.]
+{selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}
 ```
 
-Aktywny przycisk jest podswietlony (variant="default"), reszta outline.
+To ukryje karty statystyk, pipeline wazony i lejek konwersji w widoku Kanban, pozostawiajac sam board z kolumnami.
 
-## Szczegoly techniczne
+## Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/pages/DealsTeamDashboard.tsx` | Dodanie `viewMode !== 'tasks'` do warunku TeamStats (linia 206) |
-| `src/components/deals-team/MyTeamTasksView.tsx` | Zamiana Select filtra na pasek przyciskow z czlonkami zespolu jako "bloker" |
-
-### MyTeamTasksView -- szczegoly blokera
-
-- Usuniecie obecnego Select z filtrem czlonkow (linie 111-127)
-- Dodanie paska przyciskow: kazdy czlonek zespolu jako Button z imieniem
-- Przycisk "Wszyscy" i "Moje" na poczatku
-- Aktywny przycisk: `variant="default"`, reszta: `variant="outline"`
-- Zachowanie istniejacego stanu `filterMember` i logiki filtrowania
-- Przeniesienie "Zakonaczone" i badge overdue pod pasek blokera
+| `src/pages/DealsTeamDashboard.tsx` | Dodanie wykluczenia `kanban` z warunku TeamStats |
