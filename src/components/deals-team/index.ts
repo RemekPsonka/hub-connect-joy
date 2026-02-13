@@ -34,3 +34,4 @@ export { MyTeamTasksView } from './MyTeamTasksView';
 export { ConvertToClientDialog } from './ConvertToClientDialog';
 export { SnoozedTeamView } from './SnoozedTeamView';
 export { OfferingTab } from './OfferingTab';
+export { FunnelConversionChart } from './FunnelConversionChart';
