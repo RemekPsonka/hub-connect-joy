@@ -83,6 +83,9 @@ export interface DealTeamContact {
   ai_brief: string | null;
   ai_brief_generated_at: string | null;
   review_frequency: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
+  snoozed_until: string | null;
+  snooze_reason: string | null;
+  snoozed_from_category: string | null;
   created_at: string;
   updated_at: string;
   // JOIN z contacts

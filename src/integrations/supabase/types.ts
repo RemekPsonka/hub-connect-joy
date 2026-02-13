@@ -2659,6 +2659,9 @@ export type Database = {
           notes: string | null
           priority: string | null
           review_frequency: string | null
+          snooze_reason: string | null
+          snoozed_from_category: string | null
+          snoozed_until: string | null
           status: string
           status_overdue: boolean | null
           team_id: string
@@ -2686,6 +2689,9 @@ export type Database = {
           notes?: string | null
           priority?: string | null
           review_frequency?: string | null
+          snooze_reason?: string | null
+          snoozed_from_category?: string | null
+          snoozed_until?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id: string
@@ -2713,6 +2719,9 @@ export type Database = {
           notes?: string | null
           priority?: string | null
           review_frequency?: string | null
+          snooze_reason?: string | null
+          snoozed_from_category?: string | null
+          snoozed_until?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id?: string
