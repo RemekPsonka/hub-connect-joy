@@ -1,34 +1,42 @@
 
-# Naprawa powiazania konta remek@ideecom.pl
 
-## Zidentyfikowany problem
+# Zamiana panelu bocznego kontaktu na popup (Dialog)
 
-Konto `remek@ideecom.pl` istnieje w bazie jako **director**, ale jest powiazane z **nieaktualnym user_id**.
-
-| Element | Wartosc |
-|---------|---------|
-| Aktualny auth user_id | `bec7a137-ec33-4cb6-b13c-3a47d9e53972` |
-| user_id w tabeli directors | `fc25bc35-3d29-4b81-887e-af1ae18232a4` (stary) |
-
-System przy logowaniu szuka directora/assistanta po `user_id`, nie znajduje dopasowania i odrzuca logowanie z komunikatem "konto nie jest powiazane z organizacja".
+## Problem
+Panel boczny (Sheet) ucina dane po prawej stronie - przyciski kategorii, "+ Nowe zadanie" i inne elementy sa obciete. Mimo wielu poprawek szerokosci, Sheet z ScrollArea nadal nie wyswietla pelnej zawartosci.
 
 ## Rozwiazanie
+Zamiana komponentu `Sheet` na `Dialog` (popup wycentrowany na ekranie) w pliku `DealContactDetailSheet.tsx`. Dialog daje pelna kontrole nad szerokoscia i nie ma problemow z ucinaniem zawartosci.
 
-Jedna operacja SQL - aktualizacja `user_id` w tabeli `directors`:
+## Szczegoly techniczne
 
-```sql
-UPDATE directors
-SET user_id = 'bec7a137-ec33-4cb6-b13c-3a47d9e53972'
-WHERE id = '98a271e8-d923-49cb-a6aa-45f3ac0064d8'
-  AND email = 'remek@ideecom.pl';
-```
+### Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
 
-## Dodatkowa poprawka kodu (bonus)
+**Zmiany:**
 
-Przy okazji naprawienie problemu z zablokowanymi przyciskami logowania w `Login.tsx`:
-- Reset `isGoogleLoading` po kazdym wyniku logowania Google (nie tylko przy bledzie)
-- Reset stanow ladowania przy wyswietleniu komunikatu o odrzuceniu konta
+1. Zamiana importow:
+   - Usuniecie: `Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription`
+   - Dodanie: `Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription` z `@/components/ui/dialog`
 
-## Efekt
+2. Zamiana struktury JSX (linie 202-718):
+   - `Sheet` -> `Dialog`
+   - `SheetContent` -> `DialogContent` z klasa `max-w-2xl w-full max-h-[85vh] flex flex-col p-0 overflow-hidden`
+   - `SheetHeader` -> `DialogHeader`
+   - `SheetTitle` -> `DialogTitle`
+   - `SheetDescription` -> `DialogDescription`
+   - Usuniecie `side="right"` (Dialog nie ma tego propa)
 
-Po aktualizacji user_id bedziesz mogl zalogowac sie normalnie mailem `remek@ideecom.pl` - zarowno haslem jak i przez Google.
+3. ScrollArea pozostaje bez zmian - opakowuje zawartosc ponizej headera
+
+4. Usuniecie propa `side` z interfejsu (nie jest potrzebny)
+
+**Efekt koncowy:**
+- Popup wycentrowany na ekranie, 672px szerokosci (max-w-2xl)
+- Maksymalna wysokosc 85% viewportu z wewnetrznym scrollem
+- Wszystkie dane widoczne: kategorie, przyciski, notatki, zadania
+- Zero uciecia po prawej stronie
+- Zachowana cala dotychczasowa funkcjonalnosc (edycja statusu, kategorie, notatki, zadania, brief AI, statusy tygodniowe, historia)
+
+### Zadne inne pliki nie wymagaja zmian
+Komponent jest uzywany w innych miejscach przez te same propsy (`open`, `onOpenChange`, `contact`, `teamId`) - interfejs nie ulega zmianie.
+
