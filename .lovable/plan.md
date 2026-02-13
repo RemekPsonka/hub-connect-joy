@@ -1,47 +1,52 @@
 
+# Naprawy scrollowania i widocznosci w formularzach Deals
 
-# Dodanie linków do zadań zespołowych w nawigacji
+## Zidentyfikowane problemy
 
-## Co się zmieni
+### 1. ScrollArea w WeeklyStatusForm nie scrolluje
+Komponent `ScrollArea` wymaga jawnej wysokosci (np. `max-h-[60vh]`), a obecnie ma tylko `flex-1` co nie zawsze daje poprawna wysokosc. Formularz jest dluzszy niz okno dialogowe i dolna czesc (zadania, rekomendacja kategorii, przyciski) jest ucieta.
 
-### 1. Menu główne (AppSidebar) -- nowy link w sekcji "Sprzedaż"
+**Rozwiazanie:** Zamienic `ScrollArea` na zwykly `div` z `overflow-y-auto` i `max-h-[60vh]`, co zapewni natywne scrollowanie.
 
-Dodanie pozycji **"Zadania zespołu"** w sekcji `salesItems`, kierującej na `/deals-team` z automatycznym przełączeniem na zakładkę "Zadania":
+### 2. Sekcja zadan domyslnie ukryta w statusie
+Stan `createTask` domyslnie `false` — uzytkownik moze nie zauwazac ze ta sekcja istnieje.
 
-```text
-Sprzedaż
-  Deals
-  Zespół Deals
-  Zadania zespołu   <-- NOWY (ikona ClipboardList, url: /deals-team?view=tasks)
-  Ofertowanie
-  Dopasowania
-```
+**Rozwiazanie:** Zmienic domyslna wartosc `createTask` na `true` (tak samo jak w ProspectingConvertDialog).
 
-### 2. Widok DealsTeamDashboard -- link do "Moje zadania"
+### 3. Sidebar - link "Zadania zespolu" niewidoczny
+Link jest w sekcji "Sprzedaz" ktora wymaga scrollowania sidebara. To nie jest bug — sidebar ma wiele sekcji. Nie wymaga zmian.
 
-W headerze widoku `/deals-team`, obok przycisków Kanban/Tabela/Prospecting, zakładka "Zadania" już istnieje w TabsList. Natomiast dodamy obsługę query parametru `?view=tasks`, żeby link z menu głównego automatycznie otwierał zakładkę zadań.
-
-## Szczegóły techniczne
+## Szczegoly techniczne
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/layout/AppSidebar.tsx` | Dodanie "Zadania zespołu" do `salesItems` z url `/deals-team?view=tasks` + import `ClipboardList` |
-| `src/pages/DealsTeamDashboard.tsx` | Odczyt query param `view` z URL i ustawienie początkowego `viewMode` na jego podstawie |
+| `src/components/deals-team/WeeklyStatusForm.tsx` | Zamiana `ScrollArea` na `div` z `overflow-y-auto max-h-[60vh]`; zmiana `createTask` domyslnie na `true` |
 
-### AppSidebar.tsx
+### Konkretne zmiany
 
-- Import `ClipboardList` z `lucide-react`
-- Dodanie do tablicy `salesItems`:
-  ```
-  { title: 'Zadania zespołu', url: '/deals-team?view=tasks', icon: ClipboardList }
-  ```
+**Linia 96** — zmiana domyslnej wartosci:
+```
+// BYLO:
+const [createTask, setCreateTask] = useState(false);
+// BEDZIE:
+const [createTask, setCreateTask] = useState(true);
+```
 
-### DealsTeamDashboard.tsx
+**Linia 136** — reset tez na `true`:
+```
+setCreateTask(true);
+```
 
-- Import `useSearchParams` z `react-router-dom`
-- Odczyt `searchParams.get('view')` do ustawienia domyślnego `viewMode`
-- Jeśli URL zawiera `?view=tasks`, widok startuje od razu na zakładce "Zadania"
+**Linia 255** — zamiana ScrollArea na div:
+```
+// BYLO:
+<ScrollArea className="flex-1 -mx-6 px-6">
+// BEDZIE:
+<div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: '60vh' }}>
+```
 
-Zero migracji SQL, zero nowych komponentów.
+**Zamkniecie tagu** (koniec ScrollArea) — analogicznie na `</div>`.
+
+Usuniecie importu `ScrollArea` jesli nie jest uzywany nigdzie indziej.
