@@ -1,53 +1,57 @@
 
-
-# Ujednolicenie statusow zadan miedzy widokami
+# Naprawa filtrowania zadań w "Moje zadania"
 
 ## Problem
 
-Istnieja dwie rozne konwencje nazewnictwa statusow:
-
-```text
-Baza danych:     todo  |  in_progress  |  completed  |  cancelled
-deals-team UI:   pending  |  in_progress  |  done  |  cancelled
-TaskDetailSheet: pending  |  in_progress  |  completed
+Logika w `MyTasks.tsx` (linie 141-156):
+```
+if (task.owner_id === directorId || task.assigned_to === directorId) {
+  my.push(task);  // <-- WSZYSTKO trafia tutaj
+}
 ```
 
-Warstwa mapowania (`fromTaskStatus`/`toTaskStatus`) w `useDealsTeamAssignments.ts` tlumczy miedzy nimi, ale to prowadzi do bledow gdy TaskDetailSheet otwierany z MyTeamTasksView probuje aktualizowac status wartosciami, ktorych baza nie rozpoznaje.
+Zadania deal-team maja `owner_id` = Ty (tworca), nawet gdy `assigned_to` = ktos inny. Efekt: 33 zadania w "Moje", 0 w "Zespolowe".
+
+## Dane z bazy
+
+Przyklad: 20+ zadan "Umowic spotkanie" z `owner_id = Ty`, ale `assigned_to` = Adam Osoba / Pawel Swierczynski. Te zadania powinny byc w "Zespolowe", nie w "Moje".
 
 ## Rozwiazanie
 
-Ujednolicenie do wartosci bazodanowych (`todo`, `in_progress`, `completed`, `cancelled`) we wszystkich komponentach. Warstwa mapowania zostaje usunieta - etykiety wyswietlane sa przez konfiguracje UI.
+Zmiana logiki filtrowania w `src/pages/MyTasks.tsx`:
 
-## Zmiany w plikach
+**Nowa logika:**
+- **Moje**: zadanie przypisane do mnie (`assigned_to === directorId`) LUB jestem wlascicielem i nikt inny nie jest przypisany (`owner_id === directorId && !assigned_to`)
+- **Zespolowe**: zadania z `deal_team_id` gdzie jestem wlascicielem ale przypisane komus innemu, PLUS zadania z `visibility === 'team'` gdzie nie jestem ani ownerem ani assignee
+- **Inne**: reszta (jak dotychczas)
 
-### 1. `src/hooks/useDealsTeamAssignments.ts`
-- Usuniecie funkcji `toTaskStatus` i `fromTaskStatus`
-- Usuniecie wszystkich wywolan `.map(... fromTaskStatus ...)` w hookach `useContactAssignments`, `useMyTeamAssignments`, `useDealContactAllTasks`
-- W `useUpdateAssignment`: zamiana `toTaskStatus(params.status)` na bezposrednie uzycie `params.status`, zamiana warunku `completed_at` z `params.status === 'done'` na `params.status === 'completed'`
+### Plik: `src/pages/MyTasks.tsx` (linie 141-156)
 
-### 2. `src/components/deals-team/MyTeamTasksView.tsx`
-- Zamiana `statusConfig` z kluczami `pending/done` na `todo/completed`:
-  - `pending` -> `todo` (label: "Do zrobienia")
-  - `done` -> `todo` zostaje, `done` -> `completed`
-- Zamiana `statusCycle` z `['pending', 'in_progress', 'done']` na `['todo', 'in_progress', 'completed']`
-- Wszystkie porownania `task.status === 'done'` -> `task.status === 'completed'`
-- Usuniecie mapowania w `selectedTask` (linia 458) - status przekazywany bez konwersji
-- Warunek `overdue` - zamiana `!== 'done'` na `!== 'completed'`
+Zamiana bloku filtrowania:
 
-### 3. `src/components/tasks/TaskStatusBadge.tsx`
-- Dodanie obslugi statusu `todo` (ten sam styl co `pending`, label "Do zrobienia")
-- Dodanie obslugi statusu `cancelled` (szary styl, label "Anulowane")
-- Zachowanie `pending` jako alias (fallback) dla kompatybilnosci
+```typescript
+for (const task of allTasks) {
+  const isOwner = task.owner_id === directorId;
+  const isAssignee = task.assigned_to === directorId;
+  const isDelegated = isOwner && task.assigned_to && task.assigned_to !== directorId;
 
-### 4. `src/components/tasks/TaskActivityLog.tsx`
-- Dodanie `todo: 'Do zrobienia'` i `cancelled: 'Anulowane'` do `statusLabels`
-
-### 5. `src/components/deals-team/DealContactDetailSheet.tsx`
-- Zamiana porownania statusow z `pending/done` na `todo/completed` w sekcji zadan (ikony statusu, cykliczne przelaczanie)
+  if (isDelegated) {
+    // Jestem tworca ale delegowalem komus - to zadanie zespolowe
+    team.push(task);
+  } else if (isOwner || isAssignee) {
+    // Moje wlasne lub przypisane do mnie
+    my.push(task);
+  } else if (task.visibility === 'team' || task.deal_team_id) {
+    team.push(task);
+  } else {
+    other.push(task);
+  }
+}
+```
 
 ## Efekt
-- Jeden zestaw wartosci statusow (`todo`, `in_progress`, `completed`, `cancelled`) uzyty wszedzie
-- Brak warstwy tlumaczenia = brak bledow synchronizacji
-- TaskDetailSheet otwarty z dowolnego widoku operuje na tych samych wartosciach co baza
-- Pelna funkcjonalnosc zachowana: cykliczne przelaczanie, edycja, drag-and-drop, subtaski
 
+- "Moje" pokaze tylko zadania bezposrednio Twoje (utworzone przez Ciebie bez delegacji + przypisane do Ciebie)
+- "Zespolowe" pokaze zadania delegowane innym czlonkom zespolu + zadania zespolowe
+- Liczniki w tabach beda poprawne
+- Zadna inna zmiana nie jest potrzebna - tylko logika filtrowania
