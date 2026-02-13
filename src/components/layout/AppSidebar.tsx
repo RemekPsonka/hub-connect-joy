@@ -69,13 +69,13 @@ const projectItems = [
   { title: 'Analityka zadań', url: '/tasks/analytics', icon: BarChart3 },
   { title: 'Raport zespołu', url: '/tasks/team-report', icon: Users2 },
   { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },
-  { title: 'Spotkania', url: '/meetings', icon: UsersRound },
 ];
 
 // SPRZEDAŻ
 const salesItems = [
   { title: 'Lejek sprzedaży', url: '/deals-team', icon: TrendingUp, adminOnly: false },
   { title: 'Zadania sprzedaży', url: '/deals-team?view=tasks', icon: ClipboardList, adminOnly: false },
+  { title: 'Spotkania', url: '/meetings', icon: UsersRound, adminOnly: false },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
   { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
 ];
