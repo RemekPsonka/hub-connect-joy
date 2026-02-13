@@ -1,91 +1,84 @@
 
 
-# Etap 1: Konsolidacja Deals -- usuniecie zakladki Deals, polaczenie z Zespolem Deals
+# Etap 3: Spojne wykresy i dashboardy
 
 ## Cel
 
-Usunac oddzielna zakladke "Deals" (/deals) i skonsolidowac cala sprzedaz w module "Zespol Deals" (/deals-team), ktory staje sie glownym i jedynym lejkiem sprzedazowym. Dodac rowniez widok "Snoozed" na poziomie zespolu.
+Dodac wizualne wykresy (recharts) do modulu lejka sprzedazowego, aby dane z Kanbana, Ofertowania, Klientow i harmonogramow platnosci byly przedstawione graficznie w sposob spojny. Rozszerzyc TeamStats o kartke "Ofertowanie" i dodac wykresy do zakladek.
 
 ## Co sie zmieni dla uzytkownika
 
-1. **Sidebar**: Zamiast "Deals" i "Zespol Deals" -- jeden wpis "Lejek sprzedazy" (/deals-team)
-2. **Routing**: /deals przekierowuje na /deals-team, /deals/:id nadal dziala (detail page)
-3. **Kanban**: Dodanie kolumny "OFERTOWANIE" miedzy HOT a KLIENCI (przygotowanie na etap 2)
-4. **Snooze**: Nowa zakladka "Odlozone" w tabsach obok Kanban/Tabela/Prospecting/Klienci/Zadania/Prowizje -- widok wszystkich snoozowanych kontaktow zespolu
+1. **TeamStats** -- nowa karta "Ofertowanie" (emerald, ikona Briefcase) z wartoscia i liczba kontaktow w ofertowaniu
+2. **ClientsSummaryView** -- dodanie wykresu slupkowego (BarChart) prognozy miesiecznej zamiast samych kafelkow + wykres kolowy kategorii produktow
+3. **OfferingTab** -- dodanie wykresu liniowego (AreaChart) timeline platnosci na najblizsze 24 miesiace, z rozroznieniem typow (cykliczne, jednorazowe, lump sum)
+4. **TeamStats** -- wykres lejka konwersji (COLD -> LEAD -> TOP -> HOT -> OFERTOWANIE -> KLIENT) z liczbami na kazdym etapie
 
 ## Szczegoly techniczne
 
-### 1. Sidebar (AppSidebar.tsx)
+### 1. TeamStats -- karta Ofertowanie
 
-Zmiana sekcji salesItems:
-```text
-BYLO:
-  Deals -> /deals
-  Zespol Deals -> /deals-team
-  Zadania zespolu -> /deals-team?view=tasks
-  Ofertowanie -> /pipeline
+Plik: `src/components/deals-team/TeamStats.tsx`
 
-BEDZIE:
-  Lejek sprzedazy -> /deals-team
-  Zadania sprzedazy -> /deals-team?view=tasks
-  Ofertowanie -> /pipeline
-  (Dopasowania bez zmian)
-```
+Dodanie karty miedzy "Klienci" a "Poszukiwani":
+- Ikona: Briefcase (emerald)
+- Liczba kontaktow w kategorii `offering`
+- Wartosc produktow z ofertowania
+- Prowizja z ofertowania
 
-### 2. Routing (App.tsx)
+Rozszerzenie `categoryValues` o klucz `offering` (obecnie brakuje).
+Zmiana gridu z `grid-cols-6` na `grid-cols-7`.
 
-- Zmiana `/deals` route na redirect do `/deals-team`
-- Zachowanie `/deals/:id` (DealDetail page nadal potrzebne)
+### 2. OfferingTab -- wykres timeline platnosci
 
-### 3. Nowa zakladka "Odlozone" (DealsTeamDashboard.tsx)
+Plik: `src/components/deals-team/OfferingTab.tsx`
 
-Dodanie ViewMode `'snoozed'` i nowego taba z ikona Moon:
-```text
-Kanban | Tabela | Prospecting | Klienci | Zadania | Prowizje | Odlozone
-```
+Dodanie nad lista kontaktow wykresu AreaChart (recharts):
+- Os X: miesiace (24 do przodu)
+- Os Y: kwoty PLN
+- 3 serie danych: "Cykliczne" (niebieskie), "Jednorazowe" (fioletowe), "Dodatkowe/lump sum" (zolte)
+- Agregacja `payments` po miesiacu i typie
+- Wykorzystanie istniejacego ChartContainer z `src/components/ui/chart.tsx`
 
-### 4. Nowy komponent SnoozedTeamView
+### 3. ClientsSummaryView -- wykres slupkowy prognozy
 
-Widok listy wszystkich snoozowanych kontaktow zespolu:
-- Tabela z kolumnami: Kontakt, Firma, Kategoria (HOT/TOP/LEAD/COLD), Data powrotu, Powod, Akcje (Obud)
-- Sortowanie domyslnie po dacie powrotu (najblizsze na gorze)
-- Oznaczenie przeterminowanych (data powrotu w przeszlosci) kolorem ostrzegawczym
-- Mozliwosc obudzenia kontaktu jednym kliknieciem
+Plik: `src/components/deals-team/ClientsSummaryView.tsx`
 
-### 5. Nowa kategoria "offering" na Kanbanie (przygotowanie na etap 2)
+Zamiana statycznych kafelkow prognozy miesiecznej na wykres BarChart:
+- Os X: miesiace
+- Os Y: kwoty
+- Tooltip z formatowaniem walutowym
+- Zachowanie kafelkow kategorii produktow (z kolorami) jako mini-wykres kolowy (PieChart)
 
-Dodanie kategorii `offering` do type `DealCategory`:
-```text
-export type DealCategory = 'hot' | 'top' | 'lead' | 'cold' | 'offering';
-```
+### 4. Nowy komponent: FunnelChart
 
-Nowa kolumna na Kanbanie miedzy HOT a reszta:
-- Tytul: "OFERTOWANIE"
-- Ikona: Briefcase
-- Kolor: zielony/emerald
-- Drag-and-drop obslugiwany jak inne kolumny
+Plik: `src/components/deals-team/FunnelConversionChart.tsx` (NOWY)
+
+Wizualizacja lejka konwersji:
+- Uzycie BarChart z recharts (poziomy) jako zastepnik funnela
+- Etapy: COLD -> LEAD -> TOP -> HOT -> OFERTOWANIE -> KLIENT
+- Kazdy etap z kolorem odpowiadajacym kolumnce Kanban
+- Wyswietlany na dole TeamStats jako pelna szerokosc
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/layout/AppSidebar.tsx` | Zmiana nazw i URL-i w salesItems |
-| `src/App.tsx` | Redirect /deals -> /deals-team |
-| `src/pages/DealsTeamDashboard.tsx` | Dodanie ViewMode 'snoozed', nowy tab |
-| `src/components/deals-team/SnoozedTeamView.tsx` | NOWY -- pelny widok snoozowanych |
-| `src/components/deals-team/KanbanBoard.tsx` | Dodanie kolumny OFERTOWANIE |
-| `src/components/deals-team/index.ts` | Export SnoozedTeamView |
-| `src/types/dealTeam.ts` | Dodanie 'offering' do DealCategory |
+| `src/components/deals-team/TeamStats.tsx` | Karta Ofertowanie + FunnelChart na dole |
+| `src/components/deals-team/OfferingTab.tsx` | Wykres timeline platnosci (AreaChart) |
+| `src/components/deals-team/ClientsSummaryView.tsx` | BarChart prognozy + PieChart kategorii |
+| `src/components/deals-team/FunnelConversionChart.tsx` | NOWY -- wykres lejka konwersji |
+| `src/components/deals-team/index.ts` | Export FunnelConversionChart |
 
-### Co NIE zmienia sie w tym etapie
+### Biblioteka
 
-- Strona DealDetail (/deals/:id) -- zostaje bez zmian
-- Tabela `deals` w bazie -- zostaje (jest uzywana przez deal_team_contacts.deal_id)
-- Modul Ofertowania (/pipeline) -- zostaje bez zmian (integracja w etapie 2)
-- Konsolidacja zadan (deal_team_assignments -> tasks) -- oddzielny plan (juz zatwierdzony)
+Recharts jest juz zainstalowany. ChartContainer, ChartTooltip, ChartTooltipContent sa juz dostepne w `src/components/ui/chart.tsx`.
 
-## Nastepne etapy (oddzielne plany)
+### Dane -- skad bierzemy
 
-- **Etap 2**: Integracja lejka z ofertowaniem -- automatyczne tworzenie polis, harmonogram platnosci, prognozowanie
-- **Etap 3**: Spojne wykresy i dashboardy -- dane z lejka na wykresach ofertowania i odwrotnie
+- **Lejek konwersji**: z `useTeamContactStats` (hot_count, top_count itd.) + dodanie offering_count
+- **Timeline platnosci**: z `useTeamPaymentSchedule` (juz istnieje)
+- **Prognoza miesieczna**: z `useAllTeamForecasts` (juz istnieje)
+- **Kategorie produktow**: z `useAllTeamClientProducts` (juz istnieje)
+
+Nie wymaga zmian w bazie danych.
 
