@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList } from 'lucide-react';
+import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -15,12 +15,13 @@ import {
   ClientsTab,
   CommissionsTab,
   MyTeamTasksView,
+  SnoozedTeamView,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed';
 
 const STORAGE_KEY = 'deals-team-selected';
 
@@ -33,7 +34,7 @@ export default function DealsTeamDashboard() {
     return localStorage.getItem(STORAGE_KEY) || '';
   });
 
-  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks'];
+  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed'];
   const initialView = searchParams.get('view') as ViewMode;
   const [viewMode, setViewMode] = useState<ViewMode>(
     validViews.includes(initialView) ? initialView : 'kanban'
@@ -175,6 +176,10 @@ export default function DealsTeamDashboard() {
                 <Receipt className="h-4 w-4" />
                 <span className="hidden sm:inline">Prowizje</span>
               </TabsTrigger>
+              <TabsTrigger value="snoozed" className="gap-2">
+                <Moon className="h-4 w-4" />
+                <span className="hidden sm:inline">Odłożone</span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -210,6 +215,10 @@ export default function DealsTeamDashboard() {
 
       {selectedTeamId && viewMode === 'commissions' && (
         <CommissionsTab teamId={selectedTeamId} />
+      )}
+
+      {selectedTeamId && viewMode === 'snoozed' && (
+        <SnoozedTeamView teamId={selectedTeamId} />
       )}
 
       {/* Create Team Dialog */}

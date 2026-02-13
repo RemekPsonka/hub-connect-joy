@@ -32,3 +32,4 @@ export { SnoozeDialog } from './SnoozeDialog';
 export { SnoozedContactsBar } from './SnoozedContactsBar';
 export { MyTeamTasksView } from './MyTeamTasksView';
 export { ConvertToClientDialog } from './ConvertToClientDialog';
+export { SnoozedTeamView } from './SnoozedTeamView';

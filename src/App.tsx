@@ -13,6 +13,9 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Navigate } from "react-router-dom";
+
+const DealsRedirect = () => <Navigate to="/deals-team" replace />;
 
 // Static imports (login page - fast loading)
 import Login from "./pages/Login";
@@ -43,7 +46,7 @@ const PolicyPipeline = lazy(() => import("./pages/PolicyPipeline"));
 const Network = lazy(() => import("./pages/Network"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
-const Deals = lazy(() => import("./pages/Deals"));
+const Deals = lazy(() => import("./pages/Deals")); // kept for /deals/:id
 const DealDetail = lazy(() => import("./pages/DealDetail"));
 const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
 const MyDay = lazy(() => import("./pages/MyDay"));
@@ -123,7 +126,7 @@ const App = () => (
                   <Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
                   <Route path="/projects" element={<DirectorGuard><Projects /></DirectorGuard>} />
                   <Route path="/projects/:id" element={<DirectorGuard><ProjectDetail /></DirectorGuard>} />
-                  <Route path="/deals" element={<DirectorGuard><Deals /></DirectorGuard>} />
+                  <Route path="/deals" element={<DirectorGuard><DealsRedirect /></DirectorGuard>} />
                   <Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
                   <Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
                   <Route path="/wanted" element={<DirectorGuard><WantedContacts /></DirectorGuard>} />

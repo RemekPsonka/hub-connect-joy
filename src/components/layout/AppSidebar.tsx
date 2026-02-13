@@ -71,9 +71,8 @@ const projectItems = [
 
 // SPRZEDAŻ
 const salesItems = [
-  { title: 'Deals', url: '/deals', icon: TrendingUp, adminOnly: false },
-  { title: 'Zespół Deals', url: '/deals-team', icon: Users2, adminOnly: false },
-  { title: 'Zadania zespołu', url: '/deals-team?view=tasks', icon: ClipboardList, adminOnly: false },
+  { title: 'Lejek sprzedaży', url: '/deals-team', icon: TrendingUp, adminOnly: false },
+  { title: 'Zadania sprzedaży', url: '/deals-team?view=tasks', icon: ClipboardList, adminOnly: false },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
   { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
 ];
