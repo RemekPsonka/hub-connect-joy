@@ -261,7 +261,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                       Kategoria
                     </h4>
                     <div className="flex gap-1.5">
-                      {(['hot', 'top', 'lead', '10x', 'cold', 'lost'] as const).map((cat) => {
+                      {(['hot', 'offering', 'top', 'lead', '10x', 'cold', 'lost'] as const).map((cat) => {
                         const cfg = categoryConfig[cat];
                         const isCurrent = contact.category === cat;
                         return (
