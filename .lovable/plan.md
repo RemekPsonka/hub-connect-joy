@@ -1,64 +1,74 @@
 
-# Pelna aktywacja panelu kontaktu w lejku sprzedazy
 
-## Problem
-Panel boczny kontaktu (DealContactDetailSheet) ma wszystkie sekcje wizualnie, ale nie dzialaja prawidlowo:
+# Wzbogacenie formularza statusu o etap lejka i kontekst w zadaniu
 
-1. **Zadania nie sa widoczne** -- panel uzywa `useContactTasksWithCross` (szuka przez tabele `task_contacts`), ale zadania tworzone w lejku sa zapisywane z `deal_team_contact_id` na tabeli `tasks`. Te dwa systemy sa rozlaczone.
-2. **Nowe zadania nie sa powiazane z lejkiem** -- TaskModal nie przekazuje `deal_team_id` ani `deal_team_contact_id`, wiec nowe zadania tworzone z panelu nie pojawiaja sie w widoku zadaniowym lejka.
-3. **Historia aktywnosci dziala** -- uzywany hook `useContactActivityLog` poprawnie odpytuje `deal_team_activity_log`.
-4. **Produkty/Deale dzialaja** -- `ClientProductsPanel` jest poprawnie podlaczony.
+## Zmiany w `src/components/deals-team/WeeklyStatusForm.tsx`
 
-## Plan naprawy
+### 1. Wyswietlenie obecnego etapu lejka w naglowku
 
-### 1. Zunifikowane pobieranie zadan dla kontaktu w lejku
+W sekcji `DialogHeader` (linia 266-270), pod nazwa kontaktu i tygodniem, dodanie badge z aktualnym etapem lejka (np. "LEAD", "HOT", "COLD"). Wykorzystanie propa `currentCategory` ktory juz jest przekazywany.
 
-Stworze nowy hook `useDealContactTasks` w `src/hooks/useDealsTeamAssignments.ts` (lub rozszerze istniejacy), ktory pobiera zadania z **obu zrodel**:
-- Zadania powiazane przez `deal_team_contact_id` (system lejkowy)
-- Zadania powiazane przez `task_contacts` (system ogolny CRM)
+```text
+Dariusz Lyson
+Firma XYZ
+Etap: LEAD
+Tydzien: 09.02 - 15.02.2026
+```
 
-Usunie duplikaty i zwroci zunifikowana liste.
+Badge bedzie kolorowy, uzywajac mapy kolorow analogicznej do `categoryConfig` z `DealContactDetailSheet`.
 
-### 2. Rozszerzenie TaskModal o parametry lejkowe
+### 2. Wzbogacenie opisu zadania o kontekst statusu
 
-Dodanie nowych propsow do `TaskModal`:
-- `dealTeamId?: string`
-- `dealTeamContactId?: string`
+Przy tworzeniu zadania operacyjnego (linie 196-206), zamiast wstawiac sam tytul, doda do pola `description` kontekst z formularza:
+- Obecny etap lejka
+- Podsumowanie statusu (co sie wydarzylo)
+- Nastepne kroki
+- Blokery (jesli sa)
 
-Gdy te propsy sa podane, `useCreateTask` wstawi je do rekordu `tasks` przy tworzeniu, dzieki czemu zadanie bedzie widoczne zarowno w panelu kontaktu jak i w widoku "Zadania sprzedazy".
+Dzieki temu osoba przypisana do zadania widzi pelny kontekst bez koniecznosci szukania statusu.
 
-### 3. Rozszerzenie useCreateTask
+Format opisu zadania:
+```text
+Etap: HOT | Kontakt: Jan Kowalski (Firma ABC)
 
-Dodanie obslug pol `deal_team_id` i `deal_team_contact_id` w `useCreateTask` (hooks `useTasks.ts`), plus invalidacja kluczy `deal-team-assignments`.
+Status tygodnia (09.02-15.02):
+[tresc statusSummary]
 
-### 4. Aktualizacja DealContactDetailSheet
+Nastepne kroki:
+[tresc nextSteps]
 
-- Zamiana `useContactTasksWithCross` na nowy zunifikowany hook
-- Przekazanie `dealTeamId` i `dealTeamContactId` do `TaskModal`
-- Dodanie invalidacji kluczy po operacjach na zadaniach
+Blokery:
+[tresc blockers]
+```
 
 ## Szczegoly techniczne
 
 | Plik | Zmiana |
 |------|--------|
-| `src/hooks/useTasks.ts` | Dodanie `deal_team_id`, `deal_team_contact_id` do interfejsu `useCreateTask`. Invalidacja kluczy `deal-team-assignments`. |
-| `src/hooks/useDealsTeamAssignments.ts` | Nowy hook `useDealContactAllTasks` -- laczy zadania z `deal_team_contact_id` i `task_contacts` w jedna liste. |
-| `src/components/tasks/TaskModal.tsx` | Nowe propsy `dealTeamId`, `dealTeamContactId`. Przekazanie ich do `useCreateTask`. |
-| `src/components/deals-team/DealContactDetailSheet.tsx` | Uzycie nowego hooka do wyswietlania zadan. Przekazanie parametrow lejkowych do TaskModal. |
+| `src/components/deals-team/WeeklyStatusForm.tsx` | (1) Dodanie badge etapu w DialogHeader z mapa kolorow/etykiet. (2) Budowanie `description` zadania z kontekstem formularza przy insercie do tabeli `tasks`. |
 
-### Diagram przepywu danych
-
-Po zmianach zadania beda widoczne w obu kontekstach:
+### Mapa etykiet etapow (do dodania w WeeklyStatusForm)
 
 ```text
-TaskModal (z panelu lejka)
-  |
-  v
-tasks table
-  |- deal_team_contact_id  --> widoczne w "Zadania sprzedazy"
-  |- task_contacts (join)  --> widoczne w CRM / profil kontaktu
-  |
-  v
-DealContactDetailSheet
-  <- zunifikowany hook (oba zrodla)
+categoryLabels = {
+  hot: 'HOT', top: 'TOP', lead: 'LEAD', '10x': '10x',
+  cold: 'COLD', lost: 'PRZEGRANE', client: 'KLIENT', offering: 'OFERTOWANIE'
+}
 ```
+
+### Budowanie opisu zadania
+
+W `onSubmit`, w sekcji tworzenia zadania (linia 196), dodanie pola `description` budowanego dynamicznie z danych formularza:
+
+```text
+const taskDescription = [
+  `Etap: ${categoryLabel} | Kontakt: ${contactName}${contactCompany ? ` (${contactCompany})` : ''}`,
+  '',
+  `Status (${weekLabel}):`,
+  data.statusSummary,
+  data.nextSteps ? `\nNastepne kroki:\n${data.nextSteps}` : '',
+  data.blockers ? `\nBlokery:\n${data.blockers}` : '',
+].filter(Boolean).join('\n');
+```
+
+Pole to zostanie przekazane w `insert({ ..., description: taskDescription })`.
