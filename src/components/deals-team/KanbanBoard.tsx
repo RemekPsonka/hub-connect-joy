@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
+import { useActiveTaskContacts } from '@/hooks/useActiveTaskContacts';
 import { KanbanColumn } from './KanbanColumn';
 import { HotLeadCard } from './HotLeadCard';
 import { TopLeadCard } from './TopLeadCard';
@@ -27,6 +28,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const { data: contacts = [], isLoading: contactsLoading } = useTeamContacts(teamId);
   const { data: prospects = [], isLoading: prospectsLoading } = useTeamProspects(teamId);
   const updateContact = useUpdateTeamContact();
+  const { data: activeTaskMap } = useActiveTaskContacts(teamId);
   const { columns: visibleColumns, toggleColumn, visibleCount } = useKanbanColumnSettings();
   const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
@@ -225,6 +227,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -254,6 +257,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -283,6 +287,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -312,6 +317,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -341,6 +347,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -370,6 +377,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
@@ -399,6 +407,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
                 onDragStart={(e) => handleDragStart(e, contact.id)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
               />
             ))}
           </KanbanColumn>
