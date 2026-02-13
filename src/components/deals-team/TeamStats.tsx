@@ -354,10 +354,6 @@ export function TeamStats({ teamId }: TeamStatsProps) {
     {/* Funnel conversion chart */}
     <FunnelConversionChart
       stats={{
-        lost_count: contactStats.lost_count,
-        cold_count: contactStats.cold_count,
-        tenx_count: contactStats.tenx_count,
-        lead_count: contactStats.lead_count,
         top_count: contactStats.top_count,
         hot_count: contactStats.hot_count,
         offering_count: offeringCount,

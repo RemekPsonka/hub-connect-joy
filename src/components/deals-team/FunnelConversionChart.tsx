@@ -5,10 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface FunnelConversionChartProps {
   stats: {
-    lost_count: number;
-    cold_count: number;
-    tenx_count: number;
-    lead_count: number;
     top_count: number;
     hot_count: number;
     offering_count: number;
@@ -17,10 +13,6 @@ interface FunnelConversionChartProps {
 }
 
 const STAGES = [
-  { key: 'lost_count', label: 'PRZEGRANE', color: '#6b7280' },
-  { key: 'cold_count', label: 'COLD', color: '#94a3b8' },
-  { key: 'tenx_count', label: '10x', color: '#06b6d4' },
-  { key: 'lead_count', label: 'LEAD', color: '#3b82f6' },
   { key: 'top_count', label: 'TOP', color: '#f59e0b' },
   { key: 'hot_count', label: 'HOT', color: '#ef4444' },
   { key: 'offering_count', label: 'OFERTOWANIE', color: '#10b981' },
