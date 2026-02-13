@@ -33,7 +33,8 @@ import { useConvertToClient } from '@/hooks/useTeamClients';
 import { ClientProductsPanel } from './ClientProductsPanel';
 import { useContactActivityLog } from '@/hooks/useContactActivityLog';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
-import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
+import { useUpdateTask } from '@/hooks/useTasks';
+import { useDealContactAllTasks } from '@/hooks/useDealsTeamAssignments';
 import { WeeklyStatusForm } from './WeeklyStatusForm';
 import { ProspectAIBriefDialog } from './ProspectAIBriefDialog';
 import { PromoteDialog } from './PromoteDialog';
@@ -97,7 +98,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
 
   const { data: activityLog = [] } = useContactActivityLog(contact?.id);
   const { data: weeklyStatuses = [] } = useTeamContactWeeklyStatuses(contact?.id);
-  const { data: tasks = [] } = useContactTasksWithCross(contact?.contact_id);
+  const { data: tasks = [] } = useDealContactAllTasks(contact?.contact_id, contact?.id);
 
   const [notes, setNotes] = useState('');
   const [showWeeklyForm, setShowWeeklyForm] = useState(false);
@@ -155,8 +156,8 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   if (!contact || !contact.contact) return null;
 
   const cat = categoryConfig[contact.category] || categoryConfig.lead;
-  const openTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'cancelled');
-  const completedTasks = tasks.filter((t) => t.status === 'completed' || t.status === 'cancelled');
+  const openTasks = tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'done');
+  const completedTasks = tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled' || t.status === 'done');
   const visibleActivity = showAllActivity ? activityLog : activityLog.slice(0, 5);
 
   const handleStatusChange = (newStatus: string) => {
@@ -716,6 +717,8 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
         open={taskModalOpen}
         onOpenChange={setTaskModalOpen}
         preselectedContactId={contact.contact_id}
+        dealTeamId={teamId}
+        dealTeamContactId={contact.id}
       />
 
       {/* Task Detail */}

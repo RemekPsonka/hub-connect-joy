@@ -221,3 +221,53 @@ export function useMyTeamAssignments(teamId: string | undefined) {
     staleTime: 60 * 1000,
   });
 }
+
+/**
+ * Unified hook: fetches tasks for a deal contact from BOTH sources:
+ * 1. tasks.deal_team_contact_id (deal funnel tasks)
+ * 2. task_contacts join table (general CRM tasks)
+ * Deduplicates and returns a merged list.
+ */
+export function useDealContactAllTasks(contactId: string | undefined, teamContactId: string | undefined) {
+  return useQuery({
+    queryKey: ['deal-contact-all-tasks', contactId, teamContactId],
+    queryFn: async () => {
+      if (!contactId) return [];
+
+      const taskMap = new Map<string, any>();
+
+      // Source 1: tasks linked via deal_team_contact_id
+      if (teamContactId) {
+        const { data: dealTasks, error: dealError } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('deal_team_contact_id', teamContactId)
+          .order('created_at', { ascending: false });
+
+        if (dealError) throw dealError;
+        (dealTasks || []).forEach((t: any) => {
+          taskMap.set(t.id, { ...t, status: t.status === 'todo' ? 'pending' : t.status === 'done' ? 'completed' : t.status });
+        });
+      }
+
+      // Source 2: tasks linked via task_contacts
+      const { data: taskContacts, error: tcError } = await supabase
+        .from('task_contacts')
+        .select('task_id, tasks(*)')
+        .eq('contact_id', contactId);
+
+      if (tcError) throw tcError;
+      (taskContacts || []).forEach((tc: any) => {
+        if (tc.tasks && !taskMap.has(tc.tasks.id)) {
+          taskMap.set(tc.tasks.id, tc.tasks);
+        }
+      });
+
+      return Array.from(taskMap.values()).sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
+    },
+    enabled: !!contactId,
+    staleTime: 15 * 1000,
+  });
+}
