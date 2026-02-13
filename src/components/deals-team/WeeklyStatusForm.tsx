@@ -54,6 +54,22 @@ interface WeeklyStatusFormProps {
   onClose: () => void;
 }
 
+const categoryLabels: Record<string, string> = {
+  hot: 'HOT', top: 'TOP', lead: 'LEAD', '10x': '10x',
+  cold: 'COLD', lost: 'PRZEGRANE', client: 'KLIENT', offering: 'OFERTOWANIE',
+};
+
+const categoryColors: Record<string, string> = {
+  hot: 'bg-red-500/20 text-red-700 border-red-300',
+  top: 'bg-amber-500/20 text-amber-700 border-amber-300',
+  lead: 'bg-blue-500/20 text-blue-700 border-blue-300',
+  '10x': 'bg-purple-500/20 text-purple-700 border-purple-300',
+  cold: 'bg-sky-500/20 text-sky-700 border-sky-300',
+  lost: 'bg-gray-500/20 text-gray-700 border-gray-300',
+  client: 'bg-green-500/20 text-green-700 border-green-300',
+  offering: 'bg-orange-500/20 text-orange-700 border-orange-300',
+};
+
 const recommendationLabels: Record<string, string> = {
   keep: 'Zostaw w obecnej kategorii',
   hot: '🔥 HOT Lead (spotkanie umówione/w toku)',
@@ -193,9 +209,21 @@ export function WeeklyStatusForm({
 
           if (directorData) {
             // Insert into unified tasks table
+            const categoryLabel = categoryLabels[currentCategory || 'lead'] || (currentCategory || 'lead').toUpperCase();
+            const taskDescription = [
+              `Etap: ${categoryLabel} | Kontakt: ${contactName}${contactCompany ? ` (${contactCompany})` : ''}`,
+              '',
+              `Status (${weekLabel}):`,
+              data.statusSummary,
+              data.nextSteps ? `\nNastępne kroki:\n${data.nextSteps}` : '',
+              data.blockers ? `\nBlokery:\n${data.blockers}` : '',
+              data.meetingHappened && data.meetingOutcome ? `\nWynik spotkania:\n${data.meetingOutcome}` : '',
+            ].filter(Boolean).join('\n');
+
             const { data: newTask, error: taskError } = await supabase.from('tasks').insert({
               tenant_id: directorData.tenant_id,
               title: finalTitle,
+              description: taskDescription,
               owner_id: directorData.id,
               assigned_to: taskAssignedTo,
               due_date: taskDueDate || null,
@@ -266,6 +294,11 @@ export function WeeklyStatusForm({
           <div className="text-sm text-muted-foreground">
             <p className="font-medium text-foreground">{contactName}</p>
             {contactCompany && <p>{contactCompany}</p>}
+            {currentCategory && (
+              <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded border ${categoryColors[currentCategory] || 'bg-muted text-muted-foreground border-border'}`}>
+                Etap: {categoryLabels[currentCategory] || currentCategory.toUpperCase()}
+              </span>
+            )}
             <p className="mt-1">Tydzień: {weekLabel}</p>
           </div>
         </DialogHeader>
