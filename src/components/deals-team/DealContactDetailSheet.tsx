@@ -10,6 +10,7 @@ import {
   Sparkles, RefreshCw, ArrowLeftRight, Loader2, ArrowRight, UserCheck, Moon,
   Circle, CheckCircle2, Pencil
 } from 'lucide-react';
+import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '@/components/ui/dialog';
@@ -337,84 +338,40 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                 {openTasks.length === 0 && completedTasks.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Brak zadań</p>
                 ) : (
-                  <div className="space-y-1">
+                  <div>
                     {openTasks.map((task) => (
-                      <div
+                      <UnifiedTaskRow
                         key={task.id}
-                        className="group flex items-start gap-2 py-1.5 cursor-pointer hover:bg-muted/50 rounded px-1.5 -mx-1"
-                        onClick={() => {
-                          setSelectedTask(task);
-                          setTaskDetailOpen(true);
+                        task={task}
+                        compact
+                        showSubtasks={false}
+                        onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                        onClick={(taskId) => {
+                          const t = tasks.find((x: any) => x.id === taskId);
+                          if (t) { setSelectedTask(t); setTaskDetailOpen(true); }
                         }}
-                      >
-                        <button
-                          className="mt-0.5 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const next = task.status === 'todo' ? 'in_progress' : task.status === 'in_progress' ? 'completed' : 'todo';
-                            updateTask.mutate({ id: task.id, status: next });
-                          }}
-                          title={task.status === 'todo' ? 'Do zrobienia' : task.status === 'in_progress' ? 'W trakcie' : 'Zakończone'}
-                        >
-                          {task.status === 'todo' && <Circle className="h-4 w-4 text-muted-foreground" />}
-                          {task.status === 'in_progress' && <Clock className="h-4 w-4 text-blue-500" />}
-                          {task.status !== 'todo' && task.status !== 'in_progress' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn(
-                              'h-2 w-2 rounded-full shrink-0',
-                              task.priority === 'urgent' ? 'bg-red-500' :
-                              task.priority === 'high' ? 'bg-orange-500' :
-                              task.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                            )} />
-                            <p className="text-xs font-medium truncate">{task.title}</p>
-                          </div>
-                          {task.due_date && (
-                            <div className={cn('flex items-center gap-1 text-xs', getDueDateClass(task.due_date))}>
-                              <Clock className="h-2.5 w-2.5" />
-                              <span>{format(new Date(task.due_date), 'dd MMM', { locale: pl })}</span>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTask(task);
-                            setTaskModalOpen(true);
-                          }}
-                          title="Edytuj zadanie"
-                        >
-                          <Pencil className="h-3 w-3 text-muted-foreground" />
-                        </button>
-                      </div>
+                      />
                     ))}
                     {completedTasks.length > 0 && (
                       <Collapsible open={showCompletedTasks} onOpenChange={setShowCompletedTasks}>
                         <CollapsibleTrigger asChild>
-                          <button className="text-xs text-muted-foreground hover:text-foreground w-full text-left pt-1.5 border-t mt-1.5">
+                          <button className="text-xs text-muted-foreground hover:text-foreground w-full text-left px-3 pt-1.5 border-t mt-1">
                             Zamknięte ({completedTasks.length})
                           </button>
                         </CollapsibleTrigger>
-                        <CollapsibleContent className="space-y-1 mt-1">
+                        <CollapsibleContent>
                           {completedTasks.map((task) => (
-                            <div
+                            <UnifiedTaskRow
                               key={task.id}
-                              className="flex items-start gap-2 py-1 opacity-60 cursor-pointer hover:opacity-80 rounded px-1.5 -mx-1"
-                              onClick={() => {
-                                setSelectedTask(task);
-                                setTaskDetailOpen(true);
+                              task={task}
+                              compact
+                              showSubtasks={false}
+                              onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                              onClick={(taskId) => {
+                                const t = tasks.find((x: any) => x.id === taskId);
+                                if (t) { setSelectedTask(t); setTaskDetailOpen(true); }
                               }}
-                            >
-                              <Checkbox
-                                checked={true}
-                                onCheckedChange={() => handleToggleTask(task.id, task.status)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="mt-0.5 h-3.5 w-3.5"
-                              />
-                              <p className="text-xs line-through truncate">{task.title}</p>
-                            </div>
+                            />
                           ))}
                         </CollapsibleContent>
                       </Collapsible>
