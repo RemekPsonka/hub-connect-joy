@@ -1,34 +1,44 @@
 
+# Konfiguracja widocznych kolumn w Kanban
 
-# Poprawka szerokosci dashboardu
+## Cel
 
-## Problem
-
-9 kart KPI w jednym rzedzie (`lg:grid-cols-9`) nie miesci sie na ekranie -- karty sa za waskie i tekst sie ucina. Tabs z zakladkami rowniez wychodzi poza ekran.
+Dodanie popovera z checkboxami umozliwiajacego wybor widocznych kolumn w widoku Kanban (HOT, Ofertowanie, TOP, LEAD, 10x, COLD, Przegrane, Poszukiwani). Ustawienia zapisywane w localStorage.
 
 ## Rozwiazanie
 
-### 1. Karty KPI -- zmiana layoutu z 9 kolumn na 2 rzedy
-
-Zamiast jednego rzedu 9 kart, uklad bedzie:
-- **Gorny rzad**: 5 kart (HOT, TOP, Leads, 10x, Cold) -- `lg:grid-cols-5`
-- **Dolny rzad**: 4 karty (Przegrane, Klienci, Ofertowanie, Poszukiwani) -- `lg:grid-cols-4`
-
-Alternatywnie: jeden grid `lg:grid-cols-5` ktory lamiie karty na 2 rzedy (5+4).
-
-### 2. Zakladki nawigacyjne -- scroll lub zawijanie
-
-Pasek zakladek (Dashboard, Kanban, Tabela, Klienci...) wymaga `overflow-x-auto` zeby mozna bylo przewijac gdy nie miesci sie na ekranie. Lub zmniejszyc padding/rozmiar tekstu.
+Wzorzec identyczny jak `ColumnConfigPopover` w kontaktach -- przycisk z ikona Settings2, popover z checkboxami.
 
 ## Szczegoly techniczne
 
-### Plik: `src/components/deals-team/SalesFunnelDashboard.tsx`
+### 1. Nowy hook: `src/hooks/useKanbanColumnSettings.ts`
 
-- Zmiana grida KPI z `grid-cols-2 lg:grid-cols-9` na `grid-cols-2 md:grid-cols-3 lg:grid-cols-5` -- karty ulozone w 2 rzedach (5+4)
-- Zmniejszenie minimalnej szerokosci kart
+- Interfejs `KanbanColumnVisibility` z 8 kluczami: `hot`, `offering`, `top`, `lead`, `tenx`, `cold`, `lost`, `prospecting` -- kazdy boolean, domyslnie true
+- Zapis/odczyt z `localStorage` pod kluczem `kanban-column-visibility`
+- Zwraca `{ columns, toggleColumn }` analogicznie do `useContactsTableSettings`
 
-### Plik: `src/pages/DealsTeamDashboard.tsx`
+### 2. Nowy komponent: `src/components/deals-team/KanbanColumnConfigPopover.tsx`
 
-- Dodanie `overflow-x-auto` do kontenera z zakladkami nawigacyjnymi aby mozna bylo je przewijac na wezszych ekranach
-- Ewentualne zmniejszenie paddingu/rozmiaru tekstu w zakadkach
+- Popover z checkboxami dla kazdej kolumny (etykiety: HOT LEAD, OFERTOWANIE, TOP LEAD, LEAD, 10x, COLD LEAD, PRZEGRANE, POSZUKIWANI)
+- Wzorzec 1:1 z `ColumnConfigPopover` z kontaktow
+- Przycisk "Kolumny" z ikona Settings2
 
+### 3. Zmiana: `src/components/deals-team/KanbanBoard.tsx`
+
+- Import i uzycie hooka `useKanbanColumnSettings`
+- Dodanie `KanbanColumnConfigPopover` obok paska wyszukiwania (po prawej stronie)
+- Warunkowe renderowanie kazdej kolumny KanbanColumn na podstawie `columns.hot`, `columns.top` itd.
+- Dynamiczne dostosowanie gridu: `lg:grid-cols-{N}` gdzie N = liczba widocznych kolumn
+
+### 4. Zmiana: `src/components/deals-team/index.ts`
+
+- Export `KanbanColumnConfigPopover`
+
+### Zmieniane pliki
+
+| Plik | Zmiana |
+|------|--------|
+| `src/hooks/useKanbanColumnSettings.ts` | NOWY -- hook z localStorage |
+| `src/components/deals-team/KanbanColumnConfigPopover.tsx` | NOWY -- popover z checkboxami |
+| `src/components/deals-team/KanbanBoard.tsx` | Filtrowanie kolumn + przycisk konfiguracji |
+| `src/components/deals-team/index.ts` | Export nowego komponentu |
