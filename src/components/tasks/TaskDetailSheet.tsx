@@ -207,6 +207,33 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
         </SheetHeader>
 
         <div className="space-y-5">
+          {/* Owner & Assignee info */}
+          {(() => {
+            const owner = (task as any).owner;
+            const assignee = (task as any).assignee;
+            const visibility = (task as any).visibility;
+            if (!owner && !assignee && !visibility) return null;
+            return (
+              <div className="flex flex-wrap gap-3 text-sm">
+                {owner && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="font-medium text-foreground">Właściciel:</span> {owner.full_name}
+                  </div>
+                )}
+                {assignee && assignee.id !== owner?.id && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="font-medium text-foreground">Przypisane do:</span> {assignee.full_name}
+                  </div>
+                )}
+                {visibility && (
+                  <Badge variant="outline" className="text-xs">
+                    {visibility === 'private' ? 'Prywatne' : visibility === 'team' ? 'Zespołowe' : 'Publiczne'}
+                  </Badge>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Description */}
           {task.description && (
             <div>
