@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Flame, Star, ClipboardList, Search, AlertTriangle, Snowflake, UserCheck } from 'lucide-react';
+import { Flame, Star, ClipboardList, Search, AlertTriangle, Snowflake, UserCheck, Briefcase } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
@@ -7,6 +7,7 @@ import { useTeamClients, useAllTeamClientProducts, CATEGORY_PROBABILITY } from '
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FunnelConversionChart } from './FunnelConversionChart';
 
 interface TeamStatsProps {
   teamId: string;
@@ -18,6 +19,11 @@ export function TeamStats({ teamId }: TeamStatsProps) {
   const { data: clients = [] } = useTeamClients(teamId);
   const { data: allProducts = [] } = useAllTeamClientProducts(teamId);
   const { data: allContacts = [] } = useTeamContacts(teamId);
+
+  const offeringCount = useMemo(
+    () => allContacts.filter((c) => c.category === 'offering').length,
+    [allContacts]
+  );
 
   const prospectStats = useMemo(() => {
     const activeProspects = prospects.filter(
@@ -48,6 +54,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
       top: { value: 0, commission: 0 },
       lead: { value: 0, commission: 0 },
       cold: { value: 0, commission: 0 },
+      offering: { value: 0, commission: 0 },
     };
     allProducts.forEach((p) => {
       const contact = allContacts.find((c) => c.id === p.team_contact_id);
@@ -74,8 +81,8 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
   if (prospectsLoading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
           <Skeleton key={i} className="h-24" />
         ))}
       </div>
@@ -83,7 +90,8 @@ export function TeamStats({ teamId }: TeamStatsProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+    <div className="space-y-4">
+    <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
       {/* HOT Leads */}
       <Card className="border-l-4 border-l-red-500">
         <CardContent className="p-4">
@@ -245,6 +253,37 @@ export function TeamStats({ teamId }: TeamStatsProps) {
         </CardContent>
       </Card>
 
+      {/* Ofertowanie */}
+      <Card className="border-l-4 border-l-teal-500">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-teal-500" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  Ofertowanie
+                </span>
+              </div>
+              <p className="text-2xl font-bold">{offeringCount}</p>
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-muted-foreground">Wartość</p>
+            <p className="text-sm font-semibold text-teal-600">
+              {formatCompactCurrency(categoryValues.offering.value)}
+            </p>
+            {categoryValues.offering.commission > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">Prowizja</p>
+                <p className="text-sm font-semibold text-teal-500">
+                  {formatCompactCurrency(categoryValues.offering.commission)}
+                </p>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Poszukiwani */}
       <Card className="border-l-4 border-l-purple-500">
         <CardContent className="p-4">
@@ -267,7 +306,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
       {/* Weighted pipeline value - full width */}
       {weightedValue > 0 && (
-        <Card className="col-span-2 lg:col-span-6 border-l-4 border-l-indigo-500">
+        <Card className="col-span-2 lg:col-span-7 border-l-4 border-l-indigo-500">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <p className="text-sm font-medium text-muted-foreground">Pipeline ważony (wszystkie produkty × % szans)</p>
@@ -276,6 +315,19 @@ export function TeamStats({ teamId }: TeamStatsProps) {
           </CardContent>
         </Card>
       )}
+    </div>
+
+    {/* Funnel conversion chart */}
+    <FunnelConversionChart
+      stats={{
+        cold_count: contactStats.cold_count,
+        lead_count: contactStats.lead_count,
+        top_count: contactStats.top_count,
+        hot_count: contactStats.hot_count,
+        offering_count: offeringCount,
+        client_count: clients.length,
+      }}
+    />
     </div>
   );
 }
