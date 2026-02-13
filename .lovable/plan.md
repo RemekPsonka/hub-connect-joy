@@ -1,62 +1,123 @@
 
 
-# Konsolidacja zadan: deal_team_assignments -> tasks
+# Nowa hierarchia kategorii lejka sprzedazowego
 
-## Cel
+## Obecny stan
 
-Przepisac wszystkie hooki i komponenty, ktore czytaja/zapisuja do tabeli `deal_team_assignments`, aby korzystaly z glownej tabeli `tasks`. Dodac brakujace kolumny `deal_team_id` i `deal_team_contact_id` do tabeli `tasks`.
+Kanban ma 6 kolumn: HOT, OFERTOWANIE, TOP, LEAD, COLD, POSZUKIWANI.
+Hierarchia: cold < lead < top < hot < offering < client.
 
-## Co sie zmieni
+## Nowy stan (wg uzytkownika)
 
-1. Zadania tworzone w module Deals beda widoczne w globalnym systemie zadan (/tasks)
-2. Kanban, Kalendarz, komentarze, logi, powiadomienia -- dzialaja automatycznie dla zadan z Deals
-3. Jedna tabela zamiast dwoch
-
-## Plan techniczny
-
-### Krok 1: Migracja bazy danych
-
-Dodanie dwoch kolumn do tabeli `tasks`:
+Pelna hierarchia od najnizszej do najwyzszej:
 
 ```text
-tasks
-  + deal_team_id          UUID (nullable, FK -> deal_teams.id, ON DELETE SET NULL)
-  + deal_team_contact_id  UUID (nullable, FK -> deal_team_contacts.id, ON DELETE SET NULL)
+PRZEGRANE -> COLD -> 10x -> LEAD -> TOP -> HOT -> OFERTOWANIE -> KLIENT
 ```
 
-Migracja istniejacego 1 rekordu z `deal_team_assignments` do `tasks`.
+Dodajemy 2 nowe kategorie:
+- **lost** (PRZEGRANE) -- najnizszy poziom, kontakt przegrany ale widoczny
+- **10x** -- etap "budowania relacji", pomiedzy COLD a LEAD
 
-Aktualizacja polityk RLS na `tasks` -- dodanie warunku `is_deal_team_member` dla zadan z `deal_team_id`.
+Kolumny na Kanbanie (od lewej): HOT LEAD, OFERTOWANIE, TOP LEAD, LEAD, 10x, COLD LEAD, PRZEGRANE, POSZUKIWANI
 
-### Krok 2: Przepisanie useDealsTeamAssignments.ts
+## Szczegoly techniczne
 
-Caly plik przepisany na tabele `tasks`:
+### 1. Typ DealCategory
 
-- `useContactAssignments` -> `SELECT * FROM tasks WHERE deal_team_contact_id = ?`
-- `useCreateAssignment` -> `INSERT INTO tasks` z `deal_team_id`, `deal_team_contact_id`, `owner_id`
-- `useUpdateAssignment` -> `UPDATE tasks SET status = ?` (mapowanie statusow: `pending` -> `todo`, `done` -> `completed`)
-- `useMyTeamAssignments` -> `SELECT * FROM tasks WHERE deal_team_id = ?` z joinem na `deal_team_contacts` i `contacts`
+Plik: `src/types/dealTeam.ts`
 
-Interfejs `DealTeamAssignment` zostanie zamapowany na pola z tabeli `tasks`.
+Zmiana:
+```
+'hot' | 'top' | 'lead' | 'cold' | 'offering' | 'client'
+```
+na:
+```
+'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost'
+```
 
-### Krok 3: MyTeamTasksView.tsx
+Dodanie do `DealTeamContactStats`:
+- `tenx_count: number`
+- `lost_count: number`
 
-Drobne dostosowania mapowania pol (np. `team_contact_id` -> `deal_team_contact_id`, statusy `pending` -> `todo`).
+### 2. CATEGORY_PROBABILITY
 
-### Krok 4: ProspectingConvertDialog.tsx
+Plik: `src/hooks/useTeamClients.ts`
 
-Zmiana `createAssignment.mutateAsync` aby uzywal nowego hooka (ktory juz zapisuje do `tasks`).
+Dodanie:
+- `'10x': 10` (miedzy cold 5% a lead 20%)
+- `lost: 0`
 
-### Krok 5: WeeklyStatusForm.tsx
+### 3. KanbanBoard -- nowe kolumny
 
-Juz zapisuje do `tasks` -- bez zmian. Potwierdze ze kolumny `deal_team_id` i `deal_team_contact_id` sa poprawnie ustawiane.
+Plik: `src/components/deals-team/KanbanBoard.tsx`
+
+Dodanie dwoch nowych kolumn:
+- **10x** (ikona: zegar/powtorka, kolor: cyan) -- miedzy COLD a LEAD
+- **PRZEGRANE** (ikona: X/ban, kolor: gray) -- po COLD
+
+Nowa kolejnosc kolumn (od lewej):
+HOT LEAD | OFERTOWANIE | TOP LEAD | LEAD | 10x | COLD LEAD | PRZEGRANE | POSZUKIWANI
+
+Grid zmiana z `lg:grid-cols-6` na `lg:grid-cols-8`.
+
+### 4. useTeamContactStats
+
+Plik: `src/hooks/useDealsTeamContacts.ts`
+
+Dodanie `tenx_count` i `lost_count` do obliczen.
+
+### 5. TeamStats -- nowe karty
+
+Plik: `src/components/deals-team/TeamStats.tsx`
+
+Dodanie kart "10x" i "Przegrane". Grid z 7 na 9 kolumn.
+
+### 6. FunnelConversionChart
+
+Plik: `src/components/deals-team/FunnelConversionChart.tsx`
+
+Dodanie etapow PRZEGRANE i 10x do wykresu lejka.
+
+### 7. categoryConfig (rozne pliki)
+
+Dodanie `'10x'` i `'lost'` do slownikow categoryConfig w:
+- `DealContactDetailSheet.tsx`
+- `TableView.tsx`
+- `SnoozedContactsBar.tsx`
+
+### 8. WeeklyStatusForm -- rekomendacje
+
+Plik: `src/components/deals-team/WeeklyStatusForm.tsx`
+
+Dodanie rekomendacji:
+- `'10x': '🔄 10x (buduj relacje, wroc pozniej)'`
+
+### 9. ProspectingConvertDialog
+
+Plik: `src/components/deals-team/ProspectingConvertDialog.tsx`
+
+Dodanie `'10x'` i `'lost'` do listy kategorii konwersji.
+
+### 10. AddContactDialog
+
+Dodanie nowych kategorii do selecta.
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| Migracja SQL | Dodanie 2 kolumn + FK + migracja danych + RLS |
-| `src/hooks/useDealsTeamAssignments.ts` | Pelne przepisanie na tabele `tasks` |
-| `src/components/deals-team/MyTeamTasksView.tsx` | Dostosowanie mapowania pol i statusow |
-| `src/components/deals-team/ProspectingConvertDialog.tsx` | Bez zmian w logice (hook sie zmieni pod spodem) |
+| `src/types/dealTeam.ts` | Rozszerzenie DealCategory + DealTeamContactStats |
+| `src/hooks/useTeamClients.ts` | CATEGORY_PROBABILITY += 10x, lost |
+| `src/hooks/useDealsTeamContacts.ts` | useTeamContactStats += tenx_count, lost_count |
+| `src/components/deals-team/KanbanBoard.tsx` | 2 nowe kolumny, grid 8-col |
+| `src/components/deals-team/TeamStats.tsx` | 2 nowe karty, grid 9-col |
+| `src/components/deals-team/FunnelConversionChart.tsx` | 2 nowe etapy |
+| `src/components/deals-team/DealContactDetailSheet.tsx` | categoryConfig += 10x, lost |
+| `src/components/deals-team/TableView.tsx` | categoryConfig += 10x, lost |
+| `src/components/deals-team/WeeklyStatusForm.tsx` | Nowa rekomendacja 10x |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Nowe kategorie |
+| `src/components/deals-team/AddContactDialog.tsx` | Nowe kategorie |
+| `src/components/deals-team/SnoozedContactsBar.tsx` | categoryIcons += 10x, lost |
 
+Brak zmian w bazie danych -- kolumna `category` jest typu `text`, wiec nowe wartosci dzialaja od razu.
