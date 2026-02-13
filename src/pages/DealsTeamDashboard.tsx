@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
@@ -25,13 +26,18 @@ const STORAGE_KEY = 'deals-team-selected';
 
 export default function DealsTeamDashboard() {
   const { data: teams = [], isLoading: teamsLoading } = useMyDealTeams();
+  const [searchParams] = useSearchParams();
 
   // Load selected team from localStorage
   const [selectedTeamId, setSelectedTeamId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY) || '';
   });
 
-  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
+  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks'];
+  const initialView = searchParams.get('view') as ViewMode;
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    validViews.includes(initialView) ? initialView : 'kanban'
+  );
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
