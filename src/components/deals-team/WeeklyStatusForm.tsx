@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -93,7 +93,7 @@ export function WeeklyStatusForm({
   const [showPreviousContext, setShowPreviousContext] = useState(true);
 
   // Task section
-  const [createTask, setCreateTask] = useState(false);
+  const [createTask, setCreateTask] = useState(true);
   const [taskTitle, setTaskTitle] = useState('Umówić spotkanie');
   const [taskCustomTitle, setTaskCustomTitle] = useState('');
   const [taskAssignedTo, setTaskAssignedTo] = useState('');
@@ -133,7 +133,7 @@ export function WeeklyStatusForm({
         categoryRecommendation: 'keep',
       });
       setPreviousTasksDone([]);
-      setCreateTask(false);
+      setCreateTask(true);
       setTaskTitle('Umówić spotkanie');
       setTaskCustomTitle('');
       setTaskAssignedTo('');
@@ -252,7 +252,7 @@ export function WeeklyStatusForm({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: '60vh' }}>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-4">
 
@@ -541,7 +541,7 @@ export function WeeklyStatusForm({
               </DialogFooter>
             </form>
           </Form>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
