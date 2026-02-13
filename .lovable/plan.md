@@ -1,74 +1,62 @@
 
 
-# Wzbogacenie formularza statusu o etap lejka i kontekst w zadaniu
+# Dodanie edycji, zmiany statusu i szczegolowego zarzadzania zadaniami w widoku "Zadania"
 
-## Zmiany w `src/components/deals-team/WeeklyStatusForm.tsx`
+## Obecny stan
+Widok "Zadania" w zakladce Deals (`MyTeamTasksView`) wyswietla zadania pogrupowane po kontaktach, ale jedyna interakcja to checkbox (toggle done/pending). Brak mozliwosci:
+- Edycji tytulu, opisu, priorytetu, terminu
+- Zmiany statusu na posredni (np. "W trakcie")
+- Przypisania do innego czlonka zespolu
+- Otwarcia szczegolow zadania
 
-### 1. Wyswietlenie obecnego etapu lejka w naglowku
+## Rozwiazanie
+Dodanie interaktywnego menu kontekstowego i dialogu edycji do kazdego zadania w liscie.
 
-W sekcji `DialogHeader` (linia 266-270), pod nazwa kontaktu i tygodniem, dodanie badge z aktualnym etapem lejka (np. "LEAD", "HOT", "COLD"). Wykorzystanie propa `currentCategory` ktory juz jest przekazywany.
+### 1. Menu kontekstowe na kazdym zadaniu
 
-```text
-Dariusz Lyson
-Firma XYZ
-Etap: LEAD
-Tydzien: 09.02 - 15.02.2026
-```
+Po kliknieciu na wiersz zadania (lub ikone "...") pojawi sie `DropdownMenu` z opcjami:
+- **Status**: Zmiana miedzy "Do zrobienia", "W trakcie", "Zrobione"
+- **Priorytet**: Zmiana miedzy "Niski", "Sredni", "Wysoki", "Pilny"
+- **Przypisz do**: Lista czlonkow zespolu
+- **Edytuj**: Otwiera dialog edycji (tytul, opis, termin)
 
-Badge bedzie kolorowy, uzywajac mapy kolorow analogicznej do `categoryConfig` z `DealContactDetailSheet`.
+### 2. Inline status change
 
-### 2. Wzbogacenie opisu zadania o kontekst statusu
+Klikniecie na ikone statusu (Circle/Clock/CheckCircle2) obok checkboxa przelacza cyklicznie: pending -> in_progress -> done -> pending.
 
-Przy tworzeniu zadania operacyjnego (linie 196-206), zamiast wstawiac sam tytul, doda do pola `description` kontekst z formularza:
-- Obecny etap lejka
-- Podsumowanie statusu (co sie wydarzylo)
-- Nastepne kroki
-- Blokery (jesli sa)
+### 3. Dialog edycji zadania
 
-Dzieki temu osoba przypisana do zadania widzi pelny kontekst bez koniecznosci szukania statusu.
+Prosty dialog (`Dialog`) z polami:
+- Tytul (Input)
+- Opis (Textarea)
+- Priorytet (Select)
+- Termin (DatePicker)
+- Status (Select)
+- Przypisany do (Select z czlonkami zespolu)
 
-Format opisu zadania:
-```text
-Etap: HOT | Kontakt: Jan Kowalski (Firma ABC)
-
-Status tygodnia (09.02-15.02):
-[tresc statusSummary]
-
-Nastepne kroki:
-[tresc nextSteps]
-
-Blokery:
-[tresc blockers]
-```
+Zapisywanie przez istniejacy `useUpdateAssignment` hook.
 
 ## Szczegoly techniczne
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/WeeklyStatusForm.tsx` | (1) Dodanie badge etapu w DialogHeader z mapa kolorow/etykiet. (2) Budowanie `description` zadania z kontekstem formularza przy insercie do tabeli `tasks`. |
+| `src/components/deals-team/MyTeamTasksView.tsx` | (1) Dodanie DropdownMenu z opcjami statusu, priorytetu, przypisania. (2) Dodanie stanu `editingTask` i dialogu edycji z formularzem. (3) Rozszerzenie `handleToggle` o cykliczne przelaczanie statusow. (4) Invalidacja kluczy `deal-team-assignments-all` po edycji. |
 
-### Mapa etykiet etapow (do dodania w WeeklyStatusForm)
+### Interakcje uzytkownika
 
-```text
-categoryLabels = {
-  hot: 'HOT', top: 'TOP', lead: 'LEAD', '10x': '10x',
-  cold: 'COLD', lost: 'PRZEGRANE', client: 'KLIENT', offering: 'OFERTOWANIE'
-}
-```
+- **Klikniecie ikony statusu**: Cykliczna zmiana pending -> in_progress -> done
+- **Klikniecie tytulu lub ikony "..."**: Otwiera dropdown z akcjami
+- **"Edytuj" z dropdown**: Otwiera dialog z pelnym formularzem edycji
+- **Zmiana priorytetu/przypisania z dropdown**: Natychmiastowa aktualizacja
 
-### Budowanie opisu zadania
-
-W `onSubmit`, w sekcji tworzenia zadania (linia 196), dodanie pola `description` budowanego dynamicznie z danych formularza:
+### Nowe importy w MyTeamTasksView
 
 ```text
-const taskDescription = [
-  `Etap: ${categoryLabel} | Kontakt: ${contactName}${contactCompany ? ` (${contactCompany})` : ''}`,
-  '',
-  `Status (${weekLabel}):`,
-  data.statusSummary,
-  data.nextSteps ? `\nNastepne kroki:\n${data.nextSteps}` : '',
-  data.blockers ? `\nBlokery:\n${data.blockers}` : '',
-].filter(Boolean).join('\n');
+DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent
+Dialog, DialogContent, DialogHeader, DialogTitle
+Input, Textarea, Select
+MoreHorizontal, Edit, ArrowRight icons
 ```
 
-Pole to zostanie przekazane w `insert({ ..., description: taskDescription })`.
+Wszystkie komponenty juz istnieja w projekcie (shadcn/ui), wiec nie ma potrzeby instalacji nowych zaleznosci.
+
