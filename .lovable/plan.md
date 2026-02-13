@@ -1,53 +1,41 @@
 
-# Naprawa widocznosci przyciskow zadaniowych w panelu bocznym kontaktu
+# Poprawa widocznosci sekcji ZADANIA w panelu bocznym kontaktu
 
 ## Problem
-Przycisk "+ Nowe" istnieje w kodzie, ale jest w wariancie `ghost` (prawie niewidoczny). Brakuje tez wyraznego przycisku edycji przy kazdym zadaniu na liscie. Uzytkownik nie widzi elementow sterujacych.
+
+Przycisk "Nowe zadanie", ikony edycji i statusu **istnieja i dzialaja poprawnie** w kodzie. Problem polega na tym, ze sekcja ZADANIA jest **szosta sekcja od gory** panelu bocznego. Uzytkownik musi scrollowac bardzo daleko w dol, zeby do niej dotrzec. Kolejnosc sekcji w panelu:
+
+1. Status
+2. Kategoria
+3. Notatki
+4. Brief AI
+5. Statusy tygodniowe
+6. **ZADANIA** (tutaj jest przycisk "Nowe zadanie")
+7. Historia aktywnosci
+8. Produkty / Deale
 
 ## Rozwiazanie
 
-Zmiany w jednym pliku: `src/components/deals-team/DealContactDetailSheet.tsx`
+Przesuniecie sekcji ZADANIA **na trzecie miejsce** (zaraz po Notatki), poniewaz zadania sa najczesciej uzywana funkcja i powinny byc latwo dostepne bez scrollowania.
 
-### 1. Przycisk "+ Nowe zadanie" - zmiana na widoczny
-
-Zmiana przycisku z `variant="ghost"` na `variant="outline"` z wyrazniejszym stylem:
-
-```
-Przed:  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-Po:     <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs gap-1">
-```
-
-### 2. Dodanie przycisku edycji (olowek) przy kazdym zadaniu
-
-Przy kazdym zadaniu na liscie (obok ikony statusu i tytulu) dodanie malego przycisku edycji (ikona `Pencil`), ktory otwiera `TaskModal` z danymi zadania:
-
-```tsx
-<button onClick={(e) => {
-  e.stopPropagation();
-  setSelectedTask(task);
-  setTaskModalOpen(true);
-}}>
-  <Pencil className="h-3 w-3" />
-</button>
-```
-
-### 3. Import ikony Pencil
-
-Dodanie `Pencil` do importu z `lucide-react`.
-
-### 4. Wizualna poprawa sekcji ZADANIA
-
-- Przycisk "+ Nowe zadanie" bedzie miał ramke (outline) zamiast byc niewidoczny (ghost)
-- Kazde zadanie na liscie bedzie mialo ikone olowka po najechaniu (opacity-0 group-hover:opacity-100)
-- Ikony statusu (Circle/Clock/CheckCircle2) beda wieksze i bardziej widoczne
+Nowa kolejnosc:
+1. Status
+2. Kategoria
+3. Notatki
+4. **ZADANIA** (przesuniety wyzej)
+5. Brief AI
+6. Statusy tygodniowe
+7. Historia aktywnosci
+8. Produkty / Deale
 
 ## Szczegoly techniczne
 
-| Zmiana | Linie | Opis |
-|--------|-------|------|
-| Import Pencil | ~7-12 | Dodanie `Pencil` do importu z lucide-react |
-| Przycisk "+ Nowe" | ~476-484 | Zmiana variant z ghost na outline, dodanie tekstu "Nowe zadanie" |
-| Przycisk edycji w wierszu | ~489-529 | Dodanie ikony Pencil z handlerem otwierajacym TaskModal |
-| Hover effect | ~491 | Dodanie klasy `group` do wiersza zadania |
+Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
 
-Nie sa wymagane nowe zaleznosci ani zmiany w bazie danych.
+Zmiana polega na **przeniesieniu bloku kodu** sekcji ZADANIA (linie ~462-590, od `<Separator />` przed `{/* Tasks */}` do konca zamkniecia `</section>` z zamknietymi zadaniami) w inne miejsce w pliku — **przed sekcje Brief AI** (obecnie linia ~307).
+
+| Element | Obecna pozycja | Nowa pozycja |
+|---------|---------------|-------------|
+| Sekcja ZADANIA (caly blok ~462-590) | Po "Statusy tygodniowe" | Po "Notatki" (przed "Brief AI") |
+
+Zadne inne zmiany nie sa wymagane — przycisk "Nowe zadanie", inline edycja, status cycling i priorytety sa juz poprawnie zaimplementowane.
