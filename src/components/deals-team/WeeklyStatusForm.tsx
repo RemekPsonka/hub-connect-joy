@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSubmitWeeklyStatus } from '@/hooks/useWeeklyStatuses';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
@@ -45,6 +46,7 @@ type WeeklyStatusFormData = z.infer<typeof weeklyStatusSchema>;
 interface WeeklyStatusFormProps {
   teamContactId: string;
   teamId: string;
+  contactId?: string;
   contactName: string;
   contactCompany: string | null;
   currentCategory?: string;
@@ -69,8 +71,9 @@ const TASK_PRESETS = [
 ];
 
 export function WeeklyStatusForm({
-  teamContactId, teamId, contactName, contactCompany, currentCategory, open, onClose,
+  teamContactId, teamId, contactId, contactName, contactCompany, currentCategory, open, onClose,
 }: WeeklyStatusFormProps) {
+  const queryClient = useQueryClient();
   const submitStatus = useSubmitWeeklyStatus();
   const { data: previousStatuses = [] } = useTeamContactWeeklyStatuses(teamContactId);
   const { data: members = [] } = useTeamMembers(teamId);
@@ -188,17 +191,29 @@ export function WeeklyStatusForm({
             .single();
 
           if (directorData) {
-            await supabase.from('deal_team_assignments').insert({
-              team_contact_id: teamContactId,
-              team_id: teamId,
+            // Insert into unified tasks table
+            const { data: newTask, error: taskError } = await supabase.from('tasks').insert({
               tenant_id: directorData.tenant_id,
-              assigned_to: taskAssignedTo,
-              assigned_by: directorData.id,
               title: finalTitle,
+              owner_id: directorData.id,
+              assigned_to: taskAssignedTo,
               due_date: taskDueDate || null,
-              status: 'pending',
+              status: 'todo',
               priority: 'medium',
-            });
+              deal_team_id: teamId,
+              deal_team_contact_id: teamContactId,
+            }).select('id').single();
+
+            if (!taskError && newTask && contactId) {
+              // Link task to contact via task_contacts
+              await supabase.from('task_contacts').insert({
+                task_id: newTask.id,
+                contact_id: contactId,
+                role: 'primary',
+              });
+              // Invalidate contact tasks cache
+              queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross', contactId] });
+            }
           }
         }
       }

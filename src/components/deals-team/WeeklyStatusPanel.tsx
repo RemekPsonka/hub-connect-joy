@@ -29,6 +29,7 @@ export function WeeklyStatusPanel({ teamId, open, onOpenChange }: WeeklyStatusPa
     id: string;
     name: string;
     company: string | null;
+    contactId?: string;
   } | null>(null);
 
   const now = new Date();
@@ -42,6 +43,7 @@ export function WeeklyStatusPanel({ teamId, open, onOpenChange }: WeeklyStatusPa
     id: string;
     name: string;
     company: string | null;
+    contactId?: string;
   }) => {
     setSelectedContact(contact);
   };
@@ -119,6 +121,7 @@ export function WeeklyStatusPanel({ teamId, open, onOpenChange }: WeeklyStatusPa
                               id: contact.id,
                               name: contact.contact?.full_name || 'Nieznany',
                               company: contact.contact?.company || null,
+                              contactId: contact.contact_id,
                             })
                           }
                         >
@@ -194,6 +197,7 @@ export function WeeklyStatusPanel({ teamId, open, onOpenChange }: WeeklyStatusPa
         <WeeklyStatusForm
           teamContactId={selectedContact.id}
           teamId={teamId}
+          contactId={selectedContact.contactId}
           contactName={selectedContact.name}
           contactCompany={selectedContact.company}
           open={!!selectedContact}

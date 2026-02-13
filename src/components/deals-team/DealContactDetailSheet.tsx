@@ -692,6 +692,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
       <WeeklyStatusForm
         teamContactId={contact.id}
         teamId={teamId}
+        contactId={contact.contact_id}
         contactName={contact.contact.full_name}
         contactCompany={contact.contact.company}
         currentCategory={contact.category}
