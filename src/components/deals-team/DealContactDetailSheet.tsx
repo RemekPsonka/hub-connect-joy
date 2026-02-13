@@ -201,7 +201,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+        <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-4 border-b">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
