@@ -203,7 +203,7 @@ export default function DealsTeamDashboard() {
       </div>
 
       {/* Stats - always visible when team selected (except dashboard) */}
-      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && <TeamStats teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
