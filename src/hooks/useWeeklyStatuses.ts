@@ -131,7 +131,6 @@ export function useOverdueContacts(teamId: string | undefined) {
         .select('*')
         .eq('team_id', teamId)
         .eq('status_overdue', true)
-        .in('category', ['hot', 'top'])
         .not('status', 'in', '("won","lost","disqualified")')
         .order('last_status_update', { ascending: true, nullsFirst: true });
 

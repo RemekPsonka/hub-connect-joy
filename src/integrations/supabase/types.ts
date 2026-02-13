@@ -3169,6 +3169,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
+          status_frequency_days: Json | null
           tenant_id: string
           updated_at: string | null
           weekly_status_day: number | null
@@ -3182,6 +3183,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
+          status_frequency_days?: Json | null
           tenant_id: string
           updated_at?: string | null
           weekly_status_day?: number | null
@@ -3195,6 +3197,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          status_frequency_days?: Json | null
           tenant_id?: string
           updated_at?: string | null
           weekly_status_day?: number | null

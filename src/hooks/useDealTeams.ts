@@ -29,6 +29,7 @@ export interface DealTeam {
   is_active: boolean;
   created_by: string | null;
   weekly_status_day?: number;
+  status_frequency_days?: Record<string, number> | null;
   created_at: string;
   updated_at?: string;
   members?: DealTeamMember[];
@@ -47,6 +48,7 @@ export interface DealTeamUpdate {
   description?: string | null;
   color?: string;
   member_ids?: string[];
+  statusFrequencyDays?: Record<string, number>;
 }
 
 export function useDealTeams() {
@@ -186,6 +188,7 @@ export function useUpdateDealTeam() {
       if (team.name !== undefined) updateData.name = team.name;
       if (team.description !== undefined) updateData.description = team.description;
       if (team.color !== undefined) updateData.color = team.color;
+      if (team.statusFrequencyDays !== undefined) updateData.status_frequency_days = team.statusFrequencyDays;
 
       if (Object.keys(updateData).length > 0) {
         const { error: updateError } = await supabase
@@ -282,7 +285,7 @@ export function useDealTeamWithMembers(teamId: string | null | undefined) {
         .single();
 
       if (error) throw error;
-      return data as DealTeam;
+      return data as unknown as DealTeam;
     },
     enabled: !!teamId,
     staleTime: 5 * 60 * 1000,
