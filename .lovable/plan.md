@@ -1,59 +1,34 @@
 
-# Aktywne karty KPI + zwijane menu w sidebarze
 
-## 1. Klikalne karty KPI na dashboardzie
+# Poprawka szerokosci dashboardu
 
-Karty KPI (HOT Leads, TOP Leads, Leads, 10x, Cold, Przegrane, Klienci, Ofertowanie, Poszukiwani) beda klikalane i beda przelaczac uzytkownika do odpowiedniego widoku/tabu w module Lejek sprzedazy.
+## Problem
 
-Mapowanie kart na widoki:
-- HOT Leads -> `kanban` (Kanban z filtrem hot)
-- TOP Leads -> `kanban` (Kanban z filtrem top)  
-- Leads -> `kanban` (Kanban z filtrem lead)
-- 10x -> `kanban` (Kanban z filtrem 10x)
-- Cold -> `kanban` (Kanban z filtrem cold)
-- Przegrane -> `kanban` (Kanban z filtrem lost)
-- Klienci -> `clients`
-- Ofertowanie -> `offering`
-- Poszukiwani -> `prospecting`
+9 kart KPI w jednym rzedzie (`lg:grid-cols-9`) nie miesci sie na ekranie -- karty sa za waskie i tekst sie ucina. Tabs z zakladkami rowniez wychodzi poza ekran.
 
-Komponent `SalesFunnelDashboard` otrzyma nowy prop `onNavigate(viewMode: string)` przekazywany z `DealsTeamDashboard`. `KPICard` otrzyma opcjonalny prop `onClick` i bedzie renderowany jako klikalny element z efektem hover (`cursor-pointer`, `hover:shadow-md`).
+## Rozwiazanie
 
-## 2. Zwijane grupy kategorii w sidebarze
+### 1. Karty KPI -- zmiana layoutu z 9 kolumn na 2 rzedy
 
-Kazda grupa nawigacyjna (Overview, CRM, Projekty, Sprzedaz, AI, System) bedzie zwijana z uzyciem komponentu `Collapsible` z Radix UI. Klikniecie na nazwe grupy bedzie zwiac/rozwiac liste linkow.
+Zamiast jednego rzedu 9 kart, uklad bedzie:
+- **Gorny rzad**: 5 kart (HOT, TOP, Leads, 10x, Cold) -- `lg:grid-cols-5`
+- **Dolny rzad**: 4 karty (Przegrane, Klienci, Ofertowanie, Poszukiwani) -- `lg:grid-cols-4`
 
-- Grupy beda domyslnie rozwiniete
-- Ikona strzalki (ChevronDown) bedzie obracana przy zwinietej grupie
-- Grupa zawierajaca aktywna strone bedzie automatycznie rozwinieta
-- W trybie zwiniecia sidebara (icon mode) grupy beda ukryte
+Alternatywnie: jeden grid `lg:grid-cols-5` ktory lamiie karty na 2 rzedy (5+4).
+
+### 2. Zakladki nawigacyjne -- scroll lub zawijanie
+
+Pasek zakladek (Dashboard, Kanban, Tabela, Klienci...) wymaga `overflow-x-auto` zeby mozna bylo przewijac gdy nie miesci sie na ekranie. Lub zmniejszyc padding/rozmiar tekstu.
 
 ## Szczegoly techniczne
 
 ### Plik: `src/components/deals-team/SalesFunnelDashboard.tsx`
 
-- Dodanie propa `onNavigate: (view: string) => void` do interfejsu
-- Dodanie propa `onClick` do `KPICard`
-- Przekazanie odpowiedniego `onClick` do kazdej karty KPI
-- Dodanie stylow hover (`cursor-pointer`, `hover:shadow-md`, `transition-shadow`)
+- Zmiana grida KPI z `grid-cols-2 lg:grid-cols-9` na `grid-cols-2 md:grid-cols-3 lg:grid-cols-5` -- karty ulozone w 2 rzedach (5+4)
+- Zmniejszenie minimalnej szerokosci kart
 
 ### Plik: `src/pages/DealsTeamDashboard.tsx`
 
-- Przekazanie `onNavigate={setViewMode}` do `SalesFunnelDashboard`
+- Dodanie `overflow-x-auto` do kontenera z zakladkami nawigacyjnymi aby mozna bylo je przewijac na wezszych ekranach
+- Ewentualne zmniejszenie paddingu/rozmiaru tekstu w zakadkach
 
-### Plik: `src/components/layout/AppSidebar.tsx`
-
-- Import `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent` z `@radix-ui/react-collapsible`
-- Import `ChevronDown` z `lucide-react`
-- Dodanie stanu `openGroups` (Record string boolean) do sledzenia ktore grupy sa rozwiniete
-- Zamiana kazdego `SidebarGroup` na `Collapsible` z `GroupLabel` jako triggerem
-- `SidebarGroupContent` owiniety w `CollapsibleContent`
-- Grupy z aktywna strona beda domyslnie otwarte
-- Ikona strzalki obok nazwy grupy z animacja obrotu
-
-### Zmieniane pliki
-
-| Plik | Zmiana |
-|------|--------|
-| `src/components/deals-team/SalesFunnelDashboard.tsx` | Dodanie `onNavigate` prop, klikalne KPI karty |
-| `src/pages/DealsTeamDashboard.tsx` | Przekazanie `onNavigate` do dashboardu |
-| `src/components/layout/AppSidebar.tsx` | Zwijane grupy z Collapsible |
