@@ -1,44 +1,90 @@
 
-# Naprawa panelu bocznego kontaktu - pelna widocznosc
+# Przebudowa widoku Zadania w stylu Asana/ClickUp
 
-## Problem
-Panel boczny uzywa komponentu `Sheet` z bazowym wariantem `right`, ktory ma twardo ustawione `sm:max-w-sm` (384px). Mimo ze `DealContactDetailSheet` nadpisuje to na `sm:max-w-xl`, ScrollArea wewnatrz zabiera dodatkowa przestrzen na scrollbar, co powoduje ucinanie zawartosci (np. przycisk "+ Nowe zadanie").
+## Zakres zmian
 
-## Rozwiazanie - 2 zmiany
+Widok `MyTeamTasksView` (zakladka "Zadania" w /deals-team) zostanie przebudowany z prostej listy grupowanej po kontaktach na pelny menedzer zadan z funkcjami wzorowanymi na Asana/ClickUp.
 
-### 1. Plik: `src/components/ui/sheet.tsx` (linia 40-41)
+## Co zostanie dodane/zmienione
 
-Usuniecie restrykcyjnego `sm:max-w-sm` z wariantu `right`, aby klasy nadpisujace w komponentach potomnych dzialaly poprawnie:
+### 1. Nowy uklad widoku zadania
+- Toolbar z przyciskiem "+ Nowe zadanie" (widoczny, kolorowy, nie ukryty)
+- Przelacznik widokow: Lista / Kanban / Tabela (reuse istniejacych komponentow)
+- Filtrowanie po statusie, priorytecie, osobie przypisanej, terminie
+- Wyszukiwarka zadan
 
+### 2. Rozbudowane karty zadan na liscie
+- Inline edycja tytulu (kliknij aby edytowac, Enter aby zapisac)
+- Klikalne badge statusu i priorytetu (zmiana jednym kliknieciem)
+- Widoczny termin z kolorowym oznaczeniem (czerwony = po terminie, zolty = dzis)
+- Informacja o subtaskach z paskiem postepu (np. "2/5")
+- Ikona komentarzy z liczba
+- Przypisana osoba (avatar)
+
+### 3. Panel szczegolowy zadania (Sheet z prawej strony)
+- Otwarcie przez klikniecie na zadanie
+- Pelna edycja inline: tytul, opis, status, priorytet, termin, przypisanie
+- Sekcja subtaskow: dodawanie, oznaczanie, drag-and-drop, usuwanie
+- Komentarze
+- Historia aktywnosci
+- Przycisk "Utworz podzadanie" bezposrednio widoczny
+- Przycisk usuwania zadania
+
+### 4. Tworzenie nowych zadan
+- Przycisk "+ Nowe zadanie" zawsze widoczny w toolbarze
+- Inline create na dole listy (jak w Asanie - wpisz tytul i Enter)
+- Nowe zadanie automatycznie przypisane do biezacego kontekstu (team, kontakt)
+
+### 5. Drag and drop
+- Przenoszenie zadan miedzy grupami kontaktow
+- Zmiana kolejnosci wewnatrz grupy
+
+## Szczegoly techniczne
+
+### Pliki do zmiany
+
+| Plik | Zmiana |
+|------|--------|
+| `src/components/deals-team/MyTeamTasksView.tsx` | **Pelna przebudowa** - nowy layout z toolbarem, rozbudowanymi kartami zadan, inline edycja, panel szczegolowy (TaskDetailSheet), inline create, drag-and-drop |
+
+### Pliki do ponownego uzycia (bez zmian)
+- `TaskDetailSheet.tsx` - panel szczegolowy z subtaskami, komentarzami, activity log
+- `TaskModal.tsx` - modal tworzenia/edycji
+- `TaskStatusBadge.tsx`, `TaskPriorityBadge.tsx` - badge statusu/priorytetu
+- `SortableTaskItem.tsx` - drag-and-drop wrapper
+- `useDealsTeamAssignments.ts` - hook do danych
+
+### Kluczowe decyzje architektoniczne
+- Reuse istniejacych komponentow (`TaskDetailSheet`, `TaskModal`, badge) zamiast tworzenia nowych
+- Otwarcie `TaskDetailSheet` po kliknieciu zadania (pelne szczegoly z subtaskami, komentarzami, historia)
+- Inline create na dole kazdej grupy kontaktow (szybkie dodawanie bez modala)
+- Status cycling przez klikniecie ikony statusu (juz istnieje, zostanie zachowane)
+- Priorytet zmieniany przez klikniecie badge (dropdown z opcjami)
+
+### Nowe elementy UI w MyTeamTasksView
+```text
++--------------------------------------------------+
+| [+ Nowe zadanie]  [Filtr statusu] [Szukaj...]    |
+| [Wszyscy] [Moje] [Adam] [Remigiusz] [Pawel]      |
+| [Zakonczone] [Przeterminowane: 3]    12 zadan     |
++--------------------------------------------------+
+|                                                   |
+| Artur Paluch · WESTA INVESTMENTS           [1]    |
+| +------------------------------------------------+|
+| | O  Umowic spotkanie                        ... ||
+| |    17 lut  [Sredni]  [Do zrobienia]  [2/3] RP  ||
+| +------------------------------------------------+|
+| | O  Wyslac oferte                           ... ||
+| |    20 lut  [Wysoki]  [W trakcie]           RP  ||
+| +------------------------------------------------+|
+| | [+ Dodaj zadanie...]                           ||
+| +------------------------------------------------+|
+|                                                   |
+| Marcin Raczek                              [2]    |
+| +------------------------------------------------+|
+| | ...                                            ||
++--------------------------------------------------+
 ```
-Przed:
-right: "inset-y-0 right-0 h-full w-3/4  border-l ... sm:max-w-sm"
 
-Po:
-right: "inset-y-0 right-0 h-full w-3/4  border-l ..."
-```
-
-Analogiczna zmiana dla wariantu `left` (linia 39), aby zachowac spojnosc.
-
-### 2. Plik: `src/components/deals-team/DealContactDetailSheet.tsx` (linia 204)
-
-Ustawienie konkretnej szerokosci panelu na 640px (`sm:max-w-xl`) z dodatkowym `overflow-hidden` dla pewnosci:
-
-```
-Przed:
-className="w-full sm:max-w-xl p-0 flex flex-col"
-
-Po:
-className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden"
-```
-
-## Efekt
-
-- Panel bedzie mial 640px szerokosci (xl) bez konfliktu z bazowym sm:max-w-sm
-- Przycisk "+ Nowe zadanie" bedzie w pelni widoczny
-- Badge kategorii (HOT, OFERTOWANIE, TOP itd.) beda sie miescily
-- ScrollArea nie bedzie ucinac zawartosci po prawej stronie
-
-## Uwaga
-
-Zmiana w `sheet.tsx` usuwa domyslne ograniczenie `sm:max-w-sm` — inne komponenty uzywajace Sheet powinny same ustawiac max-width w className (co jest standardowa praktyka w shadcn).
+### Zmiana w hook'u danych
+- `useMyTeamAssignments` zostanie rozszerzony o pobieranie subtaskow (`parent_task_id`) i liczby komentarzy, aby karty zadan mogly wyswietlac te informacje
