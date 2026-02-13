@@ -2,15 +2,12 @@ import { useMemo, useState } from 'react';
 import { format, isPast, isToday } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
-  CheckCircle2, Circle, Clock, AlertTriangle, User, Filter, Building2,
+  CheckCircle2, Circle, Clock, AlertTriangle, User, Building2,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useMyTeamAssignments, useUpdateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
@@ -106,26 +103,39 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-          <Select value={filterMember} onValueChange={setFilterMember}>
-            <SelectTrigger className="h-8 w-[180px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mine">Moje zadania</SelectItem>
-              <SelectItem value="all">Wszystkie</SelectItem>
-              {members.map((m) => (
-                <SelectItem key={m.director_id} value={m.director_id}>
-                  {m.director?.full_name || 'Nieznany'}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Member blocker bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant={filterMember === 'all' ? 'default' : 'outline'}
+          size="sm"
+          className="text-xs h-8"
+          onClick={() => setFilterMember('all')}
+        >
+          Wszyscy
+        </Button>
+        <Button
+          variant={filterMember === 'mine' ? 'default' : 'outline'}
+          size="sm"
+          className="text-xs h-8"
+          onClick={() => setFilterMember('mine')}
+        >
+          Moje
+        </Button>
+        {members.map((m) => (
+          <Button
+            key={m.director_id}
+            variant={filterMember === m.director_id ? 'default' : 'outline'}
+            size="sm"
+            className="text-xs h-8"
+            onClick={() => setFilterMember(m.director_id)}
+          >
+            {m.director?.full_name || 'Nieznany'}
+          </Button>
+        ))}
+      </div>
 
+      {/* Secondary controls */}
+      <div className="flex items-center gap-3 flex-wrap">
         <Button
           variant={showCompleted ? 'secondary' : 'outline'}
           size="sm"
