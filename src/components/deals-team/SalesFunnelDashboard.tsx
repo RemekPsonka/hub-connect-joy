@@ -239,7 +239,7 @@ export function SalesFunnelDashboard({ teamId, onNavigate }: SalesFunnelDashboar
       </div>
 
       {/* Section 1: KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPICard icon={Flame} label="HOT Leads" count={contactStats.hot_count} value={categoryValues.hot.value} commission={categoryValues.hot.commission} color="text-red-500" borderColor="border-l-red-500" overdue={contactStats.overdue_count} onClick={() => onNavigate?.('kanban')} />
         <KPICard icon={Star} label="TOP Leads" count={contactStats.top_count} value={categoryValues.top.value} commission={categoryValues.top.commission} color="text-amber-500" borderColor="border-l-amber-500" onClick={() => onNavigate?.('kanban')} />
         <KPICard icon={ClipboardList} label="Leads" count={contactStats.lead_count} value={categoryValues.lead.value} commission={categoryValues.lead.commission} color="text-blue-500" borderColor="border-l-blue-500" onClick={() => onNavigate?.('kanban')} />
