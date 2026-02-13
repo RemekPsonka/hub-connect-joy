@@ -1,6 +1,8 @@
 import { Card } from '@/components/ui/card';
+import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
+import type { TaskStatus } from '@/hooks/useActiveTaskContacts';
 
 interface HotLeadCardProps {
   contact: DealTeamContact;
@@ -9,9 +11,10 @@ interface HotLeadCardProps {
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
+  taskStatus?: TaskStatus;
 }
 
-export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging }: HotLeadCardProps) {
+export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging, taskStatus }: HotLeadCardProps) {
   if (!contact.contact) return null;
 
   return (
@@ -36,6 +39,16 @@ export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDraggi
               {contact.contact.company}
             </span>
           </>
+        )}
+        {taskStatus && (
+          <span title={taskStatus === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
+            <CheckCircle2
+              className={cn(
+                "w-3 h-3 shrink-0",
+                taskStatus === 'overdue' ? 'text-destructive' : 'text-green-500'
+              )}
+            />
+          </span>
         )}
         <div
           className={cn(
