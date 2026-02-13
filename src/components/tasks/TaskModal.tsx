@@ -52,11 +52,13 @@ interface TaskModalProps {
   preselectedSectionId?: string;
   initialData?: TaskInitialData;
   onTaskCreated?: (taskId: string) => void;
+  dealTeamId?: string;
+  dealTeamContactId?: string;
 }
 
 type TaskType = 'standard' | 'cross' | 'group';
 
-export function TaskModal({ open, onOpenChange, task, preselectedContactId, preselectedProjectId, preselectedSectionId, initialData, onTaskCreated }: TaskModalProps) {
+export function TaskModal({ open, onOpenChange, task, preselectedContactId, preselectedProjectId, preselectedSectionId, initialData, onTaskCreated, dealTeamId, dealTeamContactId }: TaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taskType, setTaskType] = useState<TaskType>('standard');
@@ -236,6 +238,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
           categoryId: categoryId === 'none' ? undefined : (categoryId || undefined),
           assignedTo: assignedTo === 'self' ? undefined : (assignedTo || undefined),
           visibility: isTeamCategory ? 'team' : visibility,
+          dealTeamId: dealTeamId || undefined,
+          dealTeamContactId: dealTeamContactId || undefined,
         });
         toast.success('Zadanie utworzone');
         

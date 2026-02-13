@@ -408,6 +408,8 @@ export function useCreateTask() {
       categoryId?: string;
       assignedTo?: string;
       visibility?: 'private' | 'team' | 'public';
+      dealTeamId?: string;
+      dealTeamContactId?: string;
     }) => {
       // Get tenant_id and director_id
       const { data: { user } } = await supabase.auth.getUser();
@@ -446,6 +448,8 @@ export function useCreateTask() {
           assigned_to: input.assignedTo || null,
           category_id: input.categoryId || null,
           visibility,
+          deal_team_id: input.dealTeamId || null,
+          deal_team_contact_id: input.dealTeamContactId || null,
         })
         .select()
         .single();
@@ -474,6 +478,9 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
     },
   });
 }
@@ -569,6 +576,8 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
     },
   });
 }
