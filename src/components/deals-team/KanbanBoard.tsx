@@ -63,6 +63,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     () => filteredContacts.filter((c) => c.category === 'hot'),
     [filteredContacts]
   );
+  const offeringContacts = useMemo(
+    () => filteredContacts.filter((c) => c.category === 'offering'),
+    [filteredContacts]
+  );
   const topContacts = useMemo(
     () => filteredContacts.filter((c) => c.category === 'top'),
     [filteredContacts]
@@ -175,7 +179,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         onContactClick={handleCardClick}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         {/* HOT column */}
         <KanbanColumn
           title="HOT LEAD"
@@ -192,6 +196,33 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           isDropTarget={dragOverColumn === 'hot'}
         >
           {hotContacts.map((contact) => (
+            <HotLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => handleCardClick(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
+          ))}
+        </KanbanColumn>
+
+        {/* OFFERING column */}
+        <KanbanColumn
+          title="OFERTOWANIE"
+          icon="📝"
+          color="emerald"
+          count={offeringContacts.length}
+          onAdd={() => setAddContactCategory('offering')}
+          emptyMessage="Brak kontaktów w ofertowaniu"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'offering')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'offering')}
+          isDropTarget={dragOverColumn === 'offering'}
+        >
+          {offeringContacts.map((contact) => (
             <HotLeadCard
               key={contact.id}
               contact={contact}
