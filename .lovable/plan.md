@@ -1,60 +1,62 @@
 
 
-# Fix: Zadania ze statusu nie widoczne na karcie kontaktu
+# Konsolidacja zadan: deal_team_assignments -> tasks
 
-## Problem
+## Cel
 
-Formularz statusu tygodniowego (WeeklyStatusForm) tworzy zadania w starej tabeli `deal_team_assignments`, natomiast karta kontaktu (DealContactDetailSheet) odczytuje zadania z tabeli `tasks` przez hook `useContactTasksWithCross`. To sa dwie rozne tabele -- zadania utworzone z formularza statusu nigdy nie pojawiaja sie w sekcji "ZADANIA" na karcie.
+Przepisac wszystkie hooki i komponenty, ktore czytaja/zapisuja do tabeli `deal_team_assignments`, aby korzystaly z glownej tabeli `tasks`. Dodac brakujace kolumny `deal_team_id` i `deal_team_contact_id` do tabeli `tasks`.
 
-## Rozwiazanie
+## Co sie zmieni
 
-Zmienic WeeklyStatusForm tak, aby tworzyl zadania w tabeli `tasks` (z powiazaniem przez `task_contacts`), zamiast w `deal_team_assignments`. Dzieki temu zadania beda widoczne zarowno na karcie kontaktu, jak i w globalnym systemie zadan.
+1. Zadania tworzone w module Deals beda widoczne w globalnym systemie zadan (/tasks)
+2. Kanban, Kalendarz, komentarze, logi, powiadomienia -- dzialaja automatycznie dla zadan z Deals
+3. Jedna tabela zamiast dwoch
 
-## Szczegoly techniczne
+## Plan techniczny
 
-### Plik: `src/components/deals-team/WeeklyStatusForm.tsx`
+### Krok 1: Migracja bazy danych
 
-Zamienic blok tworzenia zadania (linie 176-203) z:
+Dodanie dwoch kolumn do tabeli `tasks`:
+
+```text
+tasks
+  + deal_team_id          UUID (nullable, FK -> deal_teams.id, ON DELETE SET NULL)
+  + deal_team_contact_id  UUID (nullable, FK -> deal_team_contacts.id, ON DELETE SET NULL)
 ```
-await supabase.from('deal_team_assignments').insert({...})
-```
-na logike tworzaca zadanie w tabeli `tasks` + powiazanie w `task_contacts`:
 
-1. Wstawic do `tasks`:
-   - `title`: tytul zadania
-   - `tenant_id`: z danych directora
-   - `owner_id`: director.id (tworca statusu)
-   - `assigned_to`: taskAssignedTo (wybrany czlonek zespolu)
-   - `due_date`: taskDueDate
-   - `status`: 'todo'
-   - `priority`: 'medium'
+Migracja istniejacego 1 rekordu z `deal_team_assignments` do `tasks`.
 
-2. Wstawic do `task_contacts`:
-   - `task_id`: id nowo utworzonego zadania
-   - `contact_id`: contact_id kontaktu (potrzebne przekazanie do komponentu)
-   - `role`: 'primary'
+Aktualizacja polityk RLS na `tasks` -- dodanie warunku `is_deal_team_member` dla zadan z `deal_team_id`.
 
-3. Po sukcesie: `invalidateQueries(['contact-tasks-with-cross', contactId])` aby odswiezyc liste zadan na karcie
+### Krok 2: Przepisanie useDealsTeamAssignments.ts
 
-### Plik: `src/components/deals-team/WeeklyStatusForm.tsx` (props)
+Caly plik przepisany na tabele `tasks`:
 
-Dodac nowy prop `contactId: string` (contact_id z deal_team_contacts) aby moc utworzyc powiazanie w `task_contacts`.
+- `useContactAssignments` -> `SELECT * FROM tasks WHERE deal_team_contact_id = ?`
+- `useCreateAssignment` -> `INSERT INTO tasks` z `deal_team_id`, `deal_team_contact_id`, `owner_id`
+- `useUpdateAssignment` -> `UPDATE tasks SET status = ?` (mapowanie statusow: `pending` -> `todo`, `done` -> `completed`)
+- `useMyTeamAssignments` -> `SELECT * FROM tasks WHERE deal_team_id = ?` z joinem na `deal_team_contacts` i `contacts`
 
-### Pliki wywolujace WeeklyStatusForm
+Interfejs `DealTeamAssignment` zostanie zamapowany na pola z tabeli `tasks`.
 
-Sprawdzic i zaktualizowac wszystkie miejsca, ktore renderuja `<WeeklyStatusForm>`, aby przekazywaly `contactId`:
-- `DealContactDetailSheet.tsx` -- przekazac `contact.contact_id`
-- `WeeklyStatusPanel.tsx` -- przekazac contact_id z danych kontaktu
+### Krok 3: MyTeamTasksView.tsx
 
-### Invalidacja cache
+Drobne dostosowania mapowania pol (np. `team_contact_id` -> `deal_team_contact_id`, statusy `pending` -> `todo`).
 
-Po utworzeniu zadania wywolac `queryClient.invalidateQueries` z kluczem `['contact-tasks-with-cross', contactId]` zeby lista zadan odswiezyla sie natychmiast.
+### Krok 4: ProspectingConvertDialog.tsx
+
+Zmiana `createAssignment.mutateAsync` aby uzywal nowego hooka (ktory juz zapisuje do `tasks`).
+
+### Krok 5: WeeklyStatusForm.tsx
+
+Juz zapisuje do `tasks` -- bez zmian. Potwierdze ze kolumny `deal_team_id` i `deal_team_contact_id` sa poprawnie ustawiane.
 
 ### Zmieniane pliki
 
 | Plik | Zmiana |
 |------|--------|
-| `src/components/deals-team/WeeklyStatusForm.tsx` | Zmiana insert z `deal_team_assignments` na `tasks` + `task_contacts`, dodanie prop `contactId` |
-| `src/components/deals-team/DealContactDetailSheet.tsx` | Przekazanie `contactId` do WeeklyStatusForm |
-| `src/components/deals-team/WeeklyStatusPanel.tsx` | Przekazanie `contactId` do WeeklyStatusForm |
+| Migracja SQL | Dodanie 2 kolumn + FK + migracja danych + RLS |
+| `src/hooks/useDealsTeamAssignments.ts` | Pelne przepisanie na tabele `tasks` |
+| `src/components/deals-team/MyTeamTasksView.tsx` | Dostosowanie mapowania pol i statusow |
+| `src/components/deals-team/ProspectingConvertDialog.tsx` | Bez zmian w logice (hook sie zmieni pod spodem) |
 
