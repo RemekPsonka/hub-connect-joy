@@ -35,3 +35,4 @@ export { ConvertToClientDialog } from './ConvertToClientDialog';
 export { SnoozedTeamView } from './SnoozedTeamView';
 export { OfferingTab } from './OfferingTab';
 export { FunnelConversionChart } from './FunnelConversionChart';
+export { SalesFunnelDashboard } from './SalesFunnelDashboard';
