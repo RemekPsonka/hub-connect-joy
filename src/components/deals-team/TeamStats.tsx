@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Flame, Star, ClipboardList, Search, AlertTriangle, Snowflake, UserCheck, Briefcase } from 'lucide-react';
+import { Flame, Star, ClipboardList, Search, AlertTriangle, Snowflake, UserCheck, Briefcase, RefreshCw, XCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
@@ -53,7 +53,9 @@ export function TeamStats({ teamId }: TeamStatsProps) {
       hot: { value: 0, commission: 0 },
       top: { value: 0, commission: 0 },
       lead: { value: 0, commission: 0 },
+      '10x': { value: 0, commission: 0 },
       cold: { value: 0, commission: 0 },
+      lost: { value: 0, commission: 0 },
       offering: { value: 0, commission: 0 },
     };
     allProducts.forEach((p) => {
@@ -81,8 +83,8 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
   if (prospectsLoading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
-        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+      <div className="grid grid-cols-2 lg:grid-cols-9 gap-4">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
           <Skeleton key={i} className="h-24" />
         ))}
       </div>
@@ -91,7 +93,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
   return (
     <div className="space-y-4">
-    <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-9 gap-4">
       {/* HOT Leads */}
       <Card className="border-l-4 border-l-red-500">
         <CardContent className="p-4">
@@ -191,6 +193,29 @@ export function TeamStats({ teamId }: TeamStatsProps) {
         </CardContent>
       </Card>
 
+      {/* 10x */}
+      <Card className="border-l-4 border-l-cyan-500">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-cyan-500" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  10x
+                </span>
+              </div>
+              <p className="text-2xl font-bold">{contactStats.tenx_count}</p>
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-muted-foreground">Wartość</p>
+            <p className="text-sm font-semibold">
+              {formatCompactCurrency(categoryValues['10x'].value)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* COLD Leads */}
       <Card className="border-l-4 border-l-slate-400">
         <CardContent className="p-4">
@@ -210,14 +235,23 @@ export function TeamStats({ teamId }: TeamStatsProps) {
             <p className="text-sm font-semibold">
               {formatCompactCurrency(categoryValues.cold.value)}
             </p>
-            {categoryValues.cold.commission > 0 && (
-              <>
-                <p className="text-xs text-muted-foreground">Prowizja</p>
-                <p className="text-sm font-semibold text-slate-500">
-                  {formatCompactCurrency(categoryValues.cold.commission)}
-                </p>
-              </>
-            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Przegrane */}
+      <Card className="border-l-4 border-l-gray-400">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  Przegrane
+                </span>
+              </div>
+              <p className="text-2xl font-bold">{contactStats.lost_count}</p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -306,7 +340,7 @@ export function TeamStats({ teamId }: TeamStatsProps) {
 
       {/* Weighted pipeline value - full width */}
       {weightedValue > 0 && (
-        <Card className="col-span-2 lg:col-span-7 border-l-4 border-l-indigo-500">
+        <Card className="col-span-2 lg:col-span-9 border-l-4 border-l-indigo-500">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <p className="text-sm font-medium text-muted-foreground">Pipeline ważony (wszystkie produkty × % szans)</p>
@@ -320,7 +354,9 @@ export function TeamStats({ teamId }: TeamStatsProps) {
     {/* Funnel conversion chart */}
     <FunnelConversionChart
       stats={{
+        lost_count: contactStats.lost_count,
         cold_count: contactStats.cold_count,
+        tenx_count: contactStats.tenx_count,
         lead_count: contactStats.lead_count,
         top_count: contactStats.top_count,
         hot_count: contactStats.hot_count,

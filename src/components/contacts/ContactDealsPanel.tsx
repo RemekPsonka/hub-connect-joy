@@ -16,11 +16,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   hot: 'bg-red-500/15 text-red-700 border-red-300',
   top: 'bg-amber-500/15 text-amber-700 border-amber-300',
   lead: 'bg-blue-500/15 text-blue-700 border-blue-300',
+  '10x': 'bg-cyan-500/15 text-cyan-700 border-cyan-300',
   cold: 'bg-slate-500/15 text-slate-700 border-slate-300',
+  lost: 'bg-gray-500/15 text-gray-700 border-gray-300',
+  offering: 'bg-green-500/15 text-green-700 border-green-300',
   client: 'bg-emerald-500/15 text-emerald-700 border-emerald-300',
 };
 
-const CATEGORIES = ['cold', 'lead', 'top', 'hot', 'client'] as const;
+const CATEGORIES = ['cold', '10x', 'lead', 'top', 'hot', 'offering', 'client', 'lost'] as const;
 
 interface ContactDealsPanelProps {
   contactId: string;

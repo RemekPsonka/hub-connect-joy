@@ -37,7 +37,7 @@ const weeklyStatusSchema = z.object({
   meetingHappened: z.boolean().default(false),
   meetingOutcome: z.string().optional(),
   categoryRecommendation: z
-    .enum(['keep', 'hot', 'cold', 'snooze', 'convert_client', 'close_lost'])
+    .enum(['keep', 'hot', 'cold', '10x', 'snooze', 'convert_client', 'close_lost'])
     .default('keep'),
 });
 
@@ -58,6 +58,7 @@ const recommendationLabels: Record<string, string> = {
   keep: 'Zostaw w obecnej kategorii',
   hot: '🔥 HOT Lead (spotkanie umówione/w toku)',
   cold: '❄️ COLD Lead (temat na później)',
+  '10x': '🔄 10x (buduj relacje, wróć później)',
   snooze: '😴 Odłóż (snooze)',
   convert_client: '✅ Konwertuj na Klienta',
   close_lost: '❌ Zamknij jako przegrany',
@@ -223,8 +224,10 @@ export function WeeklyStatusForm({
         await supabase.from('deal_team_contacts').update({ category: 'hot' as any }).eq('id', teamContactId);
       } else if (data.categoryRecommendation === 'cold') {
         await supabase.from('deal_team_contacts').update({ category: 'cold' as any }).eq('id', teamContactId);
+      } else if (data.categoryRecommendation === '10x') {
+        await supabase.from('deal_team_contacts').update({ category: '10x' as any }).eq('id', teamContactId);
       } else if (data.categoryRecommendation === 'close_lost') {
-        await supabase.from('deal_team_contacts').update({ status: 'lost' } as any).eq('id', teamContactId);
+        await supabase.from('deal_team_contacts').update({ category: 'lost' as any, status: 'lost' } as any).eq('id', teamContactId);
       } else if (data.categoryRecommendation === 'snooze' && snoozeUntil) {
         await supabase.from('deal_team_contacts').update({
           snoozed_until: snoozeUntil,

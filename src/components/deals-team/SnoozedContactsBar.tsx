@@ -18,7 +18,7 @@ interface SnoozedContactsBarProps {
 }
 
 const categoryIcons: Record<string, string> = {
-  hot: '🔥', top: '⭐', lead: '📋', cold: '❄️',
+  hot: '🔥', top: '⭐', lead: '📋', '10x': '🔄', cold: '❄️', lost: '✖️',
 };
 
 export function SnoozedContactsBar({ snoozedContacts, teamId, onContactClick }: SnoozedContactsBarProps) {

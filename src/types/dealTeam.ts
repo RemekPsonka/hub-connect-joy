@@ -1,7 +1,7 @@
 // ===== ENUMS / UNION TYPES =====
 
 export type DealTeamRole = 'leader' | 'member' | 'viewer';
-export type DealCategory = 'hot' | 'top' | 'lead' | 'cold' | 'offering' | 'client';
+export type DealCategory = 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type ProspectStatus = 
@@ -110,7 +110,9 @@ export interface DealTeamContactStats {
   hot_count: number;
   top_count: number;
   lead_count: number;
+  tenx_count: number;
   cold_count: number;
+  lost_count: number;
   overdue_count: number;
   total_value: number;
   upcoming_meetings: number;

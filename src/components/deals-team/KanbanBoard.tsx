@@ -75,8 +75,16 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     () => filteredContacts.filter((c) => c.category === 'lead'),
     [filteredContacts]
   );
+  const tenxContacts = useMemo(
+    () => filteredContacts.filter((c) => c.category === '10x'),
+    [filteredContacts]
+  );
   const coldContacts = useMemo(
     () => filteredContacts.filter((c) => c.category === 'cold'),
+    [filteredContacts]
+  );
+  const lostContacts = useMemo(
+    () => filteredContacts.filter((c) => c.category === 'lost'),
     [filteredContacts]
   );
 
@@ -179,7 +187,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         onContactClick={handleCardClick}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4">
         {/* HOT column */}
         <KanbanColumn
           title="HOT LEAD"
@@ -289,6 +297,33 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           ))}
         </KanbanColumn>
 
+        {/* 10x column */}
+        <KanbanColumn
+          title="10x"
+          icon="🔄"
+          color="cyan"
+          count={tenxContacts.length}
+          onAdd={() => setAddContactCategory('10x' as DealCategory)}
+          emptyMessage="Brak kontaktów 10x. Buduj relacje →"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, '10x' as DealCategory)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, '10x' as DealCategory)}
+          isDropTarget={dragOverColumn === ('10x' as DealCategory)}
+        >
+          {tenxContacts.map((contact) => (
+            <ColdLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => handleCardClick(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
+          ))}
+        </KanbanColumn>
+
         {/* COLD column */}
         <KanbanColumn
           title="COLD LEAD"
@@ -304,6 +339,33 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           isDropTarget={dragOverColumn === 'cold'}
         >
           {coldContacts.map((contact) => (
+            <ColdLeadCard
+              key={contact.id}
+              contact={contact}
+              teamId={teamId}
+              onClick={() => handleCardClick(contact)}
+              onDragStart={(e) => handleDragStart(e, contact.id)}
+              onDragEnd={handleDragEnd}
+              isDragging={draggingContactId === contact.id}
+            />
+          ))}
+        </KanbanColumn>
+
+        {/* LOST column */}
+        <KanbanColumn
+          title="PRZEGRANE"
+          icon="✖️"
+          color="gray"
+          count={lostContacts.length}
+          onAdd={() => setAddContactCategory('lost' as DealCategory)}
+          emptyMessage="Brak przegranych kontaktów"
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'lost' as DealCategory)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, 'lost' as DealCategory)}
+          isDropTarget={dragOverColumn === ('lost' as DealCategory)}
+        >
+          {lostContacts.map((contact) => (
             <ColdLeadCard
               key={contact.id}
               contact={contact}

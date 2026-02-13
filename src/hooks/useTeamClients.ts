@@ -39,9 +39,11 @@ export const CATEGORY_PROBABILITY: Record<string, number> = {
   hot: 80,
   top: 50,
   lead: 20,
+  '10x': 10,
   cold: 5,
   offering: 90,
   client: 100,
+  lost: 0,
 };
 
 // ===== Queries =====
