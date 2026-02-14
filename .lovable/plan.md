@@ -1,60 +1,51 @@
 
-
-# Wyswietlanie kontaktow w zadaniach + ujednolicenie komponentow
+# Dodanie nazwy firmy do kart zadan
 
 ## Problem
-1. Na wszystkich listach zadan widac "Umowic spotkanie" bez informacji z KIM - brak nazwy kontaktu
-2. `ProjectTasksTab.tsx` i `MyDay.tsx` uzywaja starego `TaskRow` zamiast `UnifiedTaskRow`
-3. `MyDay.tsx` nie otwiera `TaskDetailSheet` po kliknieciu - brak panelu szczegolowego
+Na listach zadan i kartach Kanban widac tylko "Umowic spotkanie - Kowalski Krzysztof", ale brak informacji o firmie. Uzytkownik nie wie, czego dotyczy zadanie bez kontekstu firmy.
 
-## Zmiany
+## Obecny stan
+- Dane firmy (`company`) sa juz pobierane z bazy w hooku `useTasks` (join `task_contacts -> contacts(id, full_name, company)`)
+- `TaskDetailSheet` juz wyswietla firme w sekcji "Powiazane kontakty" (linia 523-525)
+- `UnifiedTaskRow` i `TasksKanban` pokazuja tylko `full_name` bez firmy
 
-### 1. UnifiedTaskRow - dodanie wyswietlania kontaktu
+## Planowane zmiany
 
-Rozszerzenie props o `contactName?: string` i wyswietlenie go obok tytulu:
+### 1. UnifiedTaskRow - dodanie firmy obok kontaktu
 
-```text
-Przed:  O Umowic spotkanie                    17 lut ●
-Po:     O Umowic spotkanie - Kowalski Krzyszt. 17 lut ●
+Zmiana formatu wyswietlania z:
+```
+Umowic spotkanie - Kowalski Krzysztof
+```
+na:
+```
+Umowic spotkanie - Kowalski Krzysztof · Ferox Energy Systems
 ```
 
-Kontakt wyswietlany jako szary tekst po myslniku, obcinany jesli za dlugi. W trybie compact - jeszcze bardziej skrocony.
+Rozszerzenie props o `companyName?: string` i wyswietlenie go po kontakcie w szarym, mniejszym foncie.
 
-### 2. Wszystkie miejsca uzywajace UnifiedTaskRow - przekazanie contactName
+### 2. TasksKanban - dodanie firmy w karcie
 
-Pliki do aktualizacji:
-- `src/components/tasks/TasksList.tsx` - dodanie `contactName` z `task.task_contacts[0]?.contacts?.full_name`
+W tytule karty Kanban dodanie firmy po kontakcie:
+```
+Umowic spotkanie - Kowalski K. · Ferox Energy Systems
+```
+
+### 3. Przekazanie danych firmy we wszystkich miejscach
+
+Pliki do aktualizacji (dodanie `companyName`):
+- `src/components/tasks/TasksList.tsx` - `task.task_contacts?.[0]?.contacts?.company`
 - `src/components/tasks/TasksTeamView.tsx` - jw.
-- `src/components/tasks/TasksKanban.tsx` - juz wyswietla kontakt, ale dodamy tez do tytulu karty
-- `src/components/contacts/ContactTasksPanel.tsx` - tu kontakt jest znany, nie trzeba dodawac
-- `src/components/deals-team/DealContactDetailSheet.tsx` - jw., kontakt juz znany z kontekstu
-- `src/components/deals-team/MyTeamTasksView.tsx` - dodanie `contactName`
+- `src/components/deals-team/MyTeamTasksView.tsx` - jw.
 
-### 3. ProjectTasksTab - zamiana starego TaskRow na UnifiedTaskRow
-
-Plik: `src/components/projects/ProjectTasksTab.tsx`
-
-Usunac lokalny komponent `TaskRow` (linie 42-115) i zamienic na `UnifiedTaskRow` z obsluga przenoszenia miedzy sekcjami w menu kontekstowym. Zachowac DnD (SortableTaskItem juz istnieje).
-
-### 4. MyDay - zamiana starego TaskRow na UnifiedTaskRow + dodanie TaskDetailSheet
-
-Plik: `src/pages/MyDay.tsx`
-
-- Usunac lokalny `TaskRow` (linie 40-89)
-- Uzyc `UnifiedTaskRow` z `contactName` i `compact`
-- Dodac stan `selectedTask` + `isDetailOpen`
-- Dodac `TaskDetailSheet` na dole komponentu (obok istniejacego `TaskModal`)
-- Klikniecie w zadanie otwiera TaskDetailSheet
-
-### 5. Podsumowanie plikow do edycji
+## Szczegoly techniczne
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/tasks/UnifiedTaskRow.tsx` | Nowy prop `contactName`, wyswietlanie obok tytulu |
-| `src/components/tasks/TasksList.tsx` | Przekazanie `contactName` |
-| `src/components/tasks/TasksTeamView.tsx` | Przekazanie `contactName` |
-| `src/components/deals-team/MyTeamTasksView.tsx` | Przekazanie `contactName` |
-| `src/components/projects/ProjectTasksTab.tsx` | Zamiana starego TaskRow na UnifiedTaskRow |
-| `src/pages/MyDay.tsx` | Zamiana starego TaskRow na UnifiedTaskRow + dodanie TaskDetailSheet |
+| `src/components/tasks/UnifiedTaskRow.tsx` | Nowy prop `companyName`, wyswietlanie po contactName |
+| `src/components/tasks/TasksList.tsx` | Przekazanie `companyName` |
+| `src/components/tasks/TasksTeamView.tsx` | Przekazanie `companyName` |
+| `src/components/tasks/TasksKanban.tsx` | Dodanie firmy obok kontaktu w karcie |
+| `src/components/deals-team/MyTeamTasksView.tsx` | Przekazanie `companyName` |
 
-Brak zmian w bazie danych - dane kontaktow juz sa pobierane w hookach.
+Brak zmian w bazie danych - pole `company` jest juz pobierane w zapytaniach.
