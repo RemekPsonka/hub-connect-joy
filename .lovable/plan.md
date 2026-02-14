@@ -1,38 +1,56 @@
 
-
-# Naprawa otwierania widoku zadania z panelu kontaktu
+# Naprawa brakujacych kontaktow w TaskDetailSheet z poziomu Deals
 
 ## Problem
-Klikniecie zadania (np. "Umowic spotkanie") w panelu szczegalow kontaktu (`DealContactDetailSheet`) nie otwiera prawidlowego widoku zadania (Asana-style `TaskDetailSheet`). Prawdopodobna przyczyna: `TaskDetailSheet` (Sheet/panel boczny) jest renderowany wewnatrz `DealContactDetailSheet` (Dialog/modal) i otwiera sie "za" nim z powodu konfliktow z-index miedzy dwoma komponentami Radix Dialog.
+Hook `useDealContactAllTasks` pobiera zadania z `select('*')` - bez joina `task_contacts`. Dlatego `TaskDetailSheet` otwierany z deals nie ma danych do wyrenderowania sekcji "POWIAZANE KONTAKTY".
 
 ## Rozwiazanie
-Zmienic logike tak, aby klikniecie zadania w panelu kontaktu **zamykalo panel kontaktu** i dopiero otwieralo `TaskDetailSheet`. Alternatywnie, wyniesc `TaskDetailSheet` na poziom rodzica (KanbanBoard / ClientsTab), aby nie byl zagniezdony wewnatrz Dialogu.
+Rozszerzyc zapytania w `useDealContactAllTasks` o pelny join `task_contacts`, `cross_tasks`, `task_categories`, `owner`, `assignee` - taki sam jak w `useProjectTasks` / glownym widoku `/tasks`.
 
-## Zmiany w plikach
+## Zmiana w pliku
 
-### 1. `src/components/deals-team/DealContactDetailSheet.tsx`
-- Usunac renderowanie `TaskDetailSheet` z wnetrza tego komponentu (linie 713-723)
-- Zamiast otwierac `TaskDetailSheet` wewnatrz dialogu, wywolac callback do rodzica z wybranym zadaniem
-- Dodac nowy prop `onTaskOpen?: (task: TaskWithDetails) => void`
-- W `onClick` na `UnifiedTaskRow` (linie 350-353, 371-374): zamiast `setTaskDetailOpen(true)`, wywolac `onTaskOpen(task)` i zamknac dialog kontaktu
+### `src/hooks/useDealsTeamAssignments.ts` - funkcja `useDealContactAllTasks`
 
-### 2. `src/components/deals-team/KanbanBoard.tsx`
-- Dodac stan `selectedTask` i `taskDetailOpen`
-- Przekazac `onTaskOpen` do `DealContactDetailSheet`
-- Renderowac `TaskDetailSheet` na poziomie `KanbanBoard` (poza Dialogiem kontaktu)
-- Import `TaskDetailSheet` i `TaskModal`
+Zmiany w dwoch zapytaniach wewnatrz tego hooka:
 
-### 3. `src/components/deals-team/ClientsTab.tsx`
-- Analogicznie jak KanbanBoard: dodac stan `selectedTask` i `taskDetailOpen`
-- Przekazac `onTaskOpen` do `DealContactDetailSheet`
-- Renderowac `TaskDetailSheet` na poziomie `ClientsTab`
+**Source 1** (zadania z `deal_team_contact_id`):
+```typescript
+// PRZED:
+.select('*')
 
-## Szczegoly techniczne
+// PO:
+.select(`
+  *,
+  task_contacts(contact_id, role, contacts(id, full_name, company)),
+  cross_tasks(id, contact_a_id, contact_b_id, connection_reason, suggested_intro, intro_made,
+    discussed_with_a, discussed_with_a_at, discussed_with_b, discussed_with_b_at, intro_made_at,
+    contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
+    contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)),
+  task_categories(id, name, color, icon, visibility_type, workflow_steps),
+  owner:directors!tasks_owner_id_fkey(id, full_name),
+  assignee:directors!tasks_assigned_to_fkey(id, full_name)
+`)
+```
 
-Przeplyw po zmianie:
-1. Uzytkownik klika kontakt w kanban -> otwiera sie `DealContactDetailSheet` (Dialog)
-2. Uzytkownik klika zadanie w sekcji "Zadania" -> Dialog kontaktu sie zamyka
-3. `TaskDetailSheet` (Sheet boczny w stylu Asana) otwiera sie na poziomie glownym
-4. Po zamknieciu TaskDetailSheet, uzytkownik wraca do widoku kanban
+**Source 2** (zadania z `task_contacts` join table):
+```typescript
+// PRZED:
+.select('task_id, tasks(*)')
 
-Kluczowa zmiana: `TaskDetailSheet` nie jest juz zagniezdony wewnatrz `Dialog`, wiec nie ma konfliktu z-index.
+// PO:
+.select(`task_id, tasks(
+  *,
+  task_contacts(contact_id, role, contacts(id, full_name, company)),
+  cross_tasks(id, contact_a_id, contact_b_id, connection_reason, suggested_intro, intro_made,
+    discussed_with_a, discussed_with_a_at, discussed_with_b, discussed_with_b_at, intro_made_at,
+    contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
+    contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)),
+  task_categories(id, name, color, icon, visibility_type, workflow_steps),
+  owner:directors!tasks_owner_id_fkey(id, full_name),
+  assignee:directors!tasks_assigned_to_fkey(id, full_name)
+)`)
+```
+
+To zapewni ze zadania otwierane z deals beda mialy identyczna strukture danych jak te z `/tasks`, wlacznie z sekcja "Powiazane kontakty", wlascicielem, kategoria i cross-taskami.
+
+Jeden plik do edycji, ~20 linii zmian.
