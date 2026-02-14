@@ -47,6 +47,7 @@ interface Filters {
 
 const categoryConfig: Record<DealCategory, { label: string; color: string; icon: string }> = {
   hot: { label: 'HOT', color: 'bg-red-100 text-red-800 border-red-200', icon: '🔥' },
+  audit: { label: 'AUDYT', color: 'bg-violet-100 text-violet-800 border-violet-200', icon: '📅' },
   top: { label: 'TOP', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: '⭐' },
   lead: { label: 'LEAD', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📋' },
   '10x': { label: '10x', color: 'bg-cyan-100 text-cyan-800 border-cyan-200', icon: '🔄' },
@@ -136,7 +137,7 @@ export function TableView({ teamId }: TableViewProps) {
           bVal = b.contact?.company || '';
           break;
         case 'category':
-          const categoryOrder: Record<string, number> = { offering: 7, hot: 6, top: 5, lead: 4, '10x': 3, cold: 2, lost: 1 };
+          const categoryOrder: Record<string, number> = { offering: 8, hot: 7, audit: 6, top: 5, lead: 4, '10x': 3, cold: 2, lost: 1 };
           aVal = categoryOrder[a.category] ?? 0;
           bVal = categoryOrder[b.category] ?? 0;
           break;
@@ -270,6 +271,7 @@ export function TableView({ teamId }: TableViewProps) {
           <SelectContent>
             <SelectItem value="all">Wszystkie</SelectItem>
             <SelectItem value="hot">🔥 HOT</SelectItem>
+            <SelectItem value="audit">📅 AUDYT</SelectItem>
             <SelectItem value="top">⭐ TOP</SelectItem>
             <SelectItem value="lead">📋 LEAD</SelectItem>
             <SelectItem value="10x">🔄 10x</SelectItem>

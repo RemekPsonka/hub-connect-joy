@@ -5,8 +5,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { KanbanColumnVisibility } from '@/hooks/useKanbanColumnSettings';
 
 const COLUMN_LABELS: Record<keyof KanbanColumnVisibility, string> = {
-  hot: 'HOT LEAD',
   offering: 'OFERTOWANIE',
+  hot: 'HOT LEAD',
+  audit: 'AUDYT',
   top: 'TOP LEAD',
   lead: 'LEAD',
   tenx: '10x',

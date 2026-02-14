@@ -37,6 +37,7 @@ export interface RevenueForecast {
 // Category probability constants
 export const CATEGORY_PROBABILITY: Record<string, number> = {
   hot: 80,
+  audit: 85,
   top: 50,
   lead: 20,
   '10x': 10,

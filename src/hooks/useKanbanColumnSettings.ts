@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 export interface KanbanColumnVisibility {
   hot: boolean;
   offering: boolean;
+  audit: boolean;
   top: boolean;
   lead: boolean;
   tenx: boolean;
@@ -16,6 +17,7 @@ const STORAGE_KEY = 'kanban-column-visibility';
 const DEFAULT_COLUMNS: KanbanColumnVisibility = {
   hot: true,
   offering: true,
+  audit: true,
   top: true,
   lead: true,
   tenx: true,

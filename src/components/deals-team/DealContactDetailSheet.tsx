@@ -57,6 +57,7 @@ interface DealContactDetailSheetProps {
 
 const categoryConfig: Record<string, { label: string; icon: string; color: string }> = {
   hot: { label: 'HOT', icon: '🔥', color: 'bg-red-100 text-red-800' },
+  audit: { label: 'AUDYT', icon: '📅', color: 'bg-violet-100 text-violet-800' },
   top: { label: 'TOP', icon: '⭐', color: 'bg-amber-100 text-amber-800' },
   lead: { label: 'LEAD', icon: '📋', color: 'bg-blue-100 text-blue-800' },
   '10x': { label: '10x', icon: '🔄', color: 'bg-cyan-100 text-cyan-800' },
@@ -264,7 +265,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                       Kategoria
                     </h4>
                     <div className="flex gap-1.5">
-                      {(['hot', 'offering', 'top', 'lead', '10x', 'cold', 'lost'] as const).map((cat) => {
+                      {(['offering', 'hot', 'audit', 'top', 'lead', '10x', 'cold', 'lost'] as const).map((cat) => {
                         const cfg = categoryConfig[cat];
                         const isCurrent = contact.category === cat;
                         return (
