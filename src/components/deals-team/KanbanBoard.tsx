@@ -237,6 +237,36 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           </KanbanColumn>
         )}
 
+        {/* AUDIT column */}
+        {visibleColumns.audit && (
+          <KanbanColumn
+            title="AUDYT"
+            icon="📅"
+            color="violet"
+            count={auditContacts.length}
+            onAdd={() => setAddContactCategory('audit')}
+            emptyMessage="Brak umówionych audytów/spotkań"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'audit')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'audit')}
+            isDropTarget={dragOverColumn === 'audit'}
+          >
+            {auditContacts.map((contact) => (
+              <HotLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
+              />
+            ))}
+          </KanbanColumn>
+        )}
+
         {/* HOT column */}
         {visibleColumns.hot && (
           <KanbanColumn
@@ -254,36 +284,6 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             isDropTarget={dragOverColumn === 'hot'}
           >
             {hotContacts.map((contact) => (
-              <HotLeadCard
-                key={contact.id}
-                contact={contact}
-                teamId={teamId}
-                onClick={() => handleCardClick(contact)}
-                onDragStart={(e) => handleDragStart(e, contact.id)}
-                onDragEnd={handleDragEnd}
-                isDragging={draggingContactId === contact.id}
-                taskStatus={activeTaskMap?.get(contact.id)}
-              />
-            ))}
-          </KanbanColumn>
-        )}
-
-        {/* AUDIT column */}
-        {visibleColumns.audit && (
-          <KanbanColumn
-            title="AUDYT"
-            icon="📅"
-            color="violet"
-            count={auditContacts.length}
-            onAdd={() => setAddContactCategory('audit')}
-            emptyMessage="Brak umówionych audytów/spotkań"
-            onDragOver={handleDragOver}
-            onDragEnter={(e) => handleDragEnter(e, 'audit')}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, 'audit')}
-            isDropTarget={dragOverColumn === 'audit'}
-          >
-            {auditContacts.map((contact) => (
               <HotLeadCard
                 key={contact.id}
                 contact={contact}
