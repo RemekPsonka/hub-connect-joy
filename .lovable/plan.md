@@ -1,86 +1,99 @@
 
-# Rozbudowa ContactTasksSheet do pelnej zakladki klienta
+# Sub-kanbany dla kategorii lejka: Audyt, Hot Lead, Top Lead
 
 ## Problem
-Obecny `ContactTasksSheet` to minimalistyczny panel pokazujacy tylko liste zadan. Uzytkownik chce pelna zakladke klienta z sekcjami: Osoba, Firma, Uwagi, Zadania, Historia, Status.
+1. W ContactTasksSheet statusy w lejku wyswietlaja sie nieprawidlowo - `offering_stage` (np. "Pelnomocnictwo") pokazuje sie tylko dla kategorii "offering", ale powinno byc widoczne tez jako sub-stage dla innych kategorii
+2. Kategorie Audyt, Hot Lead i Top Lead nie maja wlasnych sub-kanbanow (Offering juz ma)
+3. Nawigacja do sub-kanbanow powinna odbywac sie przez klikniecie naglowka kolumny, a nie przez gorne menu
 
 ## Rozwiazanie
-Rozbudowac `ContactTasksSheet` o zakladki (Tabs) z pelnym kontekstem klienta, zachowujac istniejaca logike otwierania TaskDetailSheet po kliknieciu zadania.
 
-## Struktura zakladek
+### 1. Nowe sub-stage'e per kategoria
 
-Panel boczny (Sheet, prawy, `sm:max-w-xl`) z zakladkami:
+Reuse kolumny `offering_stage` (typ `text`, brak constraintow) jako generyczny sub-stage:
 
-### Tab 1: Przeglag (domyslny)
-Szybki podglad najwazniejszych danych w jednym widoku:
-- **Osoba**: imie, stanowisko, email, telefon, miasto
-- **Firma**: nazwa firmy (z linkiem do profilu firmy jesli company_id istnieje)
-- **Status w lejku**: kategoria (hot/top/lead...), priorytet, status (active/won/lost), offering_stage
-- **Uwagi**: notatki z `contact.notes` (pole z DealTeamContact) - edytowalne inline (textarea z autosave)
-- **Nastepna akcja**: next_action, next_action_date, next_action_owner
-- **Nastepne spotkanie**: next_meeting_date
+- **Offering** (bez zmian): handshake, power_of_attorney, preparation, negotiation, accepted, lost
+- **Audit** (nowe): `audit_plan` (Do zaplanowania), `audit_scheduled` (Zaplanowany), `audit_done` (Odbyty)
+- **Hot Lead** (nowe): `meeting_plan` (Zaplanowac spotkanie), `meeting_scheduled` (Spotkanie umowione), `meeting_done` (Spotkanie odbyte)
+- **Top Lead** (nowe): `meeting_plan` (Zaplanowac spotkanie), `meeting_scheduled` (Spotkanie umowione), `meeting_done` (Spotkanie odbyte)
 
-### Tab 2: Zadania
-Obecna zawartosc - lista zadan (UnifiedTaskRow), przycisk nowe zadanie, sekcja zamknietych. Bez zmian w logice.
+### 2. Zmiany w plikach
 
-### Tab 3: Historia
-Wykorzystanie istniejacego komponentu `ContactKnowledgeTimeline` (zebrana wiedza - konsultacje, komentarze zadan, statusy tygodniowe, notatki projektowe, spotkania 1:1).
+#### A. `src/types/dealTeam.ts`
+- Rozszerzyc typ `OfferingStage` o nowe wartosci: `audit_plan`, `audit_scheduled`, `audit_done`, `meeting_plan`, `meeting_scheduled`, `meeting_done`
+- Lub stworzyc nowy typ `SubStage` jako union istniejacych + nowych
 
-### Tab 4: Statusy
-Lista statusow tygodniowych dla tego kontaktu z `useTeamContactWeeklyStatuses`. Kazdy status: data tygodnia, podsumowanie, nastepne kroki, blokery, rekomendacja kategorii.
+#### B. Nowy komponent: `src/components/deals-team/SubKanbanView.tsx`
+Generyczny komponent sub-kanbanu (wzorowany na `OfferingKanbanBoard`):
+- Props: `contacts`, `teamId`, `stages` (tablica {id, label, icon, color}), `onContactClick`, `onBack`
+- Przycisk "Wstecz" do powrotu do glownego Kanbana
+- Drag & drop miedzy sub-kolumnami (update `offering_stage`)
+- Karty kontaktow z nazwa, firma, aktywne zadanie
 
-## Zmiany w plikach
+#### C. `src/components/deals-team/KanbanBoard.tsx`
+- Dodac stan `drillDownCategory: DealCategory | null`
+- Gdy `drillDownCategory` jest ustawiony, zamiast glownego Kanbana renderowac `SubKanbanView` z odpowiednimi stage'ami
+- Przekazac prop `onHeaderClick` do `KanbanColumn` - klikniecie naglowka kolumny Offering/Audit/Hot/Top ustawia `drillDownCategory`
+- Przycisk "Wstecz" w SubKanbanView wraca do glownego widoku (`setDrillDownCategory(null)`)
 
-### 1. `src/components/deals-team/ContactTasksSheet.tsx` - pelna przebudowa
+#### D. `src/components/deals-team/KanbanColumn.tsx`
+- Dodac opcjonalny prop `onHeaderClick?: () => void`
+- Naglowek kolumny staje sie klikalny (kursor pointer, hover effect) gdy `onHeaderClick` jest przekazany
+- Wizualna wskazowka (np. ikona strzalki lub podkreslenie) ze naglowek jest klikalny
 
-Dodac:
-- Import `Tabs, TabsList, TabsTrigger, TabsContent` z `@/components/ui/tabs`
-- Import `ContactKnowledgeTimeline` z `@/components/contacts/ContactKnowledgeTimeline`
-- Import `useTeamContactWeeklyStatuses` z `@/hooks/useTeamContactWeeklyStatuses`
-- Import `useUpdateTeamContact` z `@/hooks/useDealsTeamContacts` (do edycji notatek inline)
-- Ikony: `User, Building2, StickyNote, History, BarChart3, Mail, Phone, MapPin, Calendar, Target`
+#### E. `src/components/deals-team/ContactTasksSheet.tsx`
+- W sekcji "Status w lejku" pokazywac sub-stage badge dla WSZYSTKICH kategorii ktore maja sub-kanbany (offering, audit, hot, top), nie tylko dla offering
+- Dodac mapowanie etykiet dla nowych sub-stage'ow
 
-Struktura:
+### 3. Konfiguracja sub-stage'ow
+
+```text
+OFFERING:
+  handshake -> Handshake
+  power_of_attorney -> Pelnomocnictwo
+  preparation -> Oferta w przygotowaniu
+  negotiation -> Negocjacje
+  accepted -> Akceptacja
+  lost -> Przegrana
+
+AUDIT:
+  audit_plan -> Do zaplanowania
+  audit_scheduled -> Zaplanowany
+  audit_done -> Odbyty
+
+HOT LEAD:
+  meeting_plan -> Zaplanowac spotkanie
+  meeting_scheduled -> Spotkanie umowione
+  meeting_done -> Spotkanie odbyte
+
+TOP LEAD:
+  meeting_plan -> Zaplanowac spotkanie
+  meeting_scheduled -> Spotkanie umowione
+  meeting_done -> Spotkanie odbyte
 ```
-Sheet (sm:max-w-xl)
-  SheetHeader (nazwa, firma, stanowisko, link CRM)
-  Tabs (defaultValue="overview")
-    TabsList (4 zakladki: Przeglag, Zadania, Historia, Statusy)
-    TabsContent "overview" -> sekcje: dane osobowe, firma, status lejka, uwagi, nastepna akcja
-    TabsContent "tasks" -> obecna lista zadan (UnifiedTaskRow)
-    TabsContent "history" -> ContactKnowledgeTimeline
-    TabsContent "statuses" -> lista statusow tygodniowych
-```
 
-### 2. Dane dostepne bez dodatkowych zapytan
-`DealTeamContact` (przekazywany jako prop `contact`) juz zawiera:
-- `contact.full_name`, `contact.position`, `contact.email`, `contact.phone`, `contact.city`, `contact.company`, `contact.company_id`
-- `category`, `status`, `priority`, `offering_stage`
-- `notes`, `next_action`, `next_action_date`, `next_action_owner`
-- `next_meeting_date`, `next_meeting_with`
-- `estimated_value`, `value_currency`
-- `assigned_director?.full_name`
+### 4. Przeplyw uzytkownika
 
-Dodatkowe zapytania:
-- `useTeamContactWeeklyStatuses(contact.id)` - statusy tygodniowe
-- `useContactKnowledge(contact.contact_id)` - historia wiedzy (juz istniejacy hook)
-- `useDealContactAllTasks(contact.contact_id, contact.id)` - zadania (juz jest)
+1. Uzytkownik widzi glowny Kanban z kolumnami (Offering, Audit, Hot, Top, Lead, 10x, Cold, Lost)
+2. Klika naglowek kolumny "AUDYT" -> glowny Kanban znika, pojawia sie sub-Kanban Audytu z 3 kolumnami
+3. W sub-Kanbanie moze przeciagac kontakty miedzy sub-stage'ami
+4. Klika "Wstecz" lub breadcrumb -> wraca do glownego Kanbana
+5. W ContactTasksSheet w sekcji "Status w lejku" widzi badge z aktualnym sub-stage
 
-### 3. Sekcja "Uwagi" z autosave
-- `textarea` z wartoscia `contact.notes`
-- `onBlur` -> `useUpdateTeamContact.mutate({ id: contact.id, teamId, notes: value })`
-- Debounce nie jest potrzebny - zapis na blur wystarczy
+### 5. Domyslne wartosci sub-stage
 
-### 4. Sekcja "Statusy tygodniowe"
-Mapowanie danych z `useTeamContactWeeklyStatuses`:
-- Data tygodnia (`week_start`)
-- Podsumowanie (`status_summary`)
-- Nastepne kroki (`next_steps`)
-- Blokery (`blockers`)
-- Rekomendacja kategorii (`category_recommendation`) jako Badge
+- Nowi kontakci w Audit: `audit_plan` (Do zaplanowania)
+- Nowi kontakci w Hot/Top: `meeting_plan` (Zaplanowac spotkanie)
+- Nowi kontakci w Offering: `handshake` (bez zmian)
+- Zmiana kategorii na audit/hot/top resetuje `offering_stage` do odpowiedniej domyslnej wartosci
 
-### Brak zmian w KanbanBoard.tsx
-Interfejs `ContactTasksSheet` pozostaje taki sam (te same propsy), wiec rodzic nie wymaga zmian.
+### 6. Pliki do zmiany
 
-## Podsumowanie
-Jeden plik do edycji: `ContactTasksSheet.tsx`. Panel boczny staje sie pelna karta klienta z 4 zakladkami, zachowujac istniejaca logike przejscia do TaskDetailSheet po kliknieciu zadania.
+| Plik | Operacja |
+|------|----------|
+| `src/types/dealTeam.ts` | Edycja - rozszerzenie typu OfferingStage |
+| `src/components/deals-team/SubKanbanView.tsx` | Nowy - generyczny sub-kanban |
+| `src/components/deals-team/KanbanBoard.tsx` | Edycja - stan drillDown, onHeaderClick |
+| `src/components/deals-team/KanbanColumn.tsx` | Edycja - klikalny naglowek |
+| `src/components/deals-team/ContactTasksSheet.tsx` | Edycja - sub-stage badges dla wszystkich kategorii |
+| `src/hooks/useDealsTeamContacts.ts` | Edycja - reset offering_stage przy zmianie kategorii |
