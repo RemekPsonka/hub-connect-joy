@@ -11,7 +11,7 @@ export function useActiveTaskContacts(teamId: string | undefined) {
         .from('tasks')
         .select('deal_team_contact_id, status, due_date')
         .eq('deal_team_id', teamId!)
-        .in('status', ['todo', 'in_progress'])
+        .in('status', ['todo', 'in_progress', 'pending'])
         .not('deal_team_contact_id', 'is', null);
 
       if (error) throw error;
