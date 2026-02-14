@@ -220,8 +220,18 @@ export function useDealContactAllTasks(contactId: string | undefined, teamContac
       if (teamContactId) {
         const { data: dealTasks, error: dealError } = await supabase
           .from('tasks')
-          .select('*')
-          .eq('deal_team_contact_id', teamContactId)
+        .select(`
+          *,
+          task_contacts(contact_id, role, contacts(id, full_name, company)),
+          cross_tasks(id, contact_a_id, contact_b_id, connection_reason, suggested_intro, intro_made,
+            discussed_with_a, discussed_with_a_at, discussed_with_b, discussed_with_b_at, intro_made_at,
+            contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
+            contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)),
+          task_categories(id, name, color, icon, visibility_type, workflow_steps),
+          owner:directors!tasks_owner_id_fkey(id, full_name),
+          assignee:directors!tasks_assigned_to_fkey(id, full_name)
+        `)
+        .eq('deal_team_contact_id', teamContactId)
           .order('created_at', { ascending: false });
 
         if (dealError) throw dealError;
@@ -233,7 +243,17 @@ export function useDealContactAllTasks(contactId: string | undefined, teamContac
       // Source 2: tasks linked via task_contacts
       const { data: taskContacts, error: tcError } = await supabase
         .from('task_contacts')
-        .select('task_id, tasks(*)')
+        .select(`task_id, tasks(
+          *,
+          task_contacts(contact_id, role, contacts(id, full_name, company)),
+          cross_tasks(id, contact_a_id, contact_b_id, connection_reason, suggested_intro, intro_made,
+            discussed_with_a, discussed_with_a_at, discussed_with_b, discussed_with_b_at, intro_made_at,
+            contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company),
+            contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)),
+          task_categories(id, name, color, icon, visibility_type, workflow_steps),
+          owner:directors!tasks_owner_id_fkey(id, full_name),
+          assignee:directors!tasks_assigned_to_fkey(id, full_name)
+        )`)
         .eq('contact_id', contactId);
 
       if (tcError) throw tcError;
