@@ -252,7 +252,19 @@ export function useUpdateTeamContact() {
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) {
+        updates.category = category;
+        // Reset offering_stage to default for category with sub-kanbans
+        const defaultSubStages: Record<string, string> = {
+          offering: 'handshake',
+          audit: 'audit_plan',
+          hot: 'meeting_plan',
+          top: 'meeting_plan',
+        };
+        if (defaultSubStages[category]) {
+          updates.offering_stage = defaultSubStages[category];
+        }
+      }
       if (status !== undefined) {
         updates.status = status;
         updates.last_status_update = new Date().toISOString();

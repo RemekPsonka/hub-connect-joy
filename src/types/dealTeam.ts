@@ -4,7 +4,7 @@ export type DealTeamRole = 'leader' | 'member' | 'viewer';
 export type DealCategory = 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type OfferingStage = 'handshake' | 'power_of_attorney' | 'preparation' | 'negotiation' | 'accepted' | 'lost';
+export type OfferingStage = 'handshake' | 'power_of_attorney' | 'preparation' | 'negotiation' | 'accepted' | 'lost' | 'audit_plan' | 'audit_scheduled' | 'audit_done' | 'meeting_plan' | 'meeting_scheduled' | 'meeting_done';
 export type ProspectStatus = 
   | 'searching' 
   | 'found_connection' 
