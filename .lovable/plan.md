@@ -1,41 +1,59 @@
 
-# Naprawa brakujacego ptaszka dla Marcina Szemainda
+# Dodanie etapu "Umowiony audyt" i zmiana pozycji "Ofertowanie"
 
-## Przyczyna
+## Zakres zmian
 
-Zadanie "Potwierdzic spotkanie" dla Marcina Szemainda ma status `pending` w bazie danych. Hook `useActiveTaskContacts` filtruje tylko po statusach `['todo', 'in_progress']`, pomijajac `pending`.
+Nowa kategoria `audit` ("Umowiony audyt/spotkanie robocze") zostanie dodana do lejka, a kolejnosc kolumn zostanie zmieniona.
 
-W bazie sa zadania z obu statusow: 2 zadania `pending` i 28 `todo`. Wyglada na to, ze `pending` to stary status sprzed unifikacji, ale nie zostal zmigrowany.
+### Nowa kolejnosc kolumn na Kanbanie (od lewej):
 
-## Rozwiazanie
-
-Dwuetapowe podejscie:
-
-### 1. Hook `useActiveTaskContacts.ts` - dodanie `pending` do filtra
-
-Zmiana filtra z:
-```
-.in('status', ['todo', 'in_progress'])
-```
-na:
-```
-.in('status', ['todo', 'in_progress', 'pending'])
+```text
+OFERTOWANIE | HOT LEAD | AUDYT | TOP LEAD | LEAD | 10x | COLD | PRZEGRANE | POSZUKIWANI
 ```
 
-To natychmiast naprawi ptaszka dla Szemainda i wszystkich kontaktow z zadaniami w starym statusie.
+## Pliki do zmiany
 
-### 2. Migracja danych - zamiana `pending` na `todo`
+### 1. `src/types/dealTeam.ts`
+- Dodanie `'audit'` do typu `DealCategory`
 
-Uruchomienie migracji SQL:
-```sql
-UPDATE tasks SET status = 'todo' WHERE status = 'pending';
-```
+### 2. `src/hooks/useKanbanColumnSettings.ts`
+- Dodanie `audit: true` do interfejsu `KanbanColumnVisibility` i domyslnych ustawien
 
-To ujednolici wszystkie zadania do nowego systemu statusow (`todo`, `in_progress`, `completed`, `cancelled`).
+### 3. `src/components/deals-team/KanbanBoard.tsx`
+- Dodanie `useMemo` filtrujacego kontakty z kategoria `audit`
+- Dodanie kolumny AUDYT miedzy HOT a TOP
+- Przesuniecie kolumny OFERTOWANIE na pierwsza pozycje (przed HOT)
 
-## Pliki do edycji
+### 4. `src/components/deals-team/KanbanColumnConfigPopover.tsx`
+- Dodanie etykiety `audit: 'AUDYT'` do `COLUMN_LABELS`
+- Zmiana kolejnosci etykiet: offering na poczatku, audit miedzy hot a top
 
-| Plik | Zmiana |
-|---|---|
-| `src/hooks/useActiveTaskContacts.ts` | Dodanie `'pending'` do tablicy statusow w filtrze |
-| Migracja SQL | `UPDATE tasks SET status = 'todo' WHERE status = 'pending'` |
+### 5. `src/hooks/useTeamClients.ts`
+- Dodanie `audit: 85` do `CATEGORY_PROBABILITY`
+
+### 6. `src/components/deals-team/DealContactDetailSheet.tsx`
+- Dodanie `audit` do `categoryConfig` z etykieta "AUDYT", ikona "📅" i kolorami
+
+### 7. `src/components/contacts/DealFunnelBadges.tsx`
+- Dodanie `AUDIT` do `CATEGORIES` i `CATEGORY_COLORS`
+
+### 8. `src/components/deals-team/AddContactDialog.tsx`
+- Dodanie `SelectItem` dla `audit` w dropdownie kategorii
+
+### 9. `src/components/deals-team/TableView.tsx`
+- Dodanie `SelectItem` dla `audit` w filtrze kategorii
+
+### 10. `src/components/deals-team/ProspectingConvertDialog.tsx`
+- Dodanie `'audit'` do typu kategorii
+
+### 11. `src/components/deals-team/FunnelConversionChart.tsx`
+- Dodanie `audit_count` do danych wykresu (opcjonalnie, jesli potrzebne)
+
+## Szczegoly techniczne
+
+- Kategoria: `audit`
+- Etykieta: `AUDYT` (lub "UM. AUDYT")
+- Ikona: `📅`
+- Kolor: `violet` / `bg-violet-100 text-violet-800`
+- Prawdopodobienstwo: 85%
+- Pozycja w Kanbanie: trzecia kolumna (po OFERTOWANIE i HOT)
