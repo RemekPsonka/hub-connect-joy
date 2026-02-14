@@ -1,0 +1,1 @@
+ALTER TABLE public.deal_team_contacts ADD COLUMN offering_stage text DEFAULT 'handshake';

@@ -248,6 +248,7 @@ export function useUpdateTeamContact() {
       valueCurrency,
       notes,
       reviewFrequency,
+      offeringStage,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -268,6 +269,7 @@ export function useUpdateTeamContact() {
       if (valueCurrency !== undefined) updates.value_currency = valueCurrency;
       if (notes !== undefined) updates.notes = notes;
       if (reviewFrequency !== undefined) updates.review_frequency = reviewFrequency;
+      if (offeringStage !== undefined) updates.offering_stage = offeringStage;
 
       const { error } = await supabase
         .from('deal_team_contacts')

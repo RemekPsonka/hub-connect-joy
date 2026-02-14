@@ -4,6 +4,7 @@ export type DealTeamRole = 'leader' | 'member' | 'viewer';
 export type DealCategory = 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type OfferingStage = 'handshake' | 'power_of_attorney' | 'preparation' | 'negotiation' | 'accepted' | 'lost';
 export type ProspectStatus = 
   | 'searching' 
   | 'found_connection' 
@@ -86,6 +87,7 @@ export interface DealTeamContact {
   snoozed_until: string | null;
   snooze_reason: string | null;
   snoozed_from_category: string | null;
+  offering_stage: OfferingStage;
   created_at: string;
   updated_at: string;
   // JOIN z contacts
@@ -260,6 +262,7 @@ export interface UpdateTeamContactInput {
   valueCurrency?: string;
   notes?: string | null;
   reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
+  offeringStage?: OfferingStage;
 }
 
 export interface PromoteContactInput {

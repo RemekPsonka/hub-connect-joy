@@ -2679,6 +2679,7 @@ export type Database = {
           next_meeting_date: string | null
           next_meeting_with: string | null
           notes: string | null
+          offering_stage: string | null
           priority: string | null
           review_frequency: string | null
           snooze_reason: string | null
@@ -2709,6 +2710,7 @@ export type Database = {
           next_meeting_date?: string | null
           next_meeting_with?: string | null
           notes?: string | null
+          offering_stage?: string | null
           priority?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
@@ -2739,6 +2741,7 @@ export type Database = {
           next_meeting_date?: string | null
           next_meeting_with?: string | null
           notes?: string | null
+          offering_stage?: string | null
           priority?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
