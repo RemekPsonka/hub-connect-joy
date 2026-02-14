@@ -111,7 +111,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [briefDialogOpen, setBriefDialogOpen] = useState(false);
-  const [promoteTarget, setPromoteTarget] = useState<'lead' | 'top' | 'hot' | null>(null);
+  const [promoteTarget, setPromoteTarget] = useState<'lead' | 'top' | 'hot' | 'audit' | null>(null);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -276,7 +276,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                             className={cn('shrink-0 text-xs h-8 px-3', isCurrent && 'pointer-events-none')}
                             disabled={isCurrent}
                             onClick={() => {
-                              if (cat === 'top' || cat === 'hot') {
+                              if (cat === 'top' || cat === 'hot' || cat === 'audit') {
                                 setPromoteTarget(cat);
                               } else {
                                 updateContact.mutate({
