@@ -32,7 +32,7 @@ import type { DealTeamContact, DealCategory, DealPriority } from '@/types/dealTe
 
 interface PromoteDialogProps {
   contact: DealTeamContact;
-  targetCategory: 'lead' | 'top' | 'hot';
+  targetCategory: 'lead' | 'top' | 'hot' | 'audit';
   teamId: string;
   open: boolean;
   onClose: () => void;
@@ -73,11 +73,13 @@ export function PromoteDialog({
   const isToLead = targetCategory === 'lead';
   const isToTop = targetCategory === 'top';
   const isToHot = targetCategory === 'hot';
+  const isToAudit = targetCategory === 'audit';
 
   // Validation
   const canSubmitToTop = !!assignedTo && !!nextAction.trim();
   const canSubmitToHot = !!nextMeetingDate;
-  const canSubmit = isToLead ? true : isToTop ? canSubmitToTop : canSubmitToHot;
+  const canSubmitToAudit = !!nextMeetingDate && !!nextMeetingWith;
+  const canSubmit = isToLead ? true : isToTop ? canSubmitToTop : isToAudit ? canSubmitToAudit : canSubmitToHot;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -95,11 +97,13 @@ export function PromoteDialog({
       updates.priority = priority;
     }
 
-    if (isToHot) {
+    if (isToHot || isToAudit) {
       updates.nextMeetingDate = nextMeetingDate?.toISOString() || null;
       updates.nextMeetingWith = nextMeetingWith || null;
-      updates.estimatedValue = estimatedValue ? parseFloat(estimatedValue) : null;
-      updates.valueCurrency = valueCurrency;
+      if (isToHot) {
+        updates.estimatedValue = estimatedValue ? parseFloat(estimatedValue) : null;
+        updates.valueCurrency = valueCurrency;
+      }
     }
 
     await updateContact.mutateAsync(updates);
@@ -115,7 +119,7 @@ export function PromoteDialog({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            {isToLead ? 'Awansuj do LEAD 📋' : isToTop ? 'Awansuj do TOP LEAD ⭐' : 'Awansuj do HOT LEAD 🔥'}
+            {isToLead ? 'Awansuj do LEAD 📋' : isToTop ? 'Awansuj do TOP LEAD ⭐' : isToAudit ? 'Umów audyt/spotkanie robocze 📅' : 'Awansuj do HOT LEAD 🔥'}
           </DialogTitle>
           <div className="text-sm text-muted-foreground">
             <p className="font-medium text-foreground">
@@ -279,6 +283,58 @@ export function PromoteDialog({
               </div>
             </>
           )}
+
+          {/* AUDIT fields */}
+          {isToAudit && (
+            <>
+              {/* Meeting date */}
+              <div className="space-y-2">
+                <Label>Data spotkania / audytu *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-full justify-start text-left font-normal',
+                        !nextMeetingDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {nextMeetingDate
+                        ? format(nextMeetingDate, 'd MMMM yyyy', { locale: pl })
+                        : 'Wybierz datę...'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={nextMeetingDate}
+                      onSelect={setNextMeetingDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Who attends */}
+              <div className="space-y-2">
+                <Label>Kto idzie na spotkanie *</Label>
+                <Select value={nextMeetingWith} onValueChange={setNextMeetingWith}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Wybierz członka zespołu..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.director_id}>
+                        {member.director?.full_name || 'Nieznany'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>
@@ -289,7 +345,7 @@ export function PromoteDialog({
             {updateContact.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            {isToLead ? '📋 Awansuj do LEAD' : isToTop ? '⬆️ Awansuj do TOP' : '🔥 Awansuj do HOT'}
+            {isToLead ? '📋 Awansuj do LEAD' : isToTop ? '⬆️ Awansuj do TOP' : isToAudit ? '📅 Umów audyt' : '🔥 Awansuj do HOT'}
           </Button>
         </DialogFooter>
       </DialogContent>
