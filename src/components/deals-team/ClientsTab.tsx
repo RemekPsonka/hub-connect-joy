@@ -1,5 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Search, X, UserCheck, Plus, BarChart3 } from 'lucide-react';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { TaskModal } from '@/components/tasks/TaskModal';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useTeamClients } from '@/hooks/useTeamClients';
 import { ClientCard } from './ClientCard';
 import { AddClientDialog } from './AddClientDialog';
@@ -20,6 +23,9 @@ export function ClientsTab({ teamId }: ClientsTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddClient, setShowAddClient] = useState(false);
   const [selectedClient, setSelectedClient] = useState<DealTeamContact | null>(null);
+  const [taskForDetail, setTaskForDetail] = useState<TaskWithDetails | null>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  const [taskEditOpen, setTaskEditOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return clients;
@@ -115,6 +121,24 @@ export function ClientsTab({ teamId }: ClientsTabProps) {
         teamId={teamId}
         open={selectedClient !== null}
         onOpenChange={(open) => !open && setSelectedClient(null)}
+        onTaskOpen={(task) => { setTaskForDetail(task); setTaskDetailOpen(true); }}
+      />
+
+      {taskForDetail && (
+        <TaskDetailSheet
+          open={taskDetailOpen}
+          onOpenChange={setTaskDetailOpen}
+          task={taskForDetail}
+          onEdit={() => {
+            setTaskDetailOpen(false);
+            setTaskEditOpen(true);
+          }}
+        />
+      )}
+      <TaskModal
+        open={taskEditOpen}
+        onOpenChange={(o) => { setTaskEditOpen(o); if (!o) setTaskForDetail(null); }}
+        task={taskForDetail}
       />
     </>
   );

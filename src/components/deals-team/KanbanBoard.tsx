@@ -1,5 +1,8 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { Search, X } from 'lucide-react';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { TaskModal } from '@/components/tasks/TaskModal';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
@@ -36,6 +39,9 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const [draggingContactId, setDraggingContactId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [taskForDetail, setTaskForDetail] = useState<TaskWithDetails | null>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  const [taskEditOpen, setTaskEditOpen] = useState(false);
 
   // Separate snoozed contacts
   const { activeContacts, snoozedContacts } = useMemo(() => {
@@ -487,6 +493,25 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         teamId={teamId}
         open={selectedContact !== null}
         onOpenChange={(open) => !open && setSelectedContact(null)}
+        onTaskOpen={(task) => { setTaskForDetail(task); setTaskDetailOpen(true); }}
+      />
+
+      {/* Task Detail Sheet (rendered outside Dialog to avoid z-index conflicts) */}
+      {taskForDetail && (
+        <TaskDetailSheet
+          open={taskDetailOpen}
+          onOpenChange={setTaskDetailOpen}
+          task={taskForDetail}
+          onEdit={() => {
+            setTaskDetailOpen(false);
+            setTaskEditOpen(true);
+          }}
+        />
+      )}
+      <TaskModal
+        open={taskEditOpen}
+        onOpenChange={(o) => { setTaskEditOpen(o); if (!o) setTaskForDetail(null); }}
+        task={taskForDetail}
       />
     </>
   );
