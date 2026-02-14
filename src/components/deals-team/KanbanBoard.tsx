@@ -8,6 +8,7 @@ import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
 import { useActiveTaskContacts } from '@/hooks/useActiveTaskContacts';
 import { KanbanColumn } from './KanbanColumn';
+import { SubKanbanView, SUB_KANBAN_CONFIGS } from './SubKanbanView';
 import { HotLeadCard } from './HotLeadCard';
 import { TopLeadCard } from './TopLeadCard';
 import { LeadCard } from './LeadCard';
@@ -42,6 +43,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const [taskForDetail, setTaskForDetail] = useState<TaskWithDetails | null>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [taskEditOpen, setTaskEditOpen] = useState(false);
+  const [drillDownCategory, setDrillDownCategory] = useState<DealCategory | null>(null);
 
   // Separate snoozed contacts
   const { activeContacts, snoozedContacts } = useMemo(() => {
@@ -173,6 +175,55 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     );
   }
 
+  // Categories that support drill-down sub-kanbans
+  const DRILLDOWN_CATEGORIES = new Set<DealCategory>(['audit', 'hot', 'top']);
+
+  // Get contacts for drill-down category
+  const drillDownContacts = useMemo(() => {
+    if (!drillDownCategory) return [];
+    return filteredContacts.filter(c => c.category === drillDownCategory);
+  }, [filteredContacts, drillDownCategory]);
+
+  if (drillDownCategory && SUB_KANBAN_CONFIGS[drillDownCategory]) {
+    const config = SUB_KANBAN_CONFIGS[drillDownCategory];
+    return (
+      <>
+        <SubKanbanView
+          title={config.title}
+          icon={config.icon}
+          contacts={drillDownContacts}
+          stages={config.stages}
+          teamId={teamId}
+          defaultStage={config.defaultStage}
+          onBack={() => setDrillDownCategory(null)}
+          onContactClick={handleCardClick}
+          activeTaskMap={activeTaskMap}
+        />
+
+        <ContactTasksSheet
+          contact={selectedContact}
+          teamId={teamId}
+          open={selectedContact !== null}
+          onOpenChange={(open) => !open && setSelectedContact(null)}
+          onTaskOpen={(task) => { setTaskForDetail(task); setTaskDetailOpen(true); }}
+        />
+        {taskForDetail && (
+          <TaskDetailSheet
+            open={taskDetailOpen}
+            onOpenChange={setTaskDetailOpen}
+            task={taskForDetail}
+            onEdit={() => { setTaskDetailOpen(false); setTaskEditOpen(true); }}
+          />
+        )}
+        <TaskModal
+          open={taskEditOpen}
+          onOpenChange={(o) => { setTaskEditOpen(o); if (!o) setTaskForDetail(null); }}
+          task={taskForDetail}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       {/* Search bar + column config */}
@@ -252,6 +303,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             count={auditContacts.length}
             onAdd={() => setAddContactCategory('audit')}
             emptyMessage="Brak umówionych audytów/spotkań"
+            onHeaderClick={() => setDrillDownCategory('audit')}
             onDragOver={handleDragOver}
             onDragEnter={(e) => handleDragEnter(e, 'audit')}
             onDragLeave={handleDragLeave}
@@ -283,6 +335,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             totalValue={hotTotalValue}
             onAdd={() => setAddContactCategory('hot')}
             emptyMessage="Brak HOT leadów. Awansuj kontakty z TOP →"
+            onHeaderClick={() => setDrillDownCategory('hot')}
             onDragOver={handleDragOver}
             onDragEnter={(e) => handleDragEnter(e, 'hot')}
             onDragLeave={handleDragLeave}
@@ -313,6 +366,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             count={topContacts.length}
             onAdd={() => setAddContactCategory('top')}
             emptyMessage="Brak TOP leadów. Awansuj kontakty z LEAD →"
+            onHeaderClick={() => setDrillDownCategory('top')}
             onDragOver={handleDragOver}
             onDragEnter={(e) => handleDragEnter(e, 'top')}
             onDragLeave={handleDragLeave}

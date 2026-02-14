@@ -1,5 +1,5 @@
 import { ReactNode, Children } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -21,6 +21,7 @@ interface KanbanColumnProps {
   onDragLeave?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
   isDropTarget?: boolean;
+  onHeaderClick?: () => void;
 }
 
 const colorClasses: Record<string, string> = {
@@ -47,6 +48,7 @@ export function KanbanColumn({
   onDragLeave,
   onDrop,
   isDropTarget = false,
+  onHeaderClick,
 }: KanbanColumnProps) {
   const hasChildren = Children.count(children) > 0;
 
@@ -63,7 +65,13 @@ export function KanbanColumn({
       onDrop={onDrop}
     >
       {/* Header */}
-      <div className="p-3 border-b bg-muted/50">
+      <div
+        className={cn(
+          "p-3 border-b bg-muted/50",
+          onHeaderClick && "cursor-pointer hover:bg-muted/80 transition-colors"
+        )}
+        onClick={onHeaderClick}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-lg">{icon}</span>
@@ -71,6 +79,9 @@ export function KanbanColumn({
             <Badge variant="secondary" className="text-xs">
               {count}
             </Badge>
+            {onHeaderClick && (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
           </div>
         </div>
         {totalValue !== undefined && totalValue > 0 && (

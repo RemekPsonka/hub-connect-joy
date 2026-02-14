@@ -45,10 +45,14 @@ const priorityLabels: Record<string, string> = {
   low: 'Niski', medium: 'Średni', high: 'Wysoki', urgent: 'Pilny',
 };
 
-const offeringStageLabels: Record<string, string> = {
+const subStageLabels: Record<string, string> = {
   handshake: 'Handshake', power_of_attorney: 'Pełnomocnictwo', preparation: 'Przygotowanie',
   negotiation: 'Negocjacje', accepted: 'Zaakceptowano', lost: 'Przegrano',
+  audit_plan: 'Do zaplanowania', audit_scheduled: 'Zaplanowany', audit_done: 'Odbyty',
+  meeting_plan: 'Zaplanować spotkanie', meeting_scheduled: 'Spotkanie umówione', meeting_done: 'Spotkanie odbyte',
 };
+
+const CATEGORIES_WITH_SUBSTAGES = new Set(['offering', 'audit', 'hot', 'top']);
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string | null | undefined }) {
   if (!value) return null;
@@ -185,8 +189,8 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                       <Badge variant="outline">{categoryLabels[contact.category] || contact.category}</Badge>
                       <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
                       <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
-                      {contact.offering_stage && contact.category === 'offering' && (
-                        <Badge variant="secondary">{offeringStageLabels[contact.offering_stage] || contact.offering_stage}</Badge>
+                      {contact.offering_stage && CATEGORIES_WITH_SUBSTAGES.has(contact.category) && (
+                        <Badge variant="secondary">{subStageLabels[contact.offering_stage] || contact.offering_stage}</Badge>
                       )}
                     </div>
                     {contact.estimated_value != null && contact.estimated_value > 0 && (
