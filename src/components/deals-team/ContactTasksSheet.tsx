@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Plus, CheckSquare, User, Building2, StickyNote,
-  Mail, Phone, MapPin, Calendar, Target, BarChart3, History,
+  Mail, Phone, MapPin, Calendar, Target, BarChart3, History, Loader2,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -15,10 +15,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
-import { TaskModal } from '@/components/tasks/TaskModal';
 import { ContactKnowledgeTimeline } from '@/components/contacts/ContactKnowledgeTimeline';
 import { useDealContactAllTasks } from '@/hooks/useDealsTeamAssignments';
-import { useUpdateTask } from '@/hooks/useTasks';
+import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
+import { toast } from 'sonner';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
 import type { DealTeamContact } from '@/types/dealTeam';
@@ -70,7 +70,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const { data: weeklyStatuses = [], isLoading: statusesLoading } = useTeamContactWeeklyStatuses(contact?.id);
   const updateTask = useUpdateTask();
   const updateContact = useUpdateTeamContact();
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const createTask = useCreateTask();
   const [showCompleted, setShowCompleted] = useState(false);
   const [notesValue, setNotesValue] = useState<string | null>(null);
 
@@ -265,9 +265,33 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                       variant="outline"
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1"
-                      onClick={() => setTaskModalOpen(true)}
+                      disabled={createTask.isPending}
+                      onClick={async () => {
+                        try {
+                          const result = await createTask.mutateAsync({
+                            task: { title: 'Nowe zadanie', status: 'todo' },
+                            contactId: contact.contact_id,
+                            dealTeamId: teamId,
+                            dealTeamContactId: contact.id,
+                          });
+                          onOpenChange(false);
+                          if (onTaskOpen && result) {
+                            setTimeout(() => {
+                              onTaskOpen({
+                                ...result,
+                                task_contacts: [],
+                                cross_tasks: [],
+                                subtasks: [],
+                                comments: [],
+                              } as any);
+                            }, 150);
+                          }
+                        } catch {
+                          toast.error('Nie udało się utworzyć zadania');
+                        }
+                      }}
                     >
-                      <Plus className="h-3 w-3" />
+                      {createTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                       Nowe zadanie
                     </Button>
                   </div>
@@ -376,13 +400,6 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
         </SheetContent>
       </Sheet>
 
-      <TaskModal
-        open={taskModalOpen}
-        onOpenChange={setTaskModalOpen}
-        preselectedContactId={contact.contact_id}
-        dealTeamContactId={contact.id}
-        dealTeamId={teamId}
-      />
     </>
   );
 }
