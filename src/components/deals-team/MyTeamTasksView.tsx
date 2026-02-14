@@ -1,14 +1,16 @@
 import { useMemo, useState, useRef } from 'react';
-import { isPast, isToday } from 'date-fns';
+import { isPast, isToday, format } from 'date-fns';
 import {
   CheckCircle2, User, Building2,
   Plus, Search,
   ChevronDown, ChevronRight, Filter, AlertTriangle, Circle,
+  List, LayoutGrid, Users, Columns3,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useMyTeamAssignments, useUpdateAssignment, useCreateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
@@ -17,14 +19,26 @@ import type { DealTeamAssignment } from '@/hooks/useDealsTeamAssignments';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { UnifiedTaskRow, STATUS_CYCLE, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface MyTeamTasksViewProps {
   teamId: string;
 }
 
+type ViewMode = 'grouped' | 'list' | 'kanban' | 'team';
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  todo: { label: 'Do zrobienia', color: 'bg-muted' },
+  in_progress: { label: 'W trakcie', color: 'bg-blue-500/10' },
+  completed: { label: 'Zakończone', color: 'bg-green-500/10' },
+  cancelled: { label: 'Anulowane', color: 'bg-muted/50' },
+};
 
 // ─── Inline Quick-Add ────────────────────────────────────────
 function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
@@ -94,16 +108,14 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: members = [] } = useTeamMembers(teamId);
   const updateAssignment = useUpdateAssignment();
 
+  const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [filterMember, setFilterMember] = useState<string>('mine');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // Task detail sheet
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-
-  // Task create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const toggleGroup = (key: string) => {
@@ -116,36 +128,28 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
   const filtered = useMemo(() => {
     let result = [...assignments];
-
-    // Member filter
     if (filterMember === 'mine') {
       result = result.filter((a) => a.assigned_to === director?.id);
     } else if (filterMember !== 'all') {
       result = result.filter((a) => a.assigned_to === filterMember);
     }
-
-    // Status filter
     if (filterStatus === 'active') {
       result = result.filter((a) => a.status !== 'completed' && a.status !== 'cancelled');
     } else if (filterStatus !== 'all') {
       result = result.filter((a) => a.status === filterStatus);
     }
-
-    // Priority filter
     if (filterPriority !== 'all') {
       result = result.filter((a) => a.priority === filterPriority);
     }
-
-    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter((a) =>
         a.title.toLowerCase().includes(q) ||
         a.description?.toLowerCase().includes(q) ||
-        a.contact_name?.toLowerCase().includes(q)
+        a.contact_name?.toLowerCase().includes(q) ||
+        a.contact_company?.toLowerCase().includes(q)
       );
     }
-
     return result;
   }, [assignments, filterMember, filterStatus, filterPriority, searchQuery, director?.id]);
 
@@ -161,13 +165,41 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     return Array.from(map.values());
   }, [filtered]);
 
-  const handleStatusCycle = (task: DealTeamAssignment) => {
-    const currentIdx = STATUS_CYCLE.indexOf(task.status as any);
-    const nextStatus = STATUS_CYCLE[(currentIdx + 1) % STATUS_CYCLE.length];
+  // Kanban columns
+  const kanbanColumns = useMemo(() => {
+    const cols: Record<string, DealTeamAssignment[]> = {
+      todo: [], in_progress: [], completed: [], cancelled: [],
+    };
+    for (const a of filtered) {
+      const s = a.status || 'todo';
+      if (cols[s]) cols[s].push(a);
+      else cols.todo.push(a);
+    }
+    return cols;
+  }, [filtered]);
+
+  // Team view data
+  const teamData = useMemo(() => {
+    const map = new Map<string, { name: string; tasks: DealTeamAssignment[] }>();
+    for (const a of filtered) {
+      const key = a.assigned_to || 'unassigned';
+      if (!map.has(key)) {
+        const member = members.find(m => m.director_id === key);
+        map.set(key, { name: member?.director?.full_name || 'Nieprzypisane', tasks: [] });
+      }
+      map.get(key)!.tasks.push(a);
+    }
+    return Array.from(map.entries()).map(([id, data]) => {
+      const completed = data.tasks.filter(t => t.status === 'completed').length;
+      return { id, ...data, completed, total: data.tasks.length, progress: data.tasks.length > 0 ? Math.round((completed / data.tasks.length) * 100) : 0 };
+    });
+  }, [filtered, members]);
+
+  const handleStatusChange = (taskId: string, task: DealTeamAssignment, newStatus: string) => {
     updateAssignment.mutate({
-      id: task.id,
+      id: taskId,
       teamContactId: task.deal_team_contact_id || '',
-      status: nextStatus,
+      status: newStatus,
     });
   };
 
@@ -187,39 +219,20 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     (a) => a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)) && a.status !== 'completed' && a.status !== 'cancelled'
   ).length;
 
-  // Build a "fake" TaskWithDetails from the selected assignment for TaskDetailSheet
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
     const a = assignments.find(t => t.id === selectedTaskId);
     if (!a) return null;
-    // Map to TaskWithDetails shape expected by TaskDetailSheet
     return {
-      id: a.id,
-      title: a.title,
-      description: a.description,
-      status: a.status,
-      priority: a.priority,
-      due_date: a.due_date,
-      task_type: 'standard',
-      created_at: a.created_at,
-      tenant_id: a.tenant_id,
-      owner_id: a.owner_id,
-      assigned_to: a.assigned_to,
-      project_id: null,
-      section_id: null,
-      category_id: null,
-      visibility: 'private',
-      milestone_id: null,
-      completed_at: a.completed_at,
-      sort_order: null,
-      source_task_id: null,
-      recurrence_rule: null,
-      deal_team_id: a.deal_team_id,
-      deal_team_contact_id: a.deal_team_contact_id,
-      task_contacts: [],
-      cross_tasks: [],
-      parent_task_id: null,
-      estimated_hours: null,
+      id: a.id, title: a.title, description: a.description, status: a.status,
+      priority: a.priority, due_date: a.due_date, task_type: 'standard',
+      created_at: a.created_at, tenant_id: a.tenant_id, owner_id: a.owner_id,
+      assigned_to: a.assigned_to, project_id: null, section_id: null,
+      category_id: null, visibility: 'private', milestone_id: null,
+      completed_at: a.completed_at, sort_order: null, source_task_id: null,
+      recurrence_rule: null, deal_team_id: a.deal_team_id,
+      deal_team_contact_id: a.deal_team_contact_id, task_contacts: [],
+      cross_tasks: [], parent_task_id: null, estimated_hours: null,
     } as any;
   }, [selectedTaskId, assignments]);
 
@@ -237,33 +250,41 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     <div className="space-y-4">
       {/* ─── Toolbar ──────────────────────────────────── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          size="sm"
-          className="h-8 text-xs gap-1"
-        >
+        <Button onClick={() => setShowCreateModal(true)} size="sm" className="h-8 text-xs gap-1">
           <Plus className="h-3.5 w-3.5" />
           Nowe zadanie
         </Button>
 
+        {/* View mode toggle */}
+        <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as ViewMode)} size="sm" className="ml-2">
+          <ToggleGroupItem value="grouped" aria-label="Grupowane" className="h-8 px-2.5 text-xs gap-1">
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Grupowane</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="Lista" className="h-8 px-2.5 text-xs gap-1">
+            <List className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Lista</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="kanban" aria-label="Kanban" className="h-8 px-2.5 text-xs gap-1">
+            <Columns3 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Kanban</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="team" aria-label="Zespół" className="h-8 px-2.5 text-xs gap-1">
+            <Users className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Zespół</span>
+          </ToggleGroupItem>
+        </ToggleGroup>
+
         <div className="flex-1" />
 
-        {/* Search */}
         <div className="relative w-48">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Szukaj..."
-            className="h-8 text-xs pl-7"
-          />
+          <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Szukaj..." className="h-8 text-xs pl-7" />
         </div>
 
-        {/* Status filter */}
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
-            <Filter className="h-3 w-3 mr-1" />
-            <SelectValue />
+            <Filter className="h-3 w-3 mr-1" /><SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-popover z-50">
             <SelectItem value="active">Aktywne</SelectItem>
@@ -274,7 +295,6 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           </SelectContent>
         </Select>
 
-        {/* Priority filter */}
         <Select value={filterPriority} onValueChange={setFilterPriority}>
           <SelectTrigger className="h-8 w-[110px] text-xs">
             <SelectValue placeholder="Priorytet" />
@@ -301,9 +321,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             {m.director?.full_name || 'Nieznany'}
           </Button>
         ))}
-
         <div className="flex-1" />
-
         {overdueCount > 0 && (
           <Badge variant="destructive" className="text-xs gap-1">
             <AlertTriangle className="h-3 w-3" />{overdueCount} przeterminowanych
@@ -313,7 +331,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       </div>
 
       {/* ─── Empty state ──────────────────────────────── */}
-      {grouped.length === 0 && (
+      {filtered.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">
           <CheckCircle2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
           <p className="text-sm font-medium">Brak zadań do wyświetlenia</p>
@@ -324,34 +342,26 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         </div>
       )}
 
-      {/* ─── Grouped task list ────────────────────────── */}
-      {grouped.map((group) => {
+      {/* ─── VIEW: Grouped ────────────────────────────── */}
+      {filtered.length > 0 && viewMode === 'grouped' && grouped.map((group) => {
         const isCollapsed = collapsedGroups.has(group.teamContactId);
         return (
           <Card key={group.teamContactId} className="overflow-hidden">
-            {/* Group header */}
             <button
               onClick={() => toggleGroup(group.teamContactId)}
               className="w-full px-3 py-2 bg-muted/50 border-b flex items-center gap-2 hover:bg-muted/70 transition-colors text-left"
             >
-              {isCollapsed
-                ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              }
+              {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-sm font-medium">{group.contactName}</span>
               {group.company && (
                 <>
                   <span className="text-muted-foreground text-xs">·</span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Building2 className="h-3 w-3" />{group.company}
-                  </span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />{group.company}</span>
                 </>
               )}
               <Badge variant="secondary" className="text-xs ml-auto">{group.tasks.length}</Badge>
             </button>
-
-            {/* Tasks */}
             {!isCollapsed && (
               <div>
                 {group.tasks.map((task) => (
@@ -362,37 +372,170 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
                     companyName={task.contact_company || undefined}
                     members={members}
                     showAssignee
-                    onStatusChange={(taskId, newStatus) => {
-                      updateAssignment.mutate({
-                        id: taskId,
-                        teamContactId: task.deal_team_contact_id || '',
-                        status: newStatus,
-                      });
-                    }}
+                    onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
                     onPriorityChange={(taskId, newPriority) => handleQuickUpdate(task, 'priority', newPriority)}
                     onAssigneeChange={(taskId, newAssigneeId) => handleQuickUpdate(task, 'assignedTo', newAssigneeId)}
                     onTitleChange={(taskId, newTitle) => {
-                      updateAssignment.mutate({
-                        id: taskId,
-                        teamContactId: task.deal_team_contact_id || '',
-                        title: newTitle,
-                      });
+                      updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
                     }}
                     onClick={() => handleOpenDetail(task)}
                   />
                 ))}
-
-                {/* Inline create */}
-                <InlineTaskCreate
-                  teamId={teamId}
-                  teamContactId={group.teamContactId}
-                  assignedTo={director?.id || ''}
-                />
+                <InlineTaskCreate teamId={teamId} teamContactId={group.teamContactId} assignedTo={director?.id || ''} />
               </div>
             )}
           </Card>
         );
       })}
+
+      {/* ─── VIEW: Flat List ──────────────────────────── */}
+      {filtered.length > 0 && viewMode === 'list' && (
+        <Card className="overflow-hidden">
+          {filtered.map((task) => (
+            <UnifiedTaskRow
+              key={task.id}
+              task={task}
+              contactName={task.contact_name || undefined}
+              companyName={task.contact_company || undefined}
+              members={members}
+              showAssignee
+              onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
+              onPriorityChange={(taskId, newPriority) => handleQuickUpdate(task, 'priority', newPriority)}
+              onAssigneeChange={(taskId, newAssigneeId) => handleQuickUpdate(task, 'assignedTo', newAssigneeId)}
+              onTitleChange={(taskId, newTitle) => {
+                updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
+              }}
+              onClick={() => handleOpenDetail(task)}
+            />
+          ))}
+        </Card>
+      )}
+
+      {/* ─── VIEW: Kanban ─────────────────────────────── */}
+      {filtered.length > 0 && viewMode === 'kanban' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Object.entries(STATUS_LABELS).map(([status, { label, color }]) => {
+            const tasks = kanbanColumns[status] || [];
+            return (
+              <div key={status} className="space-y-2">
+                <div className={cn("px-3 py-2 rounded-lg flex items-center justify-between", color)}>
+                  <span className="text-sm font-medium">{label}</span>
+                  <Badge variant="secondary" className="text-xs">{tasks.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {tasks.map((task) => (
+                    <Card
+                      key={task.id}
+                      className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => handleOpenDetail(task)}
+                    >
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium leading-tight">{task.title}</p>
+                        {(task.contact_name || task.contact_company) && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {task.contact_name}
+                              {task.contact_company && <span className="ml-1 opacity-70">· {task.contact_company}</span>}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {task.priority && task.priority !== 'medium' && (
+                            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
+                              {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
+                            </Badge>
+                          )}
+                          {task.due_date && (
+                            <span className={cn(
+                              "text-[10px]",
+                              isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed'
+                                ? 'text-destructive font-medium'
+                                : 'text-muted-foreground'
+                            )}>
+                              {format(new Date(task.due_date), 'dd.MM')}
+                            </span>
+                          )}
+                          {/* Status change buttons */}
+                          <div className="ml-auto flex gap-1">
+                            {status !== 'completed' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 px-1.5 text-[10px]"
+                                onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, status === 'todo' ? 'in_progress' : 'completed'); }}
+                              >
+                                {status === 'todo' ? '→ Rozpocznij' : '✓ Zakończ'}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ─── VIEW: Team ───────────────────────────────── */}
+      {filtered.length > 0 && viewMode === 'team' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {teamData.map((member) => (
+            <Card key={member.id} className="overflow-hidden">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{member.name}</p>
+                    <p className="text-xs text-muted-foreground">{member.completed}/{member.total} zakończonych</p>
+                  </div>
+                </div>
+                <Progress value={member.progress} className="h-2" />
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  {(['todo', 'in_progress', 'completed'] as const).map((s) => {
+                    const count = member.tasks.filter(t => t.status === s).length;
+                    if (count === 0) return null;
+                    return (
+                      <Badge key={s} variant="outline" className="text-[10px]">
+                        {STATUS_LABELS[s]?.label}: {count}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Collapsible task list */}
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full px-4 py-2 text-xs text-muted-foreground hover:bg-muted/50 border-t flex items-center gap-1">
+                    <ChevronDown className="h-3 w-3" />
+                    Pokaż zadania
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="border-t">
+                    {member.tasks.map((task) => (
+                      <UnifiedTaskRow
+                        key={task.id}
+                        task={task}
+                        contactName={task.contact_name || undefined}
+                        companyName={task.contact_company || undefined}
+                        compact
+                        onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
+                        onClick={() => handleOpenDetail(task)}
+                      />
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* ─── Task Detail Sheet ────────────────────────── */}
       {selectedTask && (
@@ -400,18 +543,12 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           open={!!selectedTaskId}
           onOpenChange={(open) => { if (!open) setSelectedTaskId(null); }}
           task={selectedTask}
-          onEdit={() => {
-            // Could open TaskModal for full edit, but detail sheet already supports inline edit
-          }}
+          onEdit={() => {}}
         />
       )}
 
       {/* ─── Create Task Modal ────────────────────────── */}
-      <TaskModal
-        open={showCreateModal}
-        onOpenChange={setShowCreateModal}
-        dealTeamId={teamId}
-      />
+      <TaskModal open={showCreateModal} onOpenChange={setShowCreateModal} dealTeamId={teamId} />
     </div>
   );
 }
