@@ -191,9 +191,13 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
                             isDone && 'line-through text-muted-foreground'
                           )}>
                             {task.title}
-                            {task.task_contacts?.[0]?.contacts?.full_name && (
+                            {(task.task_contacts?.[0]?.contacts?.full_name || task.task_contacts?.[0]?.contacts?.company) && (
                               <span className="text-muted-foreground font-normal ml-1">
-                                – {task.task_contacts[0].contacts.full_name}
+                                {task.task_contacts[0].contacts.full_name && <>– {task.task_contacts[0].contacts.full_name}</>}
+                                {task.task_contacts[0].contacts.full_name && task.task_contacts[0].contacts.company && <span className="mx-1">·</span>}
+                                {task.task_contacts[0].contacts.company && (
+                                  <span className="text-muted-foreground/70">{task.task_contacts[0].contacts.company}</span>
+                                )}
                               </span>
                             )}
                           </h4>

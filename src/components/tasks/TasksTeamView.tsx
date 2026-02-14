@@ -207,6 +207,7 @@ function StatusGroup({
               key={task.id}
               task={task}
               contactName={task.task_contacts?.[0]?.contacts?.full_name}
+              companyName={task.task_contacts?.[0]?.contacts?.company ?? undefined}
               onStatusChange={onStatusChange}
               onClick={(id) => {
                 const t = tasks.find((tt) => tt.id === id);
