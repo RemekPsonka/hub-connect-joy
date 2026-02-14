@@ -1,99 +1,39 @@
 
-# Sub-kanbany dla kategorii lejka: Audyt, Hot Lead, Top Lead
+# Zamiana TaskModal na TaskDetailSheet w ContactTasksSheet
 
 ## Problem
-1. W ContactTasksSheet statusy w lejku wyswietlaja sie nieprawidlowo - `offering_stage` (np. "Pelnomocnictwo") pokazuje sie tylko dla kategorii "offering", ale powinno byc widoczne tez jako sub-stage dla innych kategorii
-2. Kategorie Audyt, Hot Lead i Top Lead nie maja wlasnych sub-kanbanow (Offering juz ma)
-3. Nawigacja do sub-kanbanow powinna odbywac sie przez klikniecie naglowka kolumny, a nie przez gorne menu
+Przycisk "Nowe zadanie" w panelu kontaktu (ContactTasksSheet) otwiera centralny dialog (`TaskModal`), zamiast uzywac bocznego panelu (`TaskDetailSheet`) - tego samego, ktory jest uzywany wszedzie indziej.
 
 ## Rozwiazanie
+Zamiast otwierac `TaskModal`, po kliknieciu "Nowe zadanie" system:
+1. Tworzy zadanie automatycznie (z domyslnym tytulem "Nowe zadanie") uzywajac `useCreateTask`
+2. Zamyka `ContactTasksSheet`
+3. Otwiera `TaskDetailSheet` z nowym zadaniem (po 150ms delay, aby uniknac kolizji animacji)
 
-### 1. Nowe sub-stage'e per kategoria
+Uzytkownik od razu widzi pelny panel zadania w stylu Asana i moze edytowac tytul, opis, status itd. inline.
 
-Reuse kolumny `offering_stage` (typ `text`, brak constraintow) jako generyczny sub-stage:
+## Zmiany w pliku
 
-- **Offering** (bez zmian): handshake, power_of_attorney, preparation, negotiation, accepted, lost
-- **Audit** (nowe): `audit_plan` (Do zaplanowania), `audit_scheduled` (Zaplanowany), `audit_done` (Odbyty)
-- **Hot Lead** (nowe): `meeting_plan` (Zaplanowac spotkanie), `meeting_scheduled` (Spotkanie umowione), `meeting_done` (Spotkanie odbyte)
-- **Top Lead** (nowe): `meeting_plan` (Zaplanowac spotkanie), `meeting_scheduled` (Spotkanie umowione), `meeting_done` (Spotkanie odbyte)
+### `src/components/deals-team/ContactTasksSheet.tsx`
 
-### 2. Zmiany w plikach
+1. Usunac import `TaskModal`
+2. Usunac stan `taskModalOpen` i komponent `<TaskModal>` na dole
+3. Dodac import `useCreateTask` z `@/hooks/useTasks`
+4. Dodac import `toast` z `sonner`
+5. W przycisku "Nowe zadanie" zamiast `setTaskModalOpen(true)`:
+   - Wywolac `createTask.mutateAsync(...)` z domyslnymi danymi (tytul "Nowe zadanie", kontakt, dealTeamId)
+   - Po sukcesie: zamknac ContactTasksSheet, po 150ms wywolac `onTaskOpen` z nowym zadaniem
+   - Nowe zadanie od razu pojawi sie w `TaskDetailSheet` gdzie uzytkownik edytuje je inline
 
-#### A. `src/types/dealTeam.ts`
-- Rozszerzyc typ `OfferingStage` o nowe wartosci: `audit_plan`, `audit_scheduled`, `audit_done`, `meeting_plan`, `meeting_scheduled`, `meeting_done`
-- Lub stworzyc nowy typ `SubStage` jako union istniejacych + nowych
+### Szczegoly techniczne
 
-#### B. Nowy komponent: `src/components/deals-team/SubKanbanView.tsx`
-Generyczny komponent sub-kanbanu (wzorowany na `OfferingKanbanBoard`):
-- Props: `contacts`, `teamId`, `stages` (tablica {id, label, icon, color}), `onContactClick`, `onBack`
-- Przycisk "Wstecz" do powrotu do glownego Kanbana
-- Drag & drop miedzy sub-kolumnami (update `offering_stage`)
-- Karty kontaktow z nazwa, firma, aktywne zadanie
-
-#### C. `src/components/deals-team/KanbanBoard.tsx`
-- Dodac stan `drillDownCategory: DealCategory | null`
-- Gdy `drillDownCategory` jest ustawiony, zamiast glownego Kanbana renderowac `SubKanbanView` z odpowiednimi stage'ami
-- Przekazac prop `onHeaderClick` do `KanbanColumn` - klikniecie naglowka kolumny Offering/Audit/Hot/Top ustawia `drillDownCategory`
-- Przycisk "Wstecz" w SubKanbanView wraca do glownego widoku (`setDrillDownCategory(null)`)
-
-#### D. `src/components/deals-team/KanbanColumn.tsx`
-- Dodac opcjonalny prop `onHeaderClick?: () => void`
-- Naglowek kolumny staje sie klikalny (kursor pointer, hover effect) gdy `onHeaderClick` jest przekazany
-- Wizualna wskazowka (np. ikona strzalki lub podkreslenie) ze naglowek jest klikalny
-
-#### E. `src/components/deals-team/ContactTasksSheet.tsx`
-- W sekcji "Status w lejku" pokazywac sub-stage badge dla WSZYSTKICH kategorii ktore maja sub-kanbany (offering, audit, hot, top), nie tylko dla offering
-- Dodac mapowanie etykiet dla nowych sub-stage'ow
-
-### 3. Konfiguracja sub-stage'ow
-
+Nowa funkcja `handleCreateAndOpen`:
 ```text
-OFFERING:
-  handshake -> Handshake
-  power_of_attorney -> Pelnomocnictwo
-  preparation -> Oferta w przygotowaniu
-  negotiation -> Negocjacje
-  accepted -> Akceptacja
-  lost -> Przegrana
-
-AUDIT:
-  audit_plan -> Do zaplanowania
-  audit_scheduled -> Zaplanowany
-  audit_done -> Odbyty
-
-HOT LEAD:
-  meeting_plan -> Zaplanowac spotkanie
-  meeting_scheduled -> Spotkanie umowione
-  meeting_done -> Spotkanie odbyte
-
-TOP LEAD:
-  meeting_plan -> Zaplanowac spotkanie
-  meeting_scheduled -> Spotkanie umowione
-  meeting_done -> Spotkanie odbyte
+async handleCreateAndOpen():
+  1. createTask.mutateAsync({ task: { title: "Nowe zadanie", status: "todo" }, contactId, dealTeamId, dealTeamContactId })
+  2. Pobrac pelne dane zadania (refetch tasks)
+  3. onOpenChange(false) - zamknac ContactTasksSheet
+  4. setTimeout(() => onTaskOpen(newTask), 150)
 ```
 
-### 4. Przeplyw uzytkownika
-
-1. Uzytkownik widzi glowny Kanban z kolumnami (Offering, Audit, Hot, Top, Lead, 10x, Cold, Lost)
-2. Klika naglowek kolumny "AUDYT" -> glowny Kanban znika, pojawia sie sub-Kanban Audytu z 3 kolumnami
-3. W sub-Kanbanie moze przeciagac kontakty miedzy sub-stage'ami
-4. Klika "Wstecz" lub breadcrumb -> wraca do glownego Kanbana
-5. W ContactTasksSheet w sekcji "Status w lejku" widzi badge z aktualnym sub-stage
-
-### 5. Domyslne wartosci sub-stage
-
-- Nowi kontakci w Audit: `audit_plan` (Do zaplanowania)
-- Nowi kontakci w Hot/Top: `meeting_plan` (Zaplanowac spotkanie)
-- Nowi kontakci w Offering: `handshake` (bez zmian)
-- Zmiana kategorii na audit/hot/top resetuje `offering_stage` do odpowiedniej domyslnej wartosci
-
-### 6. Pliki do zmiany
-
-| Plik | Operacja |
-|------|----------|
-| `src/types/dealTeam.ts` | Edycja - rozszerzenie typu OfferingStage |
-| `src/components/deals-team/SubKanbanView.tsx` | Nowy - generyczny sub-kanban |
-| `src/components/deals-team/KanbanBoard.tsx` | Edycja - stan drillDown, onHeaderClick |
-| `src/components/deals-team/KanbanColumn.tsx` | Edycja - klikalny naglowek |
-| `src/components/deals-team/ContactTasksSheet.tsx` | Edycja - sub-stage badges dla wszystkich kategorii |
-| `src/hooks/useDealsTeamContacts.ts` | Edycja - reset offering_stage przy zmianie kategorii |
+Poniewaz `useCreateTask` zwraca surowy rekord (bez relacji), a `TaskDetailSheet` potrzebuje `TaskWithDetails`, po utworzeniu zadania trzeba poczekac na refetch listy zadan i znalezc nowe zadanie po ID.
