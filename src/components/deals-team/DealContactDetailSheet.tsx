@@ -43,7 +43,6 @@ import { PromoteDialog } from './PromoteDialog';
 import { SnoozeDialog } from './SnoozeDialog';
 import { ConvertToClientDialog } from './ConvertToClientDialog';
 import { TaskModal } from '@/components/tasks/TaskModal';
-import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import type { DealTeamContact, DealContactStatus, DealCategory } from '@/types/dealTeam';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { isPast, isToday } from 'date-fns';
@@ -53,6 +52,7 @@ interface DealContactDetailSheetProps {
   teamId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onTaskOpen?: (task: TaskWithDetails) => void;
 }
 
 const categoryConfig: Record<string, { label: string; icon: string; color: string }> = {
@@ -90,7 +90,7 @@ const actionLabels: Record<string, string> = {
   prospect_created: 'Prospekt utworzony',
 };
 
-export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: DealContactDetailSheetProps) {
+export function DealContactDetailSheet({ contact, teamId, open, onOpenChange, onTaskOpen }: DealContactDetailSheetProps) {
   const changeStatus = useChangeContactStatus();
   const removeContact = useRemoveContactFromTeam();
   const updateContact = useUpdateTeamContact();
@@ -107,7 +107,6 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
   const [showWeeklyForm, setShowWeeklyForm] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
-  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [briefDialogOpen, setBriefDialogOpen] = useState(false);
@@ -349,7 +348,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                         onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
                         onClick={(taskId) => {
                           const t = tasks.find((x: any) => x.id === taskId);
-                          if (t) { setSelectedTask(t); setTaskDetailOpen(true); }
+                          if (t && onTaskOpen) { onOpenChange(false); onTaskOpen(t); }
                         }}
                       />
                     ))}
@@ -370,7 +369,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                               onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
                               onClick={(taskId) => {
                                 const t = tasks.find((x: any) => x.id === taskId);
-                                if (t) { setSelectedTask(t); setTaskDetailOpen(true); }
+                                if (t && onTaskOpen) { onOpenChange(false); onTaskOpen(t); }
                               }}
                             />
                           ))}
@@ -710,18 +709,6 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
         dealTeamContactId={contact.id}
       />
 
-      {/* Task Detail */}
-      {selectedTask && (
-        <TaskDetailSheet
-          open={taskDetailOpen}
-          onOpenChange={setTaskDetailOpen}
-          task={selectedTask}
-          onEdit={() => {
-            setTaskDetailOpen(false);
-            setTaskModalOpen(true);
-          }}
-        />
-      )}
 
       {/* Brief AI Dialog */}
       {contact.ai_brief && (
