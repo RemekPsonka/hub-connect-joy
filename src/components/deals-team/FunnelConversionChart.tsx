@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 interface FunnelConversionChartProps {
   stats: {
     top_count: number;
+    audit_count?: number;
     hot_count: number;
     offering_count: number;
     client_count: number;
@@ -14,9 +15,10 @@ interface FunnelConversionChartProps {
 
 const STAGES = [
   { key: 'top_count', label: 'TOP', color: '#f59e0b' },
+  { key: 'audit_count', label: 'AUDYT', color: '#8b5cf6' },
   { key: 'hot_count', label: 'HOT', color: '#ef4444' },
   { key: 'offering_count', label: 'OFERTOWANIE', color: '#10b981' },
-  { key: 'client_count', label: 'KLIENT', color: '#8b5cf6' },
+  { key: 'client_count', label: 'KLIENT', color: '#059669' },
 ] as const;
 
 const chartConfig: ChartConfig = Object.fromEntries(

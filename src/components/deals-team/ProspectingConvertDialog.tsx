@@ -74,7 +74,7 @@ export function ProspectingConvertDialog({
   const [email, setEmail] = useState(prospect.email || '');
   const [phone, setPhone] = useState(prospect.phone || '');
   const [linkedin, setLinkedin] = useState(prospect.linkedin_url || '');
-  const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot' | '10x' | 'lost' | 'client'>('cold');
+  const [category, setCategory] = useState<'cold' | 'lead' | 'top' | 'hot' | '10x' | 'lost' | 'client' | 'audit'>('cold');
   const [loading, setLoading] = useState(false);
 
   // Task assignment
@@ -462,14 +462,14 @@ export function ProspectingConvertDialog({
           <div className="space-y-2">
             <Label>Kategoria na Kanban</Label>
             <div className="flex gap-2">
-              {(['cold', '10x', 'lead', 'top', 'hot', 'client'] as const).map((cat) => (
+              {(['cold', '10x', 'lead', 'top', 'audit', 'hot', 'client'] as const).map((cat) => (
                 <Button
                   key={cat}
                   variant={category === cat ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setCategory(cat)}
                 >
-                  {cat === 'client' ? 'KLIENT' : cat === '10x' ? '10x' : cat.toUpperCase()}
+                  {cat === 'client' ? 'KLIENT' : cat === '10x' ? '10x' : cat === 'audit' ? 'AUDYT' : cat.toUpperCase()}
                 </Button>
               ))}
             </div>

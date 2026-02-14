@@ -220,6 +220,7 @@ export function AddContactDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="hot">🔥 HOT</SelectItem>
+                <SelectItem value="audit">📅 AUDYT</SelectItem>
                 <SelectItem value="top">⭐ TOP</SelectItem>
                 <SelectItem value="lead">📋 LEAD</SelectItem>
                 <SelectItem value="10x">🔄 10x</SelectItem>

@@ -71,6 +71,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     () => filteredContacts.filter((c) => c.category === 'offering'),
     [filteredContacts]
   );
+  const auditContacts = useMemo(
+    () => filteredContacts.filter((c) => c.category === 'audit'),
+    [filteredContacts]
+  );
   const topContacts = useMemo(
     () => filteredContacts.filter((c) => c.category === 'top'),
     [filteredContacts]
@@ -200,8 +204,39 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         visibleCount === 5 && "lg:grid-cols-5",
         visibleCount === 6 && "lg:grid-cols-6",
         visibleCount === 7 && "lg:grid-cols-7",
-        visibleCount >= 8 && "lg:grid-cols-8"
+        visibleCount === 8 && "lg:grid-cols-8",
+        visibleCount >= 9 && "lg:grid-cols-9"
       )}>
+        {/* OFFERING column */}
+        {visibleColumns.offering && (
+          <KanbanColumn
+            title="OFERTOWANIE"
+            icon="📝"
+            color="emerald"
+            count={offeringContacts.length}
+            onAdd={() => setAddContactCategory('offering')}
+            emptyMessage="Brak kontaktów w ofertowaniu"
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, 'offering')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'offering')}
+            isDropTarget={dragOverColumn === 'offering'}
+          >
+            {offeringContacts.map((contact) => (
+              <HotLeadCard
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
+              />
+            ))}
+          </KanbanColumn>
+        )}
+
         {/* HOT column */}
         {visibleColumns.hot && (
           <KanbanColumn
@@ -233,22 +268,22 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           </KanbanColumn>
         )}
 
-        {/* OFFERING column */}
-        {visibleColumns.offering && (
+        {/* AUDIT column */}
+        {visibleColumns.audit && (
           <KanbanColumn
-            title="OFERTOWANIE"
-            icon="📝"
-            color="emerald"
-            count={offeringContacts.length}
-            onAdd={() => setAddContactCategory('offering')}
-            emptyMessage="Brak kontaktów w ofertowaniu"
+            title="AUDYT"
+            icon="📅"
+            color="violet"
+            count={auditContacts.length}
+            onAdd={() => setAddContactCategory('audit')}
+            emptyMessage="Brak umówionych audytów/spotkań"
             onDragOver={handleDragOver}
-            onDragEnter={(e) => handleDragEnter(e, 'offering')}
+            onDragEnter={(e) => handleDragEnter(e, 'audit')}
             onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, 'offering')}
-            isDropTarget={dragOverColumn === 'offering'}
+            onDrop={(e) => handleDrop(e, 'audit')}
+            isDropTarget={dragOverColumn === 'audit'}
           >
-            {offeringContacts.map((contact) => (
+            {auditContacts.map((contact) => (
               <HotLeadCard
                 key={contact.id}
                 contact={contact}
