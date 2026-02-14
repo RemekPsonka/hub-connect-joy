@@ -1,47 +1,60 @@
 
-# Rozbudowa widoku zadan w Zespole Deals + naprawa statusow
+# Naprawa natychmiastowej aktualizacji list po akcjach na zadaniach
 
-## Problemy do rozwiazania
+## Problem
+Po wykonaniu akcji (usuwanie, zmiana statusu, edycja) lista zadan nie aktualizuje sie natychmiast - trzeba odswiezyc strone. Przyczyna: brakujace invalidacje kluczy cache w hookach mutacji.
 
-1. **Widok zadan w deals-team (`MyTeamTasksView`) ma tylko jeden tryb** - grupowanie per kontakt. Brakuje: widoku listy plaskiej, kanban i kafelkow zespolowych.
-2. **Statusy nie aktualizuja sie natychmiast** - `useUpdateAssignment` po zmianie statusu invaliduje tylko `['deal-team-assignments', teamContactId]`, ale NIE invaliduje `['deal-team-assignments-all', teamId]` - czyli lista glowna sie nie odswieza po zmianie.
-3. **TaskDetailSheet uzywa `useUpdateTask`** (invaliduje `['tasks']`), ale dane w deals-team sa pobierane przez `useMyTeamAssignments` (`['deal-team-assignments-all']`) - wiec zmiany w panelu szczegolowym tez nie odswiezaja widoku.
+## Analiza
 
-## Plan zmian
+Istnieje wiele query keys uzywanych w roznych widokach:
+- `['tasks']` - glowna lista zadan
+- `['task', id]` - szczegoly jednego zadania
+- `['project-tasks']` - zadania w projekcie
+- `['pending-tasks-count']` - licznik
+- `['contact-tasks-with-cross']` - zadania kontaktu
+- `['dashboard-stats']` - statystyki
+- `['consultation-tasks']` - zadania konsultacji
+- `['deal-team-assignments']` - zadania w lejku per kontakt
+- `['deal-team-assignments-all']` - wszystkie zadania lejka
+- `['deal-contact-all-tasks']` - zadania kontaktu w deals
+- `['subtasks']` - podzadania
 
-### 1. Naprawa invalidacji cache (`useDealsTeamAssignments.ts`)
+Problem polega na tym, ze kazdy hook mutacji invaliduje INNY podzbiur tych kluczy. Na przyklad:
 
-W `useUpdateAssignment.onSuccess` dodanie brakujacej invalidacji:
-```
-queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
-```
-To sprawi, ze kazda zmiana statusu natychmiast odswieza liste.
-
-### 2. Dodanie przelacznika widokow do `MyTeamTasksView`
-
-Dodanie stanu `viewMode: 'grouped' | 'list' | 'kanban' | 'team'` z przyciskami przelaczania (ToggleGroup) w toolbarze:
-- **Grupowane** (obecny widok) - per kontakt z kartami
-- **Lista** - plaska lista wszystkich zadan bez grupowania, uzywajaca `UnifiedTaskRow`
-- **Kanban** - kolumny per status (todo, in_progress, completed, cancelled) z kartami zadan
-- **Zespol** - kafelki per czlonek zespolu ze statystykami (jak `TasksTeamView`)
-
-### 3. Widok listy plaskiej
-
-Prosta iteracja po `filtered` z `UnifiedTaskRow` - bez grupowania per kontakt. Kazde zadanie wyswietla kontakt i firme w tytule.
-
-### 4. Kanban wbudowany w deals-team
-
-Mini-kanban z kolumnami per status. Karty zawieraja: tytul, kontakt, firme, priorytet, termin, avatar. Drag & drop miedzy kolumnami zmienia status.
-
-### 5. Widok zespolowy wbudowany
-
-Kafelki per czlonek zespolu z podsumowaniem: ile zadan, ile zakończonych, pasek postepu. Rozwijane listy zadan per status.
-
-## Szczegoly techniczne
-
-| Plik | Zmiana |
+| Hook | Brakujace klucze |
 |---|---|
-| `src/hooks/useDealsTeamAssignments.ts` | Dodanie invalidacji `['deal-team-assignments-all']` w `useUpdateAssignment` |
-| `src/components/deals-team/MyTeamTasksView.tsx` | Dodanie stanu viewMode, przelacznika widokow, 3 nowych trybow renderowania (lista, kanban, zespol) |
+| `useDeleteTask` | `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `task` |
+| `useUpdateTask` | `deal-team-assignments-all` (dodane wczesniej, ale brak `subtasks`) |
+| `useBulkUpdateTasks` | `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `contact-tasks-with-cross`, `consultation-tasks` |
+| `useBulkDeleteTasks` | `project-tasks`, `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `contact-tasks-with-cross`, `consultation-tasks` |
+| `useCreateSubtask` | `deal-team-assignments`, `deal-team-assignments-all` |
 
-Nie sa potrzebne zmiany w bazie danych.
+## Rozwiazanie
+
+Stworze jedna wspolna funkcje `invalidateAllTaskQueries(queryClient)` i uzyje jej we WSZYSTKICH hookach mutacji zadan. Dzieki temu kazda akcja (tworzenie, edycja, usuwanie, bulk) odswiezy wszystkie widoki natychmiast.
+
+### Plik: `src/hooks/useTasks.ts`
+
+1. Dodanie na poczatku pliku funkcji:
+```typescript
+function invalidateAllTaskQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['task'] });
+  queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
+  queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+  queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
+  queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+}
+```
+
+2. Zamiana w kazydm hooku mutacji (`useCreateTask`, `useUpdateTask`, `useDeleteTask`, `useUpdateCrossTaskStatus`, `useDuplicateTask`, `useBulkUpdateTasks`, `useBulkDeleteTasks`, `useCreateSubtask`) blokow `onSuccess` na wywolanie `invalidateAllTaskQueries(queryClient)`.
+
+### Efekt
+- Kazda akcja na zadaniu (w dowolnym widoku) natychmiast odswieza WSZYSTKIE listy
+- Brak potrzeby recznego odswiezania strony
+- Jeden punkt zarzadzania kluczami cache - latwiejsze utrzymanie
