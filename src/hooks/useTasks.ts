@@ -1,7 +1,21 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { calculateCrossTaskStatus, calculateCrossTaskProgress } from '@/utils/crossTaskStatus';
+
+function invalidateAllTaskQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['task'] });
+  queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
+  queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+  queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
+  queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+}
 
 export type Task = Tables<'tasks'>;
 export type TaskInsert = TablesInsert<'tasks'>;
@@ -472,15 +486,7 @@ export function useCreateTask() {
       return task;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -543,11 +549,7 @@ export function useCreateCrossTask() {
       return task;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -569,15 +571,7 @@ export function useUpdateTask() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['task'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -630,10 +624,7 @@ export function useUpdateCrossTaskStatus() {
       return crossTask;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['task'] });
-      queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -655,12 +646,7 @@ export function useDeleteTask() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -713,10 +699,8 @@ export function useCreateSubtask() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['subtasks', vars.parentTaskId] });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+    onSuccess: () => {
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -806,10 +790,7 @@ export function useDuplicateTask() {
       return newTask;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -828,10 +809,7 @@ export function useBulkUpdateTasks() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
@@ -847,9 +825,7 @@ export function useBulkDeleteTasks() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      invalidateAllTaskQueries(queryClient);
     },
   });
 }
