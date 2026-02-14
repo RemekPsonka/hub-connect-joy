@@ -1,42 +1,58 @@
 
 
-# Dodanie dialogu "Awansuj do AUDYT" z data i osoba
+# Kanban ofertowania z 6 etapami
 
-## Problem
-Klikniecie przycisku AUDYT w sekcji Kategoria zmienia kategorie kontaktu natychmiast, bez zadawania pytania o date spotkania i osobe, ktora je odbedzie. Nie ma mechanizmu wymuszenia podania tych danych.
+## Cel
+Zamiana obecnego widoku listy w zakladce "Ofertowanie" na widok Kanban z 6 kolumnami etapow procesu ofertowania.
 
-## Rozwiazanie
-Wykorzystanie istniejacego komponentu `PromoteDialog` - rozszerzenie go o obsluge kategorii `audit`. Dialog bedzie wymagal podania daty spotkania i osoby odpowiedzialnej (analogicznie do awansu do HOT).
+## Nowa kolumna w bazie danych
+Tabela `deal_team_contacts` nie posiada pola do sledzenia etapu ofertowania. Potrzebna jest nowa kolumna:
+
+```sql
+ALTER TABLE deal_team_contacts 
+ADD COLUMN offering_stage text DEFAULT 'handshake';
+```
+
+Dopuszczalne wartosci: `handshake`, `power_of_attorney`, `preparation`, `negotiation`, `accepted`, `lost`
+
+## Etapy Kanban
+
+| # | ID | Etykieta | Kolor |
+|---|-----|----------|-------|
+| 1 | handshake | Handshake | blue |
+| 2 | power_of_attorney | Pelnomocnictwo | indigo |
+| 3 | preparation | Oferta w przygotowaniu | amber |
+| 4 | negotiation | Negocjacje | orange |
+| 5 | accepted | Akceptacja | green |
+| 6 | lost | Przegrana | red |
 
 ## Zmiany w plikach
 
-### 1. `src/components/deals-team/PromoteDialog.tsx`
-- Rozszerzenie `targetCategory` o `'audit'`
-- Dodanie warunku `isToAudit` obok istniejacych `isToTop`, `isToHot`
-- Formularz AUDYT: data spotkania (wymagana) + kto idzie na spotkanie (wymagane) - reuse pol z HOT
-- Tytul dialogu: "Umow audyt/spotkanie robocze 📅"
-- Walidacja: obie pola wymagane
-- Przy zapisie: ustawienie `nextMeetingDate`, `nextMeetingWith` i `category: 'audit'`
+### 1. Migracja bazy danych
+- Dodanie kolumny `offering_stage` (text, default `'handshake'`) do `deal_team_contacts`
 
-### 2. `src/components/deals-team/DealContactDetailSheet.tsx`
-- Zmiana obslugi klikniecia przycisku AUDYT: zamiast bezposredniego `updateContact.mutate(...)`, otwieranie `PromoteDialog` z `targetCategory='audit'`
-- Dodanie `'audit'` do warunku: `if (cat === 'top' || cat === 'hot' || cat === 'audit')` -> `setPromoteTarget(cat)`
-- Aktualizacja typu `promoteTarget` z `'lead' | 'top' | 'hot' | null` na `'lead' | 'top' | 'hot' | 'audit' | null`
+### 2. `src/components/deals-team/OfferingTab.tsx`
+- Zachowanie istniejacych kart KPI (w ofertowaniu, zaplanowane, oplacone, nadchodzace) i wykresu timeline na gorze
+- Ponizej: nowy widok Kanban z 6 kolumnami
+- Kontakty z `category = 'offering'` rozdzielone wg `offering_stage`
+- Drag & drop miedzy kolumnami (natywny HTML drag, tak jak w `TasksKanban`)
+- Kazda karta kontaktu wyswietla: imie, firme, wartosc, liczbe platnosci, nastepna platnosc
+- Po kliknieciu karty - mozliwosc rozwijania szczegolow platnosci (zachowanie obecnej logiki `OfferingContactCard`)
 
-## Przeplyw uzytkownika
-
-```text
-1. Uzytkownik otwiera kontakt w lejku
-2. Klika przycisk "AUDYT" w sekcji Kategoria
-3. Otwiera sie dialog z polami:
-   - Data spotkania * (kalendarz)
-   - Kto idzie na spotkanie * (dropdown czlonkow zespolu)
-4. Po wypelnieniu i zatwierdzeniu:
-   - Kontakt przenosi sie do kolumny AUDYT
-   - Data i osoba zapisuja sie w deal_team_contacts (next_meeting_date, next_meeting_with)
-```
+### 3. `src/hooks/useDealsTeamContacts.ts`
+- Rozszerzenie hooka `useUpdateTeamContact` o obsluge pola `offering_stage`
+- Nowa mutacja lub rozszerzenie istniejacego `updateContact` o zmiane `offering_stage`
 
 ## Szczegoly techniczne
-- Tabela `deal_team_contacts` juz posiada kolumny `next_meeting_date` i `next_meeting_with` - nie trzeba zmieniac schematu bazy
-- Hook `useUpdateTeamContact` juz obsluguje te pola
-- Brak zmian w bazie danych - czysto frontendowa zmiana
+- Drag & drop: natywny HTML API (wzorzec z `TasksKanban` - `onDragStart`, `onDragOver`, `onDrop`)
+- Przy upuszczeniu karty na nowa kolumne: wywolanie `updateContact.mutate({ offering_stage: newStage })`
+- Kontakty wchodzace do ofertowania (zmiana `category` na `offering`) automatycznie dostaja `offering_stage = 'handshake'`
+- Kolumna "Przegrana" moze opcjonalnie zmieniac `category` kontaktu na `lost` (do ustalenia)
+
+## Przeplyw uzytkownika
+1. Uzytkownik otwiera zakladke Ofertowanie
+2. Widzi karty KPI i wykres timeline na gorze
+3. Ponizej widzi Kanban z 6 kolumnami
+4. Przeciaga kontakt miedzy kolumnami aby zmienic etap
+5. Klika karte aby rozwinac szczegoly platnosci
+
