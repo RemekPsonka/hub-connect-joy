@@ -133,6 +133,7 @@ export function useUpdateAssignment() {
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['deal-team-assignments', params.teamContactId] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
     },
     onError: (error: Error) => {
       toast.error(`Błąd aktualizacji: ${error.message}`);
