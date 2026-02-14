@@ -1,59 +1,29 @@
 
-# Dodanie etapu "Umowiony audyt" i zmiana pozycji "Ofertowanie"
 
-## Zakres zmian
+# Naprawienie sekcji Kategoria w DealContactDetailSheet
 
-Nowa kategoria `audit` ("Umowiony audyt/spotkanie robocze") zostanie dodana do lejka, a kolejnosc kolumn zostanie zmieniona.
+## Problem
+Sekcja "KATEGORIA" w oknie szczegolowego kontaktu ma 8 przyciskow (`flex-1`) w ograniczonej szerokosci dialogu `max-w-2xl`. Przyciski sie zgniataja i ostatni ("PRZEGRANE") jest ucinany.
 
-### Nowa kolejnosc kolumn na Kanbanie (od lewej):
+## Rozwiazanie
 
-```text
-OFERTOWANIE | HOT LEAD | AUDYT | TOP LEAD | LEAD | 10x | COLD | PRZEGRANE | POSZUKIWANI
+### Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
+
+Zmiana kontenera przyciskow kategorii z:
+```
+<div className="flex gap-1.5">
+  <Button className="flex-1 text-xs h-8" ...>
+```
+na kontener z przewijaniem poziomym:
+```
+<div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+  <Button className="shrink-0 text-xs h-8 px-3" ...>
 ```
 
-## Pliki do zmiany
+Kluczowe zmiany:
+- `overflow-x-auto` na kontenerze - umozliwia przewijanie gdy przyciski nie mieszcza sie
+- `pb-1` - odrobine miejsca na scrollbar
+- Zamiana `flex-1` na `shrink-0` na przyciskach - kazdy przycisk zachowuje naturalna szerokosc i nie jest zgniatany
+- Dodanie `px-3` dla minimalnego paddingu
 
-### 1. `src/types/dealTeam.ts`
-- Dodanie `'audit'` do typu `DealCategory`
-
-### 2. `src/hooks/useKanbanColumnSettings.ts`
-- Dodanie `audit: true` do interfejsu `KanbanColumnVisibility` i domyslnych ustawien
-
-### 3. `src/components/deals-team/KanbanBoard.tsx`
-- Dodanie `useMemo` filtrujacego kontakty z kategoria `audit`
-- Dodanie kolumny AUDYT miedzy HOT a TOP
-- Przesuniecie kolumny OFERTOWANIE na pierwsza pozycje (przed HOT)
-
-### 4. `src/components/deals-team/KanbanColumnConfigPopover.tsx`
-- Dodanie etykiety `audit: 'AUDYT'` do `COLUMN_LABELS`
-- Zmiana kolejnosci etykiet: offering na poczatku, audit miedzy hot a top
-
-### 5. `src/hooks/useTeamClients.ts`
-- Dodanie `audit: 85` do `CATEGORY_PROBABILITY`
-
-### 6. `src/components/deals-team/DealContactDetailSheet.tsx`
-- Dodanie `audit` do `categoryConfig` z etykieta "AUDYT", ikona "📅" i kolorami
-
-### 7. `src/components/contacts/DealFunnelBadges.tsx`
-- Dodanie `AUDIT` do `CATEGORIES` i `CATEGORY_COLORS`
-
-### 8. `src/components/deals-team/AddContactDialog.tsx`
-- Dodanie `SelectItem` dla `audit` w dropdownie kategorii
-
-### 9. `src/components/deals-team/TableView.tsx`
-- Dodanie `SelectItem` dla `audit` w filtrze kategorii
-
-### 10. `src/components/deals-team/ProspectingConvertDialog.tsx`
-- Dodanie `'audit'` do typu kategorii
-
-### 11. `src/components/deals-team/FunnelConversionChart.tsx`
-- Dodanie `audit_count` do danych wykresu (opcjonalnie, jesli potrzebne)
-
-## Szczegoly techniczne
-
-- Kategoria: `audit`
-- Etykieta: `AUDYT` (lub "UM. AUDYT")
-- Ikona: `📅`
-- Kolor: `violet` / `bg-violet-100 text-violet-800`
-- Prawdopodobienstwo: 85%
-- Pozycja w Kanbanie: trzecia kolumna (po OFERTOWANIE i HOT)
+Dzieki temu przyciski beda czytelne, a uzytkownik moze przesuwac palcem/myszka zeby zobaczyc wszystkie kategorie.
