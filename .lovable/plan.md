@@ -1,29 +1,42 @@
 
 
-# Naprawienie sekcji Kategoria w DealContactDetailSheet
+# Dodanie dialogu "Awansuj do AUDYT" z data i osoba
 
 ## Problem
-Sekcja "KATEGORIA" w oknie szczegolowego kontaktu ma 8 przyciskow (`flex-1`) w ograniczonej szerokosci dialogu `max-w-2xl`. Przyciski sie zgniataja i ostatni ("PRZEGRANE") jest ucinany.
+Klikniecie przycisku AUDYT w sekcji Kategoria zmienia kategorie kontaktu natychmiast, bez zadawania pytania o date spotkania i osobe, ktora je odbedzie. Nie ma mechanizmu wymuszenia podania tych danych.
 
 ## Rozwiazanie
+Wykorzystanie istniejacego komponentu `PromoteDialog` - rozszerzenie go o obsluge kategorii `audit`. Dialog bedzie wymagal podania daty spotkania i osoby odpowiedzialnej (analogicznie do awansu do HOT).
 
-### Plik: `src/components/deals-team/DealContactDetailSheet.tsx`
+## Zmiany w plikach
 
-Zmiana kontenera przyciskow kategorii z:
-```
-<div className="flex gap-1.5">
-  <Button className="flex-1 text-xs h-8" ...>
-```
-na kontener z przewijaniem poziomym:
-```
-<div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-  <Button className="shrink-0 text-xs h-8 px-3" ...>
+### 1. `src/components/deals-team/PromoteDialog.tsx`
+- Rozszerzenie `targetCategory` o `'audit'`
+- Dodanie warunku `isToAudit` obok istniejacych `isToTop`, `isToHot`
+- Formularz AUDYT: data spotkania (wymagana) + kto idzie na spotkanie (wymagane) - reuse pol z HOT
+- Tytul dialogu: "Umow audyt/spotkanie robocze 📅"
+- Walidacja: obie pola wymagane
+- Przy zapisie: ustawienie `nextMeetingDate`, `nextMeetingWith` i `category: 'audit'`
+
+### 2. `src/components/deals-team/DealContactDetailSheet.tsx`
+- Zmiana obslugi klikniecia przycisku AUDYT: zamiast bezposredniego `updateContact.mutate(...)`, otwieranie `PromoteDialog` z `targetCategory='audit'`
+- Dodanie `'audit'` do warunku: `if (cat === 'top' || cat === 'hot' || cat === 'audit')` -> `setPromoteTarget(cat)`
+- Aktualizacja typu `promoteTarget` z `'lead' | 'top' | 'hot' | null` na `'lead' | 'top' | 'hot' | 'audit' | null`
+
+## Przeplyw uzytkownika
+
+```text
+1. Uzytkownik otwiera kontakt w lejku
+2. Klika przycisk "AUDYT" w sekcji Kategoria
+3. Otwiera sie dialog z polami:
+   - Data spotkania * (kalendarz)
+   - Kto idzie na spotkanie * (dropdown czlonkow zespolu)
+4. Po wypelnieniu i zatwierdzeniu:
+   - Kontakt przenosi sie do kolumny AUDYT
+   - Data i osoba zapisuja sie w deal_team_contacts (next_meeting_date, next_meeting_with)
 ```
 
-Kluczowe zmiany:
-- `overflow-x-auto` na kontenerze - umozliwia przewijanie gdy przyciski nie mieszcza sie
-- `pb-1` - odrobine miejsca na scrollbar
-- Zamiana `flex-1` na `shrink-0` na przyciskach - kazdy przycisk zachowuje naturalna szerokosc i nie jest zgniatany
-- Dodanie `px-3` dla minimalnego paddingu
-
-Dzieki temu przyciski beda czytelne, a uzytkownik moze przesuwac palcem/myszka zeby zobaczyc wszystkie kategorie.
+## Szczegoly techniczne
+- Tabela `deal_team_contacts` juz posiada kolumny `next_meeting_date` i `next_meeting_with` - nie trzeba zmieniac schematu bazy
+- Hook `useUpdateTeamContact` juz obsluguje te pola
+- Brak zmian w bazie danych - czysto frontendowa zmiana
