@@ -32,7 +32,7 @@ import { format, subDays, startOfDay, isAfter, isBefore, parseISO } from 'date-f
 import { pl } from 'date-fns/locale';
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: '#94a3b8',
+  todo: '#94a3b8',
   in_progress: '#3b82f6',
   completed: '#22c55e',
   cancelled: '#ef4444',
@@ -46,7 +46,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Oczekujące',
+  todo: 'Do zrobienia',
   in_progress: 'W trakcie',
   completed: 'Zakończone',
   cancelled: 'Anulowane',
@@ -130,7 +130,7 @@ export default function TaskAnalytics() {
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
     tasks.forEach((t) => {
-      const s = t.status || 'pending';
+      const s = t.status || 'todo';
       counts[s] = (counts[s] || 0) + 1;
     });
     return Object.entries(counts).map(([status, value]) => ({

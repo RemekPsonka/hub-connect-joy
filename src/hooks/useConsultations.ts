@@ -294,7 +294,7 @@ export function useCreateConsultationTask() {
           title,
           consultation_id: consultationId,
           tenant_id: tenantId,
-          status: 'pending',
+          status: 'todo',
           priority: 'medium',
         })
         .select()

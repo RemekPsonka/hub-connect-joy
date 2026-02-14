@@ -383,7 +383,7 @@ export function useContactStats(contactId: string | undefined) {
           .from('task_contacts')
           .select('task_id, tasks!inner(status)', { count: 'exact', head: true })
           .eq('contact_id', contactId)
-          .eq('tasks.status', 'pending'),
+          .in('tasks.status', ['todo', 'in_progress']),
       ]);
 
       return {

@@ -16,7 +16,7 @@ export function MyTasksWidget() {
   const { data: myTasks = [], isLoading } = useTasks({
     ownerId: currentDirector?.id,
     visibility: 'private',
-    status: 'pending',
+    status: 'todo',
     excludeSnoozed: true,
   });
 

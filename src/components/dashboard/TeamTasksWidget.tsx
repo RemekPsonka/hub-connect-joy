@@ -25,7 +25,7 @@ export function TeamTasksWidget() {
   
   const { data: teamTasks = [], isLoading } = useTasks({
     visibility: 'team',
-    status: 'pending',
+    status: 'todo',
     excludeSnoozed: true,
   });
 

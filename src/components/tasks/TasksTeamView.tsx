@@ -53,7 +53,7 @@ export function TasksTeamView({ tasks, onTaskClick, onStatusChange, onNewTask }:
       const bucket = map.get(key)!;
       bucket.tasks.push(task);
 
-      const status = task.status === 'pending' ? 'todo' : (task.status || 'todo');
+      const status = task.status || 'todo';
       if (!bucket.byStatus[status]) bucket.byStatus[status] = [];
       bucket.byStatus[status].push(task);
 

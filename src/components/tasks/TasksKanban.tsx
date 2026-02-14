@@ -53,12 +53,8 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [justDroppedId, setJustDroppedId] = useState<string | null>(null);
 
-  // Also include legacy 'pending' mapped to 'todo'
   const getTasksByStatus = (status: string) =>
-    tasks.filter((task) => {
-      const taskStatus = task.status === 'pending' ? 'todo' : task.status;
-      return taskStatus === status;
-    });
+    tasks.filter((task) => task.status === status);
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     setDraggingTaskId(taskId);
@@ -96,7 +92,7 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId) {
       const task = tasks.find(t => t.id === taskId);
-      const currentStatus = task?.status === 'pending' ? 'todo' : task?.status;
+      const currentStatus = task?.status;
       if (task && currentStatus !== status) {
         onStatusChange(taskId, status);
         setJustDroppedId(taskId);

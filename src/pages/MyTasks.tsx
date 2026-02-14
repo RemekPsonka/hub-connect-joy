@@ -1,18 +1,15 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
-import { TaskStatusBadge } from '@/components/tasks/TaskStatusBadge';
+import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { useTasks, useUpdateTask, type TaskWithDetails } from '@/hooks/useTasks';
 import { useCurrentDirector } from '@/hooks/useDirectors';
-import { Loader2, Calendar, Plus, CheckCircle2, Clock, CalendarDays, Inbox, User } from 'lucide-react';
-import { format, isToday, isThisWeek, isPast } from 'date-fns';
-import { pl } from 'date-fns/locale';
+import { Loader2, Calendar, Plus, CheckCircle2, Clock, CalendarDays, Inbox } from 'lucide-react';
+import { isToday, isThisWeek, isPast } from 'date-fns';
 import { toast } from 'sonner';
 
 type Section = 'overdue' | 'today' | 'this_week' | 'later' | 'no_date' | 'completed';
@@ -49,24 +46,18 @@ function groupTasks(tasks: TaskWithDetails[]): GroupedTasks {
   return g;
 }
 
-function getInitials(name: string) {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
 function TaskSectionList({
   tasks,
   showCompleted,
   setShowCompleted,
   onTaskClick,
   onStatusChange,
-  currentDirectorId,
 }: {
   tasks: TaskWithDetails[];
   showCompleted: boolean;
   setShowCompleted: (v: boolean) => void;
-  onTaskClick: (t: TaskWithDetails) => void;
-  onStatusChange: (id: string, completed: boolean) => void;
-  currentDirectorId?: string;
+  onTaskClick: (taskId: string) => void;
+  onStatusChange: (taskId: string, newStatus: string) => void;
 }) {
   const grouped = useMemo(() => groupTasks(tasks), [tasks]);
   const visibleSections: Section[] = ['overdue', 'today', 'this_week', 'later', 'no_date'];
@@ -93,62 +84,18 @@ function TaskSectionList({
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-1">
-                {sectionTasks.map((task) => {
-                  const owner = (task as any).owner;
-                  const assignee = (task as any).assignee;
-                  const showOwner = owner && owner.id !== currentDirectorId;
-                  const showAssignee = assignee && assignee.id !== owner?.id;
-
-                  return (
-                    <Card
-                      key={task.id}
-                      className="cursor-pointer hover:shadow-sm transition-shadow"
-                      onClick={() => onTaskClick(task)}
-                    >
-                      <CardContent className="py-2.5 px-4 flex items-center gap-3">
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={task.status === 'completed'}
-                            onCheckedChange={(v) => onStatusChange(task.id, !!v)}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-medium ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
-                              {task.title}
-                            </span>
-                          </div>
-                          {(showOwner || showAssignee) && (
-                            <div className="flex items-center gap-2 mt-0.5">
-                              {showOwner && (
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <User className="h-3 w-3" />
-                                  {owner.full_name}
-                                </span>
-                              )}
-                              {showAssignee && (
-                                <Badge variant="outline" className="text-xs py-0 px-1.5 h-4">
-                                  → {assignee.full_name}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <TaskPriorityBadge priority={task.priority} />
-                          <TaskStatusBadge status={task.status} />
-                          {task.due_date && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {format(new Date(task.due_date), 'd MMM', { locale: pl })}
-                            </span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+              <div className="border rounded-lg overflow-hidden">
+                {sectionTasks.map((task) => (
+                  <UnifiedTaskRow
+                    key={task.id}
+                    task={task}
+                    contactName={task.task_contacts?.[0]?.contacts?.full_name}
+                    companyName={task.task_contacts?.[0]?.contacts?.company ?? undefined}
+                    onStatusChange={onStatusChange}
+                    onClick={onTaskClick}
+                    showSubtasks
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -168,9 +115,7 @@ export default function MyTasks() {
   const { data: currentDirector } = useCurrentDirector();
   const directorId = currentDirector?.id;
 
-  // Fetch all tasks visible to tenant - query will be skipped if no directorId via early return in grouping
   const { data: allTasks = [], isLoading } = useTasks({});
-
   const updateTask = useUpdateTask();
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -178,7 +123,6 @@ export default function MyTasks() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
-  // Client-side filtering into 3 groups
   const { myTasks, teamTasks, otherTasks } = useMemo(() => {
     if (!directorId) return { myTasks: [], teamTasks: [], otherTasks: [] };
     const my: TaskWithDetails[] = [];
@@ -203,19 +147,22 @@ export default function MyTasks() {
     return { myTasks: my, teamTasks: team, otherTasks: other };
   }, [allTasks, directorId]);
 
-  const handleStatusChange = async (taskId: string, completed: boolean) => {
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
-      await updateTask.mutateAsync({ id: taskId, status: completed ? 'completed' : 'pending' });
+      await updateTask.mutateAsync({ id: taskId, status: newStatus });
       toast.success('Status zaktualizowany');
     } catch {
       toast.error('Wystąpił błąd');
     }
   };
 
-  const handleTaskClick = (task: TaskWithDetails) => {
-    setSelectedTask(task);
-    setIsDetailOpen(true);
-    setIsEditMode(false);
+  const handleTaskClick = (taskId: string) => {
+    const task = allTasks.find(t => t.id === taskId);
+    if (task) {
+      setSelectedTask(task);
+      setIsDetailOpen(true);
+      setIsEditMode(false);
+    }
   };
 
   const handleEditFromDetail = () => {
@@ -243,7 +190,6 @@ export default function MyTasks() {
     setShowCompleted,
     onTaskClick: handleTaskClick,
     onStatusChange: handleStatusChange,
-    currentDirectorId: directorId,
   };
 
   return (

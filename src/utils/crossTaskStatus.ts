@@ -4,13 +4,13 @@
  * Status logic:
  * - 'completed': intro_made is true
  * - 'in_progress': at least one person discussed but intro not made yet
- * - 'pending': nothing done yet
+ * - 'todo': nothing done yet
  */
 export function calculateCrossTaskStatus(crossTask: {
   discussed_with_a: boolean | null;
   discussed_with_b: boolean | null;
   intro_made: boolean | null;
-}): 'pending' | 'in_progress' | 'completed' {
+}): 'todo' | 'in_progress' | 'completed' {
   const discussedA = crossTask.discussed_with_a || false;
   const discussedB = crossTask.discussed_with_b || false;
   const introMade = crossTask.intro_made || false;
@@ -22,7 +22,7 @@ export function calculateCrossTaskStatus(crossTask: {
   if (discussedA || discussedB) return 'in_progress';
   
   // Nothing done yet
-  return 'pending';
+  return 'todo';
 }
 
 /**

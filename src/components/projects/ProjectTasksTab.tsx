@@ -126,7 +126,7 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
 
   const handleStatusToggle = (e: React.MouseEvent, task: TaskWithDetails) => {
     e.stopPropagation();
-    const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+    const newStatus = task.status === 'completed' ? 'todo' : 'completed';
     updateTask.mutate({ id: task.id, status: newStatus });
   };
 

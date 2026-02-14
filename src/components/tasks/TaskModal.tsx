@@ -68,7 +68,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
   const [connectionReason, setConnectionReason] = useState('');
   const [suggestedIntro, setSuggestedIntro] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [status, setStatus] = useState('pending');
+  const [status, setStatus] = useState('todo');
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [projectId, setProjectId] = useState<string>('');
   
@@ -100,7 +100,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setDescription(task.description || '');
       setTaskType((task.task_type as TaskType) || 'standard');
       setPriority(task.priority || 'medium');
-      setStatus(task.status || 'pending');
+      setStatus(task.status || 'todo');
       setDueDate(task.due_date ? new Date(task.due_date) : undefined);
       setCategoryId(task.category_id || 'none');
       setAssignedTo(task.assigned_to || 'self');
@@ -127,7 +127,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setConnectionReason(initialData.connectionReason || '');
       setSuggestedIntro('');
       setPriority(initialData.priority || 'medium');
-      setStatus('pending');
+      setStatus('todo');
       setDueDate(undefined);
       setCategoryId('');
       setAssignedTo('');
@@ -149,7 +149,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setConnectionReason('');
       setSuggestedIntro('');
       setPriority('medium');
-      setStatus('pending');
+      setStatus('todo');
       setDueDate(undefined);
       setCategoryId('none');
       setAssignedTo('self');
