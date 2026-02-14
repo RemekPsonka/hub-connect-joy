@@ -206,6 +206,7 @@ function StatusGroup({
             <UnifiedTaskRow
               key={task.id}
               task={task}
+              contactName={task.task_contacts?.[0]?.contacts?.full_name}
               onStatusChange={onStatusChange}
               onClick={(id) => {
                 const t = tasks.find((tt) => tt.id === id);

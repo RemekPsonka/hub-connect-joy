@@ -87,6 +87,7 @@ export function TasksList({ tasks, onTaskClick, onStatusChange, selectedIds, onT
                       ...task,
                       status: effectiveStatus,
                     }}
+                    contactName={task.task_contacts?.[0]?.contacts?.full_name}
                     onStatusChange={(taskId, newStatus) => {
                       if (!isCrossTask) {
                         onStatusChange(taskId, newStatus === 'completed');

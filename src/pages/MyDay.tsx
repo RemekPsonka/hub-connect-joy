@@ -21,73 +21,13 @@ import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { TaskModal } from '@/components/tasks/TaskModal';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { NewProjectDialog } from '@/components/projects/NewProjectDialog';
 import { MiniCalendar } from '@/components/my-day/MiniCalendar';
 import { GCalTodayEvents } from '@/components/my-day/GCalTodayEvents';
 import { SovraRemindersCard } from '@/components/sovra/SovraRemindersCard';
-
-// Priority dot colors
-const priorityColors: Record<string, string> = {
-  urgent: 'bg-red-500',
-  critical: 'bg-red-500',
-  high: 'bg-amber-500',
-  medium: 'bg-blue-500',
-  low: 'bg-muted-foreground/40',
-};
-
-function TaskRow({
-  task,
-  onToggle,
-  showOverdueDate,
-}: {
-  task: TaskWithDetails;
-  onToggle: (task: TaskWithDetails) => void;
-  showOverdueDate?: boolean;
-}) {
-  const isDone = task.status === 'done';
-  const projectName = task.project_id ? (task as any).projects?.name : null;
-
-  return (
-    <div className="flex items-center gap-3 py-3 border-b border-border last:border-0">
-      <Checkbox
-        checked={isDone}
-        onCheckedChange={() => onToggle(task)}
-        className="shrink-0"
-      />
-      <span
-        className={`w-2 h-2 rounded-full shrink-0 ${priorityColors[task.priority || 'low'] || priorityColors.low}`}
-      />
-      <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm font-medium truncate ${
-            isDone ? 'line-through text-muted-foreground' : 'text-foreground'
-          }`}
-        >
-          {task.title}
-        </p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {projectName && (
-          <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full hidden sm:inline">
-            {projectName}
-          </span>
-        )}
-        {showOverdueDate && task.due_date && (
-          <span className="text-xs text-destructive">
-            {formatDistanceToNow(new Date(task.due_date), { locale: pl, addSuffix: true })}
-          </span>
-        )}
-        {!showOverdueDate && task.due_date && (
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {format(new Date(task.due_date), 'HH:mm', { locale: pl })}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function getActivityIcon(type: string) {
   switch (type) {
@@ -117,6 +57,8 @@ export default function MyDay() {
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Calendar state
   const now = new Date();
@@ -139,8 +81,13 @@ export default function MyDay() {
   const handleToggleTask = (task: TaskWithDetails) => {
     updateTask.mutate({
       id: task.id,
-      status: task.status === 'done' ? 'pending' : 'done',
+      status: task.status === 'completed' ? 'todo' : 'completed',
     });
+  };
+
+  const handleTaskClick = (task: TaskWithDetails) => {
+    setSelectedTask(task);
+    setIsDetailOpen(true);
   };
 
   const handleMonthChange = (start: string, end: string) => {
@@ -232,10 +179,14 @@ export default function MyDay() {
             ) : (
               <div>
                 {tasksToday.map((task) => (
-                  <TaskRow
+                  <UnifiedTaskRow
                     key={task.id}
                     task={task}
-                    onToggle={handleToggleTask}
+                    contactName={task.task_contacts?.[0]?.contacts?.full_name}
+                    onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                    onClick={() => handleTaskClick(task)}
+                    compact
+                    showSubtasks
                   />
                 ))}
               </div>
@@ -255,11 +206,14 @@ export default function MyDay() {
             >
               <div>
                 {tasksOverdue.map((task) => (
-                  <TaskRow
+                  <UnifiedTaskRow
                     key={task.id}
                     task={task}
-                    onToggle={handleToggleTask}
-                    showOverdueDate
+                    contactName={task.task_contacts?.[0]?.contacts?.full_name}
+                    onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                    onClick={() => handleTaskClick(task)}
+                    compact
+                    showSubtasks
                   />
                 ))}
               </div>
@@ -412,6 +366,14 @@ export default function MyDay() {
       {/* Modals */}
       <TaskModal open={taskModalOpen} onOpenChange={setTaskModalOpen} />
       <NewProjectDialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen} />
+      {selectedTask && (
+        <TaskDetailSheet
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+          task={selectedTask}
+          onEdit={() => {}}
+        />
+      )}
     </>
   );
 }
