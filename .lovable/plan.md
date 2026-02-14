@@ -1,60 +1,41 @@
 
-# Naprawa natychmiastowej aktualizacji list po akcjach na zadaniach
+# Naprawa brakujacego ptaszka dla Marcina Szemainda
 
-## Problem
-Po wykonaniu akcji (usuwanie, zmiana statusu, edycja) lista zadan nie aktualizuje sie natychmiast - trzeba odswiezyc strone. Przyczyna: brakujace invalidacje kluczy cache w hookach mutacji.
+## Przyczyna
 
-## Analiza
+Zadanie "Potwierdzic spotkanie" dla Marcina Szemainda ma status `pending` w bazie danych. Hook `useActiveTaskContacts` filtruje tylko po statusach `['todo', 'in_progress']`, pomijajac `pending`.
 
-Istnieje wiele query keys uzywanych w roznych widokach:
-- `['tasks']` - glowna lista zadan
-- `['task', id]` - szczegoly jednego zadania
-- `['project-tasks']` - zadania w projekcie
-- `['pending-tasks-count']` - licznik
-- `['contact-tasks-with-cross']` - zadania kontaktu
-- `['dashboard-stats']` - statystyki
-- `['consultation-tasks']` - zadania konsultacji
-- `['deal-team-assignments']` - zadania w lejku per kontakt
-- `['deal-team-assignments-all']` - wszystkie zadania lejka
-- `['deal-contact-all-tasks']` - zadania kontaktu w deals
-- `['subtasks']` - podzadania
-
-Problem polega na tym, ze kazdy hook mutacji invaliduje INNY podzbiur tych kluczy. Na przyklad:
-
-| Hook | Brakujace klucze |
-|---|---|
-| `useDeleteTask` | `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `task` |
-| `useUpdateTask` | `deal-team-assignments-all` (dodane wczesniej, ale brak `subtasks`) |
-| `useBulkUpdateTasks` | `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `contact-tasks-with-cross`, `consultation-tasks` |
-| `useBulkDeleteTasks` | `project-tasks`, `deal-team-assignments`, `deal-team-assignments-all`, `deal-contact-all-tasks`, `contact-tasks-with-cross`, `consultation-tasks` |
-| `useCreateSubtask` | `deal-team-assignments`, `deal-team-assignments-all` |
+W bazie sa zadania z obu statusow: 2 zadania `pending` i 28 `todo`. Wyglada na to, ze `pending` to stary status sprzed unifikacji, ale nie zostal zmigrowany.
 
 ## Rozwiazanie
 
-Stworze jedna wspolna funkcje `invalidateAllTaskQueries(queryClient)` i uzyje jej we WSZYSTKICH hookach mutacji zadan. Dzieki temu kazda akcja (tworzenie, edycja, usuwanie, bulk) odswiezy wszystkie widoki natychmiast.
+Dwuetapowe podejscie:
 
-### Plik: `src/hooks/useTasks.ts`
+### 1. Hook `useActiveTaskContacts.ts` - dodanie `pending` do filtra
 
-1. Dodanie na poczatku pliku funkcji:
-```typescript
-function invalidateAllTaskQueries(queryClient: QueryClient) {
-  queryClient.invalidateQueries({ queryKey: ['tasks'] });
-  queryClient.invalidateQueries({ queryKey: ['task'] });
-  queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] });
-  queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross'] });
-  queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-  queryClient.invalidateQueries({ queryKey: ['project-tasks'] });
-  queryClient.invalidateQueries({ queryKey: ['consultation-tasks'] });
-  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments'] });
-  queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
-  queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
-  queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-}
+Zmiana filtra z:
+```
+.in('status', ['todo', 'in_progress'])
+```
+na:
+```
+.in('status', ['todo', 'in_progress', 'pending'])
 ```
 
-2. Zamiana w kazydm hooku mutacji (`useCreateTask`, `useUpdateTask`, `useDeleteTask`, `useUpdateCrossTaskStatus`, `useDuplicateTask`, `useBulkUpdateTasks`, `useBulkDeleteTasks`, `useCreateSubtask`) blokow `onSuccess` na wywolanie `invalidateAllTaskQueries(queryClient)`.
+To natychmiast naprawi ptaszka dla Szemainda i wszystkich kontaktow z zadaniami w starym statusie.
 
-### Efekt
-- Kazda akcja na zadaniu (w dowolnym widoku) natychmiast odswieza WSZYSTKIE listy
-- Brak potrzeby recznego odswiezania strony
-- Jeden punkt zarzadzania kluczami cache - latwiejsze utrzymanie
+### 2. Migracja danych - zamiana `pending` na `todo`
+
+Uruchomienie migracji SQL:
+```sql
+UPDATE tasks SET status = 'todo' WHERE status = 'pending';
+```
+
+To ujednolici wszystkie zadania do nowego systemu statusow (`todo`, `in_progress`, `completed`, `cancelled`).
+
+## Pliki do edycji
+
+| Plik | Zmiana |
+|---|---|
+| `src/hooks/useActiveTaskContacts.ts` | Dodanie `'pending'` do tablicy statusow w filtrze |
+| Migracja SQL | `UPDATE tasks SET status = 'todo' WHERE status = 'pending'` |
