@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown, FolderKanban, Table2, CalendarDays } from 'lucide-react';
+import { Plus, Search, List, Columns, X, ArrowUpDown, ArrowUp, ArrowDown, FolderKanban, Table2, CalendarDays, Users } from 'lucide-react';
 import type { TasksFilters } from '@/hooks/useTasks';
 import { TaskContactFilter } from './TaskContactFilter';
 import { useProjects } from '@/hooks/useProjects';
@@ -35,8 +35,8 @@ function ProjectFilterSelect({ value, onChange }: { value?: string; onChange: (v
 interface TasksHeaderProps {
   filters: TasksFilters;
   onFiltersChange: (filters: TasksFilters) => void;
-  view: 'list' | 'kanban' | 'table' | 'calendar';
-  onViewChange: (view: 'list' | 'kanban' | 'table' | 'calendar') => void;
+  view: 'list' | 'kanban' | 'table' | 'calendar' | 'team';
+  onViewChange: (view: 'list' | 'kanban' | 'table' | 'calendar' | 'team') => void;
   onNewTask: () => void;
   pendingCount?: number;
 }
@@ -229,7 +229,7 @@ export function TasksHeader({
         <ToggleGroup
           type="single"
           value={view}
-          onValueChange={(v) => v && onViewChange(v as 'list' | 'kanban' | 'table' | 'calendar')}
+          onValueChange={(v) => v && onViewChange(v as 'list' | 'kanban' | 'table' | 'calendar' | 'team')}
         >
           <ToggleGroupItem value="list" aria-label="Widok listy">
             <List className="h-4 w-4" />
@@ -239,6 +239,9 @@ export function TasksHeader({
           </ToggleGroupItem>
           <ToggleGroupItem value="kanban" aria-label="Widok kanban">
             <Columns className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="team" aria-label="Widok zespołu">
+            <Users className="h-4 w-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="calendar" aria-label="Widok kalendarza">
             <CalendarDays className="h-4 w-4" />

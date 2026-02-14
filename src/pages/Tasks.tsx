@@ -3,6 +3,7 @@ import { TasksHeader } from '@/components/tasks/TasksHeader';
 import { TasksList } from '@/components/tasks/TasksList';
 import { TasksTable } from '@/components/tasks/TasksTable';
 import { TasksKanban } from '@/components/tasks/TasksKanban';
+import { TasksTeamView } from '@/components/tasks/TasksTeamView';
 import { TasksCalendar } from '@/components/tasks/TasksCalendar';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
@@ -14,7 +15,7 @@ import { toast } from 'sonner';
 
 export default function Tasks() {
   const [filters, setFilters] = useState<TasksFilters>({});
-  const [view, setView] = useState<'list' | 'kanban' | 'table' | 'calendar'>('list');
+  const [view, setView] = useState<'list' | 'kanban' | 'table' | 'calendar' | 'team'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -124,6 +125,13 @@ export default function Tasks() {
           tasks={tasks}
           onTaskClick={handleTaskClick}
           onStatusChange={handleStatusChange}
+        />
+      ) : view === 'team' ? (
+        <TasksTeamView
+          tasks={tasks}
+          onTaskClick={handleTaskClick}
+          onStatusChange={handleStatusChange}
+          onNewTask={handleNewTask}
         />
       ) : (
         <TasksKanban
