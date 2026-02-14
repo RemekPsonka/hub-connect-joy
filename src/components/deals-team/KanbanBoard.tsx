@@ -15,7 +15,7 @@ import { ColdLeadCard } from './ColdLeadCard';
 import { ProspectCard } from './ProspectCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
-import { DealContactDetailSheet } from './DealContactDetailSheet';
+import { ContactTasksSheet } from './ContactTasksSheet';
 import { SnoozedContactsBar } from './SnoozedContactsBar';
 import { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';
 import { Input } from '@/components/ui/input';
@@ -487,8 +487,8 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         teamId={teamId}
       />
 
-      {/* Contact Detail Sheet */}
-      <DealContactDetailSheet
+      {/* Contact Tasks Sheet */}
+      <ContactTasksSheet
         contact={selectedContact}
         teamId={teamId}
         open={selectedContact !== null}

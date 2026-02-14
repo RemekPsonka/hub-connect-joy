@@ -7,7 +7,7 @@ import { useTeamClients } from '@/hooks/useTeamClients';
 import { ClientCard } from './ClientCard';
 import { AddClientDialog } from './AddClientDialog';
 import { ClientsSummaryView } from './ClientsSummaryView';
-import { DealContactDetailSheet } from './DealContactDetailSheet';
+import { ContactTasksSheet } from './ContactTasksSheet';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -116,7 +116,7 @@ export function ClientsTab({ teamId }: ClientsTabProps) {
 
       <AddClientDialog open={showAddClient} onOpenChange={setShowAddClient} teamId={teamId} />
 
-      <DealContactDetailSheet
+      <ContactTasksSheet
         contact={selectedClient}
         teamId={teamId}
         open={selectedClient !== null}
