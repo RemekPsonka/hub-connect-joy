@@ -67,7 +67,7 @@ export function ConsultationPreparationSection({
       const contact = contactResult.data;
       const lastConsultations = consultationsResult.data || [];
       const tasks = tasksResult.data?.map(tc => tc.tasks).filter(Boolean) || [];
-      const pendingTasks = tasks.filter((t: any) => t?.status === 'pending');
+      const pendingTasks = tasks.filter((t: any) => t?.status === 'todo' || t?.status === 'in_progress');
       const needs = needsResult.data || [];
       const offers = offersResult.data || [];
       

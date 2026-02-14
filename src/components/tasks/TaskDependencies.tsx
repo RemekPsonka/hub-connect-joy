@@ -105,7 +105,7 @@ export function TaskDependencies({ taskId }: TaskDependenciesProps) {
               <div key={dep.id} className="flex items-center gap-2 text-sm p-1.5 rounded-md bg-muted/30">
                 <ArrowRight className="h-3 w-3 text-destructive shrink-0" />
                 <span className="flex-1 truncate">{dep.related_task?.title}</span>
-                <TaskStatusBadge status={dep.related_task?.status || 'pending'} />
+                <TaskStatusBadge status={dep.related_task?.status || 'todo'} />
                 <button onClick={() => handleDelete(dep.id)} className="text-muted-foreground hover:text-destructive">
                   <X className="h-3 w-3" />
                 </button>
@@ -122,7 +122,7 @@ export function TaskDependencies({ taskId }: TaskDependenciesProps) {
               <div key={dep.id} className="flex items-center gap-2 text-sm p-1.5 rounded-md bg-muted/30">
                 <ArrowRight className="h-3 w-3 text-primary shrink-0" />
                 <span className="flex-1 truncate">{dep.related_task?.title}</span>
-                <TaskStatusBadge status={dep.related_task?.status || 'pending'} />
+                <TaskStatusBadge status={dep.related_task?.status || 'todo'} />
                 <button onClick={() => handleDelete(dep.id)} className="text-muted-foreground hover:text-destructive">
                   <X className="h-3 w-3" />
                 </button>

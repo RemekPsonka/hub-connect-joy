@@ -30,13 +30,13 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'hsl(var(--muted-foreground))',
+  todo: 'hsl(var(--muted-foreground))',
   in_progress: 'hsl(var(--primary))',
   completed: 'hsl(var(--success))',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Oczekujące',
+  todo: 'Do zrobienia',
   in_progress: 'W toku',
   completed: 'Zakończone',
 };
@@ -62,9 +62,9 @@ export function ProjectDashboardCharts({ tasks }: ProjectDashboardChartsProps) {
 
   // Status distribution
   const statusData = useMemo(() => {
-    const counts: Record<string, number> = { pending: 0, in_progress: 0, completed: 0 };
+    const counts: Record<string, number> = { todo: 0, in_progress: 0, completed: 0 };
     tasks.forEach((t) => {
-      const s = t.status || 'pending';
+      const s = t.status || 'todo';
       counts[s] = (counts[s] || 0) + 1;
     });
     return Object.entries(counts)

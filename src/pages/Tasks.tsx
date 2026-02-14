@@ -45,7 +45,7 @@ export default function Tasks() {
   const handleStatusChange = async (taskId: string, completedOrStatus: boolean | string) => {
     try {
       const status = typeof completedOrStatus === 'boolean' 
-        ? (completedOrStatus ? 'completed' : 'pending')
+        ? (completedOrStatus ? 'completed' : 'todo')
         : completedOrStatus;
 
       await updateTask.mutateAsync({ id: taskId, status });

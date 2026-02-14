@@ -43,10 +43,10 @@ export default function TeamProductivityReport() {
 
   // Status distribution
   const statusData = useMemo(() => {
-    const counts: Record<string, number> = { pending: 0, in_progress: 0, completed: 0 };
-    filteredTasks.forEach((t) => { counts[t.status || 'pending']++; });
+    const counts: Record<string, number> = { todo: 0, in_progress: 0, completed: 0 };
+    filteredTasks.forEach((t) => { counts[t.status || 'todo']++; });
     return [
-      { name: 'Oczekujące', value: counts.pending },
+      { name: 'Do zrobienia', value: counts.todo },
       { name: 'W trakcie', value: counts.in_progress },
       { name: 'Zakończone', value: counts.completed },
     ];

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckSquare, Link2, Plus } from 'lucide-react';
+import { CheckSquare, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,15 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useContactTasksWithCross } from '@/hooks/useTasks';
+import { useContactTasksWithCross, useUpdateTask } from '@/hooks/useTasks';
 import { TaskModal } from '@/components/tasks/TaskModal';
-import { CrossTaskDetail } from '@/components/tasks/CrossTaskDetail';
-import { TaskTypeBadge } from '@/components/tasks/TaskTypeBadge';
-import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
-import { TaskStatusBadge } from '@/components/tasks/TaskStatusBadge';
-import { format } from 'date-fns';
-import { pl } from 'date-fns/locale';
-import { useNavigate } from 'react-router-dom';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
+import type { TaskWithDetails } from '@/hooks/useTasks';
+import { toast } from 'sonner';
 
 interface ContactTasksTabProps {
   contactId: string;
@@ -26,16 +23,41 @@ interface ContactTasksTabProps {
 
 export function ContactTasksTab({ contactId }: ContactTasksTabProps) {
   const { data: tasks = [], isLoading } = useContactTasksWithCross(contactId);
+  const updateTask = useUpdateTask();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const navigate = useNavigate();
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const filteredTasks = tasks.filter((task) => {
     if (statusFilter === 'all') return true;
     return task.status === statusFilter;
   });
+
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    try {
+      await updateTask.mutateAsync({ id: taskId, status: newStatus });
+      toast.success('Status zaktualizowany');
+    } catch {
+      toast.error('Wystąpił błąd');
+    }
+  };
+
+  const handleTaskClick = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      setSelectedTask(task as TaskWithDetails);
+      setIsDetailOpen(true);
+      setIsEditMode(false);
+    }
+  };
+
+  const handleEditFromDetail = () => {
+    setIsDetailOpen(false);
+    setIsEditMode(true);
+    setIsModalOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -63,12 +85,12 @@ export function ContactTasksTab({ contactId }: ContactTasksTabProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Wszystkie</SelectItem>
-                <SelectItem value="pending">Oczekujące</SelectItem>
+                <SelectItem value="todo">Do zrobienia</SelectItem>
                 <SelectItem value="in_progress">W trakcie</SelectItem>
                 <SelectItem value="completed">Zakończone</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={() => setIsModalOpen(true)}>
+            <Button size="sm" onClick={() => { setSelectedTask(null); setIsEditMode(false); setIsModalOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" />
               Dodaj
             </Button>
@@ -81,63 +103,16 @@ export function ContactTasksTab({ contactId }: ContactTasksTabProps) {
               <p className="text-muted-foreground">Brak zadań</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredTasks.map((task) => {
-                const crossTaskInfo = task.crossTaskInfo;
-                const isCrossTask = task.task_type === 'cross';
-
-                return (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:shadow-sm transition-shadow"
-                    onClick={() => {
-                      setSelectedTask(task);
-                      setIsDetailOpen(true);
-                    }}
-                  >
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className={`font-medium ${task.status === 'completed' ? 'line-through opacity-60' : ''}`}>
-                          {task.title}
-                        </p>
-                        <TaskTypeBadge type={task.task_type} />
-                        
-                        {/* Cross-task: show connection info */}
-                        {isCrossTask && crossTaskInfo?.otherContact && (
-                          <Badge 
-                            variant="outline" 
-                            className="gap-1 text-purple-600 border-purple-300 cursor-pointer hover:bg-purple-50"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/contacts/${crossTaskInfo.otherContact.id}`);
-                            }}
-                          >
-                            <Link2 className="h-3 w-3" />
-                            Połączenie z {crossTaskInfo.otherContact.full_name}
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-1">
-                          {task.description}
-                        </p>
-                      )}
-                      
-                      {task.due_date && (
-                        <p className="text-sm text-muted-foreground">
-                          Termin: {format(new Date(task.due_date), 'dd MMM yyyy', { locale: pl })}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 ml-4">
-                      <TaskPriorityBadge priority={task.priority} />
-                      <TaskStatusBadge status={task.status} />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="border rounded-lg overflow-hidden">
+              {filteredTasks.map((task) => (
+                <UnifiedTaskRow
+                  key={task.id}
+                  task={task}
+                  onStatusChange={handleStatusChange}
+                  onClick={handleTaskClick}
+                  showSubtasks
+                />
+              ))}
             </div>
           )}
         </CardContent>
@@ -146,18 +121,16 @@ export function ContactTasksTab({ contactId }: ContactTasksTabProps) {
       <TaskModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
+        task={isEditMode ? selectedTask : null}
         preselectedContactId={contactId}
       />
 
       {selectedTask && (
-        <CrossTaskDetail
+        <TaskDetailSheet
           open={isDetailOpen}
           onOpenChange={setIsDetailOpen}
-          task={selectedTask}
-          onEdit={() => {
-            setIsDetailOpen(false);
-            setIsModalOpen(true);
-          }}
+          task={selectedTask as TaskWithDetails}
+          onEdit={handleEditFromDetail}
         />
       )}
     </>

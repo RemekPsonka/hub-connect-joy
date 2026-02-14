@@ -24,7 +24,7 @@ export type CrossTask = Tables<'cross_tasks'>;
 export type TaskContact = Tables<'task_contacts'>;
 
 export interface TasksFilters {
-  status?: 'all' | 'pending' | 'in_progress' | 'completed';
+  status?: 'all' | 'todo' | 'in_progress' | 'completed';
   taskType?: 'all' | 'standard' | 'cross' | 'group';
   priority?: 'all' | 'low' | 'medium' | 'high' | 'urgent';
   search?: string;
@@ -402,7 +402,7 @@ export function usePendingTasksCount() {
       const { count, error } = await supabase
         .from('tasks')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+        .eq('status', 'todo');
 
       if (error) throw error;
       return count || 0;
@@ -515,7 +515,7 @@ export function useCreateCrossTask() {
           task_type: 'cross',
           priority: input.priority || 'medium',
           due_date: input.due_date,
-          status: 'pending',
+          status: 'todo',
           tenant_id: contactData.tenant_id,
         })
         .select()
@@ -690,7 +690,7 @@ export function useCreateSubtask() {
           tenant_id: parent.tenant_id,
           project_id: parent.project_id,
           owner_id: parent.owner_id,
-          status: 'pending',
+          status: 'todo',
           priority: 'medium',
           task_type: 'standard',
         })
@@ -729,7 +729,7 @@ export function useDuplicateTask() {
           task_type: original.task_type,
           priority: original.priority,
           due_date: original.due_date,
-          status: 'pending',
+          status: 'todo',
           tenant_id: original.tenant_id,
           project_id: original.project_id,
           owner_id: original.owner_id,
@@ -770,7 +770,7 @@ export function useDuplicateTask() {
             tenant_id: original.tenant_id,
             project_id: original.project_id,
             owner_id: original.owner_id,
-            status: 'pending',
+            status: 'todo',
           }))
         );
       }

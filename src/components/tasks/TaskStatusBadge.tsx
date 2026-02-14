@@ -11,11 +11,6 @@ const statusConfig: Record<string, { label: string; className: string; icon: Rea
     className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
     icon: <Clock className="h-3 w-3" />,
   },
-  pending: {
-    label: 'Do zrobienia',
-    className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-    icon: <Clock className="h-3 w-3" />,
-  },
   in_progress: {
     label: 'W trakcie',
     className: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
@@ -34,7 +29,7 @@ const statusConfig: Record<string, { label: string; className: string; icon: Rea
 };
 
 export function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
-  const config = statusConfig[status || 'pending'] || statusConfig.pending;
+  const config = statusConfig[status || 'todo'] || statusConfig.todo;
 
   return (
     <Badge variant="secondary" className={`${config.className} gap-1`}>

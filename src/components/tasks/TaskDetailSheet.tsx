@@ -177,7 +177,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
   };
 
   const handleSubtaskToggle = async (subtaskId: string, completed: boolean) => {
-    await updateTask.mutateAsync({ id: subtaskId, status: completed ? 'completed' : 'pending' });
+    await updateTask.mutateAsync({ id: subtaskId, status: completed ? 'completed' : 'todo' });
   };
 
   const handleDiscussedChange = async (field: 'discussed_with_a' | 'discussed_with_b', value: boolean) => {
