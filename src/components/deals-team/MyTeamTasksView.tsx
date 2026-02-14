@@ -359,6 +359,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
                     key={task.id}
                     task={task}
                     contactName={task.contact_name || undefined}
+                    companyName={task.contact_company || undefined}
                     members={members}
                     showAssignee
                     onStatusChange={(taskId, newStatus) => {
