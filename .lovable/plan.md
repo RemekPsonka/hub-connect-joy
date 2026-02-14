@@ -1,51 +1,47 @@
 
-# Dodanie nazwy firmy do kart zadan
+# Rozbudowa widoku zadan w Zespole Deals + naprawa statusow
 
-## Problem
-Na listach zadan i kartach Kanban widac tylko "Umowic spotkanie - Kowalski Krzysztof", ale brak informacji o firmie. Uzytkownik nie wie, czego dotyczy zadanie bez kontekstu firmy.
+## Problemy do rozwiazania
 
-## Obecny stan
-- Dane firmy (`company`) sa juz pobierane z bazy w hooku `useTasks` (join `task_contacts -> contacts(id, full_name, company)`)
-- `TaskDetailSheet` juz wyswietla firme w sekcji "Powiazane kontakty" (linia 523-525)
-- `UnifiedTaskRow` i `TasksKanban` pokazuja tylko `full_name` bez firmy
+1. **Widok zadan w deals-team (`MyTeamTasksView`) ma tylko jeden tryb** - grupowanie per kontakt. Brakuje: widoku listy plaskiej, kanban i kafelkow zespolowych.
+2. **Statusy nie aktualizuja sie natychmiast** - `useUpdateAssignment` po zmianie statusu invaliduje tylko `['deal-team-assignments', teamContactId]`, ale NIE invaliduje `['deal-team-assignments-all', teamId]` - czyli lista glowna sie nie odswieza po zmianie.
+3. **TaskDetailSheet uzywa `useUpdateTask`** (invaliduje `['tasks']`), ale dane w deals-team sa pobierane przez `useMyTeamAssignments` (`['deal-team-assignments-all']`) - wiec zmiany w panelu szczegolowym tez nie odswiezaja widoku.
 
-## Planowane zmiany
+## Plan zmian
 
-### 1. UnifiedTaskRow - dodanie firmy obok kontaktu
+### 1. Naprawa invalidacji cache (`useDealsTeamAssignments.ts`)
 
-Zmiana formatu wyswietlania z:
+W `useUpdateAssignment.onSuccess` dodanie brakujacej invalidacji:
 ```
-Umowic spotkanie - Kowalski Krzysztof
+queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
 ```
-na:
-```
-Umowic spotkanie - Kowalski Krzysztof · Ferox Energy Systems
-```
+To sprawi, ze kazda zmiana statusu natychmiast odswieza liste.
 
-Rozszerzenie props o `companyName?: string` i wyswietlenie go po kontakcie w szarym, mniejszym foncie.
+### 2. Dodanie przelacznika widokow do `MyTeamTasksView`
 
-### 2. TasksKanban - dodanie firmy w karcie
+Dodanie stanu `viewMode: 'grouped' | 'list' | 'kanban' | 'team'` z przyciskami przelaczania (ToggleGroup) w toolbarze:
+- **Grupowane** (obecny widok) - per kontakt z kartami
+- **Lista** - plaska lista wszystkich zadan bez grupowania, uzywajaca `UnifiedTaskRow`
+- **Kanban** - kolumny per status (todo, in_progress, completed, cancelled) z kartami zadan
+- **Zespol** - kafelki per czlonek zespolu ze statystykami (jak `TasksTeamView`)
 
-W tytule karty Kanban dodanie firmy po kontakcie:
-```
-Umowic spotkanie - Kowalski K. · Ferox Energy Systems
-```
+### 3. Widok listy plaskiej
 
-### 3. Przekazanie danych firmy we wszystkich miejscach
+Prosta iteracja po `filtered` z `UnifiedTaskRow` - bez grupowania per kontakt. Kazde zadanie wyswietla kontakt i firme w tytule.
 
-Pliki do aktualizacji (dodanie `companyName`):
-- `src/components/tasks/TasksList.tsx` - `task.task_contacts?.[0]?.contacts?.company`
-- `src/components/tasks/TasksTeamView.tsx` - jw.
-- `src/components/deals-team/MyTeamTasksView.tsx` - jw.
+### 4. Kanban wbudowany w deals-team
+
+Mini-kanban z kolumnami per status. Karty zawieraja: tytul, kontakt, firme, priorytet, termin, avatar. Drag & drop miedzy kolumnami zmienia status.
+
+### 5. Widok zespolowy wbudowany
+
+Kafelki per czlonek zespolu z podsumowaniem: ile zadan, ile zakończonych, pasek postepu. Rozwijane listy zadan per status.
 
 ## Szczegoly techniczne
 
 | Plik | Zmiana |
 |---|---|
-| `src/components/tasks/UnifiedTaskRow.tsx` | Nowy prop `companyName`, wyswietlanie po contactName |
-| `src/components/tasks/TasksList.tsx` | Przekazanie `companyName` |
-| `src/components/tasks/TasksTeamView.tsx` | Przekazanie `companyName` |
-| `src/components/tasks/TasksKanban.tsx` | Dodanie firmy obok kontaktu w karcie |
-| `src/components/deals-team/MyTeamTasksView.tsx` | Przekazanie `companyName` |
+| `src/hooks/useDealsTeamAssignments.ts` | Dodanie invalidacji `['deal-team-assignments-all']` w `useUpdateAssignment` |
+| `src/components/deals-team/MyTeamTasksView.tsx` | Dodanie stanu viewMode, przelacznika widokow, 3 nowych trybow renderowania (lista, kanban, zespol) |
 
-Brak zmian w bazie danych - pole `company` jest juz pobierane w zapytaniach.
+Nie sa potrzebne zmiany w bazie danych.
