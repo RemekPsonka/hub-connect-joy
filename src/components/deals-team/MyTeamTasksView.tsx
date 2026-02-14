@@ -358,6 +358,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
                   <UnifiedTaskRow
                     key={task.id}
                     task={task}
+                    contactName={task.contact_name || undefined}
                     members={members}
                     showAssignee
                     onStatusChange={(taskId, newStatus) => {

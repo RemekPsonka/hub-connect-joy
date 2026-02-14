@@ -79,6 +79,7 @@ export interface UnifiedTaskRowProps {
     director_id: string;
     director?: { full_name: string } | null;
   }>;
+  contactName?: string;
   onStatusChange: (taskId: string, newStatus: string) => void;
   onPriorityChange?: (taskId: string, newPriority: string) => void;
   onAssigneeChange?: (taskId: string, newAssigneeId: string) => void;
@@ -95,6 +96,7 @@ export interface UnifiedTaskRowProps {
 export function UnifiedTaskRow({
   task,
   members,
+  contactName,
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
@@ -205,6 +207,11 @@ export function UnifiedTaskRow({
             title={onTitleChange ? 'Kliknij podwójnie, aby edytować tytuł' : task.title}
           >
             {task.title}
+            {contactName && (
+              <span className="text-muted-foreground font-normal ml-1.5">
+                – {contactName}
+              </span>
+            )}
           </p>
         )}
         {!compact && task.description && (

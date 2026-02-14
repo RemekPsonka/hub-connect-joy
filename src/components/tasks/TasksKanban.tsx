@@ -183,7 +183,7 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
                           </div>
                         )}
 
-                        {/* Title */}
+                        {/* Title + contact */}
                         <div className="flex items-start gap-1.5">
                           <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                           <h4 className={cn(
@@ -191,6 +191,11 @@ export function TasksKanban({ tasks, onTaskClick, onStatusChange }: TasksKanbanP
                             isDone && 'line-through text-muted-foreground'
                           )}>
                             {task.title}
+                            {task.task_contacts?.[0]?.contacts?.full_name && (
+                              <span className="text-muted-foreground font-normal ml-1">
+                                – {task.task_contacts[0].contacts.full_name}
+                              </span>
+                            )}
                           </h4>
                         </div>
 

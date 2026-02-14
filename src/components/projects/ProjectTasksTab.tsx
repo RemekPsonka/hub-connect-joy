@@ -5,16 +5,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { CheckSquare, Plus, ChevronDown, ChevronRight, MoreHorizontal, Trash2, List, GanttChart, ArrowRightLeft } from 'lucide-react';
-import { format } from 'date-fns';
-import { pl } from 'date-fns/locale';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
-import { TaskStatusBadge } from '@/components/tasks/TaskStatusBadge';
-import { TaskPriorityBadge } from '@/components/tasks/TaskPriorityBadge';
+import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { useUpdateTask } from '@/hooks/useTasks';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { TaskTimeline } from '@/components/tasks/TaskTimeline';
@@ -39,77 +35,63 @@ interface ProjectTasksTabProps {
   projectId: string;
 }
 
-function TaskRow({ task, onClick, onToggleStatus, sections, currentSectionId, onMoveToSection }: {
+function ProjectTaskRow({ task, onClick, sections, currentSectionId, onMoveToSection, onStatusChange }: {
   task: TaskWithDetails;
   onClick: () => void;
-  onToggleStatus: (e: React.MouseEvent) => void;
   sections: TaskSection[];
   currentSectionId: string | null;
   onMoveToSection: (taskId: string, sectionId: string | null) => void;
+  onStatusChange: (taskId: string, newStatus: string) => void;
 }) {
   return (
-    <div
-      className="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2 transition-colors"
-      onClick={onClick}
-    >
-      <Checkbox
-        checked={task.status === 'completed'}
-        onCheckedChange={() => {}}
-        onClick={onToggleStatus}
-        className="shrink-0"
-      />
+    <div className="flex items-center gap-1">
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
-          {task.title}
-        </p>
-        {task.due_date && (
-          <p className="text-xs text-muted-foreground">
-            Termin: {format(new Date(task.due_date), 'd MMM yyyy', { locale: pl })}
-          </p>
-        )}
+        <UnifiedTaskRow
+          task={task}
+          contactName={task.task_contacts?.[0]?.contacts?.full_name}
+          onStatusChange={onStatusChange}
+          onClick={() => onClick()}
+          showSubtasks
+        />
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <TaskPriorityBadge priority={task.priority} />
-        <TaskStatusBadge status={task.status || 'pending'} />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Przenieś do sekcji
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {currentSectionId && (
-                  <DropdownMenuItem onClick={() => onMoveToSection(task.id, null)}>
-                    Bez sekcji
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Przenieś do sekcji
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {currentSectionId && (
+                <DropdownMenuItem onClick={() => onMoveToSection(task.id, null)}>
+                  Bez sekcji
+                </DropdownMenuItem>
+              )}
+              {currentSectionId && sections.length > 0 && <DropdownMenuSeparator />}
+              {sections
+                .filter((s) => s.id !== currentSectionId)
+                .map((section) => (
+                  <DropdownMenuItem key={section.id} onClick={() => onMoveToSection(task.id, section.id)}>
+                    <div className="h-2.5 w-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: section.color }} />
+                    {section.name}
                   </DropdownMenuItem>
-                )}
-                {currentSectionId && sections.length > 0 && <DropdownMenuSeparator />}
-                {sections
-                  .filter((s) => s.id !== currentSectionId)
-                  .map((section) => (
-                    <DropdownMenuItem key={section.id} onClick={() => onMoveToSection(task.id, section.id)}>
-                      <div className="h-2.5 w-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: section.color }} />
-                      {section.name}
-                    </DropdownMenuItem>
-                  ))}
-                {sections.filter((s) => s.id !== currentSectionId).length === 0 && !currentSectionId && (
-                  <p className="text-xs text-muted-foreground px-2 py-1.5">Brak sekcji</p>
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                ))}
+              {sections.filter((s) => s.id !== currentSectionId).length === 0 && !currentSectionId && (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">Brak sekcji</p>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -371,10 +353,10 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                         sectionTasks.map((task) => (
                           <SortableTaskItem key={task.id} id={task.id} sectionId={section.id}>
                             <div className="group">
-                              <TaskRow
+                              <ProjectTaskRow
                                 task={task}
                                 onClick={() => handleTaskClick(task)}
-                                onToggleStatus={(e) => handleStatusToggle(e, task)}
+                                onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
                                 sections={sections}
                                 currentSectionId={section.id}
                                 onMoveToSection={handleMoveToSection}
@@ -404,10 +386,10 @@ export function ProjectTasksTab({ projectId }: ProjectTasksTabProps) {
                   {unsectionedTasks.map((task) => (
                     <SortableTaskItem key={task.id} id={task.id} sectionId={null}>
                       <div className="group">
-                        <TaskRow
+                        <ProjectTaskRow
                           task={task}
                           onClick={() => handleTaskClick(task)}
-                          onToggleStatus={(e) => handleStatusToggle(e, task)}
+                          onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
                           sections={sections}
                           currentSectionId={null}
                           onMoveToSection={handleMoveToSection}
