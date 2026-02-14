@@ -29,6 +29,16 @@ export function LeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging,
       onDragEnd={onDragEnd}
     >
       <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
+        {taskStatus && (
+          <span title={taskStatus === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
+            <CheckCircle2
+              className={cn(
+                "w-3 h-3 shrink-0",
+                taskStatus === 'overdue' ? 'text-destructive' : 'text-green-500'
+              )}
+            />
+          </span>
+        )}
         <span className="text-xs font-medium truncate">
           {contact.contact.full_name}
         </span>
@@ -39,16 +49,6 @@ export function LeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging,
               {contact.contact.company}
             </span>
           </>
-        )}
-        {taskStatus && (
-          <span title={taskStatus === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
-            <CheckCircle2
-              className={cn(
-                "w-3 h-3 shrink-0",
-                taskStatus === 'overdue' ? 'text-destructive' : 'text-green-500'
-              )}
-            />
-          </span>
         )}
         <div
           className={cn(
