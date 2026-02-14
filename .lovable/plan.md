@@ -1,103 +1,60 @@
 
-# Rozbudowa widoku zadan - Kanban + Widok Zespolu
 
-## Analiza obecnego stanu
+# Wyswietlanie kontaktow w zadaniach + ujednolicenie komponentow
 
-Obecny widok zadan (`/tasks`) posiada 4 tryby: Lista, Tabela, Kanban, Kalendarz.
+## Problem
+1. Na wszystkich listach zadan widac "Umowic spotkanie" bez informacji z KIM - brak nazwy kontaktu
+2. `ProjectTasksTab.tsx` i `MyDay.tsx` uzywaja starego `TaskRow` zamiast `UnifiedTaskRow`
+3. `MyDay.tsx` nie otwiera `TaskDetailSheet` po kliknieciu - brak panelu szczegolowego
 
-**Problemy z obecnym Kanbanem (`TasksKanban.tsx`):**
-- Uzywa starych statusow (`pending`) zamiast zunifikowanych (`todo`, `in_progress`, `completed`, `cancelled`)
-- Brak informacji o osobie odpowiedzialnej, projekcie, subtaskach
-- Karty sa ubogie - tylko tytul, priorytet, typ, termin, kontakt
-- Brak mozliwosci inline create wg zunifikowanego wzorca
+## Zmiany
 
-**Brak widoku zespolowego** - nie ma sposobu na szybkie sprawdzenie obciazenia kazdego czlonka zespolu.
+### 1. UnifiedTaskRow - dodanie wyswietlania kontaktu
 
-## Plan zmian
-
-### 1. Przebudowa `TasksKanban.tsx` - styl ClickUp Board
-
-Kolumny oparte na zunifikowanych statusach:
+Rozszerzenie props o `contactName?: string` i wyswietlenie go obok tytulu:
 
 ```text
-| DO ZROBIENIA (12)  | W TRAKCIE (5)      | ZAKONCZONE (8)     | ANULOWANE (1)      |
-|--------------------|--------------------|--------------------|--------------------|
-| [Projekt > Sekcja] | [Projekt > Sekcja] |                    |                    |
-| Tytul zadania      | Tytul zadania      |                    |                    |
-| [*] Wysoki 12 mar  | [*] Sredni         |                    |                    |
-| [AK] 2/5 subtaskow | [RW]               |                    |                    |
-| + ADD SUBTASK      | + ADD SUBTASK      |                    |                    |
-|                    |                    |                    |                    |
-| Tytul zadania 2    |                    |                    |                    |
-| [*] Niski  15 mar  |                    |                    |                    |
-| + ADD SUBTASK      |                    |                    |                    |
-|                    |                    |                    |                    |
-| [+ Dodaj zadanie]  | [+ Dodaj zadanie]  | [+ Dodaj zadanie]  |                    |
+Przed:  O Umowic spotkanie                    17 lut ●
+Po:     O Umowic spotkanie - Kowalski Krzyszt. 17 lut ●
 ```
 
-Kazda karta zawiera:
-- Sciezke projektu (jesli przypisany): `Projekt > Sekcja` w malym naglowku
-- Tytul zadania (pogrubiony)
-- Priorytet (kolorowa kropka) + termin (czerwony jesli przeterminowany)
-- Avatar osoby odpowiedzialnej (inicjaly) + wskaznik subtaskow (np. `2/5`)
-- Link "+ ADD SUBTASK" (opcjonalny, hover)
-- Kontakty powiazane (jesli sa)
-- Drag & drop miedzy kolumnami (zachowany z obecnej implementacji)
+Kontakt wyswietlany jako szary tekst po myslniku, obcinany jesli za dlugi. W trybie compact - jeszcze bardziej skrocony.
 
-### 2. Nowy widok: Zespol (Team/Box view)
+### 2. Wszystkie miejsca uzywajace UnifiedTaskRow - przekazanie contactName
 
-Widok inspirowany ClickUp Box - kafelki per czlonek zespolu z podsumowaniem:
+Pliki do aktualizacji:
+- `src/components/tasks/TasksList.tsx` - dodanie `contactName` z `task.task_contacts[0]?.contacts?.full_name`
+- `src/components/tasks/TasksTeamView.tsx` - jw.
+- `src/components/tasks/TasksKanban.tsx` - juz wyswietla kontakt, ale dodamy tez do tytulu karty
+- `src/components/contacts/ContactTasksPanel.tsx` - tu kontakt jest znany, nie trzeba dodawac
+- `src/components/deals-team/DealContactDetailSheet.tsx` - jw., kontakt juz znany z kontekstu
+- `src/components/deals-team/MyTeamTasksView.tsx` - dodanie `contactName`
 
-```text
-| Nieprzypisane  [+] | Pawel Kowalski [+] | Remek Nowak    [+] | Adam Wisniew.  [+] |
-|    8       2       |    5       1       |    3       0       |    7       2       |
-| Not done   Done    | Not done   Done    | Not done   Done    | Not done   Done    |
-| =============== 20%| =============== 17%| ===============  0%| =============== 22%|
-|                    |                    |                    |                    |
-| > DO ZROBIENIA (5) | > W TRAKCIE (3)    | > DO ZROBIENIA (2) | > W TRAKCIE (4)    |
-| > W TRAKCIE (3)    | > DO ZROBIENIA (2) | > W TRAKCIE (1)    | > DO ZROBIENIA (3) |
-| > ZAKONCZONE (2)   | > ZAKONCZONE (1)   |                    | > ZAKONCZONE (2)   |
-```
+### 3. ProjectTasksTab - zamiana starego TaskRow na UnifiedTaskRow
 
-Kazdy kafelek zawiera:
-- Naglowek: avatar + imie + przycisk [+] (dodaj zadanie)
-- Statystyki: "Not done" / "Done" + mini donut chart (procent ukonczonych)
-- Pasek postepu (kolorowy gradient)
-- Zwijanme grupy wg statusu z liczba zadan
-- Po rozwinieciu grupy - lista zadan w stylu `UnifiedTaskRow` compact
+Plik: `src/components/projects/ProjectTasksTab.tsx`
 
-### 3. Aktualizacja `TasksHeader.tsx`
+Usunac lokalny komponent `TaskRow` (linie 42-115) i zamienic na `UnifiedTaskRow` z obsluga przenoszenia miedzy sekcjami w menu kontekstowym. Zachowac DnD (SortableTaskItem juz istnieje).
 
-Dodanie nowej ikony widoku "Zespol" (ikona `Users`) do ToggleGroup:
-- Lista | Tabela | Kanban | Zespol | Kalendarz
+### 4. MyDay - zamiana starego TaskRow na UnifiedTaskRow + dodanie TaskDetailSheet
 
-Typ widoku rozszerzony o `'team'`.
+Plik: `src/pages/MyDay.tsx`
 
-### 4. Aktualizacja `Tasks.tsx` (strona glowna)
+- Usunac lokalny `TaskRow` (linie 40-89)
+- Uzyc `UnifiedTaskRow` z `contactName` i `compact`
+- Dodac stan `selectedTask` + `isDetailOpen`
+- Dodac `TaskDetailSheet` na dole komponentu (obok istniejacego `TaskModal`)
+- Klikniecie w zadanie otwiera TaskDetailSheet
 
-Dodanie warunku renderowania nowego widoku `TasksTeamView` gdy `view === 'team'`.
+### 5. Podsumowanie plikow do edycji
 
-## Szczegoly techniczne
-
-### Pliki do utworzenia:
-| Plik | Opis |
+| Plik | Zmiana |
 |---|---|
-| `src/components/tasks/TasksTeamView.tsx` | NOWY - widok zespolowy (Box view) |
+| `src/components/tasks/UnifiedTaskRow.tsx` | Nowy prop `contactName`, wyswietlanie obok tytulu |
+| `src/components/tasks/TasksList.tsx` | Przekazanie `contactName` |
+| `src/components/tasks/TasksTeamView.tsx` | Przekazanie `contactName` |
+| `src/components/deals-team/MyTeamTasksView.tsx` | Przekazanie `contactName` |
+| `src/components/projects/ProjectTasksTab.tsx` | Zamiana starego TaskRow na UnifiedTaskRow |
+| `src/pages/MyDay.tsx` | Zamiana starego TaskRow na UnifiedTaskRow + dodanie TaskDetailSheet |
 
-### Pliki do edycji:
-| Plik | Opis |
-|---|---|
-| `src/components/tasks/TasksKanban.tsx` | Przebudowa kart, statusy `todo`/`in_progress`/`completed`/`cancelled`, dodanie projektu, avatara, subtaskow |
-| `src/components/tasks/TasksHeader.tsx` | Dodanie ikony widoku "Zespol" do ToggleGroup |
-| `src/pages/Tasks.tsx` | Dodanie obslugi `view === 'team'` + import TasksTeamView |
-
-### Dane do widoku zespolowego
-Hook `useTasks` juz zwraca `assigned_to` oraz `assignee` (join do `directors`). Wystarczy pogrupowac zadania po `assigned_to`. Lista czlonkow zespolu - uzycie istniejacego selecta z `directors` (kolega `owner` i `assignee` sa juz joinowane w zapytaniu `useTasks`).
-
-### Brak zmian w bazie danych
-Wszystkie potrzebne pola (`assigned_to`, `status`, `priority`, `project_id`) juz istnieja. Nie sa potrzebne migracje.
-
-### Podsumowanie
-- **TasksKanban** - przebudowa kart na bogatsze (projekt, avatar, subtaski, zunifikowane statusy)
-- **TasksTeamView** - nowy widok "Box" z kafelkami per osoba i statystykami
-- **TasksHeader** + **Tasks.tsx** - dodanie nowego widoku do przelacznika
+Brak zmian w bazie danych - dane kontaktow juz sa pobierane w hookach.
