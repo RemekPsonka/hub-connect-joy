@@ -264,7 +264,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                       <ArrowRight className="h-3.5 w-3.5" />
                       Kategoria
                     </h4>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                       {(['offering', 'hot', 'audit', 'top', 'lead', '10x', 'cold', 'lost'] as const).map((cat) => {
                         const cfg = categoryConfig[cat];
                         const isCurrent = contact.category === cat;
@@ -273,7 +273,7 @@ export function DealContactDetailSheet({ contact, teamId, open, onOpenChange }: 
                             key={cat}
                             variant={isCurrent ? 'default' : 'outline'}
                             size="sm"
-                            className={cn('flex-1 text-xs h-8', isCurrent && 'pointer-events-none')}
+                            className={cn('shrink-0 text-xs h-8 px-3', isCurrent && 'pointer-events-none')}
                             disabled={isCurrent}
                             onClick={() => {
                               if (cat === 'top' || cat === 'hot') {
