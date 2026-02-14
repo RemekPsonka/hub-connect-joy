@@ -1,127 +1,103 @@
 
+# Rozbudowa widoku zadan - Kanban + Widok Zespolu
 
-# Redesign TaskDetailSheet w stylu Asana
+## Analiza obecnego stanu
 
-## Cel
-Przebudowa panelu szczegolowego zadania (`TaskDetailSheet`) na uklad inspirowany Asana (jak na screenshocie), z czytelnym formularzem metadanych, sekcja projektu, komentarzami na dole i przejrzystym ukladem.
+Obecny widok zadan (`/tasks`) posiada 4 tryby: Lista, Tabela, Kanban, Kalendarz.
 
-## Obecny stan
-Panel jest oparty na Sheet (480px boczny), z luznymi sekcjami oddzielonymi separatorami. Metadane (status, priorytet, termin, wlasciciel) sa rozproszone w badge'ach i malych elementach. Brak struktury "etykieta -> wartosc" jak w Asana.
+**Problemy z obecnym Kanbanem (`TasksKanban.tsx`):**
+- Uzywa starych statusow (`pending`) zamiast zunifikowanych (`todo`, `in_progress`, `completed`, `cancelled`)
+- Brak informacji o osobie odpowiedzialnej, projekcie, subtaskach
+- Karty sa ubogie - tylko tytul, priorytet, typ, termin, kontakt
+- Brak mozliwosci inline create wg zunifikowanego wzorca
 
-## Planowane zmiany
+**Brak widoku zespolowego** - nie ma sposobu na szybkie sprawdzenie obciazenia kazdego czlonka zespolu.
 
-### 1. Przebudowa layoutu `TaskDetailSheet.tsx`
+## Plan zmian
 
-Nowy uklad wzorowany na Asana:
+### 1. Przebudowa `TasksKanban.tsx` - styl ClickUp Board
+
+Kolumny oparte na zunifikowanych statusach:
 
 ```text
-+-----------------------------------------------+
-| [v Oznacz jako ukonczone]     [Edytuj] [Duplikuj] [Usun] [...] |
-+-------------------------------------------------+
-|                                                  |
-|  Tytul zadania (edytowalny inline, duzy font)    |
-|                                                  |
-|  Osoba odpowiedzialna    [Avatar] Jan Kowalski   |
-|  Data wykonania          [Kal] 15 marca 2026     |
-|  Priorytet               [*] Wysoki              |
-|  Status                  [O] W trakcie           |
-|  Widocznosc              [Zespolowe]             |
-|  Etykiety                [tag1] [tag2] [+]       |
-|  Zaleznosci              Dodaj zaleznosci        |
-|  Cyklicznosc             Co tydzien              |
-|                                                  |
-|  Projekty  1  [+]                                |
-|  v Projekt ABC    Status: W trakcie              |
-|                                                  |
-|  Powiazane kontakty                              |
-|  Jan Kowalski · Firma XYZ                        |
-|                                                  |
-|  ---- Subtaski (2/5) ========================    |
-|  [x] Subtask 1                                   |
-|  [ ] Subtask 2                                   |
-|  [Dodaj subtask...]                              |
-|                                                  |
-|  ---- Opis ----                                  |
-|  Tresc opisu zadania...                          |
-|                                                  |
-|  ---- Sledzenie czasu ----                       |
-|  [Timer] Lacznie: 2h 30min                       |
-|                                                  |
-|  ---- Spotkania ----                             |
-|  Spotkanie 15.03                                 |
-|                                                  |
-|  ---- Historia zmian ----                        |
-|  Jan · Status: todo -> in_progress · 2h temu     |
-|                                                  |
-+--------------------------------------------------+
-| [Avatar] Dodaj komentarz...              [Wyslij]|
-+--------------------------------------------------+
-|  Komentarze (3)                                  |
-|  [AK] Adam · Swietnie! · 1h temu                |
-+--------------------------------------------------+
+| DO ZROBIENIA (12)  | W TRAKCIE (5)      | ZAKONCZONE (8)     | ANULOWANE (1)      |
+|--------------------|--------------------|--------------------|--------------------|
+| [Projekt > Sekcja] | [Projekt > Sekcja] |                    |                    |
+| Tytul zadania      | Tytul zadania      |                    |                    |
+| [*] Wysoki 12 mar  | [*] Sredni         |                    |                    |
+| [AK] 2/5 subtaskow | [RW]               |                    |                    |
+| + ADD SUBTASK      | + ADD SUBTASK      |                    |                    |
+|                    |                    |                    |                    |
+| Tytul zadania 2    |                    |                    |                    |
+| [*] Niski  15 mar  |                    |                    |                    |
+| + ADD SUBTASK      |                    |                    |                    |
+|                    |                    |                    |                    |
+| [+ Dodaj zadanie]  | [+ Dodaj zadanie]  | [+ Dodaj zadanie]  |                    |
 ```
 
-### Kluczowe zmiany wizualne:
+Kazda karta zawiera:
+- Sciezke projektu (jesli przypisany): `Projekt > Sekcja` w malym naglowku
+- Tytul zadania (pogrubiony)
+- Priorytet (kolorowa kropka) + termin (czerwony jesli przeterminowany)
+- Avatar osoby odpowiedzialnej (inicjaly) + wskaznik subtaskow (np. `2/5`)
+- Link "+ ADD SUBTASK" (opcjonalny, hover)
+- Kontakty powiazane (jesli sa)
+- Drag & drop miedzy kolumnami (zachowany z obecnej implementacji)
 
-**A. Gora - Pasek akcji**
-- Przycisk "Oznacz jako ukonczone" (z ptaszkiem) - wyrazny, po lewej
-- Przyciski akcji (Edytuj, Duplikuj, Usun) - po prawej, ikony
+### 2. Nowy widok: Zespol (Team/Box view)
 
-**B. Tytul - duzy, edytowalny inline**
-- Klikniecie zmienia na Input
-- Font `text-xl font-semibold`
+Widok inspirowany ClickUp Box - kafelki per czlonek zespolu z podsumowaniem:
 
-**C. Metadane - uklad tabelaryczny (etykieta : wartosc)**
-- Kazdy wiersz: `label (140px, text-muted)` | `wartosc (klikalna do edycji)`
-- Osoba odpowiedzialna - avatar + imie, klik otwiera dropdown
-- Data wykonania - ikona kalendarza + data, klik otwiera DatePicker
-- Priorytet - kolorowa kropka + nazwa, klik otwiera dropdown
-- Status - ikona + nazwa, klik otwiera dropdown
-- Widocznosc - badge
-- Etykiety - tagi inline
-- Zaleznosci - link "Dodaj zaleznosci"
-- Cyklicznosc - jesli ustawiona
+```text
+| Nieprzypisane  [+] | Pawel Kowalski [+] | Remek Nowak    [+] | Adam Wisniew.  [+] |
+|    8       2       |    5       1       |    3       0       |    7       2       |
+| Not done   Done    | Not done   Done    | Not done   Done    | Not done   Done    |
+| =============== 20%| =============== 17%| ===============  0%| =============== 22%|
+|                    |                    |                    |                    |
+| > DO ZROBIENIA (5) | > W TRAKCIE (3)    | > DO ZROBIENIA (2) | > W TRAKCIE (4)    |
+| > W TRAKCIE (3)    | > DO ZROBIENIA (2) | > W TRAKCIE (1)    | > DO ZROBIENIA (3) |
+| > ZAKONCZONE (2)   | > ZAKONCZONE (1)   |                    | > ZAKONCZONE (2)   |
+```
 
-**D. Sekcja Projekty**
-- Naglowek z liczba + przycisk [+]
-- Lista projektow z nazwa i statusem
+Kazdy kafelek zawiera:
+- Naglowek: avatar + imie + przycisk [+] (dodaj zadanie)
+- Statystyki: "Not done" / "Done" + mini donut chart (procent ukonczonych)
+- Pasek postepu (kolorowy gradient)
+- Zwijanme grupy wg statusu z liczba zadan
+- Po rozwinieciu grupy - lista zadan w stylu `UnifiedTaskRow` compact
 
-**E. Powiazane kontakty** - klikalne nazwy
+### 3. Aktualizacja `TasksHeader.tsx`
 
-**F. Opis** - edytowalny textarea, placeholder "Czego dotyczy to zadanie?"
+Dodanie nowej ikony widoku "Zespol" (ikona `Users`) do ToggleGroup:
+- Lista | Tabela | Kanban | Zespol | Kalendarz
 
-**G. Subtaski** - bez zmian (DnD, progress bar)
+Typ widoku rozszerzony o `'team'`.
 
-**H. Komentarze** - przeniesione na dol, avatar + input "Dodaj komentarz" przyklejony na dole
+### 4. Aktualizacja `Tasks.tsx` (strona glowna)
 
-**I. Cross-task workflow** - bez zmian w logice, tylko lepszy uklad
+Dodanie warunku renderowania nowego widoku `TasksTeamView` gdy `view === 'team'`.
 
-### 2. Poszerzenie panelu
-- Sheet z `w-[480px]` na `w-[560px] sm:max-w-[560px]` - wiecej miejsca na metadane
+## Szczegoly techniczne
 
-### 3. Inline edit tytulu
-- Nowy stan `editingTitle` + `titleValue`
-- Klikniecie na tytul -> Input
-- Enter/Blur -> zapis przez `useUpdateTask`
-- Escape -> anuluj
-
-### 4. Inline edit opisu
-- Nowy stan `editingDescription`
-- Klikniecie na opis -> Textarea
-- Blur -> zapis
-
-### 5. Inline zmiana priorytetu/statusu
-- Dropdown bezposrednio w sekcji metadanych (zamiast badge'y)
-- Uzycie istniejacych `STATUS_CONFIG` i `PRIORITY_CONFIG` z `UnifiedTaskRow`
-
-## Pliki do edycji
-
-| Plik | Operacja |
+### Pliki do utworzenia:
+| Plik | Opis |
 |---|---|
-| `src/components/tasks/TaskDetailSheet.tsx` | Przebudowa layoutu - jedyny plik |
+| `src/components/tasks/TasksTeamView.tsx` | NOWY - widok zespolowy (Box view) |
 
-Zmiany dotycza wylacznie renderowania JSX i dodania stanow do inline edit. Wszystkie hooki (subtaski, komentarze, etykiety, zaleznosci, time tracker, activity log) pozostaja bez zmian - sa juz wyodrebnione jako osobne komponenty.
+### Pliki do edycji:
+| Plik | Opis |
+|---|---|
+| `src/components/tasks/TasksKanban.tsx` | Przebudowa kart, statusy `todo`/`in_progress`/`completed`/`cancelled`, dodanie projektu, avatara, subtaskow |
+| `src/components/tasks/TasksHeader.tsx` | Dodanie ikony widoku "Zespol" do ToggleGroup |
+| `src/pages/Tasks.tsx` | Dodanie obslugi `view === 'team'` + import TasksTeamView |
 
-## Brak zmian w bazie danych
-Wszystkie potrzebne dane sa juz pobierane. Nie potrzeba migracji.
+### Dane do widoku zespolowego
+Hook `useTasks` juz zwraca `assigned_to` oraz `assignee` (join do `directors`). Wystarczy pogrupowac zadania po `assigned_to`. Lista czlonkow zespolu - uzycie istniejacego selecta z `directors` (kolega `owner` i `assignee` sa juz joinowane w zapytaniu `useTasks`).
 
+### Brak zmian w bazie danych
+Wszystkie potrzebne pola (`assigned_to`, `status`, `priority`, `project_id`) juz istnieja. Nie sa potrzebne migracje.
+
+### Podsumowanie
+- **TasksKanban** - przebudowa kart na bogatsze (projekt, avatar, subtaski, zunifikowane statusy)
+- **TasksTeamView** - nowy widok "Box" z kafelkami per osoba i statystykami
+- **TasksHeader** + **Tasks.tsx** - dodanie nowego widoku do przelacznika
