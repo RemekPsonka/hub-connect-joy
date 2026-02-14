@@ -5,6 +5,7 @@ import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Plus, CheckSquare, User, Building2, StickyNote,
   Mail, Phone, MapPin, Calendar, Target, BarChart3, History, Loader2,
+  AlertCircle, CheckCircle2, ChevronRight,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -16,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { ContactKnowledgeTimeline } from '@/components/contacts/ContactKnowledgeTimeline';
+import { WeeklyStatusForm } from '@/components/deals-team/WeeklyStatusForm';
 import { useDealContactAllTasks } from '@/hooks/useDealsTeamAssignments';
 import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
@@ -73,6 +75,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const createTask = useCreateTask();
   const [showCompleted, setShowCompleted] = useState(false);
   const [notesValue, setNotesValue] = useState<string | null>(null);
+  const [showStatusForm, setShowStatusForm] = useState(false);
 
   const openTasks = useMemo(() => tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled'), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled'), [tasks]);
@@ -353,10 +356,48 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
             {/* ===== TAB: STATUSES ===== */}
             <TabsContent value="statuses" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
-                <div className="px-6 py-4 space-y-3">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
-                    <BarChart3 className="h-3.5 w-3.5" /> Statusy tygodniowe
-                  </h4>
+                <div className="px-6 py-4 space-y-4">
+                  {/* Status overdue / add status */}
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <BarChart3 className="h-3.5 w-3.5" /> Statusy tygodniowe
+                    </h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs gap-1"
+                      onClick={() => setShowStatusForm(true)}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Dodaj status
+                    </Button>
+                  </div>
+
+                  {/* Overdue indicator */}
+                  {contact.status_overdue && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border bg-destructive/5 border-destructive/20">
+                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">Wymaga statusu</p>
+                        <p className="text-xs text-muted-foreground">
+                          {contact.last_status_update
+                            ? `${Math.floor((Date.now() - new Date(contact.last_status_update).getTime()) / (1000 * 60 * 60 * 24))} dni bez statusu`
+                            : 'Brak statusów'}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-xs"
+                        onClick={() => setShowStatusForm(true)}
+                      >
+                        Dodaj status
+                        <ChevronRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Submitted statuses */}
                   {statusesLoading ? (
                     <div className="space-y-2">
                       {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}
@@ -364,34 +405,38 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                   ) : weeklyStatuses.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-8 text-center">Brak statusów tygodniowych</p>
                   ) : (
-                    weeklyStatuses.map((ws) => (
-                      <div key={ws.id} className="border rounded-md p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium">
-                            {(() => { try { return format(new Date(ws.week_start), 'd MMM yyyy', { locale: pl }); } catch { return ws.week_start; } })()}
-                          </span>
-                          <div className="flex items-center gap-1.5">
+                    <div className="space-y-2">
+                      {weeklyStatuses.map((ws) => (
+                        <div key={ws.id} className="p-3 rounded-lg border bg-muted/30 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />
+                            <span className="text-xs font-medium">
+                              {(() => { try { return format(new Date(ws.week_start), 'd MMM yyyy', { locale: pl }); } catch { return ws.week_start; } })()}
+                            </span>
                             {ws.category_recommendation && (
                               <Badge variant="outline" className="text-[10px]">{ws.category_recommendation}</Badge>
                             )}
-                            {ws.reporter && (
-                              <span className="text-[10px] text-muted-foreground">{ws.reporter.full_name}</span>
-                            )}
                           </div>
+                          <p className="text-sm">"{ws.status_summary}"</p>
+                          {ws.next_steps && (
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-medium">Następne kroki:</span> {ws.next_steps}
+                            </p>
+                          )}
+                          {ws.blockers && (
+                            <p className="text-xs text-destructive">
+                              <span className="font-medium">Blokery:</span> {ws.blockers}
+                            </p>
+                          )}
+                          {ws.reporter && (
+                            <p className="text-xs text-muted-foreground">
+                              — {ws.reporter.full_name}
+                              {ws.created_at && `, ${format(new Date(ws.created_at), 'd MMM HH:mm', { locale: pl })}`}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm">{ws.status_summary}</p>
-                        {ws.next_steps && (
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium">Następne kroki:</span> {ws.next_steps}
-                          </p>
-                        )}
-                        {ws.blockers && (
-                          <p className="text-xs text-destructive">
-                            <span className="font-medium">Blokery:</span> {ws.blockers}
-                          </p>
-                        )}
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               </ScrollArea>
@@ -400,6 +445,19 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
         </SheetContent>
       </Sheet>
 
+      {/* Weekly Status Form */}
+      {contact && (
+        <WeeklyStatusForm
+          teamContactId={contact.id}
+          teamId={teamId}
+          contactId={contact.contact_id}
+          contactName={c.full_name}
+          contactCompany={c.company}
+          currentCategory={contact.category}
+          open={showStatusForm}
+          onClose={() => setShowStatusForm(false)}
+        />
+      )}
     </>
   );
 }
