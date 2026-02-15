@@ -5367,6 +5367,68 @@ export type Database = {
           },
         ]
       }
+      project_links: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          project_id: string
+          tenant_id: string
+          title: string
+          url: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id: string
+          tenant_id: string
+          title: string
+          url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id?: string
+          tenant_id?: string
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_members: {
         Row: {
           assistant_id: string | null
@@ -7732,6 +7794,127 @@ export type Database = {
           },
           {
             foreignKeyName: "wanted_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_schedule: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          director_id: string
+          id: string
+          project_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          director_id: string
+          id?: string
+          project_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          director_id?: string
+          id?: string
+          project_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_schedule_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_schedule_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workspace_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_topics: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          id: string
+          is_resolved: boolean
+          project_id: string
+          resolved_at: string | null
+          tenant_id: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          project_id: string
+          resolved_at?: string | null
+          tenant_id: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          project_id?: string
+          resolved_at?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_topics_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_topics_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_topics_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workspace_topics_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

@@ -51,6 +51,7 @@ import {
 const overviewItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Mój Dzień', url: '/my-day', icon: Sun },
+  { title: 'Workspace', url: '/workspace', icon: Briefcase },
   { title: 'Kalendarz', url: '/calendar', icon: CalendarDays },
 ];
 
