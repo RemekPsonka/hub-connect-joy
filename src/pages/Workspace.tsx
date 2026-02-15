@@ -12,7 +12,7 @@ const DAY_NAMES = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', '
 
 export default function Workspace() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const todayDayIndex = (new Date().getDay() + 6) % 7; // 0=Mon
+  const todayDayIndex = (new Date().getDay() + 6) % 7;
   const [activeDay, setActiveDay] = useState(todayDayIndex);
 
   const { data: schedule = [], isLoading } = useWorkspaceSchedule();
@@ -22,15 +22,18 @@ export default function Workspace() {
     [projectsRaw]
   );
 
+  // Group schedule entries by day_of_week
   const scheduleMap = useMemo(() => {
-    const map: Record<number, any> = {};
-    schedule.forEach((s: any) => { map[s.day_of_week] = s; });
+    const map: Record<number, any[]> = {};
+    schedule.forEach((s: any) => {
+      if (!map[s.day_of_week]) map[s.day_of_week] = [];
+      map[s.day_of_week].push(s);
+    });
     return map;
   }, [schedule]);
 
   const isCurrentWeek = isSameWeek(weekStart, new Date(), { weekStartsOn: 1 });
-
-  const activeProject = scheduleMap[activeDay]?.project;
+  const activeEntries = scheduleMap[activeDay] || [];
 
   return (
     <div className="flex flex-col h-full">
@@ -64,14 +67,16 @@ export default function Workspace() {
       <div className="flex gap-2 px-6 py-3 overflow-x-auto border-b border-border/30">
         {DAY_NAMES.map((name, i) => {
           const dayDate = addDays(weekStart, i);
-          const entry = scheduleMap[i];
+          const dayEntries = scheduleMap[i] || [];
+          const projects = dayEntries
+            .filter((e: any) => e.project)
+            .map((e: any) => ({ name: e.project.name, color: e.project.color }));
           return (
             <WorkspaceDayCard
               key={i}
               dayIndex={i}
               dayName={format(dayDate, 'EEE d', { locale: pl })}
-              projectName={entry?.project?.name}
-              projectColor={entry?.project?.color}
+              projects={projects}
               isActive={activeDay === i}
               isToday={isToday(dayDate)}
               onClick={() => setActiveDay(i)}
@@ -88,7 +93,7 @@ export default function Workspace() {
           <WorkspaceDayDashboard
             dayOfWeek={activeDay}
             dayName={DAY_NAMES[activeDay]}
-            project={activeProject}
+            entries={activeEntries}
             allProjects={allProjects}
           />
         )}
