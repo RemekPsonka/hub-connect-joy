@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useProjectTasks, useProjectMembers } from '@/hooks/useProjects';
+import { useState, useRef, useEffect } from 'react';
+import { useProjectTasks, useProjectMembers, useUpdateProject, useDeleteProject } from '@/hooks/useProjects';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
@@ -10,8 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { CheckSquare, Clock, FolderKanban, Users, X, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { CheckSquare, Clock, FolderKanban, Users, X, ExternalLink, MoreVertical, Pencil, CalendarDays, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface Project {
   id: string;
@@ -19,6 +27,8 @@ interface Project {
   color: string;
   description?: string | null;
   status?: string;
+  due_date?: string | null;
+  start_date?: string | null;
 }
 
 interface TimeBlockDef {
@@ -42,8 +52,53 @@ const STATUS_MAP: Record<string, string> = {
 export function WorkspaceTimeBlock({ dayOfWeek, timeBlock, project, allProjects }: Props) {
   const assign = useAssignProjectToDay();
   const remove = useRemoveProjectFromDay();
+  const updateProject = useUpdateProject();
+  const deleteProject = useDeleteProject();
   const navigate = useNavigate();
   const [selectValue, setSelectValue] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleStartRename = () => {
+    if (!project) return;
+    setEditName(project.name);
+    setIsEditing(true);
+  };
+
+  const handleSaveRename = () => {
+    if (!project || !editName.trim()) return;
+    if (editName.trim() !== project.name) {
+      updateProject.mutate({ id: project.id, data: { name: editName.trim() } });
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelRename = () => {
+    setIsEditing(false);
+  };
+
+  const handleSetDueDate = (date: Date | undefined) => {
+    if (!project) return;
+    updateProject.mutate({ id: project.id, data: { due_date: date ? date.toISOString().split('T')[0] : null } });
+    setShowDatePicker(false);
+  };
+
+  const handleDeleteProject = () => {
+    if (!project) return;
+    remove.mutate({ dayOfWeek, timeBlock: timeBlock.id });
+    deleteProject.mutate(project.id);
+    setShowDeleteDialog(false);
+  };
 
   if (!project) {
     return (
@@ -93,13 +148,69 @@ export function WorkspaceTimeBlock({ dayOfWeek, timeBlock, project, allProjects 
               <FolderKanban className="h-4 w-4" style={{ color: project.color }} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-foreground">{project.name}</h3>
-              {project.description && <p className="text-[11px] text-muted-foreground max-w-md truncate">{project.description}</p>}
+              {isEditing ? (
+                <Input
+                  ref={inputRef}
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveRename(); if (e.key === 'Escape') handleCancelRename(); }}
+                  onBlur={handleSaveRename}
+                  className="h-7 text-sm font-bold w-[200px]"
+                />
+              ) : (
+                <h3 className="text-sm font-bold text-foreground">{project.name}</h3>
+              )}
+              {project.description && !isEditing && <p className="text-[11px] text-muted-foreground max-w-md truncate">{project.description}</p>}
             </div>
           </div>
           {project.status && <Badge variant="secondary" className="text-[10px]">{STATUS_MAP[project.status] || project.status}</Badge>}
+          {project.due_date && (
+            <Badge variant="outline" className="text-[10px] gap-1">
+              <CalendarDays className="h-3 w-3" />
+              {format(new Date(project.due_date), 'd MMM yyyy', { locale: pl })}
+            </Badge>
+          )}
         </div>
         <div className="flex gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleStartRename}>
+                <Pencil className="h-3.5 w-3.5 mr-2" /> Zmień nazwę
+              </DropdownMenuItem>
+              <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+                <PopoverTrigger asChild>
+                  <DropdownMenuItem onSelect={e => { e.preventDefault(); setShowDatePicker(true); }}>
+                    <CalendarDays className="h-3.5 w-3.5 mr-2" /> Ustaw termin
+                  </DropdownMenuItem>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={project.due_date ? new Date(project.due_date) : undefined}
+                    onSelect={handleSetDueDate}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                  {project.due_date && (
+                    <div className="p-2 border-t">
+                      <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => handleSetDueDate(undefined)}>
+                        Usuń termin
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive" onClick={() => setShowDeleteDialog(true)}>
+                <Trash2 className="h-3.5 w-3.5 mr-2" /> Usuń projekt
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate(`/projects/${project.id}`)}>
             <ExternalLink className="h-3 w-3" /> Otwórz
           </Button>
@@ -108,6 +219,20 @@ export function WorkspaceTimeBlock({ dayOfWeek, timeBlock, project, allProjects 
           </Button>
         </div>
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć projekt „{project.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>Projekt zostanie anulowany. Tej operacji nie można cofnąć.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
