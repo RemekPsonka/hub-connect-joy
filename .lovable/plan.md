@@ -1,36 +1,45 @@
 
-# Otwieranie zadan w oknie (dialog) zamiast nawigacji
+# Edycja danych projektu z poziomu Workspace
 
-## Problem
-Klikniecie w zadanie w sekcji "Zadania" w workspace powoduje nawigacje do `/tasks?taskId=...`, co opuszcza glowny ekran workspace.
-
-## Rozwiazanie
-Zamiast `navigate()`, klikniecie w zadanie otworzy `TaskDetailSheet` (boczny panel Asana-style) bezposrednio w workspace -- dokladnie tak, jak dziala to na karcie kontaktu.
+## Cel
+Dodanie mozliwosci edycji nazwy projektu, ustawienia/usuniecia terminu (due_date) oraz usuniecia projektu bezposrednio z naglowka bloku czasowego w workspace -- bez opuszczania ekranu.
 
 ## Zmiany
 
 ### `src/components/workspace/WorkspaceTimeBlock.tsx`
-Jedyny plik do zmiany:
 
-1. Import `TaskDetailSheet` i `TaskModal` oraz typ `TaskWithDetails`
-2. W komponencie `ProjectTasksList` dodanie stanu:
-   - `selectedTask` (wybrany task do podgladu)
-   - `isDetailOpen` (czy panel jest otwarty)
-   - `isEditMode` / `isModalOpen` (do edycji z poziomu panelu)
-3. Zamiana `onClick={() => navigate(...)}` na `onClick` ustawiajacy `selectedTask` i otwierajacy `TaskDetailSheet`
-4. Renderowanie `TaskDetailSheet` i `TaskModal` wewnatrz komponentu -- panel boczny otwiera sie jako overlay, uzytkownik nie opuszcza workspace
+**1. Rozszerzenie interfejsu Project:**
+Dodanie pol `start_date` i `due_date` do lokalnego interfejsu `Project`, zeby moc je wyswietlac i edytowac.
 
-### Wzorzec (identyczny jak w ContactTasksTab)
-```text
-const [selectedTask, setSelectedTask] = useState(null);
-const [isDetailOpen, setIsDetailOpen] = useState(false);
+**2. Dodanie menu akcji w naglowku bloku:**
+Obok przyciskow "Otworz" i "X" pojawi sie przycisk z ikona `MoreVertical` (lub `Pencil`) otwierajacy `DropdownMenu` z opcjami:
+- **Zmien nazwe** -- otwiera inline input lub maly dialog z polem tekstowym
+- **Ustaw termin** -- otwiera popover z date pickerem (react-day-picker) do ustawienia `due_date`
+- **Usun termin** -- widoczne tylko gdy `due_date` jest ustawione, czysci pole
+- **Usun projekt** -- zmienia status projektu na `cancelled` (tak jak istniejacy `useDeleteProject`)
 
-// onClick na wierszu zadania:
-setSelectedTask(task);
-setIsDetailOpen(true);
+**3. Inline edycja nazwy:**
+Po wybraniu "Zmien nazwe" nazwa projektu w naglowku zmienia sie w pole `Input`. Enter lub blur zapisuje, Escape anuluje. Zapis przez `useUpdateProject` z `useProjects.ts`.
 
-// renderowanie:
-<TaskDetailSheet open={isDetailOpen} onOpenChange={setIsDetailOpen} task={selectedTask} onEdit={...} />
-```
+**4. Edycja terminu:**
+Popover z komponentem `Calendar` (react-day-picker). Wybranie daty zapisuje `due_date` przez `useUpdateProject`. Przycisk "Bez terminu" czysci wartosc.
 
-Zadania dane z `useProjectTasks` juz zawieraja pelne relacje (cross_tasks, task_contacts, assignee, owner, task_categories), wiec `TaskDetailSheet` otrzyma kompletny obiekt `TaskWithDetails` bez dodatkowych zapytan.
+**5. Wyswietlanie terminu:**
+Jesli `due_date` jest ustawione, wyswietla sie obok statusu jako maly badge z ikona `CalendarDays`.
+
+**6. Usuwanie projektu:**
+Po kliknieciu "Usun projekt" pojawia sie `AlertDialog` z potwierdzeniem. Po zatwierdzeniu wywoluje `useDeleteProject` i automatycznie odpina projekt z workspace (usuwajac wpis z `workspace_schedule`).
+
+### Importy
+- `useUpdateProject`, `useDeleteProject` z `@/hooks/useProjects`
+- `DropdownMenu` + skladowe z `@/components/ui/dropdown-menu`
+- `AlertDialog` + skladowe z `@/components/ui/alert-dialog`
+- `Popover` + `Calendar` do date pickera
+- `Input` z `@/components/ui/input`
+- Ikony: `MoreVertical`, `Pencil`, `CalendarDays`, `Trash2`
+
+### Przeplyw uzytkownika
+1. Klika ikone "..." w naglowku bloku czasowego
+2. Wybiera akcje z menu (zmiana nazwy / termin / usuniecie)
+3. Edycja odbywa sie w miejscu -- bez nawigacji, bez opuszczania workspace
+4. Po zapisie dane odswiezaja sie automatycznie dzieki invalidacji query `['projects']` i `['project', id]`
