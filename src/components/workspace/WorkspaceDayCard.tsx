@@ -1,10 +1,14 @@
 import { cn } from '@/lib/utils';
 
+interface ProjectInfo {
+  name: string;
+  color: string;
+}
+
 interface WorkspaceDayCardProps {
   dayIndex: number;
   dayName: string;
-  projectName?: string;
-  projectColor?: string;
+  projects: ProjectInfo[];
   isActive: boolean;
   isToday: boolean;
   onClick: () => void;
@@ -12,8 +16,7 @@ interface WorkspaceDayCardProps {
 
 export function WorkspaceDayCard({
   dayName,
-  projectName,
-  projectColor,
+  projects,
   isActive,
   isToday,
   onClick,
@@ -36,18 +39,22 @@ export function WorkspaceDayCard({
       )}>
         {dayName}
       </span>
-      {projectName ? (
-        <div className="flex items-center gap-1.5">
-          <div
-            className="h-2 w-2 rounded-full shrink-0"
-            style={{ backgroundColor: projectColor || 'hsl(var(--primary))' }}
-          />
-          <span className={cn(
-            'text-xs truncate max-w-[90px]',
-            isActive ? 'text-foreground font-medium' : 'text-muted-foreground'
-          )}>
-            {projectName}
-          </span>
+      {projects.length > 0 ? (
+        <div className="flex flex-col items-center gap-0.5">
+          {projects.map((p, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <div
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: p.color || 'hsl(var(--primary))' }}
+              />
+              <span className={cn(
+                'text-xs truncate max-w-[90px]',
+                isActive ? 'text-foreground font-medium' : 'text-muted-foreground'
+              )}>
+                {p.name}
+              </span>
+            </div>
+          ))}
         </div>
       ) : (
         <span className="text-[10px] text-muted-foreground/50 italic">Wolny dzień</span>

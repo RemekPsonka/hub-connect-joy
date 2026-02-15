@@ -14,7 +14,8 @@ export function useWorkspaceSchedule() {
         .from('workspace_schedule')
         .select('*, project:projects(id, name, color, description, status)')
         .eq('director_id', director!.id)
-        .order('day_of_week');
+        .order('day_of_week')
+        .order('time_block');
       if (error) throw error;
       return data;
     },
@@ -26,7 +27,7 @@ export function useAssignProjectToDay() {
   const qc = useQueryClient();
   const { director } = useAuth();
   return useMutation({
-    mutationFn: async ({ dayOfWeek, projectId }: { dayOfWeek: number; projectId: string }) => {
+    mutationFn: async ({ dayOfWeek, projectId, timeBlock }: { dayOfWeek: number; projectId: string; timeBlock: number }) => {
       const { data, error } = await supabase
         .from('workspace_schedule')
         .upsert({
@@ -34,7 +35,8 @@ export function useAssignProjectToDay() {
           tenant_id: director!.tenant_id,
           day_of_week: dayOfWeek,
           project_id: projectId,
-        }, { onConflict: 'director_id,day_of_week' })
+          time_block: timeBlock,
+        }, { onConflict: 'director_id,day_of_week,time_block' })
         .select()
         .single();
       if (error) throw error;
@@ -52,12 +54,13 @@ export function useRemoveProjectFromDay() {
   const qc = useQueryClient();
   const { director } = useAuth();
   return useMutation({
-    mutationFn: async (dayOfWeek: number) => {
+    mutationFn: async ({ dayOfWeek, timeBlock }: { dayOfWeek: number; timeBlock: number }) => {
       const { error } = await supabase
         .from('workspace_schedule')
         .delete()
         .eq('director_id', director!.id)
-        .eq('day_of_week', dayOfWeek);
+        .eq('day_of_week', dayOfWeek)
+        .eq('time_block', timeBlock);
       if (error) throw error;
     },
     onSuccess: () => {

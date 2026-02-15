@@ -7809,6 +7809,7 @@ export type Database = {
           id: string
           project_id: string
           tenant_id: string
+          time_block: number
           updated_at: string
         }
         Insert: {
@@ -7818,6 +7819,7 @@ export type Database = {
           id?: string
           project_id: string
           tenant_id: string
+          time_block?: number
           updated_at?: string
         }
         Update: {
@@ -7827,6 +7829,7 @@ export type Database = {
           id?: string
           project_id?: string
           tenant_id?: string
+          time_block?: number
           updated_at?: string
         }
         Relationships: [
