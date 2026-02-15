@@ -12,7 +12,7 @@ export function useWorkspaceSchedule() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workspace_schedule')
-        .select('*, project:projects(id, name, color, description, status)')
+        .select('*, project:projects(id, name, color, description, status, due_date, start_date)')
         .eq('director_id', director!.id)
         .order('day_of_week')
         .order('time_block');
