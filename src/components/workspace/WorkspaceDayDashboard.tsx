@@ -1,4 +1,5 @@
 import { WorkspaceTimeBlock } from './WorkspaceTimeBlock';
+import { Separator } from '@/components/ui/separator';
 
 interface Project {
   id: string;
@@ -28,20 +29,24 @@ const TIME_BLOCKS = [
 
 export function WorkspaceDayDashboard({ dayOfWeek, dayName, entries, allProjects }: Props) {
   const entryMap = new Map(entries.map(e => [e.time_block, e]));
+  const occupiedBlocks = entries.filter(e => e.project).map(e => e.time_block);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h2 className="text-base font-bold text-foreground">{dayName}</h2>
-      {TIME_BLOCKS.map((block) => {
+      {TIME_BLOCKS.map((block, index) => {
         const entry = entryMap.get(block.id);
         return (
-          <WorkspaceTimeBlock
-            key={block.id}
-            dayOfWeek={dayOfWeek}
-            timeBlock={block}
-            project={entry?.project}
-            allProjects={allProjects}
-          />
+          <div key={block.id}>
+            {index > 0 && <Separator className="mb-6" />}
+            <WorkspaceTimeBlock
+              dayOfWeek={dayOfWeek}
+              timeBlock={block}
+              project={entry?.project}
+              allProjects={allProjects}
+              occupiedBlocks={occupiedBlocks}
+            />
+          </div>
         );
       })}
     </div>
