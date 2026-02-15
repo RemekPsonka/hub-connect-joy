@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { useProjectTasks, useProjectMembers } from '@/hooks/useProjects';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { TaskModal } from '@/components/tasks/TaskModal';
+import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useAssignProjectToDay, useRemoveProjectFromDay } from '@/hooks/useWorkspace';
 import { WorkspaceLinkManager } from './WorkspaceLinkManager';
 import { WorkspaceTopicsList } from './WorkspaceTopicsList';
@@ -125,39 +128,71 @@ export function WorkspaceTimeBlock({ dayOfWeek, timeBlock, project, allProjects 
 
 function ProjectTasksList({ projectId }: { projectId: string }) {
   const { data: tasks = [] } = useProjectTasks(projectId);
-  const navigate = useNavigate();
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const pending = tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled');
   const done = tasks.filter((t: any) => t.status === 'completed');
 
+  const handleTaskClick = (task: any) => {
+    setSelectedTask(task as TaskWithDetails);
+    setIsDetailOpen(true);
+    setIsEditMode(false);
+  };
+
+  const handleEditFromDetail = () => {
+    setIsDetailOpen(false);
+    setIsEditMode(true);
+    setIsModalOpen(true);
+  };
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-          <CheckSquare className="h-3.5 w-3.5" /> Zadania
-        </h3>
-        <span className="text-[10px] text-muted-foreground">{pending.length} aktywnych · {done.length} ukończonych</span>
+    <>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <CheckSquare className="h-3.5 w-3.5" /> Zadania
+          </h3>
+          <span className="text-[10px] text-muted-foreground">{pending.length} aktywnych · {done.length} ukończonych</span>
+        </div>
+        <div className="space-y-1 max-h-[300px] overflow-y-auto">
+          {pending.slice(0, 15).map((task: any) => (
+            <div
+              key={task.id}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent/40 cursor-pointer text-sm"
+              onClick={() => handleTaskClick(task)}
+            >
+              <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                task.priority === 'high' || task.priority === 'urgent' ? 'bg-destructive' :
+                task.priority === 'medium' ? 'bg-yellow-500' : 'bg-muted-foreground/30'
+              }`} />
+              <span className="truncate flex-1">{task.title}</span>
+              {task.assignee && (
+                <span className="text-[10px] text-muted-foreground">{task.assignee.full_name?.split(' ')[0]}</span>
+              )}
+            </div>
+          ))}
+          {pending.length === 0 && <p className="text-xs text-muted-foreground/50 italic px-2">Brak zadań</p>}
+        </div>
       </div>
-      <div className="space-y-1 max-h-[300px] overflow-y-auto">
-        {pending.slice(0, 15).map((task: any) => (
-          <div
-            key={task.id}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent/40 cursor-pointer text-sm"
-            onClick={() => navigate(`/tasks?taskId=${task.id}`)}
-          >
-            <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-              task.priority === 'high' || task.priority === 'urgent' ? 'bg-destructive' :
-              task.priority === 'medium' ? 'bg-yellow-500' : 'bg-muted-foreground/30'
-            }`} />
-            <span className="truncate flex-1">{task.title}</span>
-            {task.assignee && (
-              <span className="text-[10px] text-muted-foreground">{task.assignee.full_name?.split(' ')[0]}</span>
-            )}
-          </div>
-        ))}
-        {pending.length === 0 && <p className="text-xs text-muted-foreground/50 italic px-2">Brak zadań</p>}
-      </div>
-    </div>
+
+      {selectedTask && (
+        <TaskDetailSheet
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+          task={selectedTask}
+          onEdit={handleEditFromDetail}
+        />
+      )}
+
+      <TaskModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        task={isEditMode ? selectedTask : null}
+      />
+    </>
   );
 }
 
