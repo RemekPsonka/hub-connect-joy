@@ -1,45 +1,63 @@
 
-# Edycja danych projektu z poziomu Workspace
+# Wyrazne oddzielenie blokow + zmiana "Usun projekt" na "Usun z bloku / Przenies"
 
-## Cel
-Dodanie mozliwosci edycji nazwy projektu, ustawienia/usuniecia terminu (due_date) oraz usuniecia projektu bezposrednio z naglowka bloku czasowego w workspace -- bez opuszczania ekranu.
+## 1. Wizualne oddzielenie blokow
 
-## Zmiany
+W `WorkspaceDayDashboard.tsx` -- dodanie separatora miedzy blokami:
+- Zmiana `space-y-4` na `space-y-6`
+- Dodanie `<Separator />` (lub `<div className="border-t border-border/60" />`) miedzy kazdy `WorkspaceTimeBlock`
+
+W `WorkspaceTimeBlock.tsx` -- wzmocnienie obramowania wypelnionego bloku:
+- Zmiana `border-border/40` na `border-border` (pelna widocznosc)
+- Dodanie lewego kolorowego paska (`border-l-4`) w kolorze projektu dla szybkiej identyfikacji
+- Lekkie tlo bloku (`bg-card/50`) zeby odroznic od pustych slotow
+
+## 2. Zmiana menu akcji -- zamiast "Usun projekt"
+
+Obecne menu (DropdownMenu) ma opcje: Zmien nazwe, Ustaw termin, **Usun projekt**.
+
+Nowe menu:
+- Zmien nazwe (bez zmian)
+- Ustaw termin (bez zmian)
+- **Separator**
+- **Przenies do bloku** -- submenu z dwoma pozostalymi blokami (np. jesli projekt jest w 8-12, to opcje "12:00-16:00" i "16:00-20:00"). Klikniecie przenosi projekt: usuwa stary wpis i tworzy nowy w wybranym bloku.
+- **Usun z bloku** -- odpina projekt z tego bloku (nie kasuje projektu, tylko wpis w `workspace_schedule`). Zastepuje obecny przycisk "X" i obecna opcje "Usun projekt".
+
+Przycisk "X" w naglowku pozostaje jako szybki skrot do "Usun z bloku" (odpina, nie kasuje projektu).
+
+## 3. Zmiany w plikach
+
+### `src/components/workspace/WorkspaceDayDashboard.tsx`
+- Dodanie separatorow miedzy blokami (np. `Separator` z shadcn lub `<hr>`)
+- Wiekszy spacing
 
 ### `src/components/workspace/WorkspaceTimeBlock.tsx`
+- **Styl bloku**: dodanie `border-l-4` z kolorem projektu + `bg-card/50`
+- **DropdownMenu**: zamiana "Usun projekt" na:
+  - "Przenies do bloku" z sub-items (filtrowane -- bez aktualnego bloku)
+  - "Usun z bloku" -- wywoluje `remove.mutate()` (jak obecny "X")
+- **Logika przenoszenia**: `handleMoveToBlock(targetBlock)` -- wywoluje `remove` dla starego bloku, potem `assign` dla nowego
+- Usuniecie `useDeleteProject` i `handleDeleteProject` -- projekty nie sa kasowane z workspace
 
-**1. Rozszerzenie interfejsu Project:**
-Dodanie pol `start_date` i `due_date` do lokalnego interfejsu `Project`, zeby moc je wyswietlac i edytowac.
+### Props
+Komponent `WorkspaceTimeBlock` potrzebuje wiedzy o zajetych blokach, zeby w submenu "Przenies do" pokazac tylko wolne sloty. Dodanie propa `occupiedBlocks: number[]` z `WorkspaceDayDashboard`.
 
-**2. Dodanie menu akcji w naglowku bloku:**
-Obok przyciskow "Otworz" i "X" pojawi sie przycisk z ikona `MoreVertical` (lub `Pencil`) otwierajacy `DropdownMenu` z opcjami:
-- **Zmien nazwe** -- otwiera inline input lub maly dialog z polem tekstowym
-- **Ustaw termin** -- otwiera popover z date pickerem (react-day-picker) do ustawienia `due_date`
-- **Usun termin** -- widoczne tylko gdy `due_date` jest ustawione, czysci pole
-- **Usun projekt** -- zmienia status projektu na `cancelled` (tak jak istniejacy `useDeleteProject`)
+## 4. Szczegoly techniczne
 
-**3. Inline edycja nazwy:**
-Po wybraniu "Zmien nazwe" nazwa projektu w naglowku zmienia sie w pole `Input`. Enter lub blur zapisuje, Escape anuluje. Zapis przez `useUpdateProject` z `useProjects.ts`.
+Stale blokow do przenoszenia:
+```text
+TIME_BLOCKS = [
+  { id: 0, label: '8:00 - 12:00' },
+  { id: 1, label: '12:00 - 16:00' },
+  { id: 2, label: '16:00 - 20:00' },
+]
+// Filtrowanie: availableBlocks = TIME_BLOCKS.filter(b => b.id !== currentBlock && !occupiedBlocks.includes(b.id))
+```
 
-**4. Edycja terminu:**
-Popover z komponentem `Calendar` (react-day-picker). Wybranie daty zapisuje `due_date` przez `useUpdateProject`. Przycisk "Bez terminu" czysci wartosc.
-
-**5. Wyswietlanie terminu:**
-Jesli `due_date` jest ustawione, wyswietla sie obok statusu jako maly badge z ikona `CalendarDays`.
-
-**6. Usuwanie projektu:**
-Po kliknieciu "Usun projekt" pojawia sie `AlertDialog` z potwierdzeniem. Po zatwierdzeniu wywoluje `useDeleteProject` i automatycznie odpina projekt z workspace (usuwajac wpis z `workspace_schedule`).
-
-### Importy
-- `useUpdateProject`, `useDeleteProject` z `@/hooks/useProjects`
-- `DropdownMenu` + skladowe z `@/components/ui/dropdown-menu`
-- `AlertDialog` + skladowe z `@/components/ui/alert-dialog`
-- `Popover` + `Calendar` do date pickera
-- `Input` z `@/components/ui/input`
-- Ikony: `MoreVertical`, `Pencil`, `CalendarDays`, `Trash2`
-
-### Przeplyw uzytkownika
-1. Klika ikone "..." w naglowku bloku czasowego
-2. Wybiera akcje z menu (zmiana nazwy / termin / usuniecie)
-3. Edycja odbywa sie w miejscu -- bez nawigacji, bez opuszczania workspace
-4. Po zapisie dane odswiezaja sie automatycznie dzieki invalidacji query `['projects']` i `['project', id]`
+Przenoszenie (sekwencyjne mutacje):
+```text
+handleMoveToBlock = async (targetBlock) => {
+  await remove.mutateAsync({ dayOfWeek, timeBlock: currentBlock });
+  await assign.mutateAsync({ dayOfWeek, projectId: project.id, timeBlock: targetBlock });
+}
+```
