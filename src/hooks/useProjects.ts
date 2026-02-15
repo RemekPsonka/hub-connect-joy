@@ -158,6 +158,7 @@ export function useUpdateProject() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['project', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['workspace-schedule'] });
       toast.success('Projekt zaktualizowany');
     },
     onError: () => {
