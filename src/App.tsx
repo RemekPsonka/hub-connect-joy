@@ -54,6 +54,7 @@ const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Sovra = lazy(() => import("./pages/Sovra"));
 const WantedContacts = lazy(() => import("./pages/WantedContacts"));
+const Resources = lazy(() => import("./pages/Resources"));
 const TaskAnalytics = lazy(() => import("./pages/TaskAnalytics"));
 const TeamProductivityReport = lazy(() => import("./pages/TeamProductivityReport"));
 const Workspace = lazy(() => import("./pages/Workspace"));
@@ -132,6 +133,7 @@ const App = () => (
                   <Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
                   <Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
                   <Route path="/wanted" element={<DirectorGuard><WantedContacts /></DirectorGuard>} />
+                  <Route path="/resources" element={<DirectorGuard><Resources /></DirectorGuard>} />
                   <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
                   <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
                   <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />

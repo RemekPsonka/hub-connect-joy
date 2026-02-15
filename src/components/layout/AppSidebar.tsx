@@ -10,6 +10,7 @@ import {
   Search,
   Target,
   Shield,
+  Landmark,
   Building2,
   Bug,
   UserCog,
@@ -59,6 +60,7 @@ const overviewItems = [
 const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users, adminOnly: false },
   { title: 'Poszukiwani', url: '/wanted', icon: Target, adminOnly: false },
+  { title: 'Zasoby', url: '/resources', icon: Landmark, adminOnly: false },
   { title: 'Sieć kontaktów', url: '/network', icon: Network, adminOnly: true },
 ];
 
