@@ -3,6 +3,7 @@ import { useProjectTasks, useProjectMembers, useUpdateProject } from '@/hooks/us
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
+import { useCreateTask } from '@/hooks/useTasks';
 import { useAssignProjectToDay, useRemoveProjectFromDay } from '@/hooks/useWorkspace';
 import { WorkspaceLinkManager } from './WorkspaceLinkManager';
 import { WorkspaceTopicsList } from './WorkspaceTopicsList';
@@ -15,7 +16,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-import { CheckSquare, Clock, FolderKanban, Users, X, ExternalLink, MoreVertical, Pencil, CalendarDays, ArrowRightLeft, Unlink } from 'lucide-react';
+import { CheckSquare, Clock, FolderKanban, Users, X, ExternalLink, MoreVertical, Pencil, CalendarDays, ArrowRightLeft, Unlink, Plus, Loader2 } from 'lucide-react';
+import { WorkspaceNotes } from './WorkspaceNotes';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -246,6 +248,7 @@ export function WorkspaceTimeBlock({ dayOfWeek, timeBlock, project, allProjects,
         <div className="space-y-4">
           <WorkspaceLinkManager projectId={project.id} />
           <WorkspaceTopicsList projectId={project.id} />
+          <WorkspaceNotes projectId={project.id} />
         </div>
         <div className="lg:col-span-1">
           <ProjectTasksList projectId={project.id} />
@@ -264,6 +267,9 @@ function ProjectTasksList({ projectId }: { projectId: string }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const createTask = useCreateTask();
 
   const pending = tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled');
   const done = tasks.filter((t: any) => t.status === 'completed');
@@ -278,6 +284,22 @@ function ProjectTasksList({ projectId }: { projectId: string }) {
     setIsDetailOpen(false);
     setIsEditMode(true);
     setIsModalOpen(true);
+  };
+  const handleAddTask = async () => {
+    if (!newTitle.trim()) return;
+    try {
+      await createTask.mutateAsync({
+        task: {
+          title: newTitle.trim(),
+          status: 'todo',
+          priority: 'medium',
+          task_type: 'standard',
+          project_id: projectId,
+        },
+      });
+      setNewTitle('');
+      setIsAdding(false);
+    } catch {}
   };
 
   return (
@@ -306,7 +328,37 @@ function ProjectTasksList({ projectId }: { projectId: string }) {
               )}
             </div>
           ))}
-          {pending.length === 0 && <p className="text-xs text-muted-foreground/50 italic px-2">Brak zadań</p>}
+          {pending.length === 0 && !isAdding && <p className="text-xs text-muted-foreground/50 italic px-2">Brak zadań</p>}
+          {isAdding ? (
+            <div className="space-y-1.5 px-2 py-1.5">
+              <Input
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                placeholder="Tytuł zadania..."
+                autoFocus
+                className="h-8 text-sm"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleAddTask();
+                  if (e.key === 'Escape') { setIsAdding(false); setNewTitle(''); }
+                }}
+              />
+              <div className="flex gap-1.5">
+                <Button size="sm" onClick={handleAddTask} disabled={!newTitle.trim() || createTask.isPending} className="h-7 text-xs flex-1">
+                  {createTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Dodaj'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setIsAdding(false); setNewTitle(''); }} className="h-7 text-xs">
+                  Anuluj
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAdding(true)}
+              className="w-full flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> Dodaj zadanie
+            </button>
+          )}
         </div>
       </div>
 
