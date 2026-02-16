@@ -21,7 +21,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Users, User, Share2, FolderKanban } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, User, Share2, FolderKanban, Diamond } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCreateTask, useCreateCrossTask, useUpdateTask } from '@/hooks/useTasks';
 import { useProjects } from '@/hooks/useProjects';
@@ -32,6 +32,7 @@ import { useCurrentDirector } from '@/hooks/useDirectors';
 import { toast } from 'sonner';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 import { RecurrenceSelector, type RecurrenceRule } from './RecurrenceSelector';
+import { useProjectMilestones } from '@/hooks/useProjectMilestones';
 
 interface TaskInitialData {
   title?: string;
@@ -77,11 +78,13 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
   const [assignedTo, setAssignedTo] = useState<string>('');
   const [visibility, setVisibility] = useState<'private' | 'team'>('private');
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
+  const [milestoneId, setMilestoneId] = useState<string>('');
   
   const { data: categories = [] } = useTaskCategories();
   const { data: directors = [] } = useDirectors();
   const { data: currentDirector } = useCurrentDirector();
   const { data: projects } = useProjects();
+  const { data: milestones = [] } = useProjectMilestones(projectId || undefined);
   
   const createTask = useCreateTask();
   const createCrossTask = useCreateCrossTask();
@@ -107,6 +110,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setVisibility((task.visibility as 'private' | 'team') || 'private');
       setProjectId(task.project_id || '');
       setRecurrenceRule((task as any).recurrence_rule || null);
+      setMilestoneId((task as any).milestone_id || '');
 
       // Set contacts for existing task
       if (task.task_type === 'cross' && task.cross_tasks?.[0]) {
@@ -134,6 +138,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setVisibility('private');
       setProjectId(preselectedProjectId || '');
       setRecurrenceRule(null);
+      setMilestoneId('');
       // Set contactId for standard tasks
       if (initialData.taskType !== 'cross' && initialData.contactAId) {
         setContactId(initialData.contactAId);
@@ -156,6 +161,7 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
       setVisibility('private');
       setProjectId(preselectedProjectId || '');
       setRecurrenceRule(null);
+      setMilestoneId('');
     }
   }, [task, preselectedContactId, preselectedProjectId, initialData, open]);
 
@@ -202,7 +208,8 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
           assigned_to: assignedTo || null,
           visibility: visibility,
           project_id: projectId || null,
-        });
+          milestone_id: milestoneId || null,
+        } as any);
         toast.success('Zadanie zaktualizowane');
       } else if (taskType === 'cross') {
         const result = await createCrossTask.mutateAsync({
@@ -230,9 +237,10 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
             priority,
             status,
             due_date: dueDate?.toISOString().split('T')[0],
-          project_id: projectId || null,
-          section_id: preselectedSectionId || null,
-          recurrence_rule: recurrenceRule as any,
+           project_id: projectId || null,
+           section_id: preselectedSectionId || null,
+           recurrence_rule: recurrenceRule as any,
+           milestone_id: milestoneId || null,
           },
           contactId: contactId || undefined,
           categoryId: categoryId === 'none' ? undefined : (categoryId || undefined),
@@ -469,6 +477,27 @@ export function TaskModal({ open, onOpenChange, task, preselectedContactId, pres
                   <SelectItem value="none">Brak projektu</SelectItem>
                   {projects?.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Milestone selection - only when project is selected */}
+          {projectId && milestones.length > 0 && (
+            <div className="space-y-2">
+              <Label>Kamień milowy</Label>
+              <Select value={milestoneId || 'none'} onValueChange={(v) => setMilestoneId(v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <div className="flex items-center">
+                    <Diamond className="h-4 w-4 mr-2 text-amber-500" />
+                    <SelectValue placeholder="Wybierz kamień milowy (opcjonalne)" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Brak kamienia milowego</SelectItem>
+                  {milestones.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -54,6 +55,9 @@ export default function ProjectDetail() {
   const { data: project, isLoading } = useProject(id);
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState('');
 
   const setActiveTab = (tab: string) => {
     setSearchParams({ tab });
@@ -110,9 +114,31 @@ export default function ProjectDetail() {
               className="h-4 w-4 rounded-full shrink-0"
               style={{ backgroundColor: project.color || '#7C3AED' }}
             />
-            <h1 className="text-2xl font-bold text-foreground truncate">
-              {project.name}
-            </h1>
+            {editingName ? (
+              <Input
+                autoFocus
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={() => {
+                  setEditingName(false);
+                  if (nameValue.trim() && nameValue.trim() !== project.name) {
+                    updateProject.mutate({ id: project.id, data: { name: nameValue.trim() } as any });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') { setNameValue(project.name); setEditingName(false); }
+                }}
+                className="text-2xl font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0"
+              />
+            ) : (
+              <h1
+                className="text-2xl font-bold text-foreground truncate cursor-pointer hover:text-primary/80 transition-colors"
+                onClick={() => { setNameValue(project.name); setEditingName(true); }}
+              >
+                {project.name}
+              </h1>
+            )}
             <Badge className={`text-xs ${statusCfg.color}`}>
               {statusCfg.label}
             </Badge>

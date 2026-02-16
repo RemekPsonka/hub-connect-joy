@@ -43,6 +43,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Diamond,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -85,8 +86,10 @@ import { TaskDependencies } from './TaskDependencies';
 import { TaskTimeTracker } from './TaskTimeTracker';
 import { TaskCustomFields } from './TaskCustomFields';
 import { TaskActivityLog } from './TaskActivityLog';
+import { TaskAttachments } from './TaskAttachments';
 import { getRecurrenceLabel } from './RecurrenceSelector';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from './UnifiedTaskRow';
+import { useProjectMilestones } from '@/hooks/useProjectMilestones';
 import { cn } from '@/lib/utils';
 
 // ─── Sortable subtask ──────────────────────────────────────
@@ -113,6 +116,25 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
       <span className="w-[140px] shrink-0 text-xs font-medium text-muted-foreground pt-0.5">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
+  );
+}
+
+// ─── Milestone meta row (needs its own hook call) ───────────
+
+function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: string; projectId: string; navigate: (path: string) => void }) {
+  const { data: milestones } = useProjectMilestones(projectId);
+  const milestone = milestones?.find(m => m.id === milestoneId);
+  if (!milestone) return null;
+  return (
+    <MetaRow label="Kamień milowy">
+      <div
+        className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
+        onClick={() => navigate(`/projects/${projectId}?tab=milestones`)}
+      >
+        <Diamond className="h-3.5 w-3.5 text-amber-500" />
+        <span>{milestone.name}</span>
+      </div>
+    </MetaRow>
   );
 }
 
@@ -427,6 +449,11 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
                 </div>
               </MetaRow>
             )}
+
+            {/* Milestone */}
+            {(task as any).milestone_id && task.project_id && (
+              <MilestoneMetaRow milestoneId={(task as any).milestone_id} projectId={task.project_id} navigate={navigate} />
+            )}
           </div>
 
           {/* Labels */}
@@ -601,6 +628,9 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
               </p>
             )}
           </div>
+
+          {/* Attachments */}
+          <TaskAttachments taskId={task.id} />
 
           {/* Time Tracker */}
           <TaskTimeTracker taskId={task.id} estimatedHours={(task as any).estimated_hours} />
