@@ -57,6 +57,7 @@ interface AIImportContactsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  defaultGroupId?: string;
 }
 
 type Step = 'source' | 'preview' | 'importing' | 'complete';
@@ -98,10 +99,10 @@ const manualContactSchema = z.object({
 
 type ManualContactFormData = z.infer<typeof manualContactSchema>;
 
-export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImportContactsModalProps) {
+export function AIImportContactsModal({ open, onOpenChange, onSuccess, defaultGroupId }: AIImportContactsModalProps) {
   const [step, setStep] = useState<Step>('source');
   const [pastedText, setPastedText] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(defaultGroupId || '');
   const [metSource, setMetSource] = useState('');
   const [metDate, setMetDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dragActive, setDragActive] = useState(false);
@@ -173,7 +174,7 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
     if (!open) {
       setStep('source');
       setPastedText('');
-      setSelectedGroupId('');
+      setSelectedGroupId(defaultGroupId || '');
       setMetSource('');
       setMetDate(new Date().toISOString().split('T')[0]);
       setUploadedFiles([]);
@@ -184,8 +185,13 @@ export function AIImportContactsModal({ open, onOpenChange, onSuccess }: AIImpor
       setShowMergeModal(false);
       setExistingContact(null);
       setPendingSubmitData(null);
+    } else {
+      // When opening, set the default group from active filter
+      if (defaultGroupId) {
+        setSelectedGroupId(defaultGroupId);
+      }
     }
-  }, [open, reset, form]);
+  }, [open, reset, form, defaultGroupId]);
 
   // Transition to preview when contacts are parsed
   useEffect(() => {
