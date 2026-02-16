@@ -136,28 +136,73 @@ export function useContact(id: string | undefined) {
 export function useContactGroups() {
   const { director, assistant, isAssistant } = useAuth();
   const tenantId = director?.tenant_id || assistant?.tenant_id;
+  const directorId = director?.id;
 
   return useQuery({
-    queryKey: ['contact_groups', tenantId, isAssistant, assistant?.allowed_group_ids],
+    queryKey: ['contact_groups', tenantId, isAssistant, assistant?.allowed_group_ids, directorId],
     queryFn: async () => {
       if (!tenantId) return [];
 
-      let query = supabase
+      // Fetch all groups in tenant
+      const { data: allGroups, error } = await supabase
         .from('contact_groups')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('sort_order', { ascending: true });
 
-      // For assistants, only show allowed groups
-      if (isAssistant && assistant?.allowed_group_ids?.length) {
-        query = query.in('id', assistant.allowed_group_ids);
-      }
-
-      const { data, error } = await query;
-
       if (error) throw error;
 
-      return data as ContactGroup[];
+      // For assistants, only show allowed groups
+      if (isAssistant && assistant?.allowed_group_ids?.length) {
+        return (allGroups as ContactGroup[]).filter(g => assistant.allowed_group_ids!.includes(g.id));
+      }
+
+      // For directors, check if admin/owner
+      if (directorId) {
+        const { data: isAdmin } = await supabase.rpc('is_tenant_admin', {
+          _user_id: (await supabase.auth.getUser()).data.user?.id!,
+          _tenant_id: tenantId,
+        });
+
+        if (isAdmin) {
+          return allGroups as ContactGroup[];
+        }
+
+        // Non-admin: filter by contact_group_shares
+        const { data: shares, error: sharesError } = await supabase
+          .from('contact_group_shares')
+          .select('group_id')
+          .eq('tenant_id', tenantId)
+          .or(`shared_with_director_id.eq.${directorId}`);
+
+        if (sharesError) throw sharesError;
+
+        // Also check team shares
+        const { data: teamShares, error: teamError } = await supabase
+          .from('deal_team_members')
+          .select('team_id')
+          .eq('director_id', directorId)
+          .eq('is_active', true);
+
+        if (teamError) throw teamError;
+
+        let visibleGroupIds = new Set((shares || []).map(s => s.group_id));
+
+        if (teamShares?.length) {
+          const teamIds = teamShares.map(t => t.team_id);
+          const { data: teamGroupShares } = await supabase
+            .from('contact_group_shares')
+            .select('group_id')
+            .eq('tenant_id', tenantId)
+            .in('shared_with_team_id', teamIds);
+
+          (teamGroupShares || []).forEach(s => visibleGroupIds.add(s.group_id));
+        }
+
+        return (allGroups as ContactGroup[]).filter(g => visibleGroupIds.has(g.id));
+      }
+
+      return allGroups as ContactGroup[];
     },
     enabled: !!tenantId,
     staleTime: 5 * 60 * 1000, // 5 minut
