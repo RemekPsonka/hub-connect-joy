@@ -219,6 +219,7 @@ export function ContactsHeader({
         open={isAddContactModalOpen}
         onOpenChange={setIsAddContactModalOpen}
         onSuccess={onImportSuccess}
+        defaultGroupId={filters.groupId}
       />
     </div>
   );
