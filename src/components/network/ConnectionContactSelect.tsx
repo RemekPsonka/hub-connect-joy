@@ -134,7 +134,9 @@ export function ConnectionContactSelect({
             <CommandEmpty>
               {search.length > 0 && search.length < 2
                 ? 'Wpisz min. 2 znaki...'
-                : 'Brak kontaktów'}
+                : contacts.length > 0 && filteredContacts.length === 0
+                  ? 'Kontakt już dodany do projektu'
+                  : 'Brak kontaktów'}
             </CommandEmpty>
             <div ref={listRef} className="max-h-[300px] overflow-auto">
               <CommandGroup>
