@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProjectContacts, useAddProjectContact, useRemoveProjectContact } from '@/hooks/useProjects';
+import { useProjectContacts, useAddProjectContact, useRemoveProjectContact, useUpdateProjectContact } from '@/hooks/useProjects';
 import { DataCard } from '@/components/ui/data-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
@@ -16,7 +16,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Users, Plus, Trash2, ExternalLink } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Users, Plus, Trash2, ExternalLink, Pencil } from 'lucide-react';
 import { ConnectionContactSelect } from '@/components/network/ConnectionContactSelect';
 import { SovraSuggestionsSection } from './SovraSuggestionsSection';
 
@@ -24,17 +29,89 @@ interface ProjectContactsTabProps {
   projectId: string;
 }
 
+function RoleEditor({ currentRole, onSave, isPending }: {
+  currentRole: string | null;
+  onSave: (role: string | null) => void;
+  isPending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editValue, setEditValue] = useState(currentRole || '');
+
+  const handleSave = () => {
+    onSave(editValue.trim() || null);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setEditValue(currentRole || ''); }}>
+      <PopoverTrigger asChild>
+        {currentRole ? (
+          <Badge variant="outline" className="text-xs shrink-0 cursor-pointer hover:bg-accent gap-1">
+            {currentRole}
+            <Pencil className="h-2.5 w-2.5" />
+          </Badge>
+        ) : (
+          <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground shrink-0">
+            + Rola
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-3" align="end">
+        <div className="space-y-2">
+          <Label className="text-xs">Rola w projekcie</Label>
+          <Input
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            placeholder="np. Zarząd, Kapituła"
+            className="h-8 text-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+          <div className="flex gap-1.5 justify-end">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpen(false)}>
+              Anuluj
+            </Button>
+            <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={isPending}>
+              Zapisz
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ProjectContactsTab({ projectId }: ProjectContactsTabProps) {
   const navigate = useNavigate();
   const { data: projectContacts, isLoading } = useProjectContacts(projectId);
   const addContact = useAddProjectContact();
   const removeContact = useRemoveProjectContact();
+  const updateContact = useUpdateProjectContact();
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [roleInProject, setRoleInProject] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
 
   const excludeIds = projectContacts?.map((pc) => (pc as any).contact?.id).filter(Boolean) || [];
+
+  // Role counts
+  const { roleCounts, filteredContacts } = useMemo(() => {
+    if (!projectContacts?.length) return { roleCounts: new Map<string, number>(), filteredContacts: [] };
+
+    const counts = new Map<string, number>();
+    for (const pc of projectContacts) {
+      const role = pc.role_in_project || 'Bez roli';
+      counts.set(role, (counts.get(role) || 0) + 1);
+    }
+
+    const filtered = roleFilter
+      ? projectContacts.filter((pc) =>
+          roleFilter === 'Bez roli' ? !pc.role_in_project : pc.role_in_project === roleFilter
+        )
+      : projectContacts;
+
+    return { roleCounts: counts, filteredContacts: filtered };
+  }, [projectContacts, roleFilter]);
 
   const handleAddContact = () => {
     if (!selectedContactId) return;
@@ -101,6 +178,31 @@ export function ProjectContactsTab({ projectId }: ProjectContactsTabProps) {
     </Dialog>
   );
 
+  // Filter bar
+  const filterBar = projectContacts && projectContacts.length > 0 && roleCounts.size > 0 && (
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      <Badge
+        variant={roleFilter === null ? 'default' : 'outline'}
+        className="cursor-pointer text-xs"
+        onClick={() => setRoleFilter(null)}
+      >
+        Wszyscy ({projectContacts.length})
+      </Badge>
+      {Array.from(roleCounts.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([role, count]) => (
+          <Badge
+            key={role}
+            variant={roleFilter === role ? 'default' : 'outline'}
+            className="cursor-pointer text-xs"
+            onClick={() => setRoleFilter(role)}
+          >
+            {role} ({count})
+          </Badge>
+        ))}
+    </div>
+  );
+
   if (!projectContacts?.length) {
     return (
       <>
@@ -126,8 +228,9 @@ export function ProjectContactsTab({ projectId }: ProjectContactsTabProps) {
         title={`Kontakty projektu (${projectContacts.length})`}
         action={addButton}
       >
+        {filterBar}
         <div className="divide-y divide-border">
-          {projectContacts.map((pc) => {
+          {filteredContacts.map((pc) => {
             const contact = (pc as any).contact;
             if (!contact) return null;
 
@@ -151,11 +254,11 @@ export function ProjectContactsTab({ projectId }: ProjectContactsTabProps) {
                     <p className="text-xs text-muted-foreground truncate">{contact.position}</p>
                   )}
                 </div>
-                {pc.role_in_project && (
-                  <Badge variant="outline" className="text-xs shrink-0">
-                    {pc.role_in_project}
-                  </Badge>
-                )}
+                <RoleEditor
+                  currentRole={pc.role_in_project}
+                  isPending={updateContact.isPending}
+                  onSave={(role) => updateContact.mutate({ id: pc.id, roleInProject: role, projectId })}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
