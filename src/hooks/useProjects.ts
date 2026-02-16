@@ -325,6 +325,31 @@ export function useRemoveProjectContact() {
   });
 }
 
+export function useUpdateProjectContact() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, roleInProject, projectId }: {
+      id: string;
+      roleInProject: string | null;
+      projectId: string;
+    }) => {
+      const { error } = await supabase
+        .from('project_contacts')
+        .update({ role_in_project: roleInProject })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['project-contacts', vars.projectId] });
+      toast.success('Zaktualizowano rolę kontaktu');
+    },
+    onError: () => {
+      toast.error('Błąd podczas aktualizacji roli');
+    },
+  });
+}
+
 // ─── Project Notes ──────────────────────────────────────
 
 export function useProjectNotes(projectId: string | undefined) {
