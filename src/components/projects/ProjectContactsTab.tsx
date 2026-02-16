@@ -45,16 +45,16 @@ function RoleEditor({ currentRole, onSave, isPending }: {
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setEditValue(currentRole || ''); }}>
       <PopoverTrigger asChild>
-        {currentRole ? (
-          <Badge variant="outline" className="text-xs shrink-0 cursor-pointer hover:bg-accent gap-1">
-            {currentRole}
-            <Pencil className="h-2.5 w-2.5" />
-          </Badge>
-        ) : (
-          <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground shrink-0">
-            + Rola
-          </Button>
-        )}
+        <button type="button" className="shrink-0">
+          {currentRole ? (
+            <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent gap-1">
+              {currentRole}
+              <Pencil className="h-2.5 w-2.5" />
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">+ Rola</span>
+          )}
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" align="end">
         <div className="space-y-2">
