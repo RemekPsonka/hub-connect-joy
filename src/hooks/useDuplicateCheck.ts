@@ -231,6 +231,7 @@ export function useFindDuplicates(enabled: boolean = true) {
               .filter(Boolean)
           );
           if (firstNames.size > 1) return;
+          if (firstNames.size === 0) return; // Brak imion = różne kontakty, pomijaj
 
           const key = `email:${email}`;
           if (!processedKeys.has(key)) {
@@ -267,6 +268,7 @@ export function useFindDuplicates(enabled: boolean = true) {
               .filter(Boolean)
           );
           if (firstNames.size > 1) return;
+          if (firstNames.size === 0) return; // Brak imion = różne kontakty, pomijaj
 
           const emailDupIds = new Set(
             duplicateGroups
