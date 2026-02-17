@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Loader2, Users, Check, ChevronDown, ChevronUp, Mail, Phone, Building2, User } from 'lucide-react';
+import { Loader2, Users, Check, ChevronDown, ChevronUp, Mail, Phone, Building2, User, CheckSquare, FolderOpen, Brain, Handshake, MessageSquare, Target, Gift } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,11 +9,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useFindDuplicates, useMergeMultipleContacts, type DuplicateGroup } from '@/hooks/useDuplicateCheck';
+import { useFindDuplicates, useMergeMultipleContacts, type DuplicateGroup, type ContactWithRelations } from '@/hooks/useDuplicateCheck';
 import { cn } from '@/lib/utils';
 
 interface FindDuplicatesModalProps {
@@ -21,15 +20,72 @@ interface FindDuplicatesModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+function ContactRelationBadges({ contact }: { contact: ContactWithRelations }) {
+  const r = contact._relatedData;
+  if (!r) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {r.tasks > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <CheckSquare className="h-3 w-3" />
+          {r.tasks} {r.tasks === 1 ? 'zadanie' : r.tasks < 5 ? 'zadania' : 'zadań'}
+        </Badge>
+      )}
+      {r.projects > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <FolderOpen className="h-3 w-3" />
+          {r.projects} {r.projects === 1 ? 'projekt' : r.projects < 5 ? 'projekty' : 'projektów'}
+        </Badge>
+      )}
+      {r.deals > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <Handshake className="h-3 w-3" />
+          {r.deals} {r.deals === 1 ? 'zespół' : r.deals < 5 ? 'zespoły' : 'zespołów'}
+        </Badge>
+      )}
+      {r.consultations > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <MessageSquare className="h-3 w-3" />
+          {r.consultations} {r.consultations === 1 ? 'konsultacja' : r.consultations < 5 ? 'konsultacje' : 'konsultacji'}
+        </Badge>
+      )}
+      {r.needs > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <Target className="h-3 w-3" />
+          {r.needs} {r.needs === 1 ? 'potrzeba' : r.needs < 5 ? 'potrzeby' : 'potrzeb'}
+        </Badge>
+      )}
+      {r.offers > 0 && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1">
+          <Gift className="h-3 w-3" />
+          {r.offers} {r.offers === 1 ? 'oferta' : r.offers < 5 ? 'oferty' : 'ofert'}
+        </Badge>
+      )}
+      {r.hasProfileSummary && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1 border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400">
+          <Brain className="h-3 w-3" />
+          Profil AI
+        </Badge>
+      )}
+      {r.hasAI && (
+        <Badge variant="outline" className="text-xs py-0 px-1.5 gap-1 border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400">
+          <Brain className="h-3 w-3" />
+          Pamięć AI
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalProps) {
-  const { data: duplicateGroups = [], isLoading, refetch } = useFindDuplicates(open);
+  const { data: duplicateGroups = [], isLoading } = useFindDuplicates(open);
   const { mutateAsync: mergeContacts, isPending: isMerging } = useMergeMultipleContacts();
   
   const [selectedPrimary, setSelectedPrimary] = useState<Record<string, string>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [mergedGroups, setMergedGroups] = useState<Set<string>>(new Set());
 
-  // Stats
   const stats = useMemo(() => {
     const totalGroups = duplicateGroups.length;
     const totalContacts = duplicateGroups.reduce((acc, g) => acc + g.contacts.length, 0);
@@ -40,11 +96,8 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -54,11 +107,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
   };
 
   const getPrimaryForGroup = (group: DuplicateGroup): string => {
-    // If user selected, use that
-    if (selectedPrimary[group.key]) {
-      return selectedPrimary[group.key];
-    }
-    // Default: oldest contact (smallest created_at)
+    if (selectedPrimary[group.key]) return selectedPrimary[group.key];
     const sorted = [...group.contacts].sort((a, b) => 
       new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
     );
@@ -68,7 +117,6 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
   const handleMergeGroup = async (group: DuplicateGroup) => {
     const primaryId = getPrimaryForGroup(group);
     const duplicateIds = group.contacts.filter(c => c.id !== primaryId).map(c => c.id);
-    
     try {
       await mergeContacts({ primaryContactId: primaryId, duplicateIds });
       setMergedGroups(prev => new Set([...prev, group.key]));
@@ -79,7 +127,6 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
 
   const handleMergeAll = async () => {
     const unmergedGroups = duplicateGroups.filter(g => !mergedGroups.has(g.key));
-    
     for (const group of unmergedGroups) {
       await handleMergeGroup(group);
     }
@@ -114,7 +161,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
             Znajdź i scal duplikaty
           </DialogTitle>
           <DialogDescription>
-            Wyszukaj duplikaty kontaktów po emailu, telefonie lub imieniu i nazwisku, a następnie scal je w jeden kontakt.
+            Wyszukaj duplikaty kontaktów po emailu, telefonie lub imieniu i nazwisku, a następnie scal je w jeden kontakt. Wszystkie powiązane dane (zadania, projekty, konsultacje) zostaną przeniesione.
           </DialogDescription>
         </DialogHeader>
 
@@ -131,7 +178,6 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
           </div>
         ) : (
           <div className="flex flex-col min-h-0 flex-1">
-            {/* Stats */}
             <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{stats.totalGroups}</Badge>
@@ -149,7 +195,6 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
               )}
             </div>
 
-            {/* Action buttons */}
             <div className="flex justify-end gap-2">
               <Button
                 variant="default"
@@ -165,7 +210,6 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
               </Button>
             </div>
 
-            {/* Duplicate groups list */}
             <div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: 'calc(80vh - 200px)' }}>
               <div className="space-y-3 pb-4">
                 {duplicateGroups.map((group) => {
@@ -229,7 +273,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
                         <CollapsibleContent>
                           <div className="border-t px-3 py-3 bg-muted/30">
                             <p className="text-xs text-muted-foreground mb-3">
-                              Wybierz główny kontakt (pozostałe zostaną scalane do niego):
+                              Wybierz główny kontakt (pozostałe zostaną scalane do niego — zadania, projekty i inne powiązania zostaną przeniesione):
                             </p>
                             <RadioGroup
                               value={primaryId}
@@ -281,6 +325,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
                                         </div>
                                       )}
                                     </div>
+                                    <ContactRelationBadges contact={contact} />
                                     <div className="text-xs text-muted-foreground mt-1">
                                       Utworzono: {new Date(contact.created_at || '').toLocaleDateString('pl-PL')}
                                     </div>
