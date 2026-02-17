@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -166,7 +166,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
             </div>
 
             {/* Duplicate groups list */}
-            <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+            <div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: 'calc(80vh - 200px)' }}>
               <div className="space-y-3 pb-4">
                 {duplicateGroups.map((group) => {
                   const isMerged = mergedGroups.has(group.key);
@@ -295,7 +295,7 @@ export function FindDuplicatesModal({ open, onOpenChange }: FindDuplicatesModalP
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
           </div>
         )}
       </DialogContent>
