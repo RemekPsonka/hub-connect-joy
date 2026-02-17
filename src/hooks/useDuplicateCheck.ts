@@ -10,10 +10,25 @@ export interface DuplicateCheckResult {
   existingContact: Partial<Contact> | null;
 }
 
+export interface ContactRelatedData {
+  tasks: number;
+  projects: number;
+  deals: number;
+  hasAI: boolean;
+  hasProfileSummary: boolean;
+  consultations: number;
+  needs: number;
+  offers: number;
+}
+
+export interface ContactWithRelations extends Contact {
+  _relatedData?: ContactRelatedData;
+}
+
 export interface DuplicateGroup {
   type: 'email' | 'phone' | 'name';
   key: string;
-  contacts: Contact[];
+  contacts: ContactWithRelations[];
 }
 
 export interface UseDuplicateCheckReturn {
@@ -34,12 +49,10 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
       return { isDuplicate: false, existingContact: null };
     }
 
-    // Nie sprawdzaj jeśli brak podstawowych danych identyfikacyjnych
     if (!contact.first_name || !contact.last_name) {
       return { isDuplicate: false, existingContact: null };
     }
 
-    // Nie sprawdzaj jeśli brak telefonu i emaila
     if (!contact.phone && !contact.email) {
       return { isDuplicate: false, existingContact: null };
     }
@@ -115,6 +128,66 @@ export function useDuplicateCheck(): UseDuplicateCheckReturn {
   };
 }
 
+// Helper to build related data map
+async function fetchRelatedDataMap(contactIds: string[]): Promise<Map<string, ContactRelatedData>> {
+  const map = new Map<string, ContactRelatedData>();
+  if (contactIds.length === 0) return map;
+
+  // Initialize all contacts
+  contactIds.forEach(id => map.set(id, {
+    tasks: 0, projects: 0, deals: 0, hasAI: false,
+    hasProfileSummary: false, consultations: 0, needs: 0, offers: 0,
+  }));
+
+  const [taskRes, projectRes, dealRes, aiRes, consultRes, needsRes, offersRes] = await Promise.all([
+    supabase.from('task_contacts').select('contact_id').in('contact_id', contactIds),
+    supabase.from('project_contacts').select('contact_id').in('contact_id', contactIds),
+    supabase.from('deal_team_contacts').select('contact_id').in('contact_id', contactIds),
+    supabase.from('contact_agent_memory').select('contact_id').in('contact_id', contactIds),
+    supabase.from('consultations').select('contact_id').in('contact_id', contactIds),
+    supabase.from('needs').select('contact_id').in('contact_id', contactIds),
+    supabase.from('offers').select('contact_id').in('contact_id', contactIds),
+  ]);
+
+  // Count tasks per contact
+  (taskRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.tasks++;
+  });
+  // Count projects
+  (projectRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.projects++;
+  });
+  // Count deals
+  (dealRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.deals++;
+  });
+  // AI memory
+  (aiRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.hasAI = true;
+  });
+  // Consultations
+  (consultRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.consultations++;
+  });
+  // Needs
+  (needsRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.needs++;
+  });
+  // Offers
+  (offersRes.data || []).forEach(r => {
+    const d = map.get(r.contact_id);
+    if (d) d.offers++;
+  });
+
+  return map;
+}
+
 // Hook to find all duplicate contacts in the database
 export function useFindDuplicates(enabled: boolean = true) {
   const { director, assistant } = useAuth();
@@ -175,10 +248,9 @@ export function useFindDuplicates(enabled: boolean = true) {
       const phoneMap = new Map<string, Contact[]>();
       contacts.forEach(contact => {
         if (contact.phone) {
-          // Normalize phone number
           const phone = contact.phone.replace(/\D/g, '');
           if (phone.length >= 9) {
-            const normalizedPhone = phone.slice(-9); // Last 9 digits
+            const normalizedPhone = phone.slice(-9);
             if (!phoneMap.has(normalizedPhone)) {
               phoneMap.set(normalizedPhone, []);
             }
@@ -196,7 +268,6 @@ export function useFindDuplicates(enabled: boolean = true) {
           );
           if (firstNames.size > 1) return;
 
-          // Filter out contacts already in email duplicates
           const emailDupIds = new Set(
             duplicateGroups
               .filter(g => g.type === 'email')
@@ -218,7 +289,7 @@ export function useFindDuplicates(enabled: boolean = true) {
         }
       });
 
-      // Find duplicates by exact name match (first + last)
+      // Find duplicates by exact name match
       const nameMap = new Map<string, Contact[]>();
       contacts.forEach(contact => {
         if (contact.first_name && contact.last_name) {
@@ -232,7 +303,6 @@ export function useFindDuplicates(enabled: boolean = true) {
 
       nameMap.forEach((contactList, name) => {
         if (contactList.length > 1) {
-          // Filter out contacts already in other duplicate groups
           const existingDupIds = new Set(
             duplicateGroups.flatMap(g => g.contacts.map(c => c.id))
           );
@@ -250,6 +320,21 @@ export function useFindDuplicates(enabled: boolean = true) {
             }
           }
         }
+      });
+
+      // Fetch related data for all contacts in duplicate groups
+      const allContactIds = [...new Set(duplicateGroups.flatMap(g => g.contacts.map(c => c.id)))];
+      const relatedDataMap = await fetchRelatedDataMap(allContactIds);
+
+      // Attach related data to contacts & mark profile_summary
+      duplicateGroups.forEach(group => {
+        group.contacts = group.contacts.map(c => ({
+          ...c,
+          _relatedData: {
+            ...relatedDataMap.get(c.id)!,
+            hasProfileSummary: !!c.profile_summary,
+          },
+        }));
       });
 
       return duplicateGroups;
@@ -285,14 +370,13 @@ export function useMergeMultipleContacts() {
       // 2. Merge data - fill empty fields from duplicates
       const mergedData: Record<string, unknown> = {};
       const fieldsToMerge = [
-        'email', 'phone', 'phone_business', 'company', 'position', 'title',
+        'company', 'position', 'title',
         'city', 'linkedin_url', 'met_date', 'met_source', 'company_id', 'primary_group_id'
       ];
 
       fieldsToMerge.forEach(field => {
         const primaryValue = primaryContact[field as keyof typeof primaryContact];
         if (!primaryValue) {
-          // Find first non-empty value from duplicates
           for (const dup of duplicates) {
             const dupValue = dup[field as keyof typeof dup];
             if (dupValue) {
@@ -302,6 +386,68 @@ export function useMergeMultipleContacts() {
           }
         }
       });
+
+      // Smart phone merge - preserve different numbers
+      for (const dup of duplicates) {
+        if (dup.phone && dup.phone !== primaryContact.phone) {
+          if (!primaryContact.phone && !mergedData.phone) {
+            mergedData.phone = dup.phone;
+          } else if (!primaryContact.phone_business && !mergedData.phone_business) {
+            mergedData.phone_business = dup.phone;
+          }
+        }
+        if (dup.phone_business && dup.phone_business !== primaryContact.phone_business) {
+          if (!primaryContact.phone_business && !mergedData.phone_business) {
+            mergedData.phone_business = dup.phone_business;
+          }
+        }
+      }
+
+      // Smart email merge - preserve different emails
+      for (const dup of duplicates) {
+        if (dup.email && dup.email !== primaryContact.email) {
+          if (!primaryContact.email && !mergedData.email) {
+            mergedData.email = dup.email;
+          } else if (!primaryContact.email_secondary && !mergedData.email_secondary) {
+            mergedData.email_secondary = dup.email;
+          }
+        }
+        if (dup.email_secondary && dup.email_secondary !== primaryContact.email_secondary) {
+          if (!primaryContact.email_secondary && !mergedData.email_secondary) {
+            mergedData.email_secondary = dup.email_secondary;
+          }
+        }
+      }
+
+      // Smart address merge
+      for (const dup of duplicates) {
+        if (dup.address && dup.address !== primaryContact.address) {
+          if (!primaryContact.address && !mergedData.address) {
+            mergedData.address = dup.address;
+          } else if (!primaryContact.address_secondary && !mergedData.address_secondary) {
+            mergedData.address_secondary = dup.address;
+          }
+        }
+      }
+
+      // Keep best profile_summary (longest non-empty)
+      const allSummaries = [primaryContact, ...duplicates]
+        .map(c => c.profile_summary)
+        .filter(Boolean) as string[];
+      if (allSummaries.length > 0) {
+        const best = allSummaries.reduce((a, b) => a.length >= b.length ? a : b);
+        if (best !== primaryContact.profile_summary) {
+          mergedData.profile_summary = best;
+        }
+      }
+
+      // Keep best profile_embedding (non-null, prefer primary's)
+      if (!primaryContact.profile_embedding) {
+        const dupWithEmbedding = duplicates.find(d => d.profile_embedding);
+        if (dupWithEmbedding) {
+          mergedData.profile_embedding = dupWithEmbedding.profile_embedding;
+        }
+      }
 
       // Merge tags (unique)
       const allTags = new Set<string>();
@@ -344,7 +490,67 @@ export function useMergeMultipleContacts() {
         if (updateError) throw updateError;
       }
 
-      // 4. Deactivate duplicates (soft delete)
+      // 4. Transfer all related records from duplicates to primary
+      for (const dupId of duplicateIds) {
+        await Promise.all([
+          // Transfer task_contacts
+          supabase.from('task_contacts').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer project_contacts
+          supabase.from('project_contacts').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer deal_team_contacts
+          supabase.from('deal_team_contacts').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer connections (both directions)
+          supabase.from('connections').update({ contact_a_id: primaryContactId }).eq('contact_a_id', dupId),
+          supabase.from('connections').update({ contact_b_id: primaryContactId }).eq('contact_b_id', dupId),
+          // Transfer consultations
+          supabase.from('consultations').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer agent_conversations
+          supabase.from('agent_conversations').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer consultation_guests
+          supabase.from('consultation_guests').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer consultation_meetings
+          supabase.from('consultation_meetings').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer consultation_recommendations
+          supabase.from('consultation_recommendations').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer consultation_thanks
+          supabase.from('consultation_thanks').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer needs
+          supabase.from('needs').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer offers
+          supabase.from('offers').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer business_interviews
+          supabase.from('business_interviews').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer contact_activity_log
+          supabase.from('contact_activity_log').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+        ]);
+
+        // Transfer agent memory: if primary doesn't have it, move it; else delete dup's
+        const { data: dupMemory } = await supabase
+          .from('contact_agent_memory')
+          .select('*')
+          .eq('contact_id', dupId)
+          .maybeSingle();
+
+        if (dupMemory) {
+          const { data: primaryMemory } = await supabase
+            .from('contact_agent_memory')
+            .select('id')
+            .eq('contact_id', primaryContactId)
+            .maybeSingle();
+
+          if (!primaryMemory) {
+            await supabase.from('contact_agent_memory')
+              .update({ contact_id: primaryContactId })
+              .eq('contact_id', dupId);
+          } else {
+            await supabase.from('contact_agent_memory')
+              .delete()
+              .eq('contact_id', dupId);
+          }
+        }
+      }
+
+      // 5. Deactivate duplicates (soft delete)
       const { error: deactivateError } = await supabase
         .from('contacts')
         .update({ is_active: false })
@@ -352,7 +558,7 @@ export function useMergeMultipleContacts() {
 
       if (deactivateError) throw deactivateError;
 
-      // 5. Record merge history
+      // 6. Record merge history
       for (const dup of duplicates) {
         await supabase
           .from('contact_merge_history')
