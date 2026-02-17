@@ -1,32 +1,26 @@
 
-# Pomijanie kontaktow "bez nazwy" w algorytmie duplikatow
+# Naprawa polityki RLS INSERT dla wanted_contacts
 
 ## Problem
-Kontakty bez imienia i nazwiska ("bez nazwy") sa grupowane jako duplikaty, mimo ze to rozne kontakty. Dzieje sie tak, poniewaz:
-- W grupowaniu po emailu/telefonie, gdy zaden kontakt nie ma imienia, `firstNames.size` wynosi 0 (wszystkie puste wartosci sa odfiltrowane), wiec warunek `> 1` nie blokuje grupy
-- W grupowaniu po nazwisku, kontakty bez `first_name` i `last_name` nie sa brane pod uwage (to juz dziala poprawnie)
+Polityka `wc_insert` zostala utworzona z `TO public` (domyslna wartosc gdy nie podano roli), zamiast `TO authenticated`. Efekt:
+- Rola `authenticated` (zalogowani uzytkownicy) NIE MA zadnej polityki INSERT
+- RLS blokuje kazdy INSERT dla zalogowanych uzytkownikow
+- Dlatego blad "new row violates row-level security policy" pojawia sie przy kazdej probie dodania
 
 ## Rozwiazanie
-Dodac warunek: jesli **wszystkie** kontakty w grupie nie maja imienia (firstNames.size === 0), pomijamy grupe -- to sa rozne kontakty, nie duplikaty.
+Usunac i utworzyc ponownie polityke `wc_insert` z jawnym `TO authenticated`:
 
-## Szczegoly techniczne
+```sql
+DROP POLICY IF EXISTS "wc_insert" ON public.wanted_contacts;
 
-### Plik: `src/hooks/useDuplicateCheck.ts`
-
-**Duplikaty po emailu (linia 233)** -- dodac warunek pomijania grup bez imion:
-```typescript
-// Obecny kod:
-if (firstNames.size > 1) return;
-
-// Nowy kod:
-if (firstNames.size > 1) return;
-if (firstNames.size === 0) return; // Brak imion = rozne kontakty, pomijaj
+CREATE POLICY "wc_insert" ON public.wanted_contacts
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.directors WHERE user_id = auth.uid())
+    AND created_by IN (SELECT id FROM public.directors WHERE user_id = auth.uid())
+  );
 ```
 
-**Duplikaty po telefonie (linia 269)** -- ta sama zmiana:
-```typescript
-if (firstNames.size > 1) return;
-if (firstNames.size === 0) return; // Brak imion = rozne kontakty, pomijaj
-```
-
-To wyeliminuje grupe 22 kontaktow "bez nazwy" z wynikow duplikatow.
+## Plik do zmiany
+Jedna migracja SQL -- zadnych zmian w kodzie.
