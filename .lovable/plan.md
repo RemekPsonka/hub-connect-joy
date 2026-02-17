@@ -1,36 +1,44 @@
 
-
-# Naprawa przewijania w oknie "Znajdz i scal duplikaty"
+# Poprawa algorytmu wyszukiwania duplikatow
 
 ## Problem
-Komponent `ScrollArea` z Radix UI nie przewija zawartosci, poniewaz jego wewnetrzny `Viewport` nie otrzymuje ograniczenia wysokosci. Klasa `flex-1 min-h-0` nie dziala poprawnie z architektura Radix ScrollArea.
+Algorytm grupuje kontakty jako duplikaty na podstawie samego emaila lub telefonu, ignorujac roznice w imionach. Przyklad: "Piotr Frycz" i "Pawel Frycz" maja ten sam email `pfrycz@chemet.com.pl`, ale to rozne osoby -- nie powinny byc traktowane jako duplikaty.
 
 ## Rozwiazanie
-Zastapic `ScrollArea` zwyklym `div` z `overflow-y-auto` i ograniczeniem wysokosci. To najprostsze i najbardziej niezawodne podejscie.
+Dodac warunek: kontakty z tym samym emailem/telefonem sa duplikatami **tylko jesli maja takie samo imie** (lub jedno z nich nie ma imienia). Jesli imiona sie roznia, pomijamy grupe.
 
 ## Szczegoly techniczne
 
-### Plik: `src/components/contacts/FindDuplicatesModal.tsx`
+### Plik: `src/hooks/useDuplicateCheck.ts`
 
-**Linia 169**: Zamienic:
-```tsx
-<ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+**Duplikaty po emailu (linie 153-164)**: Po zgrupowaniu kontaktow po emailu, przed dodaniem grupy do wynikow, odfiltrowac grupy gdzie kontakty maja rozne imiona:
+
+```typescript
+emailMap.forEach((contactList, email) => {
+  if (contactList.length > 1) {
+    // Sprawdz czy wszystkie kontakty maja to samo imie (lub brak imienia)
+    const firstNames = new Set(
+      contactList
+        .map(c => c.first_name?.toLowerCase().trim())
+        .filter(Boolean)
+    );
+    // Jesli sa rozne imiona -> to nie duplikaty
+    if (firstNames.size > 1) return;
+
+    const key = `email:${email}`;
+    if (!processedKeys.has(key)) {
+      processedKeys.add(key);
+      duplicateGroups.push({ type: 'email', key: email, contacts: contactList });
+    }
+  }
+});
 ```
-na:
-```tsx
-<div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: 'calc(80vh - 200px)' }}>
-```
 
-**Linia 298**: Zamienic zamykajacy tag:
-```tsx
-</ScrollArea>
-```
-na:
-```tsx
-</div>
-```
+**Duplikaty po telefonie (analogiczna zmiana, ok. linia 182-200)**: Ten sam warunek -- jesli kontakty z tym samym telefonem maja rozne imiona, pomijamy grupe.
 
-Usuniecie nieuzywanych importow `ScrollArea` z poczatku pliku (linia 12), jezeli nie jest uzywany nigdzie indziej w tym pliku.
+**Duplikaty po nazwisku (linie ~210-230)**: Tu nie trzeba zmieniac -- grupowanie po pelnym imieniu i nazwisku z definicji wymaga zgodnosci imion.
 
-To da przewijalny kontener z wysokoscia dopasowana do okna dialogowego (80vh minus ~200px na naglowek, statystyki i przyciski).
-
+## Efekt
+- "Piotr Frycz" i "Pawel Frycz" z tym samym emailem nie beda juz pokazywani jako duplikaty
+- Kontakty z identycznym imieniem i emailem/telefonem nadal beda wykrywane
+- Kontakty bez imienia beda nadal dopasowywane (brak imienia nie blokuje)
