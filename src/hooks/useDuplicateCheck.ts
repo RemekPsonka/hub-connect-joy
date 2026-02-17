@@ -152,6 +152,13 @@ export function useFindDuplicates(enabled: boolean = true) {
 
       emailMap.forEach((contactList, email) => {
         if (contactList.length > 1) {
+          const firstNames = new Set(
+            contactList
+              .map(c => c.first_name?.toLowerCase().trim())
+              .filter(Boolean)
+          );
+          if (firstNames.size > 1) return;
+
           const key = `email:${email}`;
           if (!processedKeys.has(key)) {
             processedKeys.add(key);
@@ -182,6 +189,13 @@ export function useFindDuplicates(enabled: boolean = true) {
 
       phoneMap.forEach((contactList, phone) => {
         if (contactList.length > 1) {
+          const firstNames = new Set(
+            contactList
+              .map(c => c.first_name?.toLowerCase().trim())
+              .filter(Boolean)
+          );
+          if (firstNames.size > 1) return;
+
           // Filter out contacts already in email duplicates
           const emailDupIds = new Set(
             duplicateGroups
