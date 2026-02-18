@@ -1,70 +1,67 @@
 
-# Poprawki w module Poszukiwani
+# Widok "Szybka lista" na stronie Poszukiwani
 
-## Problem 1: Wybor dyrektora powinien zamykac dialog
-Obecnie po wybraniu dyrektora system probuje znalezc go w tabeli `contacts` i jesli nie znajdzie -- przelacza na wyszukiwanie CRM. To zle. Wybranie dyrektora oznacza: "ten dyrektor zna te osobe". Dialog powinien sie zamknac, a `matched_by` powinien wskazywac na wybranego dyrektora (nie na aktualnie zalogowanego).
+## Cel
+Dodac przelacznik widoku (karty / lista) na stronie Poszukiwani. Widok "szybka lista" pokazuje kompaktowe wiersze: logo firmy, nazwa firmy, nazwisko osoby (lub "brak") -- bez dodatkowych informacji jak "kto szuka", daty, pilnosc itd.
 
-**Zmiana w `MatchWantedDialog.tsx`:**
-- `handleDirectorMatch` zamiast szukac kontaktu w CRM, od razu aktualizuje `wanted_contacts`:
-  - `matched_by = director.id` (wybrany dyrektor, nie aktualny user)
-  - `status = 'in_progress'` (ktos zna, ale jeszcze nie zamkniete)
-  - `matched_at = now()`
-  - BEZ ustawiania `matched_contact_id` i `status: fulfilled`
-- Dialog zamyka sie od razu po kliknieciu dyrektora
-- Opcja "Inny -- szukaj w CRM" nadal dziala jak dotychczas (szuka kontaktu CRM i ustawia `matched_contact_id`)
+## Zmiany
 
-**Nowy hook `useClaimWantedContact` w `useWantedContacts.ts`:**
-- Osobna mutacja ktora aktualizuje tylko `matched_by`, `matched_at`, `status: 'in_progress'` -- bez `matched_contact_id`
+### 1. `src/pages/WantedContacts.tsx`
+- Dodac stan `viewMode: 'cards' | 'list'` (domyslnie `'cards'`)
+- Dodac przelacznik (dwa przyciski z ikonami `LayoutGrid` / `List`) obok filtrow lub w headerze
+- Gdy `viewMode === 'list'` -- zamiast siatki kart renderowac kompaktowa tabele/liste
+- Widok listy: prosta lista wierszy z `CompanyLogo`, `company_name`, `person_name || '—'`, plus maly badge statusu
 
-## Problem 2: Filtr "Kto zna te osobe" na stronie Poszukiwani
-
-**Zmiana w `WantedContactFilters` + `useWantedContacts`:**
-- Dodac pole `matchedBy?: string` do filtrow
-- W zapytaniu: `query = query.eq('matched_by', filters.matchedBy)`
-
-**Zmiana w `WantedContacts.tsx`:**
-- Dodac nowy `Select` z lista dyrektorow (z `useDirectors()`)
-- Opcje: "Wszyscy" + lista dyrektorow
-- Wartosc filtra to `director.id`
-
-**Zmiana w `useWantedContacts` select:**
-- Dodac join na `matched_by` zeby moc wyswietlic imie dyrektora ktory zna:
+### 2. Nowy komponent `src/components/wanted/WantedQuickList.tsx`
+- Przyjmuje `items: WantedContact[]`
+- Renderuje `Card` z wierszami w formacie:
   ```
-  matched_by_director:directors!wanted_contacts_matched_by_fkey(id, full_name)
+  [Logo] Firma                  Nazwisko        [badge status]
   ```
+- Kazdy wiersz klikalny -- otwiera akcje lub szczegoly
+- Uzywa `CompanyLogo` (juz istniejacy komponent) do wyswietlenia logo firmy
+- Jesli brak `person_name` -- wyswietla "—" w kolorze muted
+- Kompaktowy: `py-1.5`, maly tekst, bez dodatkowych danych
 
-**Zmiana w `WantedContactCard.tsx`:**
-- Wyswietlic "Zna: [imie dyrektora]" obok "Szuka: [kontakt]" gdy `matched_by` jest ustawiony
+### Szczegoly techniczne
 
-## Problem 3: Lista TOP kontaktow na stronie Poszukiwani
-Przeniesc/dodac sekcje z TOP kontaktami (kategoria `top` z `deal_team_contacts`) na strone Poszukiwani.
+**Przelacznik widoku w headerze (WantedContacts.tsx):**
+```tsx
+import { LayoutGrid, List } from 'lucide-react';
 
-**Nowa sekcja w `WantedContacts.tsx`:**
-- Pod filtrami, przed lista poszukiwanych
-- Zapytanie do `deal_team_contacts` z filtrem `category = 'top'`
-- Prosta lista z imieniem i firma, kompaktowy format
-- Tytul sekcji: "TOP Kontakty"
+const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
 
----
+// W sekcji filtrow:
+<div className="flex gap-1">
+  <Button variant={viewMode === 'cards' ? 'default' : 'ghost'} size="icon" className="h-8 w-8"
+    onClick={() => setViewMode('cards')}><LayoutGrid className="h-4 w-4" /></Button>
+  <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="icon" className="h-8 w-8"
+    onClick={() => setViewMode('list')}><List className="h-4 w-4" /></Button>
+</div>
+```
 
-## Szczegoly techniczne
+**Komponent WantedQuickList:**
+```tsx
+<Card>
+  <CardContent className="p-0 divide-y">
+    {items.map(item => (
+      <div key={item.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50">
+        <CompanyLogo companyName={item.company_name} size="sm" />
+        <span className="font-medium text-sm truncate flex-1">
+          {item.company_name || '—'}
+        </span>
+        <span className="text-sm text-muted-foreground truncate w-[180px]">
+          {item.person_name || '—'}
+        </span>
+        <Badge variant="secondary" className="text-[10px]">
+          {statusLabels[item.status]}
+        </Badge>
+      </div>
+    ))}
+  </CardContent>
+</Card>
+```
 
-### Pliki do zmiany:
-
-1. **`src/hooks/useWantedContacts.ts`**
-   - Dodac `useClaimWantedContact()` -- mutacja ustawiajaca `matched_by`, `matched_at`, `status: 'in_progress'`
-   - Rozszerzyc `WantedContactFilters` o `matchedBy?: string`
-   - Dodac filtr `matched_by` w `useWantedContacts`
-   - Dodac join `matched_by_director` w selectach
-   - Dodac `matched_by_director` do interfejsu `WantedContact`
-
-2. **`src/components/wanted/MatchWantedDialog.tsx`**
-   - `handleDirectorMatch` -- uzyc `useClaimWantedContact` zamiast szukania w CRM
-   - Zamknac dialog po wybraniu dyrektora
-
-3. **`src/pages/WantedContacts.tsx`**
-   - Dodac filtr `matchedBy` z lista dyrektorow
-   - Dodac sekcje TOP kontaktow (zapytanie do `deal_team_contacts` gdzie `category = 'top'`)
-
-4. **`src/components/wanted/WantedContactCard.tsx`**
-   - Wyswietlic "Zna: [dyrektor]" gdy `matched_by_director` jest dostepny
+### Pliki do zmiany/utworzenia:
+1. **Nowy**: `src/components/wanted/WantedQuickList.tsx` -- kompaktowy widok listy
+2. **Edycja**: `src/pages/WantedContacts.tsx` -- przelacznik widoku + renderowanie warunkowe
