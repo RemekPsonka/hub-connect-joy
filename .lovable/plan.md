@@ -1,95 +1,56 @@
 
-# Przyciski "To ta osoba" / "To nie ta osoba" przy sugestiach AI
+# Dialog "Znam te osobe" -- lista dyrektorow + opcja "Inny"
 
 ## Cel
-Przy kazdej sugestii AI (np. "Marek Warzecha (Ponar wadowice)") dodac dwa przyciski akcji:
-- **"To ta osoba!"** -- natychmiast dopasowuje kontakt z bazy do wpisu wanted (zmienia status na `fulfilled`, ustawia `matched_contact_id`)
-- **"To nie ta osoba"** -- ukrywa sugestie z listy (lokalnie), zeby nie przeszkadzala
+Po kliknieciu "Znam te osobe!" uzytkownik widzi najpierw liste dyrektorow z organizacji. Moze wybrac jednego dyrektora (ktory zna te osobe), albo kliknac "Inny" zeby przeszukac baze CRM.
 
-Dzieki temu uzytkownik moze szybko potwierdzic lub odrzucic sugestie AI bez otwierania osobnego dialogu. Nawet jesli kontakt jest "zimny", dopasowanie oznacza ze wiemy kto to jest -- dalsze ocieplanie to oddzielny krok.
+## Zmiany w `src/components/wanted/MatchWantedDialog.tsx`
 
-## Zmiany
+### Nowy flow:
+1. Dialog otwiera sie z lista dyrektorow (z `useDirectors()`) jako przyciski/karty
+2. Na dole opcja **"Inny -- szukaj w CRM"**
+3. Po kliknieciu dyrektora -- od razu `matchMutation.mutate()` z ID kontaktu powiazanego z dyrektorem (wymaga dociagniecia `contact_id` dyrektora)
+4. Po kliknieciu "Inny" -- przelaczenie na widok `ConnectionContactSelect` (obecny flow)
 
-### 1. `src/components/wanted/WantedAISuggestions.tsx`
-- Dodac stan `dismissedIds: Set<string>` do przechowywania odrzuconych sugestii (lokalnie, na czas sesji)
-- Przy kazdej sugestii dodac dwa przyciski:
-  - **Zielony check** ("To ta osoba!") -- wywoluje `useMatchWantedContact()` z `wantedId` i `contactId` sugestii
-  - **Szary X** ("To nie ta osoba") -- dodaje ID do `dismissedIds`, sugestia znika z listy
-- Filtrowac sugestie przez `dismissedIds` przed renderowaniem
-- Po kliknieciu "To ta osoba!" pokazac krotki loading spinner na przycisku
+### Szczegoly techniczne:
 
-### 2. Szczegoly techniczne
+**Stan:**
+- `mode: 'directors' | 'crm'` -- przelaczanie miedzy widokami
+- `contactId` -- wybrany kontakt (uzywany w trybie CRM)
 
-Obecny wyglad wiersza sugestii:
-```
-Marek Warzecha (Ponar wadowice)     [b/d]
-```
-
-Nowy wyglad:
-```
-Marek Warzecha (Ponar wadowice)  [v To ta!] [x Nie] [b/d]
-```
-
-Kod w `WantedAISuggestions.tsx`:
+**Tryb "directors":**
 ```tsx
-// Nowe importy
-import { useMatchWantedContact } from '@/hooks/useWantedContacts';
-import { Check, X, Loader2 } from 'lucide-react';
+const { data: directors = [] } = useDirectors();
 
-// Nowe stany
-const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-const [matchingId, setMatchingId] = useState<string | null>(null);
-const matchMutation = useMatchWantedContact();
-
-// Filtrowanie
-const visibleSuggestions = suggestions.filter(s => !dismissedIds.has(s.id));
-
-// Handler dopasowania
-const handleQuickMatch = (contactId: string) => {
-  setMatchingId(contactId);
-  matchMutation.mutate(
-    { wantedId, contactId },
-    { onSettled: () => setMatchingId(null) }
-  );
-};
-
-// Handler odrzucenia
-const handleDismiss = (id: string) => {
-  setDismissedIds(prev => new Set(prev).add(id));
-};
+{directors.map(d => (
+  <Button key={d.id} variant="outline" className="justify-start gap-2"
+    onClick={() => handleDirectorMatch(d)}>
+    <User className="h-4 w-4" />
+    {d.full_name}
+  </Button>
+))}
+<Button variant="ghost" onClick={() => setMode('crm')}>
+  Inny -- szukaj w CRM
+</Button>
 ```
 
-Wiersz sugestii:
-```tsx
-<div key={s.id} className="flex items-center justify-between gap-2 text-xs">
-  <span className="min-w-0 truncate">
-    <Link ...>{s.full_name}</Link>
-    {s.company && <span>({s.company})</span>}
-  </span>
-  <div className="flex items-center gap-1 shrink-0">
-    <Button size="sm" variant="ghost"
-      className="h-6 px-1.5 text-[10px] text-green-600 hover:bg-green-50"
-      onClick={() => handleQuickMatch(s.id)}
-      disabled={matchingId === s.id}>
-      {matchingId === s.id
-        ? <Loader2 className="h-3 w-3 animate-spin" />
-        : <><Check className="h-3 w-3" /> To ta!</>}
-    </Button>
-    <Button size="sm" variant="ghost"
-      className="h-6 px-1.5 text-[10px] text-muted-foreground"
-      onClick={() => handleDismiss(s.id)}>
-      <X className="h-3 w-3" />
-    </Button>
-    <Badge variant="outline" className="text-[10px]">{s.position || 'b/d'}</Badge>
-  </div>
-</div>
-```
+**Problem**: Dyrektorzy nie maja bezposrednio `contact_id`. Trzeba znalezc kontakt w tabeli `contacts` po emailu lub imieniu dyrektora. Ale latwiej: dyrektorzy sami w sobie nie sa kontaktami CRM -- raczej chodzi o to, ze dyrektor "zna" poszukiwana osobe i wskazuje ja z CRM.
 
-- Aktualizacja licznika w naglowku: uzyc `visibleSuggestions.length` zamiast `suggestions.length`
-- Jesli `visibleSuggestions.length === 0`, ukryc cala sekcje
+**Reinterpretacja**: Uzytkownik chce wybrac **ktory dyrektor zna te osobe** (matched_by), a nastepnie opcjonalnie wskazac kontakt z CRM. Ale z kodu wynika, ze `matched_by` to juz aktualny uzytkownik...
 
-### 3. Usuniecie nieuzywanych elementow
-- `MatchWantedDialog` w `WantedAISuggestions` nie jest aktualnie uzywany (stan `matchOpen` nigdy nie jest ustawiany na `true` przez UI). Mozna go usunac z tego komponentu -- jest juz w `WantedContactCard`.
+**Najprostsza interpretacja**: Lista dyrektorow sluzy jako szybki wybor -- kazdy dyrektor moze byc rowniez kontaktem w CRM. Wiec:
+1. Pokazac dyrektorow jako skroty
+2. Po kliknieciu dyrektora -- wyszukac jego kontakt w CRM po emailu i uzyc jako `matched_contact_id`
+3. "Inny" -- standardowy ConnectionContactSelect
+
+**Implementacja `handleDirectorMatch`:**
+- Wyszukaj kontakt po `email = director.email` w tabeli `contacts`
+- Jesli znaleziony -- dopasuj
+- Jesli nie -- pokaz toast "Dyrektor nie ma kontaktu w CRM" i przelacz na tryb CRM
+
+### Przyciski w trybie CRM:
+- "Wstecz" -- wroc do listy dyrektorow
+- "Dopasuj" -- jak teraz
 
 ## Pliki do zmiany
-1. `src/components/wanted/WantedAISuggestions.tsx` -- dodanie przyciskow, stanow, logiki dopasowania/odrzucania
+1. `src/components/wanted/MatchWantedDialog.tsx` -- nowy dwuetapowy flow
