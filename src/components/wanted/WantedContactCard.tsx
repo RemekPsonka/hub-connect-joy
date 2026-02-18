@@ -131,12 +131,12 @@ export function WantedContactCard({ item, otherRequesters }: { item: WantedConta
         )}
 
         {/* AI suggestions */}
-        {item.status === 'active' && (item.company_industry || item.company_name) && (
+        {item.status !== 'cancelled' && item.status !== 'expired' && (item.company_industry || item.company_name) && (
           <WantedAISuggestions industry={item.company_industry || item.company_name} wantedId={item.id} />
         )}
 
         {/* Actions */}
-        {item.status === 'active' && !isExpired && (
+        {(item.status === 'active' || item.status === 'fulfilled' || item.status === 'in_progress') && !isExpired && (
           <div className="flex items-center gap-2 pt-1 border-t">
             <Button size="sm" variant="outline" onClick={() => setMatchOpen(true)} className="gap-1.5 text-xs">
               <Target className="h-3.5 w-3.5" /> Znam tę osobę!
