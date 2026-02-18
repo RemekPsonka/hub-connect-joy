@@ -98,14 +98,19 @@ export function WantedContactCard({ item, otherRequesters }: { item: WantedConta
           )}
         </div>
 
-        {/* Requester */}
-        <div className="flex items-center justify-between text-xs">
+        {/* Requester & matched info */}
+        <div className="flex flex-col gap-1 text-xs">
           <span className="text-muted-foreground">
             Szuka:{' '}
             <Link to={`/contacts/${item.requested_by_contact_id}`} className="text-primary hover:underline">
               {item.requested_by_contact?.full_name || 'Nieznany'}
             </Link>
           </span>
+          {item.matched_by_director && (
+            <span className="text-blue-500">
+              Zna: <span className="font-medium">{item.matched_by_director.full_name}</span>
+            </span>
+          )}
           {item.matched_contact && (
             <span className="text-green-500">
               Dopasowano: <Link to={`/contacts/${item.matched_contact.id}`} className="hover:underline">{item.matched_contact.full_name}</Link>

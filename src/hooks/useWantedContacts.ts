@@ -36,12 +36,14 @@ export interface WantedContact {
   requested_by_contact?: { id: string; full_name: string; company: string | null };
   matched_contact?: { id: string; full_name: string; company: string | null } | null;
   created_by_director?: { id: string; full_name: string } | null;
+  matched_by_director?: { id: string; full_name: string } | null;
 }
 
 export interface WantedContactFilters {
   status?: string;
   urgency?: string;
   search?: string;
+  matchedBy?: string;
 }
 
 export function useWantedContacts(filters?: WantedContactFilters) {
@@ -54,7 +56,8 @@ export function useWantedContacts(filters?: WantedContactFilters) {
           *,
           requested_by_contact:contacts!wanted_contacts_requested_by_contact_id_fkey(id, full_name, company),
           matched_contact:contacts!wanted_contacts_matched_contact_id_fkey(id, full_name, company),
-          created_by_director:directors!wanted_contacts_created_by_fkey(id, full_name)
+          created_by_director:directors!wanted_contacts_created_by_fkey(id, full_name),
+          matched_by_director:directors!wanted_contacts_matched_by_fkey(id, full_name)
         `)
         .order('created_at', { ascending: false });
 
@@ -73,6 +76,9 @@ export function useWantedContacts(filters?: WantedContactFilters) {
       }
       if (filters?.search) {
         query = query.or(`person_name.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%,person_context.ilike.%${filters.search}%,company_context.ilike.%${filters.search}%`);
+      }
+      if (filters?.matchedBy && filters.matchedBy !== 'all') {
+        query = query.eq('matched_by', filters.matchedBy);
       }
 
       const { data, error } = await query;
@@ -93,7 +99,8 @@ export function useContactWantedContacts(contactId: string | undefined) {
           *,
           requested_by_contact:contacts!wanted_contacts_requested_by_contact_id_fkey(id, full_name, company),
           matched_contact:contacts!wanted_contacts_matched_contact_id_fkey(id, full_name, company),
-          created_by_director:directors!wanted_contacts_created_by_fkey(id, full_name)
+          created_by_director:directors!wanted_contacts_created_by_fkey(id, full_name),
+          matched_by_director:directors!wanted_contacts_matched_by_fkey(id, full_name)
         `)
         .eq('requested_by_contact_id', contactId!)
         .order('created_at', { ascending: false });
@@ -178,6 +185,29 @@ export function useDeleteWantedContact() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['wanted-contacts'] });
       toast.success('Usunięto');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useClaimWantedContact() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ wantedId, directorId }: { wantedId: string; directorId: string }) => {
+      const { error } = await supabase
+        .from('wanted_contacts')
+        .update({
+          matched_by: directorId,
+          matched_at: new Date().toISOString(),
+          status: 'in_progress',
+        } as any)
+        .eq('id', wantedId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wanted-contacts'] });
+      toast.success('Przypisano dyrektora');
     },
     onError: (e: Error) => toast.error(e.message),
   });

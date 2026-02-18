@@ -3,24 +3,53 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Plus, Target, Search, FileUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Plus, Target, Search, FileUp, Star, User } from 'lucide-react';
 import { useWantedContacts } from '@/hooks/useWantedContacts';
+import { useDirectors } from '@/hooks/useDirectors';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { WantedContactCard } from '@/components/wanted/WantedContactCard';
 import { WantedContactModal } from '@/components/wanted/WantedContactModal';
 import { ImportWantedDialog } from '@/components/wanted/ImportWantedDialog';
 import { buildRequesterGroups, getOtherRequesters } from '@/utils/wantedGrouping';
+import { Link } from 'react-router-dom';
+
+function useTopContacts() {
+  return useQuery({
+    queryKey: ['top-contacts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('deal_team_contacts')
+        .select(`
+          id,
+          contact:contacts!deal_team_contacts_contact_id_fkey(id, full_name, company, position)
+        `)
+        .eq('category', 'top')
+        .limit(20);
+      if (error) throw error;
+      return data;
+    },
+  });
+}
 
 export default function WantedContacts() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [urgencyFilter, setUrgencyFilter] = useState('all');
+  const [matchedByFilter, setMatchedByFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showTopContacts, setShowTopContacts] = useState(false);
+
+  const { data: directors = [] } = useDirectors();
+  const { data: topContacts = [] } = useTopContacts();
 
   const { data: items, isLoading } = useWantedContacts({
     status: statusFilter,
     urgency: urgencyFilter,
     search: searchQuery || undefined,
+    matchedBy: matchedByFilter !== 'all' ? matchedByFilter : undefined,
   });
 
   const requesterGroups = useMemo(() => buildRequesterGroups(items || []), [items]);
@@ -85,7 +114,52 @@ export default function WantedContacts() {
             <SelectItem value="critical">Krytyczna</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={matchedByFilter} onValueChange={setMatchedByFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Kto zna?" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Wszyscy dyrektorzy</SelectItem>
+            {directors.map(d => (
+              <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* TOP Contacts toggle */}
+      {topContacts.length > 0 && (
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 mb-2"
+            onClick={() => setShowTopContacts(!showTopContacts)}
+          >
+            <Star className="h-4 w-4 text-amber-500" />
+            TOP Kontakty ({topContacts.length})
+          </Button>
+          {showTopContacts && (
+            <Card>
+              <CardContent className="p-3">
+                <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {topContacts.map((tc: any) => (
+                    <Link
+                      key={tc.id}
+                      to={`/contacts/${tc.contact?.id}`}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors text-sm"
+                    >
+                      <User className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span className="font-medium truncate">{tc.contact?.full_name}</span>
+                      {tc.contact?.company && (
+                        <Badge variant="outline" className="text-[10px] shrink-0">{tc.contact.company}</Badge>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* List */}
       {isLoading ? (
