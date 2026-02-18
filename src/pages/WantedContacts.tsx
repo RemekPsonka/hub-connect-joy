@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Target, Search, FileUp, Star, User } from 'lucide-react';
+import { Loader2, Plus, Target, Search, FileUp, Star, User, LayoutGrid, List } from 'lucide-react';
 import { useWantedContacts } from '@/hooks/useWantedContacts';
 import { useDirectors } from '@/hooks/useDirectors';
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { WantedContactCard } from '@/components/wanted/WantedContactCard';
 import { WantedContactModal } from '@/components/wanted/WantedContactModal';
 import { ImportWantedDialog } from '@/components/wanted/ImportWantedDialog';
+import { WantedQuickList } from '@/components/wanted/WantedQuickList';
 import { buildRequesterGroups, getOtherRequesters } from '@/utils/wantedGrouping';
 import { Link } from 'react-router-dom';
 
@@ -41,6 +42,7 @@ export default function WantedContacts() {
   const [matchedByFilter, setMatchedByFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTopContacts, setShowTopContacts] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
 
   const { data: directors = [] } = useDirectors();
   const { data: topContacts = [] } = useTopContacts();
@@ -89,6 +91,14 @@ export default function WantedContacts() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1">
+          <Button variant={viewMode === 'cards' ? 'default' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('cards')}>
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('list')}>
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Szukaj po imieniu, firmie..." className="pl-9" />
@@ -167,9 +177,13 @@ export default function WantedContacts() {
       ) : !items || items.length === 0 ? (
         <Card><CardContent className="py-12 text-center"><Target className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">Brak poszukiwanych kontaktów</p></CardContent></Card>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => <WantedContactCard key={item.id} item={item} otherRequesters={getOtherRequesters(item, requesterGroups)} />)}
-        </div>
+        viewMode === 'list' ? (
+          <WantedQuickList items={items} />
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {items.map((item) => <WantedContactCard key={item.id} item={item} otherRequesters={getOtherRequesters(item, requesterGroups)} />)}
+          </div>
+        )
       )}
 
       <WantedContactModal open={modalOpen} onOpenChange={setModalOpen} />
