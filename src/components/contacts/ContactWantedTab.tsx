@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Plus, Target } from 'lucide-react';
 import { useContactWantedContacts } from '@/hooks/useWantedContacts';
 import { WantedContactCard } from '@/components/wanted/WantedContactCard';
 import { WantedContactModal } from '@/components/wanted/WantedContactModal';
+import { buildRequesterGroups, getOtherRequesters } from '@/utils/wantedGrouping';
 
 export function ContactWantedTab({ contactId }: { contactId: string }) {
   const [modalOpen, setModalOpen] = useState(false);
   const { data: items, isLoading } = useContactWantedContacts(contactId);
+  const requesterGroups = useMemo(() => buildRequesterGroups(items || []), [items]);
 
   return (
     <div className="space-y-4">
@@ -25,7 +27,7 @@ export function ContactWantedTab({ contactId }: { contactId: string }) {
         <Card><CardContent className="py-8 text-center"><Target className="h-10 w-10 text-muted-foreground mx-auto mb-2" /><p className="text-sm text-muted-foreground">Brak poszukiwanych</p></CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => <WantedContactCard key={item.id} item={item} />)}
+          {items.map((item) => <WantedContactCard key={item.id} item={item} otherRequesters={getOtherRequesters(item, requesterGroups)} />)}
         </div>
       )}
 
