@@ -114,7 +114,8 @@ Zwróć JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           userMessage,
@@ -147,6 +148,11 @@ Zwróć JSON:
     const responseText = aiResponse.choices?.[0]?.message?.content || '';
 
     console.log('[parse-wanted-list] AI response length:', responseText.length);
+
+    if (!responseText) {
+      console.error('[parse-wanted-list] Empty AI response. Full payload:', JSON.stringify(aiResponse));
+      throw new Error('AI zwróciło pustą odpowiedź. Spróbuj ponownie.');
+    }
 
     let result: any;
     try {
