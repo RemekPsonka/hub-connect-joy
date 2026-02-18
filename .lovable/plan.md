@@ -1,84 +1,95 @@
 
-# Grupowanie poszukiwanych -- "Szukaja takze: X, Y, Z"
+# Przyciski "To ta osoba" / "To nie ta osoba" przy sugestiach AI
 
 ## Cel
-Gdy kilka osob szuka tego samego kontaktu/firmy, na kafelku wyswietlic informacje kto jeszcze szuka (np. "Szukaja takze: Anna Kowalska, Jan Nowak").
+Przy kazdej sugestii AI (np. "Marek Warzecha (Ponar wadowice)") dodac dwa przyciski akcji:
+- **"To ta osoba!"** -- natychmiast dopasowuje kontakt z bazy do wpisu wanted (zmienia status na `fulfilled`, ustawia `matched_contact_id`)
+- **"To nie ta osoba"** -- ukrywa sugestie z listy (lokalnie), zeby nie przeszkadzala
 
-## Logika dopasowania
-Dwa wpisy `wanted_contacts` sa "tym samym poszukiwanym" jesli maja identyczne (case-insensitive):
-- `person_name` (jesli oba nie-null) ORAZ `company_name` (jesli oba nie-null)
-- LUB jesli jeden szuka tylko firmy -- dopasowanie po `company_name`
-- LUB jesli jeden szuka tylko osoby -- dopasowanie po `person_name`
+Dzieki temu uzytkownik moze szybko potwierdzic lub odrzucic sugestie AI bez otwierania osobnego dialogu. Nawet jesli kontakt jest "zimny", dopasowanie oznacza ze wiemy kto to jest -- dalsze ocieplanie to oddzielny krok.
 
 ## Zmiany
 
-### 1. Strona `WantedContacts.tsx` -- obliczenie grupy szukajacych
-- Po pobraniu listy `items`, zbudowac mape: klucz = `(person_name?.toLowerCase() || '') + '|' + (company_name?.toLowerCase() || '')` -> tablica requesters (imiona osob szukajacych + ich ID kontaktu)
-- Przekazac do `WantedContactCard` nowy prop `otherRequesters` -- lista pozostalych osob szukajacych tego samego (bez aktualnego requestera)
+### 1. `src/components/wanted/WantedAISuggestions.tsx`
+- Dodac stan `dismissedIds: Set<string>` do przechowywania odrzuconych sugestii (lokalnie, na czas sesji)
+- Przy kazdej sugestii dodac dwa przyciski:
+  - **Zielony check** ("To ta osoba!") -- wywoluje `useMatchWantedContact()` z `wantedId` i `contactId` sugestii
+  - **Szary X** ("To nie ta osoba") -- dodaje ID do `dismissedIds`, sugestia znika z listy
+- Filtrowac sugestie przez `dismissedIds` przed renderowaniem
+- Po kliknieciu "To ta osoba!" pokazac krotki loading spinner na przycisku
 
-### 2. Komponent `WantedContactCard.tsx` -- wyswietlenie
-- Nowy prop: `otherRequesters?: Array<{ contactId: string; name: string }>`
-- Pomiedzy sekcja "Szuka:" a akcjami, dodac sekcje:
-  ```
-  Szukaja takze: Anna Kowalska, Jan Nowak (+2 wiecej)
-  ```
-- Kazde imie jako link do `/contacts/:id`
-- Pokazac max 3 imiona, reszta jako "+N wiecej"
-- Ikona `Users` z lucide-react obok tekstu
-- Styl: maly tekst, kolor `text-amber-600` zeby sie wyroznialo
+### 2. Szczegoly techniczne
 
-### 3. Komponent `ContactWantedTab.tsx` -- analogiczne grupowanie
-- Ten sam mechanizm co na stronie glownej, ale w kontekscie zakladki kontaktu
-
-## Szczegoly techniczne
-
-Nowa funkcja pomocnicza (w `WantedContactCard.tsx` lub osobny util):
-```typescript
-function buildRequesterGroups(items: WantedContact[]): Map<string, Array<{ contactId: string; name: string }>> {
-  const groups = new Map<string, Array<{...}>>();
-  for (const item of items) {
-    const key = `${(item.person_name || '').toLowerCase().trim()}|${(item.company_name || '').toLowerCase().trim()}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push({
-      contactId: item.requested_by_contact_id,
-      name: item.requested_by_contact?.full_name || 'Nieznany',
-      wantedId: item.id,
-    });
-  }
-  return groups;
-}
+Obecny wyglad wiersza sugestii:
+```
+Marek Warzecha (Ponar wadowice)     [b/d]
 ```
 
-W `WantedContacts.tsx`:
-```typescript
-const requesterGroups = useMemo(() => buildRequesterGroups(items || []), [items]);
-
-// Dla kazdego item:
-const key = `${(item.person_name || '').toLowerCase().trim()}|${(item.company_name || '').toLowerCase().trim()}`;
-const allRequesters = requesterGroups.get(key) || [];
-const otherRequesters = allRequesters.filter(r => r.wantedId !== item.id);
+Nowy wyglad:
+```
+Marek Warzecha (Ponar wadowice)  [v To ta!] [x Nie] [b/d]
 ```
 
-W `WantedContactCard.tsx` -- nowa sekcja renderingu:
+Kod w `WantedAISuggestions.tsx`:
 ```tsx
-{otherRequesters && otherRequesters.length > 0 && (
-  <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5">
-    <Users className="h-3.5 w-3.5 shrink-0" />
-    <span>
-      Szukają także:{' '}
-      {otherRequesters.slice(0, 3).map((r, i) => (
-        <Fragment key={r.contactId}>
-          {i > 0 && ', '}
-          <Link to={`/contacts/${r.contactId}`} className="font-medium hover:underline">{r.name}</Link>
-        </Fragment>
-      ))}
-      {otherRequesters.length > 3 && ` (+${otherRequesters.length - 3} więcej)`}
-    </span>
-  </div>
-)}
+// Nowe importy
+import { useMatchWantedContact } from '@/hooks/useWantedContacts';
+import { Check, X, Loader2 } from 'lucide-react';
+
+// Nowe stany
+const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+const [matchingId, setMatchingId] = useState<string | null>(null);
+const matchMutation = useMatchWantedContact();
+
+// Filtrowanie
+const visibleSuggestions = suggestions.filter(s => !dismissedIds.has(s.id));
+
+// Handler dopasowania
+const handleQuickMatch = (contactId: string) => {
+  setMatchingId(contactId);
+  matchMutation.mutate(
+    { wantedId, contactId },
+    { onSettled: () => setMatchingId(null) }
+  );
+};
+
+// Handler odrzucenia
+const handleDismiss = (id: string) => {
+  setDismissedIds(prev => new Set(prev).add(id));
+};
 ```
+
+Wiersz sugestii:
+```tsx
+<div key={s.id} className="flex items-center justify-between gap-2 text-xs">
+  <span className="min-w-0 truncate">
+    <Link ...>{s.full_name}</Link>
+    {s.company && <span>({s.company})</span>}
+  </span>
+  <div className="flex items-center gap-1 shrink-0">
+    <Button size="sm" variant="ghost"
+      className="h-6 px-1.5 text-[10px] text-green-600 hover:bg-green-50"
+      onClick={() => handleQuickMatch(s.id)}
+      disabled={matchingId === s.id}>
+      {matchingId === s.id
+        ? <Loader2 className="h-3 w-3 animate-spin" />
+        : <><Check className="h-3 w-3" /> To ta!</>}
+    </Button>
+    <Button size="sm" variant="ghost"
+      className="h-6 px-1.5 text-[10px] text-muted-foreground"
+      onClick={() => handleDismiss(s.id)}>
+      <X className="h-3 w-3" />
+    </Button>
+    <Badge variant="outline" className="text-[10px]">{s.position || 'b/d'}</Badge>
+  </div>
+</div>
+```
+
+- Aktualizacja licznika w naglowku: uzyc `visibleSuggestions.length` zamiast `suggestions.length`
+- Jesli `visibleSuggestions.length === 0`, ukryc cala sekcje
+
+### 3. Usuniecie nieuzywanych elementow
+- `MatchWantedDialog` w `WantedAISuggestions` nie jest aktualnie uzywany (stan `matchOpen` nigdy nie jest ustawiany na `true` przez UI). Mozna go usunac z tego komponentu -- jest juz w `WantedContactCard`.
 
 ## Pliki do zmiany
-1. `src/pages/WantedContacts.tsx` -- budowanie grup, przekazanie prop
-2. `src/components/wanted/WantedContactCard.tsx` -- nowy prop + renderowanie sekcji
-3. `src/components/contacts/ContactWantedTab.tsx` -- analogiczne grupowanie
+1. `src/components/wanted/WantedAISuggestions.tsx` -- dodanie przyciskow, stanow, logiki dopasowania/odrzucania
