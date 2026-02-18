@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Building2, Target, Share2, Trash2, Clock } from 'lucide-react';
+import { User, Building2, Target, Share2, Trash2, Clock, Users } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { WantedContact, useDeleteWantedContact } from '@/hooks/useWantedContacts';
 import { MatchWantedDialog } from './MatchWantedDialog';
 import { ShareWantedDialog } from './ShareWantedDialog';
 import { WantedAISuggestions } from './WantedAISuggestions';
+import { RequesterInfo } from '@/utils/wantedGrouping';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -38,7 +39,7 @@ const urgencyLabels: Record<string, string> = {
   critical: 'Krytyczna',
 };
 
-export function WantedContactCard({ item }: { item: WantedContact }) {
+export function WantedContactCard({ item, otherRequesters }: { item: WantedContact; otherRequesters?: RequesterInfo[] }) {
   const [matchOpen, setMatchOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const deleteWanted = useDeleteWantedContact();
@@ -111,6 +112,23 @@ export function WantedContactCard({ item }: { item: WantedContact }) {
             </span>
           )}
         </div>
+
+        {/* Other requesters */}
+        {otherRequesters && otherRequesters.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5">
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Szukają także:{' '}
+              {otherRequesters.slice(0, 3).map((r, i) => (
+                <Fragment key={r.contactId}>
+                  {i > 0 && ', '}
+                  <Link to={`/contacts/${r.contactId}`} className="font-medium hover:underline">{r.name}</Link>
+                </Fragment>
+              ))}
+              {otherRequesters.length > 3 && ` (+${otherRequesters.length - 3} więcej)`}
+            </span>
+          </div>
+        )}
 
         {/* AI suggestions */}
         {item.status === 'active' && (item.company_industry || item.company_name) && (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,6 +8,7 @@ import { useWantedContacts } from '@/hooks/useWantedContacts';
 import { WantedContactCard } from '@/components/wanted/WantedContactCard';
 import { WantedContactModal } from '@/components/wanted/WantedContactModal';
 import { ImportWantedDialog } from '@/components/wanted/ImportWantedDialog';
+import { buildRequesterGroups, getOtherRequesters } from '@/utils/wantedGrouping';
 
 export default function WantedContacts() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -21,6 +22,8 @@ export default function WantedContacts() {
     urgency: urgencyFilter,
     search: searchQuery || undefined,
   });
+
+  const requesterGroups = useMemo(() => buildRequesterGroups(items || []), [items]);
 
   const stats = items ? {
     active: items.filter((i) => i.status === 'active').length,
@@ -91,7 +94,7 @@ export default function WantedContacts() {
         <Card><CardContent className="py-12 text-center"><Target className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">Brak poszukiwanych kontaktów</p></CardContent></Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => <WantedContactCard key={item.id} item={item} />)}
+          {items.map((item) => <WantedContactCard key={item.id} item={item} otherRequesters={getOtherRequesters(item, requesterGroups)} />)}
         </div>
       )}
 
