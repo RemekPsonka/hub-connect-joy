@@ -136,8 +136,8 @@ export function WantedContactCard({ item, otherRequesters }: { item: WantedConta
         )}
 
         {/* AI suggestions */}
-        {item.status !== 'cancelled' && item.status !== 'expired' && (item.company_industry || item.company_name) && (
-          <WantedAISuggestions industry={item.company_industry || item.company_name} wantedId={item.id} />
+        {item.status !== 'cancelled' && item.status !== 'expired' && (item.company_name || item.person_name) && (
+          <WantedAISuggestions companyName={item.company_name} personName={item.person_name} wantedId={item.id} />
         )}
 
         {/* Actions */}

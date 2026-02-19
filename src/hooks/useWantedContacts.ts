@@ -255,15 +255,20 @@ export function useCompanyByNip(nip: string | null) {
   });
 }
 
-export function useWantedAISuggestions(industry: string | null) {
+export function useWantedAISuggestions(companyName: string | null, personName: string | null) {
   return useQuery({
-    queryKey: ['wanted-ai-suggestions', industry],
-    enabled: !!industry,
+    queryKey: ['wanted-ai-suggestions', companyName, personName],
+    enabled: !!(companyName || personName),
     queryFn: async () => {
+      const filters: string[] = [];
+      if (companyName) filters.push(`company.ilike.${companyName}`);
+      if (personName) filters.push(`full_name.ilike.%${personName}%`);
+      if (filters.length === 0) return [];
+
       const { data, error } = await supabase
         .from('contacts')
         .select('id, full_name, company, position')
-        .or(`company.ilike.%${industry}%`)
+        .or(filters.join(','))
         .limit(5);
       if (error) throw error;
       return data;
