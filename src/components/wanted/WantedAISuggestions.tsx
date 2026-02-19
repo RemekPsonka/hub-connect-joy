@@ -5,8 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sparkles, ChevronDown, ChevronUp, Check, X, Loader2 } from 'lucide-react';
 
-export function WantedAISuggestions({ industry, wantedId }: { industry: string | null; wantedId: string }) {
-  const { data: suggestions } = useWantedAISuggestions(industry);
+export function WantedAISuggestions({ companyName, personName, wantedId }: { companyName: string | null; personName: string | null; wantedId: string }) {
+  const { data: suggestions } = useWantedAISuggestions(companyName, personName);
   const [expanded, setExpanded] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [matchingId, setMatchingId] = useState<string | null>(null);
