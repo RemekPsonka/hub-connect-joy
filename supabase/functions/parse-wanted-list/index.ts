@@ -107,44 +107,58 @@ Zwróć JSON:
       userMessage = { role: "user", content: userTextPrompt };
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          userMessage,
-        ],
-        temperature: 0.1,
-      }),
-    });
+    const models = ["google/gemini-2.5-flash", "google/gemini-2.5-pro"];
+    let aiResponse: any = null;
+    let lastError = '';
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
+    for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        console.log(`[parse-wanted-list] Trying model=${model}, attempt=${attempt + 1}`);
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemPrompt },
+              userMessage,
+            ],
+            temperature: 0.1,
+          }),
+        });
 
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Zbyt wiele zapytań. Spróbuj ponownie za chwilę.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: 'Zbyt wiele zapytań. Spróbuj ponownie za chwilę.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (response.status === 402) {
+          return new Response(
+            JSON.stringify({ error: 'Brak środków na koncie AI. Doładuj kredyty.' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!response.ok) {
+          lastError = await response.text();
+          console.error(`AI gateway error (${model}, attempt ${attempt + 1}):`, response.status, lastError);
+          continue;
+        }
+
+        aiResponse = await response.json();
+        break;
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'Brak środków na koncie AI. Doładuj kredyty.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      throw new Error(`AI gateway error: ${response.status}`);
+      if (aiResponse) break;
     }
 
-    const aiResponse = await response.json();
+    if (!aiResponse) {
+      throw new Error(`AI gateway error after retries: ${lastError}`);
+    }
     const responseText = aiResponse.choices?.[0]?.message?.content || '';
 
     console.log('[parse-wanted-list] AI response length:', responseText.length);
