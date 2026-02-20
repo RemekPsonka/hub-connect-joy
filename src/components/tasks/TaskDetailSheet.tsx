@@ -149,9 +149,10 @@ interface TaskDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   task: TaskWithDetails;
   onEdit: () => void;
+  onTaskSwitch?: (taskId: string) => void;
 }
 
-export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetailSheetProps) {
+export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch }: TaskDetailSheetProps) {
   const navigate = useNavigate();
   const crossTask = task.cross_tasks?.[0];
   const isCrossTask = task.task_type === 'cross' && crossTask;
@@ -223,38 +224,40 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
     } catch { toast.error('Wystąpił błąd'); }
   };
 
+  const handleRecurringNextTask = async () => {
+    toast.success('Zadanie zakończone. Tworzę następne…');
+    setTimeout(async () => {
+      const { data: nextTask } = await supabase
+        .from('tasks')
+        .select('id, title, due_date')
+        .eq('source_task_id', task.id)
+        .eq('status', 'todo')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (nextTask && onTaskSwitch) {
+        toast.success(
+          `Następne: ${nextTask.title} — termin ${nextTask.due_date ? format(new Date(nextTask.due_date), 'd MMM yyyy', { locale: pl }) : 'brak'}`,
+          {
+            duration: 8000,
+            action: {
+              label: 'Otwórz',
+              onClick: () => onTaskSwitch(nextTask.id),
+            },
+          }
+        );
+      } else if (nextTask) {
+        toast.success(`Następne zadanie utworzone: ${nextTask.title}`);
+      }
+      onOpenChange(false);
+    }, 800);
+  };
+
   const handleComplete = async () => {
     try {
       await updateTask.mutateAsync({ id: task.id, status: 'completed' });
       if ((task as any).recurrence_rule) {
-        toast.success('Zadanie zakończone. Tworzę następne…');
-        // Wait for trigger to create next task, then fetch it
-        setTimeout(async () => {
-          const { data: nextTask } = await supabase
-            .from('tasks')
-            .select('id, title, due_date')
-            .eq('source_task_id', task.id)
-            .eq('status', 'todo')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (nextTask) {
-            toast.success(
-              `Następne: ${nextTask.title} — termin ${nextTask.due_date ? format(new Date(nextTask.due_date), 'd MMM yyyy', { locale: pl }) : 'brak'}`,
-              {
-                duration: 8000,
-                action: {
-                  label: 'Otwórz',
-                  onClick: () => {
-                    // Re-open sheet with new task by navigating
-                    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: nextTask.id } }));
-                  },
-                },
-              }
-            );
-          }
-          onOpenChange(false);
-        }, 800);
+        await handleRecurringNextTask();
       } else {
         toast.success('Zadanie zakończone');
         onOpenChange(false);
@@ -297,32 +300,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
     await updateTask.mutateAsync({ id: task.id, status: newStatus });
     if (newStatus === 'completed') {
       if ((task as any).recurrence_rule) {
-        toast.success('Zadanie zakończone. Tworzę następne…');
-        setTimeout(async () => {
-          const { data: nextTask } = await supabase
-            .from('tasks')
-            .select('id, title, due_date')
-            .eq('source_task_id', task.id)
-            .eq('status', 'todo')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (nextTask) {
-            toast.success(
-              `Następne: ${nextTask.title} — termin ${nextTask.due_date ? format(new Date(nextTask.due_date), 'd MMM yyyy', { locale: pl }) : 'brak'}`,
-              {
-                duration: 8000,
-                action: {
-                  label: 'Otwórz',
-                  onClick: () => {
-                    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: nextTask.id } }));
-                  },
-                },
-              }
-            );
-          }
-          onOpenChange(false);
-        }, 800);
+        await handleRecurringNextTask();
       } else {
         onOpenChange(false);
       }
@@ -541,6 +519,19 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
                 <div className="flex items-center gap-2 text-sm">
                   <Repeat className="h-3.5 w-3.5 text-primary" />
                   <span>{getRecurrenceLabel((task as any).recurrence_rule) || 'Cykliczne'}</span>
+                </div>
+              </MetaRow>
+            )}
+
+            {/* Deal team / Pipeline */}
+            {task.deal_team && (
+              <MetaRow label="Lejek">
+                <div
+                  className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
+                  onClick={() => navigate('/deals-team')}
+                >
+                  <FolderKanban className="h-3.5 w-3.5" />
+                  <span>{task.deal_team.name}</span>
                 </div>
               </MetaRow>
             )}

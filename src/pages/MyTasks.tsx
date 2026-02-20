@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -171,6 +172,31 @@ export default function MyTasks() {
     setIsModalOpen(true);
   };
 
+  const handleTaskSwitch = useCallback(async (taskId: string) => {
+    const cached = allTasks.find(t => t.id === taskId);
+    if (cached) {
+      setSelectedTask(cached);
+      setIsDetailOpen(true);
+    } else {
+      const { data } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          deal_team:deal_teams(id, name, color),
+          task_contacts(contact_id, role, contacts(id, full_name, company)),
+          cross_tasks(id, contact_a_id, contact_b_id, connection_reason, suggested_intro, intro_made, discussed_with_a, discussed_with_a_at, discussed_with_b, discussed_with_b_at, intro_made_at, contact_a:contacts!cross_tasks_contact_a_id_fkey(id, full_name, company), contact_b:contacts!cross_tasks_contact_b_id_fkey(id, full_name, company)),
+          owner:directors!tasks_owner_id_fkey(id, full_name),
+          assignee:directors!tasks_assigned_to_fkey(id, full_name)
+        `)
+        .eq('id', taskId)
+        .single();
+      if (data) {
+        setSelectedTask(data as TaskWithDetails);
+        setIsDetailOpen(true);
+      }
+    }
+  }, [allTasks]);
+
   const handleNewTask = () => {
     setSelectedTask(null);
     setIsEditMode(false);
@@ -266,6 +292,7 @@ export default function MyTasks() {
           onOpenChange={setIsDetailOpen}
           task={selectedTask}
           onEdit={handleEditFromDetail}
+          onTaskSwitch={handleTaskSwitch}
         />
       )}
     </div>
