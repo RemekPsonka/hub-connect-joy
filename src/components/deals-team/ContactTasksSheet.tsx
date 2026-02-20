@@ -304,7 +304,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           <Button
                             variant="outline"
                             size="sm"
-                            className={cn("h-7 px-2 text-xs gap-1 font-normal", !taskDueDate && "text-muted-foreground")}
+                            className={cn("h-7 px-2 text-xs gap-1 font-normal", !taskDueDate && "text-muted-foreground border-red-300")}
                           >
                             <CalendarIcon className="h-3 w-3" />
                             {taskDueDate ? format(taskDueDate, 'd MMM', { locale: pl }) : 'Termin'}
@@ -338,8 +338,9 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           variant="outline"
                           size="sm"
                           className="h-7 px-2 text-xs gap-1"
-                          disabled={createTask.isPending}
+                          disabled={!taskDueDate || createTask.isPending}
                           onClick={async () => {
+                            if (!taskDueDate) { toast.error('Ustaw termin zadania'); return; }
                             try {
                               await createTask.mutateAsync({
                                 task: {
@@ -366,7 +367,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-xs gap-1"
-                        disabled={createTask.isPending}
+                        disabled={!taskDueDate || createTask.isPending}
                         onClick={() => {
                           setShowCustomInput(true);
                           setTimeout(() => customInputRef.current?.focus(), 50);
@@ -383,6 +384,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           e.preventDefault();
                           const title = customTitle.trim();
                           if (!title) return;
+                          if (!taskDueDate) { toast.error('Ustaw termin zadania'); return; }
                           try {
                             await createTask.mutateAsync({
                               task: {
@@ -411,7 +413,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           onChange={(e) => setCustomTitle(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Escape') { setShowCustomInput(false); setCustomTitle(''); } }}
                         />
-                        <Button type="submit" size="sm" className="h-7 px-2 text-xs" disabled={createTask.isPending || !customTitle.trim()}>
+                        <Button type="submit" size="sm" className="h-7 px-2 text-xs" disabled={!taskDueDate || createTask.isPending || !customTitle.trim()}>
                           {createTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Dodaj'}
                         </Button>
                       </form>
