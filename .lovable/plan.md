@@ -1,39 +1,75 @@
 
-# Wyswietlanie powiazanego kontaktu w panelu szczegolów zadania
 
-## Problem
-Panel szczegolów zadania (TaskDetailSheet) nie pokazuje, z jakim kontaktem jest powiazane zadanie. Uzytkownik widzi wiele zadan o tej samej nazwie (np. "Umowic spotkanie") i nie wie, ktorego kontaktu dotycza.
+# Interaktywny efekt karuzeli na kolumnach Kanban + tryb fokusowy
 
-## Rozwiazanie
+## Cel
+Dodanie dwoch interakcji do wszystkich widokow Kanban:
+1. **Hover**: najechanie na kolumne powoduje jej powiekszenie (efekt karuzeli) -- sasiednie kolumny sie kurcza
+2. **Klikniecie**: otwiera pelnoekranowy widok pojedynczego etapu z mozliwoscia pracy na nim
 
-### Plik: `src/components/tasks/TaskDetailSheet.tsx`
+## Podejscie techniczne
 
-Dodac wiersz "Kontakt" w sekcji metadanych (zaraz pod "Osoba odpowiedzialna"), ktory:
-- Wyswietla imie i nazwisko kontaktu z `task.task_contacts[0]`
-- Wyswietla nazwe firmy (jesli istnieje) obok imienia
-- Jest klikalny -- przekierowuje do strony kontaktu (`/contacts/{id}`)
-- Jesli brak powiazanego kontaktu, wiersz sie nie wyswietla
+### Efekt karuzeli (hover)
 
-Dane sa juz dostepne w obiekcie `task.task_contacts` (pobierane przez `useTasks`), wiec nie trzeba dodawac nowych zapytan.
+Zamiana siatki `grid` na `flex` z plynnym przejsciem `flex-grow`:
+- Domyslnie kazda kolumna ma `flex: 1`
+- Po najechaniu: hovered kolumna dostaje `flex: 3`, pozostale zostaja `flex: 1`
+- Animacja przez CSS `transition: flex 0.3s ease`
+- Efekt dziala na calym kontenerze (rodzic reaguje na hover dziecka)
 
-### Szczegoly techniczne
+### Tryb fokusowy (klikniecie naglowka)
 
-W komponencie `TaskDetailSheet`, po wierszu "Osoba odpowiedzialna" (linia ~362), dodac nowy `MetaRow` z etykieta "Kontakt":
+Po kliknieciu naglowka kolumny:
+- Caly Kanban zastepowany jest widokiem jednej kolumny na pelna szerokosc
+- Przycisk "Wroc" do powrotu do widoku wszystkich kolumn
+- Pelna funkcjonalnosc (drag & drop, dodawanie, edycja) zachowana
 
+W lejku sprzedazy (deals-team) ta funkcja juz istnieje dla niektorych kolumn (drillDownCategory + SubKanbanView). Rozszerze to na wszystkie kolumny ktore nie maja sub-kanbana -- pokaza sie w prostym trybie fokusowym (lista kart na pelna szerokosc).
+
+## Pliki do zmiany
+
+### 1. `src/components/deals-team/KanbanColumn.tsx`
+- Dodac prop `isHovered` i odpowiednie klasy CSS dla rozszerzenia
+- Dodac `onMouseEnter` / `onMouseLeave` do kontenera
+- Zmiana kontenera z sztywnych wymiarow na flex-grow
+
+### 2. `src/components/deals-team/KanbanBoard.tsx`
+- Dodac state `hoveredColumn` (string | null)
+- Zamienic grid na flex z `transition-all`
+- Przekazac `isHovered` do kazdej kolumny
+- Rozszerzyc obsluge klikniecia naglowka -- kolumny bez sub-kanbana otwieraja prosty tryb fokusowy (pelna szerokosc, lista kart, przycisk wroc)
+
+### 3. `src/components/tasks/TasksKanban.tsx`
+- Dodac state `hoveredColumn` i `focusedColumn`
+- Zamienic grid na flex z efektem karuzeli
+- Po kliknieciu naglowka: tryb fokusowy (jedna kolumna na pelna szerokosc)
+- Przycisk "Wroc do wszystkich" w trybie fokusowym
+
+### 4. `src/components/deals/KanbanColumn.tsx` + `DealsKanban.tsx`
+- Analogiczne zmiany: hover expand + klikniecie naglowka = tryb fokusowy
+- Dostosowanie do istniejacego dnd-kit (ScrollArea + flex)
+
+### 5. `tailwind.config.ts` (opcjonalnie)
+- Jesli potrzebna animacja `animate-card-drop` nie istnieje, dodam ja
+
+## Szczegoly implementacji
+
+### CSS efekt karuzeli (hover)
 ```
-{task.task_contacts?.length > 0 && (
-  <MetaRow label="Kontakt">
-    <div className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
-         onClick={() => navigate(`/contacts/${task.task_contacts[0].contacts.id}`)}>
-      <User className="h-3.5 w-3.5" />
-      <span>{task.task_contacts[0].contacts.full_name}</span>
-      {task.task_contacts[0].contacts.company && (
-        <span className="text-muted-foreground">({task.task_contacts[0].contacts.company})</span>
-      )}
-    </div>
-  </MetaRow>
-)}
+// Kontener
+<div className="flex gap-4 transition-all">
+
+// Kolumna
+<div className={cn(
+  "flex-1 min-w-0 transition-all duration-300 ease-in-out",
+  isHovered && "flex-[3]",
+  someOtherIsHovered && !isHovered && "flex-[0.7] opacity-80"
+)}>
 ```
 
-### Pliki do zmiany:
-- `src/components/tasks/TaskDetailSheet.tsx` -- dodanie wiersza "Kontakt" w metadanych
+### Tryb fokusowy (prosty, bez sub-kanbana)
+Dla kolumn ktore nie maja dedykowanego sub-kanbana, tryb fokusowy to po prostu:
+- Naglowek kolumny z przyciskiem "Wroc"
+- Karty wyswietlone w siatce 2-3 kolumnowej zamiast jednej waskiej kolumny
+- Zachowanie drag & drop i wszystkich akcji
+
