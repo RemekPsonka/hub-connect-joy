@@ -25,6 +25,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import {
   Calendar,
   Trash2,
@@ -45,7 +47,7 @@ import {
   XCircle,
   Diamond,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -365,14 +367,30 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
             )}
 
             {/* Due date */}
-            {task.due_date && (
-              <MetaRow label="Data wykonania">
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{format(new Date(task.due_date), 'd MMMM yyyy', { locale: pl })}</span>
-                </div>
-              </MetaRow>
-            )}
+            <MetaRow label="Data wykonania">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-1.5 py-0.5 -ml-1.5 transition-colors">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{task.due_date ? format(new Date(task.due_date), 'd MMMM yyyy', { locale: pl }) : 'Dodaj termin'}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 z-50" align="start">
+                  <DayPickerCalendar
+                    mode="single"
+                    selected={task.due_date ? new Date(task.due_date + 'T00:00:00') : undefined}
+                    onSelect={async (date: Date | undefined) => {
+                      if (date) {
+                        const formatted = format(date, 'yyyy-MM-dd');
+                        await updateTask.mutateAsync({ id: task.id, due_date: formatted });
+                      }
+                    }}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </MetaRow>
 
             {/* Priority - clickable dropdown */}
             <MetaRow label="Priorytet">

@@ -1,6 +1,6 @@
 import { useTaskActivityLog } from '@/hooks/useTaskActivityLog';
 import { Separator } from '@/components/ui/separator';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { History, ArrowRight } from 'lucide-react';
 
@@ -15,6 +15,7 @@ const actionLabels: Record<string, string> = {
   title_changed: 'Tytuł',
   created: 'Utworzono',
   comment_added: 'Komentarz',
+  due_date_changed: 'Termin',
 };
 
 const statusLabels: Record<string, string> = {
@@ -36,6 +37,13 @@ function formatValue(action: string, value: string | null): string {
   if (!value) return '—';
   if (action === 'status_changed') return statusLabels[value] || value;
   if (action === 'priority_changed') return priorityLabels[value] || value;
+  if (action === 'due_date_changed') {
+    try {
+      return format(new Date(value), 'd MMM yyyy', { locale: pl });
+    } catch {
+      return value;
+    }
+  }
   return value;
 }
 
