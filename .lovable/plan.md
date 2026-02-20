@@ -1,22 +1,28 @@
 
+# Oznaczenie zadan lejkowych na stronie Zadania
 
-# Naprawa: brak zielonego badge po dodaniu zadania
-
-## Problem
-Po utworzeniu zadania z poziomu ContactTasksSheet, zielony badge aktywnego zadania nie pojawia sie na karcie kontaktu w Kanban. Przyczyna: hook `useActiveTaskContacts` uzywa query key `['active-task-contacts', teamId]`, ale funkcja `invalidateAllTaskQueries()` w `useTasks.ts` nie invaliduje tego klucza. Query ma 10-minutowy cache (`staleTime`), wiec badge nie odswiezy sie az do nastepnego wejscia na strone.
+## Diagnoza
+Zadania tworzone z poziomu lejka SGU **poprawnie zapisuja `deal_team_id` w bazie danych** — problem nie lezy w tworzeniu, lecz w wyswietlaniu. Komponent `UnifiedTaskRow` nie pokazuje zadnej informacji o przynaleznosci do lejka, przez co zadania lejkowe wygladaja identycznie jak ogolne.
 
 ## Rozwiazanie
 
-### Plik: `src/hooks/useTasks.ts`
+### 1. Plik: `src/hooks/useTasks.ts` — wzbogacenie query o dane zespolu
 
-Dodanie jednej linii do funkcji `invalidateAllTaskQueries()`:
+Rozszerzyc select w glownym uzyciu `useTasks` o relacje `deal_teams`, aby pobierac nazwe i kolor zespolu:
 
 ```text
-queryClient.invalidateQueries({ queryKey: ['active-task-contacts'] });
+deal_team:deal_teams(id, name, color)
 ```
 
-To spowoduje, ze po kazdej operacji na taskach (tworzenie, edycja, usuwanie) badge aktywnych zadan odswiezy sie natychmiast.
+Dodac pole `deal_team` do typu `TaskWithDetails`.
+
+### 2. Plik: `src/components/tasks/UnifiedTaskRow.tsx` — badge lejka
+
+Dodac maly badge obok tytulu zadania, jesli `task.deal_team_id` jest ustawione. Badge powinien:
+- Wyswietlac nazwe zespolu (np. "SGU") w kolorze zespolu
+- Byc maly i nieinwazyjny (text-xs, rounded-full)
+- Pojawiac sie miedzy statusem a tytulem
 
 ### Pliki do zmiany:
-1. **`src/hooks/useTasks.ts`** — dodanie invalidacji `active-task-contacts` w `invalidateAllTaskQueries()`
-
+1. **`src/hooks/useTasks.ts`** — dodanie relacji `deal_teams` do selecta w `useTasks()` + aktualizacja typu
+2. **`src/components/tasks/UnifiedTaskRow.tsx`** — wyswietlenie badge z nazwa lejka obok tytulu zadania
