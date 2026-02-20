@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Plus, CheckSquare, User, Building2, StickyNote,
   Mail, Phone, MapPin, Calendar, Target, BarChart3, History, Loader2,
-  AlertCircle, CheckCircle2, ChevronRight,
+  AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -76,6 +76,9 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [showCompleted, setShowCompleted] = useState(false);
   const [notesValue, setNotesValue] = useState<string | null>(null);
   const [showStatusForm, setShowStatusForm] = useState(false);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   const openTasks = useMemo(() => tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled'), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled'), [tasks]);
@@ -256,47 +259,96 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
             <TabsContent value="tasks" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
                 <div className="px-6 py-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
-                      <CheckSquare className="h-3.5 w-3.5" />
-                      Zadania
-                      {openTasks.length > 0 && (
-                        <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">{openTasks.length}</Badge>
-                      )}
-                    </h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2.5 text-xs gap-1"
-                      disabled={createTask.isPending}
-                      onClick={async () => {
-                        try {
-                          const result = await createTask.mutateAsync({
-                            task: { title: 'Nowe zadanie', status: 'todo' },
-                            contactId: contact.contact_id,
-                            dealTeamId: teamId,
-                            dealTeamContactId: contact.id,
-                          });
-                          onOpenChange(false);
-                          if (onTaskOpen && result) {
-                            setTimeout(() => {
-                              onTaskOpen({
-                                ...result,
-                                task_contacts: [],
-                                cross_tasks: [],
-                                subtasks: [],
-                                comments: [],
-                              } as any);
-                            }, 150);
+                  <div className="mb-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+                        <CheckSquare className="h-3.5 w-3.5" />
+                        Zadania
+                        {openTasks.length > 0 && (
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">{openTasks.length}</Badge>
+                        )}
+                      </h4>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { icon: Calendar, label: 'Umów spotkanie', title: `Umówić spotkanie z ${c.full_name}` },
+                        { icon: PhoneCall, label: 'Zadzwoń', title: `Zadzwonić do ${c.full_name}` },
+                        { icon: FileText, label: 'Wyślij ofertę', title: `Wysłać ofertę do ${c.full_name}` },
+                        { icon: Send, label: 'Wyślij mail', title: `Wysłać maila do ${c.full_name}` },
+                      ].map((tpl) => (
+                        <Button
+                          key={tpl.label}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs gap-1"
+                          disabled={createTask.isPending}
+                          onClick={async () => {
+                            try {
+                              await createTask.mutateAsync({
+                                task: { title: tpl.title, status: 'todo' },
+                                contactId: contact.contact_id,
+                                dealTeamId: teamId,
+                                dealTeamContactId: contact.id,
+                              });
+                              toast.success(`Zadanie dodane: ${tpl.title}`);
+                            } catch {
+                              toast.error('Nie udało się utworzyć zadania');
+                            }
+                          }}
+                        >
+                          <tpl.icon className="h-3 w-3" />
+                          {tpl.label}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1"
+                        disabled={createTask.isPending}
+                        onClick={() => {
+                          setShowCustomInput(true);
+                          setTimeout(() => customInputRef.current?.focus(), 50);
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Inne
+                      </Button>
+                    </div>
+                    {showCustomInput && (
+                      <form
+                        className="flex gap-1.5"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const title = customTitle.trim();
+                          if (!title) return;
+                          try {
+                            await createTask.mutateAsync({
+                              task: { title, status: 'todo' },
+                              contactId: contact.contact_id,
+                              dealTeamId: teamId,
+                              dealTeamContactId: contact.id,
+                            });
+                            toast.success(`Zadanie dodane: ${title}`);
+                            setCustomTitle('');
+                            setShowCustomInput(false);
+                          } catch {
+                            toast.error('Nie udało się utworzyć zadania');
                           }
-                        } catch {
-                          toast.error('Nie udało się utworzyć zadania');
-                        }
-                      }}
-                    >
-                      {createTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                      Nowe zadanie
-                    </Button>
+                        }}
+                      >
+                        <input
+                          ref={customInputRef}
+                          className="flex-1 h-7 px-2 text-xs rounded-md border border-input bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          placeholder="Tytuł zadania..."
+                          value={customTitle}
+                          onChange={(e) => setCustomTitle(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Escape') { setShowCustomInput(false); setCustomTitle(''); } }}
+                        />
+                        <Button type="submit" size="sm" className="h-7 px-2 text-xs" disabled={createTask.isPending || !customTitle.trim()}>
+                          {createTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Dodaj'}
+                        </Button>
+                      </form>
+                    )}
                   </div>
 
                   {isLoading ? (
