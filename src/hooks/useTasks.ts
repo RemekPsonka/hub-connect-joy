@@ -15,6 +15,7 @@ function invalidateAllTaskQueries(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: ['deal-contact-all-tasks'] });
   queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
   queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+  queryClient.invalidateQueries({ queryKey: ['active-task-contacts'] });
 }
 
 export type Task = Tables<'tasks'>;
