@@ -1,53 +1,26 @@
 
-# Rozszerzenie tworzenia zadan w lejku: przypisanie osoby + termin
+# Wymuszenie terminu przy tworzeniu zadania w lejku
 
 ## Problem
-Zadania tworzone z poziomu lejka (ContactTasksSheet) nie maja:
-1. Selektora "Przypisz do" -- nie mozna przypisac taska do innego czlonka zespolu
-2. Daty terminu (due_date) -- nie mozna ustawic, do kiedy task ma byc zrobiony
-3. Filtr "Moje" w MyTeamTasksView nie pokazuje taskow z `assigned_to = null`
+Obecnie mozna dodac zadanie bez ustawienia terminu ("Termin"). Uzytkownik chce, aby termin byl wymagany -- nie mozna utworzyc taska bez wybrania daty.
 
 ## Rozwiazanie
 
-### 1. `src/components/deals-team/ContactTasksSheet.tsx`
+### Plik: `src/components/deals-team/ContactTasksSheet.tsx`
 
-Dodac nad przyciskami szablonow kompaktowy wiersz z dwoma kontrolkami:
+1. **Zablokowanie przyciskow szablonow gdy brak terminu** -- dodac `disabled={!taskDueDate || createTask.isPending}` do kazdego przycisku szablonu ("Umow spotkanie", "Zadzwon", "Wyslij oferte", "Wyslij mail") oraz do przycisku "+ Inne".
 
-- **Select "Przypisz do:"** -- lista czlonkow zespolu z `useTeamMembers(teamId)`, domyslna wartosc: zalogowany dyrektor (`director?.id` z `useAuth`)
-- **Date picker "Termin:"** -- maly Popover z kalendarzem (wzorzec z TaskModal), opcjonalny
+2. **Zablokowanie formularza "Inne"** -- w `onSubmit` dodac warunek `if (!taskDueDate)` z komunikatem toast `toast.error('Ustaw termin zadania')` i wczesnym returnem.
 
-Oba pola beda przekazywane do kazdego wywolania `createTask.mutateAsync()`:
-- `assignedTo: selectedMemberId`
-- `task.due_date: dueDate?.toISOString().split('T')[0]`
-
-Dotyczy zarowno szablonow ("Umow spotkanie", "Zadzwon" itd.) jak i pola "+ Inne".
-
-### 2. `src/components/deals-team/MyTeamTasksView.tsx`
-
-Rozszerzenie filtra "Moje" (linia 131-132):
-
-```text
-Przed: a.assigned_to === director?.id
-Po:    a.assigned_to === director?.id || (!a.assigned_to && a.owner_id === director?.id)
-```
-
-### Pliki do zmiany:
-1. **`src/components/deals-team/ContactTasksSheet.tsx`** -- dodanie selektora osoby + date pickera + przekazywanie do createTask
-2. **`src/components/deals-team/MyTeamTasksView.tsx`** -- rozszerzenie filtra "Moje" o owner_id
+3. **Wizualne podpowiedzi** -- jesli `taskDueDate` nie jest ustawiony:
+   - Przycisk "Termin" bedzie mial delikatne czerwone obramowanie (`border-red-300`) jako podpowiedz, ze jest wymagany
+   - Przyciski szablonow beda szare (disabled), wiec uzytkownik od razu widzi, ze cos trzeba ustawic
 
 ### Szczegoly techniczne
 
-Nowe importy w ContactTasksSheet:
-- `useTeamMembers` z `@/hooks/useDealsTeamMembers`
-- `useAuth` z `@/contexts/AuthContext`
-- `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` z `@/components/ui/select`
-- `Popover, PopoverContent, PopoverTrigger` z `@/components/ui/popover`
-- `Calendar` z `@/components/ui/calendar`
-- `CalendarIcon` z `lucide-react`
-- `cn` z `@/lib/utils`
-
-Nowe stany:
-- `assignTo` -- string, domyslnie `director?.id`
-- `taskDueDate` -- `Date | undefined`
-
-Uklad kontrolek: kompaktowy wiersz `flex gap-2` z dwoma malymi Select/Popover (rozmiar sm, h-7) umieszczony miedzy naglowkiem "Zadania" a przyciskami szablonow.
+Zmiany w jednym pliku:
+- **`src/components/deals-team/ContactTasksSheet.tsx`**
+  - Linia ~337-341: dodac `disabled={!taskDueDate || createTask.isPending}` do przyciskow szablonow
+  - Linia ~365-376: dodac `disabled={!taskDueDate || createTask.isPending}` do przycisku "+ Inne"
+  - Linia ~383-385: dodac walidacje `if (!taskDueDate) { toast.error('Ustaw termin'); return; }`
+  - Linia ~306-310: dodac warunkowa klase `border-red-300` do przycisku Termin gdy `!taskDueDate`
