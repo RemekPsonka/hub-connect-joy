@@ -5,7 +5,7 @@ import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Plus, CheckSquare, User, Building2, StickyNote,
   Mail, Phone, MapPin, Calendar as CalendarIcon, Target, BarChart3, History, Loader2,
-  AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send,
+  AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send, Trash2,
 } from 'lucide-react';
 import { MeetingScheduledDialog } from './MeetingScheduledDialog';
 import { MeetingOutcomeDialog } from './MeetingOutcomeDialog';
@@ -23,7 +23,7 @@ import { WeeklyStatusForm } from '@/components/deals-team/WeeklyStatusForm';
 import { useDealContactAllTasks } from '@/hooks/useDealsTeamAssignments';
 import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
-import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { useUpdateTeamContact, useRemoveContactFromTeam } from '@/hooks/useDealsTeamContacts';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +31,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 
@@ -82,6 +92,8 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const { director } = useAuth();
   const updateTask = useUpdateTask();
   const updateContact = useUpdateTeamContact();
+  const removeFromTeam = useRemoveContactFromTeam();
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const createTask = useCreateTask();
   const [showCompleted, setShowCompleted] = useState(false);
   const [notesValue, setNotesValue] = useState<string | null>(null);
@@ -160,21 +172,34 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-3 border-b">
-            <SheetTitle className="text-lg truncate">{c.full_name}</SheetTitle>
-            <SheetDescription asChild>
-              <div>
-                {c.company && <span className="block text-sm truncate">{c.company}</span>}
-                {c.position && <span className="block text-xs text-muted-foreground truncate">{c.position}</span>}
-                <Link
-                  to={`/contacts/${contact.contact_id}`}
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                  onClick={() => onOpenChange(false)}
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Otwórz profil CRM
-                </Link>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <SheetTitle className="text-lg truncate">{c.full_name}</SheetTitle>
+                <SheetDescription asChild>
+                  <div>
+                    {c.company && <span className="block text-sm truncate">{c.company}</span>}
+                    {c.position && <span className="block text-xs text-muted-foreground truncate">{c.position}</span>}
+                    <Link
+                      to={`/contacts/${contact.contact_id}`}
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                      onClick={() => onOpenChange(false)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Otwórz profil CRM
+                    </Link>
+                  </div>
+                </SheetDescription>
               </div>
-            </SheetDescription>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => setShowRemoveConfirm(true)}
+                title="Usuń z lejka"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </SheetHeader>
 
           <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
@@ -647,6 +672,32 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
           onConfirm={() => setPendingCompleteTaskId(null)}
         />
       )}
+
+      <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usuń z lejka</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz usunąć <span className="font-medium">{c.full_name}</span> z lejka?
+              Kontakt pozostanie w CRM, ale zostanie usunięty z tego lejka sprzedażowego.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await removeFromTeam.mutateAsync({ contactId: contact.id, teamId });
+                setShowRemoveConfirm(false);
+                onOpenChange(false);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removeFromTeam.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Usuń z lejka
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
