@@ -1,121 +1,89 @@
 
-# Przeprojektowanie flow zamykania zadan w lejku -- petla ciagla do "Klient"
+# Naprawa brakujacego powiazania kontaktu CRM z zadaniami w lejku
 
 ## Problem
-Obecny system tworzy NOWE zadanie po kazdym zamknieciu (np. "Kolejne spotkanie" w MeetingOutcomeDialog tworzy nowy task). Uzytkownik konczy z duplikatami zadan. Oczekiwane zachowanie: **jedno zadanie na kontakt w lejku**, ktore jest **recyklowane** (zmiana tytulu, daty, osoby, statusu) az do konwersji na klienta.
+Z 40 aktywnych zadan w lejku sprzedazy, **29 nie ma powiazania z kontaktem CRM** (brak rekordu w tabeli `task_contacts`). Dlatego w panelu szczegolów zadania (TaskDetailSheet) nie wyswietla sie wiersz "Kontakt".
 
-## Nowe podejscie
+## Przyczyna glowna
+Sa **3 miejsca** w kodzie, ktore tworza zadania w kontekscie lejka BEZ tworzenia rekordu `task_contacts`:
 
-### Zasada: "Dalsze dzialania" zamiast "Zamknij + nowe"
-Zamkniecie zadania w kontekscie lejka NIE tworzy nowego zadania. Zamiast tego:
-1. Uzytkownik klika status -> "completed" 
-2. Otwiera sie dialog "Co dalej?" (uniwersalny, nie tylko po spotkaniu)
-3. Uzytkownik wybiera akcje, osobe, date
-4. **To samo zadanie** jest aktualizowane: nowy tytul, nowa data, status wraca na `todo`, etap w kanbanie sie zmienia
+### 1. `useCreateAssignment` (src/hooks/useDealsTeamAssignments.ts, linia 68-83)
+Uzywany przez `ProspectingConvertDialog` przy konwersji prospekta do lejka. Tworzy zadanie z `deal_team_contact_id`, ale **nie tworzy rekordu `task_contacts`**. To jest glowne zrodlo problemu -- kazdy nowy kontakt w lejku dostaje zadanie bez powiazania CRM.
 
-### Flow krok po kroku
-```text
-Uzytkownik klika "completed" na zadaniu w lejku
-  -> Dialog "Dalsze dzialania" (NextActionDialog)
-     Opcje:
-       - Umow spotkanie -> tytul: "Umowic spotkanie z X", kanban: meeting_plan
-       - Spotkanie umowione -> otwiera MeetingScheduledDialog (data), kanban: meeting_scheduled
-       - Wyslij oferte -> tytul: "Wyslac oferte do X", kanban: offering/handshake
-       - Zadzwon -> tytul: "Zadzwonic do X", kanban: bez zmiany
-       - Wyslij mail -> tytul: "Wyslac maila do X", kanban: bez zmiany
-       - Odloz (10x) -> kanban: 10x, zadanie zamkniete
-       - Klient -> konwersja (ConvertToClientDialog)
-       - Utracony -> kanban: lost, zadanie zamkniete
-     Uzytkownik wybiera:
-       - Osobe odpowiedzialna (select z czlonkow zespolu)
-       - Date (calendar)
-     Klikniecie "Zapisz":
-       - UPDATE tasks SET title=nowy, due_date=nowa, status='todo', assigned_to=nowy
-       - UPDATE deal_team_contacts SET offering_stage=nowy, category=nowy (jesli zmiana)
-       - Log aktywnosci w task_activity_log
-  -> Sheet pozostaje otwarty z zaktualizowanym zadaniem
+### 2. `NextActionDialog` (src/components/deals-team/NextActionDialog.tsx, linia 166-174)
+Recykluje zadanie (UPDATE title, status, due_date), ale nie sprawdza czy `task_contacts` istnieje i nie tworzy go jesli brakuje. Jesli wejsciowe zadanie nie mialo kontaktu, recyklowane tez go nie bedzie miec.
+
+### 3. `MeetingOutcomeDialog` (src/components/deals-team/MeetingOutcomeDialog.tsx, linia 94-102)
+Tworzy NOWE zadanie przez `createTask.mutateAsync()` z `contactId` -- to jest OK, ale powoduje duplikaty zadan zamiast recyklowania (osobny problem, juz czesciowo rozwiazany).
+
+## Plan naprawy
+
+### Krok 1: Migracja SQL -- napraw istniejace dane
+Dla wszystkich zadan w lejku (`deal_team_contact_id IS NOT NULL`) ktore nie maja rekordu `task_contacts`, utworzyc brakujace powiazania:
+
+```sql
+INSERT INTO task_contacts (task_id, contact_id, role)
+SELECT t.id, dtc.contact_id, 'primary'
+FROM tasks t
+JOIN deal_team_contacts dtc ON dtc.id = t.deal_team_contact_id
+WHERE t.deal_team_contact_id IS NOT NULL
+  AND t.id NOT IN (SELECT task_id FROM task_contacts)
+  AND dtc.contact_id IS NOT NULL;
 ```
 
-## Pliki do zmiany
+### Krok 2: `src/hooks/useDealsTeamAssignments.ts` -- useCreateAssignment
+Po pomyslnym INSERT zadania, dodac tworzenie `task_contacts`:
 
-### 1. NOWY: `src/components/deals-team/NextActionDialog.tsx`
-Uniwersalny dialog "Dalsze dzialania" zamiast obecnego MeetingOutcomeDialog (ktory pozostanie jako sub-dialog dla opcji "Spotkanie umowione"):
-- Lista akcji (umow spotkanie, zadzwon, wyslij oferte, wyslij mail, inne, odloz, klient, utracony)
-- Select osoby odpowiedzialnej (czlonkowie zespolu)
-- Kalendarz z data
-- Pole na notatke
-- Po zapisaniu: UPDATE istniejacego zadania (nie INSERT nowego)
-- Aktualizacja offering_stage / category w deal_team_contacts
-
-### 2. ZMIANA: `src/components/deals-team/ContactTasksSheet.tsx`
-- `handleTaskStatusChange`: zamiast bezposrednio zamykac task i otwierac MeetingOutcomeDialog, otworzy nowy `NextActionDialog` dla KAZDEGO zadania (nie tylko spotkaniowego)
-- Usunac osobna logike `isMeetingTask` -- kazde zadanie w lejku wchodzi w petle "co dalej?"
-- Przekazac `taskId` do NextActionDialog zeby wiedział ktore zadanie recyklowac
-- Po zapisaniu: odswiezyc liste zadan (invalidate queries)
-
-### 3. ZMIANA: `src/components/deals-team/MeetingOutcomeDialog.tsx`
-- Zmiana logiki `next_meeting`: zamiast `createTask.mutateAsync()` zwracac informacje do rodzica ze nalezy zaktualizowac istniejace zadanie
-- Dodac prop `existingTaskId` -- jesli podany, UPDATE zamiast INSERT
-- Alternatywnie: MeetingOutcomeDialog staje sie sub-widokiem NextActionDialog (opcja "spotkanie odbyte" otwiera go)
-
-### 4. ZMIANA: `src/components/deals-team/MeetingScheduledDialog.tsx`
-- Analogicznie: zamiast `createTask.mutateAsync()` -- UPDATE istniejacego zadania
-- Dodac prop `existingTaskId` -- jesli podany, zmiana tytulu i daty na istniejacym tasku
-
-## Szczegoly techniczne
-
-### NextActionDialog -- logika zapisu:
 ```typescript
-// Recyklowanie zadania
-await updateTask.mutateAsync({
-  id: existingTaskId,
-  title: newTitle,        // np. "Umowic spotkanie z Jan Kowalski"
-  status: 'todo',         // reset
-  due_date: selectedDate, // nowa data
-  assigned_to: selectedPerson,
-});
-
-// Aktualizacja etapu w kanbanie
-await updateContact.mutateAsync({
-  id: teamContactId,
-  teamId,
-  offeringStage: newStage,     // np. 'meeting_plan'
-  category: newCategory,        // np. 'offering' (jesli zmiana)
-});
-
-// Log
-await supabase.from('task_activity_log').insert({
-  task_id: existingTaskId,
-  field_name: 'recycled',
-  old_value: oldTitle,
-  new_value: newTitle,
-});
+// Po: const { data, error } = await supabase.from('tasks').insert({...})
+// Dodac:
+if (data) {
+  // Pobierz contact_id z deal_team_contacts
+  const { data: dtc } = await supabase
+    .from('deal_team_contacts')
+    .select('contact_id')
+    .eq('id', params.teamContactId)
+    .single();
+  
+  if (dtc?.contact_id) {
+    await supabase.from('task_contacts').insert({
+      task_id: data.id,
+      contact_id: dtc.contact_id,
+      role: 'primary',
+    });
+  }
+}
 ```
 
-### Mapowanie akcji na etapy kanbana:
-| Akcja              | Tytul zadania                | offering_stage     | category (jesli zmiana) |
-|--------------------|-----------------------------|--------------------|-----------------------|
-| Umow spotkanie     | Umowic spotkanie z X        | meeting_plan       | bez zmiany           |
-| Spotkanie umowione | Spotkanie z X - data        | meeting_scheduled  | bez zmiany           |
-| Wyslij oferte      | Wyslac oferte do X          | handshake          | offering             |
-| Zadzwon            | Zadzwonic do X              | bez zmiany         | bez zmiany           |
-| Wyslij mail        | Wyslac maila do X           | bez zmiany         | bez zmiany           |
-| Odloz (10x)        | --                          | --                 | 10x (task completed) |
-| Klient             | -> ConvertToClientDialog    | --                 | client (won)         |
-| Utracony           | --                          | --                 | lost                 |
+### Krok 3: `src/components/deals-team/NextActionDialog.tsx` -- zabezpieczenie przy recyklowaniu
+Po recyklowaniu zadania, sprawdzic czy `task_contacts` istnieje. Jesli nie -- utworzyc:
 
-### Integracja z istniejacymi dialogi:
-- "Spotkanie umowione" -> otwiera MeetingScheduledDialog z `existingTaskId` (zeby zaktualizowac task zamiast tworzec nowy)
-- "Klient" -> otwiera ConvertToClientDialog (istniejacy flow)
-- "Odloz" / "Utracony" -> zamyka zadanie definitywnie (status completed), zmienia kategorie
+```typescript
+// Po updateTask.mutateAsync (linia ~174):
+// Ensure task_contacts exists
+const { data: existingTc } = await supabase
+  .from('task_contacts')
+  .select('id')
+  .eq('task_id', existingTaskId)
+  .limit(1)
+  .maybeSingle();
 
-### Zabezpieczenia:
-- Ref guard `actionInProgressRef` przeciw podwojnym kliknieciam
-- Po zapisie: `invalidateQueries` dla `deal-team-contacts`, `deal-contact-all-tasks`, `tasks`
-- Toast z potwierdzeniem co sie zmienilo
+if (!existingTc && contactId) {
+  await supabase.from('task_contacts').insert({
+    task_id: existingTaskId,
+    contact_id: contactId,
+    role: 'primary',
+  });
+}
+```
 
-## Pliki do zmiany (podsumowanie):
-1. **NOWY** `src/components/deals-team/NextActionDialog.tsx` -- glowny dialog "co dalej?"
-2. **ZMIANA** `src/components/deals-team/ContactTasksSheet.tsx` -- nowy flow zamykania
-3. **ZMIANA** `src/components/deals-team/MeetingScheduledDialog.tsx` -- prop existingTaskId, UPDATE zamiast INSERT
-4. **ZMIANA** `src/components/deals-team/MeetingOutcomeDialog.tsx` -- dostosowanie do recyklowania zadan
+Wymaga dodania `contactId` do props `NextActionDialog` (aktualnie jest `contactName` ale nie ma `contactId` -- trzeba dodac i przekazac z `ContactTasksSheet`).
+
+### Krok 4: `src/components/deals-team/ContactTasksSheet.tsx`
+Przekazac `contactId={contact.contact_id}` do `NextActionDialog`.
+
+## Pliki do zmiany (podsumowanie)
+1. **Migracja SQL** -- naprawienie 29 istniejacych zadan bez `task_contacts`
+2. **src/hooks/useDealsTeamAssignments.ts** -- `useCreateAssignment`: dodanie INSERT do `task_contacts`
+3. **src/components/deals-team/NextActionDialog.tsx** -- dodanie prop `contactId`, zabezpieczenie `task_contacts` przy recyklowaniu
+4. **src/components/deals-team/ContactTasksSheet.tsx** -- przekazanie `contactId` do `NextActionDialog`
