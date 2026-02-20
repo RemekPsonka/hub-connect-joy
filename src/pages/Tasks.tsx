@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { TasksHeader } from '@/components/tasks/TasksHeader';
 import { TasksList } from '@/components/tasks/TasksList';
 import { TasksTable } from '@/components/tasks/TasksTable';
@@ -10,6 +10,7 @@ import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { BulkTaskActions } from '@/components/tasks/BulkTaskActions';
 import { useTaskKeyboardShortcuts } from '@/components/tasks/KeyboardShortcuts';
 import { useTasks, usePendingTasksCount, useUpdateTask, type TasksFilters, type TaskWithDetails } from '@/hooks/useTasks';
+import { useCurrentDirector } from '@/hooks/useDirectors';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,9 +25,17 @@ export default function Tasks() {
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data: tasks = [], isLoading } = useTasks(filters);
+  const { data: currentDirector } = useCurrentDirector();
+  const directorId = currentDirector?.id;
+
+  const { data: allTasks = [], isLoading } = useTasks(filters);
   const { data: pendingCount = 0 } = usePendingTasksCount();
   const updateTask = useUpdateTask();
+
+  const tasks = useMemo(() => {
+    if (!directorId) return [];
+    return allTasks.filter(t => t.owner_id === directorId || t.assigned_to === directorId);
+  }, [allTasks, directorId]);
 
   const handleNewTask = useCallback(() => {
     setSelectedTask(null);
