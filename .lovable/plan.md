@@ -1,41 +1,97 @@
 
+# Integracja "Poszukiwani" z modulu CRM w lejku sprzedazy
 
-# Filtrowanie zadań na stronie Projekty/Zadania do "tylko moje"
+## Cel
+Kolumna "POSZUKIWANI" w Kanbanie lejka bedzie wyswietlac rowniez wpisy z tabeli `wanted_contacts` (modul CRM "Poszukiwani"). Uzytkownik bedzie mogl skonfigurowac, ktorych kontaktow CRM "monitoruje" -- ich wpisy wanted_contacts pojawia sie w lejku.
 
-## Problem
-Strona `/tasks` (moduł Projekty/Zadania) pokazuje zadania **wszystkich użytkowników**, co jest nieprawidłowe. Ten moduł jest przeznaczony do pracy indywidualnej -- użytkownik powinien widzieć wyłącznie swoje zadania (te, których jest właścicielem lub do których jest przypisany).
+## Rozwiazanie
 
-Lejek sprzedaży (SPRZEDAŻ) to osobny moduł zespołowy -- tam widoczność wszystkich zadań z filtrowaniem pozostaje bez zmian.
+### 1. Nowa tabela: `deal_team_watched_contacts`
 
-## Rozwiązanie
+Przechowuje konfiguracje: ktore kontakty CRM sa monitorowane w danym zespole.
 
-### Plik: `src/pages/Tasks.tsx`
-
-1. Zaimportować `useCurrentDirector` z `@/hooks/useDirectors`
-2. Pobrać `directorId` zalogowanego użytkownika
-3. Przefiltrować pobrane zadania klient-side (jak w `MyTasks.tsx`), aby pokazywać tylko te, gdzie:
-   - `owner_id === directorId` (użytkownik jest właścicielem), **LUB**
-   - `assigned_to === directorId` (użytkownik jest przypisany)
-4. Zaktualizować `pendingCount` aby też liczył tylko zadania użytkownika
-
-### Szczegóły techniczne
-
-Dodanie `useMemo` do filtrowania tasków po stronie klienta (analogicznie do logiki w `MyTasks.tsx`):
-
-```typescript
-const { data: currentDirector } = useCurrentDirector();
-const directorId = currentDirector?.id;
-
-const myTasks = useMemo(() => {
-  if (!directorId) return [];
-  return tasks.filter(t => t.owner_id === directorId || t.assigned_to === directorId);
-}, [tasks, directorId]);
+```sql
+CREATE TABLE deal_team_watched_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id UUID NOT NULL REFERENCES deal_teams(id) ON DELETE CASCADE,
+  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  added_by UUID REFERENCES directors(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(team_id, contact_id)
+);
 ```
++ RLS: tenant_id match + team membership check.
 
-Następnie przekazanie `myTasks` zamiast `tasks` do wszystkich widoków (list, table, kanban, calendar, team).
+### 2. Nowy hook: `useTeamWatchedWanted`
 
-Alternatywnie: użycie server-side filtrów `ownerId` / `assignedTo` w `useTasks` -- ale to wymaga filtra OR na dwa pola, co jest trudniejsze z Supabase SDK. Filtr klient-side jest prostszy i spójny z podejściem w `MyTasks.tsx`.
+- `useTeamWatchedContacts(teamId)` -- pobiera liste monitorowanych kontaktow CRM
+- `useWantedForWatchedContacts(contactIds)` -- pobiera wanted_contacts gdzie `requested_by_contact_id` jest w liscie monitorowanych kontaktow (status != cancelled/expired)
+- `useAddWatchedContact(teamId, contactId)` / `useRemoveWatchedContact`
 
-### Pliki do zmiany:
-- **`src/pages/Tasks.tsx`** -- dodanie importu `useCurrentDirector`, `useMemo`, filtrowanie tasków do "tylko moje"
+### 3. Modyfikacja: `KanbanBoard.tsx`
 
+- Importowac nowy hook `useTeamWatchedWanted`
+- W kolumnie "POSZUKIWANI" wyswietlac dwie sekcje:
+  - Istniejace karty `ProspectCard` (deal_team_prospects)
+  - Nowe karty `WantedKanbanCard` (wanted_contacts z monitorowanych kontaktow)
+- Count w badge = prospects.length + wantedItems.length
+
+### 4. Nowy komponent: `WantedKanbanCard.tsx`
+
+Kompaktowa karta wanted_contact dostosowana do Kanbana:
+- Nazwa osoby/firmy
+- Badge statusu (active/in_progress/fulfilled)
+- Kto szuka (requested_by_contact)
+- Kto zna (matched_by_director) jesli jest
+- Przycisk "Znam te osobe!" (istniejacy flow)
+
+### 5. Nowy komponent: `WatchedContactsConfig.tsx`
+
+Dialog/popover konfiguracji dostepny z ustawien zespolu (TeamSettings) lub bezposrednio z kolumny POSZUKIWANI:
+- Wyszukiwarka kontaktow CRM
+- Lista aktualnie monitorowanych kontaktow z mozliwoscia usuniecia
+- Przycisk "Dodaj" do monitorowania nowego kontaktu
+
+### 6. Modyfikacja: `TeamSettings.tsx`
+
+Dodac sekcje "Monitorowani kontakty (Poszukiwani)" z komponentem `WatchedContactsConfig`.
+
+### 7. Modyfikacja: kolumna POSZUKIWANI w `KanbanBoard.tsx`
+
+Zmienic przycisk "Szukaj" na dwie opcje:
+- "+ Szukaj" (istniejacy -- dodaje prospect)
+- Ikona ustawien (otwiera WatchedContactsConfig)
+
+## Szczegoly techniczne
+
+**Pliki do utworzenia:**
+1. `src/hooks/useTeamWatchedContacts.ts` -- CRUD hooki dla monitorowanych kontaktow + pobieranie wanted_contacts
+2. `src/components/deals-team/WantedKanbanCard.tsx` -- kompaktowa karta wanted w Kanbanie
+3. `src/components/deals-team/WatchedContactsConfig.tsx` -- konfiguracja monitorowanych kontaktow
+
+**Pliki do modyfikacji:**
+4. `src/components/deals-team/KanbanBoard.tsx` -- integracja wanted w kolumnie POSZUKIWANI
+5. `src/components/deals-team/TeamSettings.tsx` -- sekcja konfiguracji monitorowanych kontaktow
+
+**Migracja SQL:**
+- Tabela `deal_team_watched_contacts` z RLS
+- Polityki: SELECT/INSERT/DELETE dla czlonkow zespolu
+
+**Flow danych:**
+
+```text
+TeamSettings / Kolumna POSZUKIWANI
+       |
+       v
+WatchedContactsConfig --> deal_team_watched_contacts
+       |                        |
+       |                        v (contact_ids)
+       |                  wanted_contacts WHERE requested_by_contact_id IN (...)
+       |                        |
+       v                        v
+  [ProspectCard]         [WantedKanbanCard]
+       |_______________|
+              |
+     Kolumna POSZUKIWANI w Kanbanie
+```
