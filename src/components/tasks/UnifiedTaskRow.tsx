@@ -74,6 +74,11 @@ export interface UnifiedTaskRowProps {
     due_date: string | null;
     assigned_to?: string | null;
     completed_at?: string | null;
+    deal_team?: {
+      id: string;
+      name: string;
+      color: string;
+    } | null;
   };
   members?: Array<{
     director_id: string;
@@ -173,6 +178,17 @@ export function UnifiedTaskRow({
       >
         <StatusIcon className={cn(compact ? 'h-4 w-4' : 'h-[18px] w-[18px]', st.color)} />
       </button>
+
+      {/* Deal team badge */}
+      {task.deal_team && (
+        <Badge
+          variant="outline"
+          className="text-[10px] px-1.5 py-0 h-4 border-none shrink-0 font-medium"
+          style={{ backgroundColor: `${task.deal_team.color}20`, color: task.deal_team.color }}
+        >
+          {task.deal_team.name}
+        </Badge>
+      )}
 
       {/* Title + description */}
       <div className="flex-1 min-w-0">
