@@ -42,6 +42,11 @@ export interface TasksFilters {
 }
 
 export interface TaskWithDetails extends Task {
+  deal_team?: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
   task_contacts: Array<{
     contact_id: string;
     role: string;
@@ -131,6 +136,7 @@ export function useTasks(filters: TasksFilters = {}) {
         .from('tasks')
         .select(`
           *,
+          deal_team:deal_teams(id, name, color),
           task_contacts(
             contact_id,
             role,
