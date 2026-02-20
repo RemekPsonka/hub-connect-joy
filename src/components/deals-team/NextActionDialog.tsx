@@ -201,6 +201,28 @@ export function NextActionDialog({
         // Non-critical, ignore logging errors
       }
 
+      // Ensure task_contacts link exists for CRM visibility
+      if (contactId) {
+        try {
+          const { data: existingTc } = await supabase
+            .from('task_contacts')
+            .select('id')
+            .eq('task_id', existingTaskId)
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingTc) {
+            await supabase.from('task_contacts').insert({
+              task_id: existingTaskId,
+              contact_id: contactId,
+              role: 'primary',
+            });
+          }
+        } catch {
+          // Non-critical
+        }
+      }
+
       toast.success(closeTask ? 'Kontakt zamknięty' : `Dalsze działania: ${newTitle}`);
       onConfirm?.();
       onOpenChange(false);

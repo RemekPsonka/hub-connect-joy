@@ -83,6 +83,24 @@ export function useCreateAssignment() {
         .single();
 
       if (error) throw error;
+
+      // Ensure task_contacts link exists for CRM visibility
+      if (data) {
+        const { data: dtc } = await supabase
+          .from('deal_team_contacts')
+          .select('contact_id')
+          .eq('id', params.teamContactId)
+          .single();
+
+        if (dtc?.contact_id) {
+          await supabase.from('task_contacts').insert({
+            task_id: data.id,
+            contact_id: dtc.contact_id,
+            role: 'primary',
+          });
+        }
+      }
+
       return data;
     },
     onSuccess: (_, params) => {
