@@ -25,7 +25,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Popover, PopoverTrigger } from '@/components/ui/popover';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import {
   Calendar,
@@ -174,6 +175,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
   const [titleValue, setTitleValue] = useState(task.title);
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(task.description || '');
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -368,27 +370,36 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
             {/* Due date */}
             <MetaRow label="Data wykonania">
-              <Popover>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                 <PopoverTrigger asChild>
                   <button className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-1.5 py-0.5 -ml-1.5 transition-colors">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{task.due_date ? format(new Date(task.due_date), 'd MMMM yyyy', { locale: pl }) : 'Dodaj termin'}</span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-50" align="start">
+                <PopoverPrimitive.Content
+                  align="start"
+                  sideOffset={4}
+                  className="z-[100] w-auto rounded-md border bg-popover p-0 shadow-md pointer-events-auto"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
                   <DayPickerCalendar
                     mode="single"
                     selected={task.due_date ? new Date(task.due_date + 'T00:00:00') : undefined}
                     onSelect={async (date: Date | undefined) => {
                       if (date) {
-                        const formatted = format(date, 'yyyy-MM-dd');
-                        await updateTask.mutateAsync({ id: task.id, due_date: formatted });
+                        try {
+                          const formatted = format(date, 'yyyy-MM-dd');
+                          await updateTask.mutateAsync({ id: task.id, due_date: formatted });
+                          setIsCalendarOpen(false);
+                        } catch (error) {
+                          toast.error('Nie udało się zmienić terminu');
+                        }
                       }
                     }}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
+                    className="p-3"
                   />
-                </PopoverContent>
+                </PopoverPrimitive.Content>
               </Popover>
             </MetaRow>
 
