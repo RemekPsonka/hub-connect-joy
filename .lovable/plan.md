@@ -1,75 +1,81 @@
 
+# Naprawa flow zamykania zadan i cyklicznosci
 
-# Interaktywny efekt karuzeli na kolumnach Kanban + tryb fokusowy
+## Zidentyfikowane problemy
 
-## Cel
-Dodanie dwoch interakcji do wszystkich widokow Kanban:
-1. **Hover**: najechanie na kolumne powoduje jej powiekszenie (efekt karuzeli) -- sasiednie kolumny sie kurcza
-2. **Klikniecie**: otwiera pelnoekranowy widok pojedynczego etapu z mozliwoscia pracy na nim
+### 1. Trigger `handle_recurring_task` tworzy zadania ze statusem 'pending'
+Trigger bazodanowy tworzy nowe zadanie cykliczne ze statusem `'pending'`, ale caly system UI (kanban, listy, filtry) uzywa statusow: `todo`, `in_progress`, `completed`, `cancelled`. Zadanie ze statusem `pending` nie pojawia sie w zadnej kolumnie kanbana ani na liscie -- jest "niewidoczne".
 
-## Podejscie techniczne
+**Naprawa:** Migracja SQL -- zmiana triggera `handle_recurring_task` aby tworzyl zadania ze statusem `'todo'` zamiast `'pending'`.
 
-### Efekt karuzeli (hover)
+### 2. Po zakonczeniu zadania cyklicznego brak informacji o nowym zadaniu
+Gdy uzytkownik zamyka zadanie cykliczne, panel szczegolów (TaskDetailSheet) zamyka sie natychmiast (`onOpenChange(false)`). Uzytkownik nie wie, ze system stworzyl nowe zadanie-kontynuacje z kolejnym terminem.
 
-Zamiana siatki `grid` na `flex` z plynnym przejsciem `flex-grow`:
-- Domyslnie kazda kolumna ma `flex: 1`
-- Po najechaniu: hovered kolumna dostaje `flex: 3`, pozostale zostaja `flex: 1`
-- Animacja przez CSS `transition: flex 0.3s ease`
-- Efekt dziala na calym kontenerze (rodzic reaguje na hover dziecka)
+**Naprawa:** Po zakonczeniu zadania cyklicznego:
+- Wyswietlic toast z informacja o nowym zadaniu i przyciskiem "Otworz nowe zadanie"
+- Pobrac nowo utworzone zadanie (query po `source_task_id = task.id`) i umozliwic szybkie przejscie do niego
 
-### Tryb fokusowy (klikniecie naglowka)
+### 3. Nowe zadanie cykliczne nie dziedziczy powiazania z kontaktem
+Trigger `handle_recurring_task` kopiuje pola zadania, ale NIE kopiuje wpisow z tabeli `task_contacts`. Nowe zadanie cykliczne traci powiazanie z kontaktem.
 
-Po kliknieciu naglowka kolumny:
-- Caly Kanban zastepowany jest widokiem jednej kolumny na pelna szerokosc
-- Przycisk "Wroc" do powrotu do widoku wszystkich kolumn
-- Pelna funkcjonalnosc (drag & drop, dodawanie, edycja) zachowana
+**Naprawa:** Rozszerzyc trigger aby kopiowal rowniez rekordy `task_contacts` ze starego zadania do nowego.
 
-W lejku sprzedazy (deals-team) ta funkcja juz istnieje dla niektorych kolumn (drillDownCategory + SubKanbanView). Rozszerze to na wszystkie kolumny ktore nie maja sub-kanbana -- pokaza sie w prostym trybie fokusowym (lista kart na pelna szerokosc).
+### 4. Sortowanie -- nowe zadanie z przyszlym terminem ladujena koncu
+Domyslne sortowanie to `created_at DESC`, wiec nowe zadanie powinno byc na gorze. Ale w widoku MyTasks (grupowanie wg daty), zadanie z przyszlym terminem trafi do sekcji "Pozniej" co jest poprawne -- ale uzytkownik powinien zobaczyc powiadomienie/link.
+
+**Brak zmiany sortowania** -- to jest poprawne zachowanie. Problem rozwiazuje punkt 2 (feedback o nowym zadaniu).
 
 ## Pliki do zmiany
 
-### 1. `src/components/deals-team/KanbanColumn.tsx`
-- Dodac prop `isHovered` i odpowiednie klasy CSS dla rozszerzenia
-- Dodac `onMouseEnter` / `onMouseLeave` do kontenera
-- Zmiana kontenera z sztywnych wymiarow na flex-grow
+### 1. Migracja SQL
+- Zmiana triggera `handle_recurring_task`: status `'pending'` -> `'todo'`
+- Dodanie kopiowania `task_contacts` do nowego zadania cyklicznego
+- Naprawa istniejacych zadan ze statusem `'pending'` (UPDATE na `'todo'`)
 
-### 2. `src/components/deals-team/KanbanBoard.tsx`
-- Dodac state `hoveredColumn` (string | null)
-- Zamienic grid na flex z `transition-all`
-- Przekazac `isHovered` do kazdej kolumny
-- Rozszerzyc obsluge klikniecia naglowka -- kolumny bez sub-kanbana otwieraja prosty tryb fokusowy (pelna szerokosc, lista kart, przycisk wroc)
+```sql
+-- Fix existing pending tasks
+UPDATE tasks SET status = 'todo' WHERE status = 'pending';
 
-### 3. `src/components/tasks/TasksKanban.tsx`
-- Dodac state `hoveredColumn` i `focusedColumn`
-- Zamienic grid na flex z efektem karuzeli
-- Po kliknieciu naglowka: tryb fokusowy (jedna kolumna na pelna szerokosc)
-- Przycisk "Wroc do wszystkich" w trybie fokusowym
-
-### 4. `src/components/deals/KanbanColumn.tsx` + `DealsKanban.tsx`
-- Analogiczne zmiany: hover expand + klikniecie naglowka = tryb fokusowy
-- Dostosowanie do istniejacego dnd-kit (ScrollArea + flex)
-
-### 5. `tailwind.config.ts` (opcjonalnie)
-- Jesli potrzebna animacja `animate-card-drop` nie istnieje, dodam ja
-
-## Szczegoly implementacji
-
-### CSS efekt karuzeli (hover)
-```
-// Kontener
-<div className="flex gap-4 transition-all">
-
-// Kolumna
-<div className={cn(
-  "flex-1 min-w-0 transition-all duration-300 ease-in-out",
-  isHovered && "flex-[3]",
-  someOtherIsHovered && !isHovered && "flex-[0.7] opacity-80"
-)}>
+-- Recreate trigger to use 'todo' and copy task_contacts
+CREATE OR REPLACE FUNCTION handle_recurring_task() ...
+  -- INSERT ... status = 'todo' (zamiast 'pending')
+  -- + INSERT INTO task_contacts SELECT ... FROM task_contacts WHERE task_id = NEW.id
 ```
 
-### Tryb fokusowy (prosty, bez sub-kanbana)
-Dla kolumn ktore nie maja dedykowanego sub-kanbana, tryb fokusowy to po prostu:
-- Naglowek kolumny z przyciskiem "Wroc"
-- Karty wyswietlone w siatce 2-3 kolumnowej zamiast jednej waskiej kolumny
-- Zachowanie drag & drop i wszystkich akcji
+### 2. `src/components/tasks/TaskDetailSheet.tsx`
+- Zmodyfikowac `handleComplete` i `handleStatusChange`:
+  - Po ustawieniu statusu `completed`, jesli zadanie ma `recurrence_rule`, poczekac na invalidacje cache
+  - Pobrac nowe zadanie cykliczne (query: `source_task_id = task.id, status = 'todo'`)
+  - Wyswietlic toast z przyciskiem "Otworz nastepne zadanie" ktory otwiera nowe zadanie w panelu szczegolów
+  - Nie zamykac panelu natychmiast -- dac uzytkownikowi chwile na zobaczenie potwierdzenia
 
+### 3. `src/components/tasks/BulkTaskActions.tsx`
+- Usunac status `'pending'` z opcji -- zastapic na `'todo'` (juz jest, ale upewnic sie ze nie ma niezgodnosci)
+
+### 4. `src/hooks/useTasks.ts`
+- Dodac helper hook `useNextRecurringTask(sourceTaskId)` do pobierania najnowszego zadania potomnego
+
+## Szczegoly techniczne
+
+### Zmieniony trigger (kluczowy fragment):
+```sql
+INSERT INTO public.tasks (..., status, ...)
+VALUES (..., 'todo', ...);  -- bylo 'pending'
+
+-- Kopiowanie kontaktow
+INSERT INTO public.task_contacts (task_id, contact_id, role)
+SELECT v_new_task_id, tc.contact_id, tc.role
+FROM public.task_contacts tc
+WHERE tc.task_id = NEW.id;
+```
+
+### Flow po zakonczeniu zadania cyklicznego:
+```text
+Uzytkownik klika "Zakoncz"
+  -> updateTask(status: 'completed')
+  -> Trigger DB tworzy nowe zadanie (status: 'todo', nowy due_date)
+  -> invalidateQueries
+  -> UI czeka 500ms, pobiera nowe zadanie (source_task_id = old.id)
+  -> Toast: "Zadanie zakonczone. Nastepne: [tytul] - termin [data]" + przycisk "Otworz"
+  -> Klikniecie "Otworz" -> otwiera TaskDetailSheet z nowym zadaniem
+```
