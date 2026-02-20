@@ -6,9 +6,10 @@ import { cn } from '@/lib/utils';
 interface KanbanColumnProps {
   stage: DealStage;
   deals: Deal[];
+  onHeaderClick?: () => void;
 }
 
-export function KanbanColumn({ stage, deals }: KanbanColumnProps) {
+export function KanbanColumn({ stage, deals, onHeaderClick }: KanbanColumnProps) {
   const { isOver, setNodeRef } = useDroppable({
     id: stage.id,
   });
@@ -19,11 +20,15 @@ export function KanbanColumn({ stage, deals }: KanbanColumnProps) {
     <div className="flex flex-col w-[300px] shrink-0">
       {/* Column Header */}
       <div
-        className="rounded-t-lg p-3 border-b-2"
+        className={cn(
+          "rounded-t-lg p-3 border-b-2",
+          onHeaderClick && "cursor-pointer hover:bg-opacity-30 transition-colors"
+        )}
         style={{
           backgroundColor: `${stage.color}15`,
           borderBottomColor: stage.color,
         }}
+        onClick={onHeaderClick}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

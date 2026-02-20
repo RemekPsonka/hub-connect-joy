@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { Search, X, Eye } from 'lucide-react';
+import { Search, X, Eye, ArrowLeft } from 'lucide-react';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
@@ -57,6 +57,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [taskEditOpen, setTaskEditOpen] = useState(false);
   const [drillDownCategory, setDrillDownCategory] = useState<DealCategory | null>(null);
+  const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
 
   // Separate snoozed contacts
   const { activeContacts, snoozedContacts } = useMemo(() => {
@@ -198,6 +199,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   }
 
 
+  // Focus view for categories with sub-kanban
   if (drillDownCategory && SUB_KANBAN_CONFIGS[drillDownCategory]) {
     const config = SUB_KANBAN_CONFIGS[drillDownCategory];
     return (
@@ -213,6 +215,84 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           onContactClick={handleCardClick}
           activeTaskMap={activeTaskMap}
         />
+
+        <ContactTasksSheet
+          contact={selectedContact}
+          teamId={teamId}
+          open={selectedContact !== null}
+          onOpenChange={(open) => !open && setSelectedContact(null)}
+          onTaskOpen={(task) => { setTaskForDetail(task); setTaskDetailOpen(true); }}
+        />
+        {taskForDetail && (
+          <TaskDetailSheet
+            open={taskDetailOpen}
+            onOpenChange={setTaskDetailOpen}
+            task={taskForDetail}
+            onEdit={() => { setTaskDetailOpen(false); setTaskEditOpen(true); }}
+          />
+        )}
+        <TaskModal
+          open={taskEditOpen}
+          onOpenChange={(o) => { setTaskEditOpen(o); if (!o) setTaskForDetail(null); }}
+          task={taskForDetail}
+        />
+      </>
+    );
+  }
+
+  // Simple focus view for categories WITHOUT sub-kanban
+  if (drillDownCategory && !SUB_KANBAN_CONFIGS[drillDownCategory]) {
+    const categoryLabels: Record<string, { title: string; icon: string }> = {
+      offering: { title: 'OFERTOWANIE', icon: '📝' },
+      lead: { title: 'LEAD', icon: '📋' },
+      '10x': { title: '10x', icon: '🔄' },
+      cold: { title: 'COLD LEAD', icon: '❄️' },
+      lost: { title: 'PRZEGRANE', icon: '✖️' },
+    };
+    const label = categoryLabels[drillDownCategory] || { title: drillDownCategory.toUpperCase(), icon: '📌' };
+    const CardComponent = ['offering', 'hot', 'audit'].includes(drillDownCategory) ? HotLeadCard
+      : ['top'].includes(drillDownCategory) ? TopLeadCard
+      : ['lead'].includes(drillDownCategory) ? LeadCard
+      : ColdLeadCard;
+
+    return (
+      <>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setDrillDownCategory(null)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Wróć do lejka
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{label.icon}</span>
+              <h2 className="font-semibold text-lg">{label.title}</h2>
+              <Badge variant="secondary">{drillDownContacts.length}</Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {drillDownContacts.map((contact) => (
+              <CardComponent
+                key={contact.id}
+                contact={contact}
+                teamId={teamId}
+                onClick={() => handleCardClick(contact)}
+                onDragStart={(e: React.DragEvent) => handleDragStart(e, contact.id)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggingContactId === contact.id}
+                taskStatus={activeTaskMap?.get(contact.id)}
+              />
+            ))}
+            {drillDownContacts.length === 0 && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                Brak kontaktów w tym etapie
+              </div>
+            )}
+          </div>
+        </div>
 
         <ContactTasksSheet
           contact={selectedContact}
@@ -269,15 +349,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         onContactClick={handleCardClick}
       />
 
-      <div className={cn(
-        "grid grid-cols-1 sm:grid-cols-2 gap-4",
-        visibleCount <= 4 && "lg:grid-cols-4",
-        visibleCount === 5 && "lg:grid-cols-5",
-        visibleCount === 6 && "lg:grid-cols-6",
-        visibleCount === 7 && "lg:grid-cols-7",
-        visibleCount === 8 && "lg:grid-cols-8",
-        visibleCount >= 9 && "lg:grid-cols-9"
-      )}>
+      <div
+        className="flex gap-3 transition-all duration-300"
+        onMouseLeave={() => setHoveredColumn(null)}
+      >
         {/* OFFERING column */}
         {visibleColumns.offering && (
           <KanbanColumn
@@ -292,6 +367,11 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'offering')}
             isDropTarget={dragOverColumn === 'offering'}
+            isHovered={hoveredColumn === 'offering'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'offering'}
+            onMouseEnter={() => setHoveredColumn('offering')}
+            onMouseLeave={() => {}}
+            onHeaderClick={() => setDrillDownCategory('offering')}
           >
             {offeringContacts.map((contact) => (
               <HotLeadCard
@@ -323,6 +403,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'audit')}
             isDropTarget={dragOverColumn === 'audit'}
+            isHovered={hoveredColumn === 'audit'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'audit'}
+            onMouseEnter={() => setHoveredColumn('audit')}
+            onMouseLeave={() => {}}
           >
             {auditContacts.map((contact) => (
               <HotLeadCard
@@ -355,6 +439,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'hot')}
             isDropTarget={dragOverColumn === 'hot'}
+            isHovered={hoveredColumn === 'hot'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'hot'}
+            onMouseEnter={() => setHoveredColumn('hot')}
+            onMouseLeave={() => {}}
           >
             {hotContacts.map((contact) => (
               <HotLeadCard
@@ -386,6 +474,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'top')}
             isDropTarget={dragOverColumn === 'top'}
+            isHovered={hoveredColumn === 'top'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'top'}
+            onMouseEnter={() => setHoveredColumn('top')}
+            onMouseLeave={() => {}}
           >
             {topContacts.map((contact) => (
               <TopLeadCard
@@ -416,6 +508,11 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'lead')}
             isDropTarget={dragOverColumn === 'lead'}
+            isHovered={hoveredColumn === 'lead'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'lead'}
+            onMouseEnter={() => setHoveredColumn('lead')}
+            onMouseLeave={() => {}}
+            onHeaderClick={() => setDrillDownCategory('lead')}
           >
             {leadContacts.map((contact) => (
               <LeadCard
@@ -446,6 +543,11 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, '10x' as DealCategory)}
             isDropTarget={dragOverColumn === ('10x' as DealCategory)}
+            isHovered={hoveredColumn === '10x'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== '10x'}
+            onMouseEnter={() => setHoveredColumn('10x')}
+            onMouseLeave={() => {}}
+            onHeaderClick={() => setDrillDownCategory('10x' as DealCategory)}
           >
             {tenxContacts.map((contact) => (
               <ColdLeadCard
@@ -476,6 +578,11 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'cold')}
             isDropTarget={dragOverColumn === 'cold'}
+            isHovered={hoveredColumn === 'cold'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'cold'}
+            onMouseEnter={() => setHoveredColumn('cold')}
+            onMouseLeave={() => {}}
+            onHeaderClick={() => setDrillDownCategory('cold' as DealCategory)}
           >
             {coldContacts.map((contact) => (
               <ColdLeadCard
@@ -506,6 +613,11 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'lost' as DealCategory)}
             isDropTarget={dragOverColumn === ('lost' as DealCategory)}
+            isHovered={hoveredColumn === 'lost'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'lost'}
+            onMouseEnter={() => setHoveredColumn('lost')}
+            onMouseLeave={() => {}}
+            onHeaderClick={() => setDrillDownCategory('lost' as DealCategory)}
           >
             {lostContacts.map((contact) => (
               <ColdLeadCard
@@ -532,6 +644,10 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             onAdd={() => setShowAddProspect(true)}
             addButtonLabel="+ Szukaj"
             emptyMessage="Brak poszukiwanych. Dodaj osobę/firmę do znalezienia →"
+            isHovered={hoveredColumn === 'prospecting'}
+            isShrunk={!!hoveredColumn && hoveredColumn !== 'prospecting'}
+            onMouseEnter={() => setHoveredColumn('prospecting')}
+            onMouseLeave={() => {}}
             headerExtra={
               <button
                 onClick={(e) => { e.stopPropagation(); setShowWatchedConfig(true); }}
