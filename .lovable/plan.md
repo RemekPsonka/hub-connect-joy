@@ -1,81 +1,119 @@
 
-# Naprawa flow zamykania zadan i cyklicznosci
+
+# Naprawa flow zamykania zadan cyklicznych i wyswietlania powiazania z lejkiem
 
 ## Zidentyfikowane problemy
 
-### 1. Trigger `handle_recurring_task` tworzy zadania ze statusem 'pending'
-Trigger bazodanowy tworzy nowe zadanie cykliczne ze statusem `'pending'`, ale caly system UI (kanban, listy, filtry) uzywa statusow: `todo`, `in_progress`, `completed`, `cancelled`. Zadanie ze statusem `pending` nie pojawia sie w zadnej kolumnie kanbana ani na liscie -- jest "niewidoczne".
+### 1. Przycisk "Otworz" w toast nie dziala
+Po zakonczeniu zadania cyklicznego, wyswietlany jest toast z przyciskiem "Otworz", ktory emituje custom event `open-task`. Problem: **zaden komponent nie nasluchuje na ten event**. Przycisk nic nie robi.
 
-**Naprawa:** Migracja SQL -- zmiana triggera `handle_recurring_task` aby tworzyl zadania ze statusem `'todo'` zamiast `'pending'`.
+### 2. Brak informacji o lejku (pipeline) w panelu szczegolów
+Zadanie moze byc powiazane z lejkiem sprzedazy (`deal_team_id`), ale panel TaskDetailSheet nie wyswietla tej informacji. Uzytkownik nie wie, do ktorego lejka nalezy zadanie.
 
-### 2. Po zakonczeniu zadania cyklicznego brak informacji o nowym zadaniu
-Gdy uzytkownik zamyka zadanie cykliczne, panel szczegolów (TaskDetailSheet) zamyka sie natychmiast (`onOpenChange(false)`). Uzytkownik nie wie, ze system stworzyl nowe zadanie-kontynuacje z kolejnym terminem.
+### 3. Blad "completed_at column not found"
+Sesja uzytkownika pokazala blad: "Could not find the 'completed_at' column of 'tasks' in the schema cache". Tabela `tasks` nie ma kolumny `completed_at`. Jesli jakikolwiek kod probuje ja ustawic przy update, operacja sie nie powiiedzie.
 
-**Naprawa:** Po zakonczeniu zadania cyklicznego:
-- Wyswietlic toast z informacja o nowym zadaniu i przyciskiem "Otworz nowe zadanie"
-- Pobrac nowo utworzone zadanie (query po `source_task_id = task.id`) i umozliwic szybkie przejscie do niego
+## Plan naprawy
 
-### 3. Nowe zadanie cykliczne nie dziedziczy powiazania z kontaktem
-Trigger `handle_recurring_task` kopiuje pola zadania, ale NIE kopiuje wpisow z tabeli `task_contacts`. Nowe zadanie cykliczne traci powiazanie z kontaktem.
+### Plik 1: `src/pages/Tasks.tsx` i `src/pages/MyTasks.tsx`
+Dodac nasluchiwanie na event `open-task`:
+- `useEffect` z `addEventListener('open-task', ...)` 
+- Gdy event przyjdzie, pobrac zadanie po ID z supabase (lub z cache)
+- Otworzyc TaskDetailSheet z nowym zadaniem
+- Cleanup w `return` useEffect
 
-**Naprawa:** Rozszerzyc trigger aby kopiowal rowniez rekordy `task_contacts` ze starego zadania do nowego.
+### Plik 2: `src/components/tasks/TaskDetailSheet.tsx`
+- Dodac wiersz "Lejek" w sekcji metadanych -- wyswietlic `task.deal_team?.name` z kolorem i linkiem do `/deals-team`
+- Poprawic `handleComplete` i `handleStatusChange`: zamiast emitowac event `open-task`, uzyc callbacka przekazanego z rodzica (np. `onOpenNextTask?: (taskId: string) => void`)
+- Alternatywnie: zachowac event ale dodac listener w samym komponencie, ktory pobierze i wyswietli nowe zadanie bezposrednio (zamieni `task` w stanie)
+- Usunac ewentualne proby ustawiania `completed_at` na tabeli tasks (jesli istnieja)
 
-### 4. Sortowanie -- nowe zadanie z przyszlym terminem ladujena koncu
-Domyslne sortowanie to `created_at DESC`, wiec nowe zadanie powinno byc na gorze. Ale w widoku MyTasks (grupowanie wg daty), zadanie z przyszlym terminem trafi do sekcji "Pozniej" co jest poprawne -- ale uzytkownik powinien zobaczyc powiadomienie/link.
+### Podejscie do "Otworz nastepne zadanie"
+Zamiast custom event, zmienie podejscie:
+- Po zakonczeniu zadania cyklicznego i pobraniu nextTask, **nie zamykac sheeta** 
+- Wyswietlic w panelu informacje "Zadanie zakonczone. Nastepne zadanie:" z przyciskiem
+- Klikniecie przycisku zamieni wyswietlane zadanie na nowe (podmiana `task` w stanie rodzica przez callback `onTaskSwitch`)
 
-**Brak zmiany sortowania** -- to jest poprawne zachowanie. Problem rozwiazuje punkt 2 (feedback o nowym zadaniu).
+### Plik 3: `src/pages/Tasks.tsx`
+- Dodac callback `handleTaskSwitch` ktory zmienia `selectedTask` na nowe zadanie
+- Przekazac go do `TaskDetailSheet` jako `onTaskSwitch`
 
-## Pliki do zmiany
+### Plik 4: `src/pages/MyTasks.tsx`
+- Analogiczna zmiana jak w Tasks.tsx
 
-### 1. Migracja SQL
-- Zmiana triggera `handle_recurring_task`: status `'pending'` -> `'todo'`
-- Dodanie kopiowania `task_contacts` do nowego zadania cyklicznego
-- Naprawa istniejacych zadan ze statusem `'pending'` (UPDATE na `'todo'`)
+### Szczegoly techniczne
 
-```sql
--- Fix existing pending tasks
-UPDATE tasks SET status = 'todo' WHERE status = 'pending';
-
--- Recreate trigger to use 'todo' and copy task_contacts
-CREATE OR REPLACE FUNCTION handle_recurring_task() ...
-  -- INSERT ... status = 'todo' (zamiast 'pending')
-  -- + INSERT INTO task_contacts SELECT ... FROM task_contacts WHERE task_id = NEW.id
+#### Wyswietlanie lejka w TaskDetailSheet (po sekcji "Kontakt"):
+```
+{task.deal_team && (
+  <MetaRow label="Lejek">
+    <div className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
+         onClick={() => navigate('/deals-team')}>
+      <FolderKanban className="h-3.5 w-3.5" />
+      <span>{task.deal_team.name}</span>
+    </div>
+  </MetaRow>
+)}
 ```
 
-### 2. `src/components/tasks/TaskDetailSheet.tsx`
-- Zmodyfikowac `handleComplete` i `handleStatusChange`:
-  - Po ustawieniu statusu `completed`, jesli zadanie ma `recurrence_rule`, poczekac na invalidacje cache
-  - Pobrac nowe zadanie cykliczne (query: `source_task_id = task.id, status = 'todo'`)
-  - Wyswietlic toast z przyciskiem "Otworz nastepne zadanie" ktory otwiera nowe zadanie w panelu szczegolów
-  - Nie zamykac panelu natychmiast -- dac uzytkownikowi chwile na zobaczenie potwierdzenia
-
-### 3. `src/components/tasks/BulkTaskActions.tsx`
-- Usunac status `'pending'` z opcji -- zastapic na `'todo'` (juz jest, ale upewnic sie ze nie ma niezgodnosci)
-
-### 4. `src/hooks/useTasks.ts`
-- Dodac helper hook `useNextRecurringTask(sourceTaskId)` do pobierania najnowszego zadania potomnego
-
-## Szczegoly techniczne
-
-### Zmieniony trigger (kluczowy fragment):
-```sql
-INSERT INTO public.tasks (..., status, ...)
-VALUES (..., 'todo', ...);  -- bylo 'pending'
-
--- Kopiowanie kontaktow
-INSERT INTO public.task_contacts (task_id, contact_id, role)
-SELECT v_new_task_id, tc.contact_id, tc.role
-FROM public.task_contacts tc
-WHERE tc.task_id = NEW.id;
+#### Mechanizm podmiany zadania po zakonczeniu cyklicznego:
+```typescript
+// TaskDetailSheet - handleComplete
+const handleComplete = async () => {
+  await updateTask.mutateAsync({ id: task.id, status: 'completed' });
+  if ((task as any).recurrence_rule) {
+    toast.success('Zadanie zakonczone. Tworze nastepne...');
+    setTimeout(async () => {
+      const { data: nextTask } = await supabase
+        .from('tasks')
+        .select('id, title, due_date')
+        .eq('source_task_id', task.id)
+        .eq('status', 'todo')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (nextTask && onTaskSwitch) {
+        toast.success(`Nastepne: ${nextTask.title}`, {
+          duration: 8000,
+          action: {
+            label: 'Otworz',
+            onClick: () => onTaskSwitch(nextTask.id),
+          },
+        });
+      }
+      onOpenChange(false);
+    }, 800);
+  } else {
+    toast.success('Zadanie zakonczone');
+    onOpenChange(false);
+  }
+};
 ```
 
-### Flow po zakonczeniu zadania cyklicznego:
-```text
-Uzytkownik klika "Zakoncz"
-  -> updateTask(status: 'completed')
-  -> Trigger DB tworzy nowe zadanie (status: 'todo', nowy due_date)
-  -> invalidateQueries
-  -> UI czeka 500ms, pobiera nowe zadanie (source_task_id = old.id)
-  -> Toast: "Zadanie zakonczone. Nastepne: [tytul] - termin [data]" + przycisk "Otworz"
-  -> Klikniecie "Otworz" -> otwiera TaskDetailSheet z nowym zadaniem
+#### W Tasks.tsx / MyTasks.tsx:
+```typescript
+const handleTaskSwitch = async (taskId: string) => {
+  const task = allTasks.find(t => t.id === taskId);
+  if (task) {
+    setSelectedTask(task);
+    setIsDetailOpen(true);
+  } else {
+    // Fetch from DB if not in cache yet
+    const { data } = await supabase
+      .from('tasks')
+      .select('*, deal_team:deal_teams(id, name, color), task_contacts(...), ...')
+      .eq('id', taskId)
+      .single();
+    if (data) {
+      setSelectedTask(data as TaskWithDetails);
+      setIsDetailOpen(true);
+    }
+  }
+};
 ```
+
+### Pliki do zmiany:
+1. `src/components/tasks/TaskDetailSheet.tsx` -- dodanie lejka, naprawa flow zamykania
+2. `src/pages/Tasks.tsx` -- dodanie handleTaskSwitch i przekazanie do sheeta
+3. `src/pages/MyTasks.tsx` -- analogiczne zmiany
+
