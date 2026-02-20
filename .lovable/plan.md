@@ -1,119 +1,121 @@
 
+# Przeprojektowanie flow zamykania zadan w lejku -- petla ciagla do "Klient"
 
-# Naprawa flow zamykania zadan cyklicznych i wyswietlania powiazania z lejkiem
+## Problem
+Obecny system tworzy NOWE zadanie po kazdym zamknieciu (np. "Kolejne spotkanie" w MeetingOutcomeDialog tworzy nowy task). Uzytkownik konczy z duplikatami zadan. Oczekiwane zachowanie: **jedno zadanie na kontakt w lejku**, ktore jest **recyklowane** (zmiana tytulu, daty, osoby, statusu) az do konwersji na klienta.
 
-## Zidentyfikowane problemy
+## Nowe podejscie
 
-### 1. Przycisk "Otworz" w toast nie dziala
-Po zakonczeniu zadania cyklicznego, wyswietlany jest toast z przyciskiem "Otworz", ktory emituje custom event `open-task`. Problem: **zaden komponent nie nasluchuje na ten event**. Przycisk nic nie robi.
+### Zasada: "Dalsze dzialania" zamiast "Zamknij + nowe"
+Zamkniecie zadania w kontekscie lejka NIE tworzy nowego zadania. Zamiast tego:
+1. Uzytkownik klika status -> "completed" 
+2. Otwiera sie dialog "Co dalej?" (uniwersalny, nie tylko po spotkaniu)
+3. Uzytkownik wybiera akcje, osobe, date
+4. **To samo zadanie** jest aktualizowane: nowy tytul, nowa data, status wraca na `todo`, etap w kanbanie sie zmienia
 
-### 2. Brak informacji o lejku (pipeline) w panelu szczegolów
-Zadanie moze byc powiazane z lejkiem sprzedazy (`deal_team_id`), ale panel TaskDetailSheet nie wyswietla tej informacji. Uzytkownik nie wie, do ktorego lejka nalezy zadanie.
-
-### 3. Blad "completed_at column not found"
-Sesja uzytkownika pokazala blad: "Could not find the 'completed_at' column of 'tasks' in the schema cache". Tabela `tasks` nie ma kolumny `completed_at`. Jesli jakikolwiek kod probuje ja ustawic przy update, operacja sie nie powiiedzie.
-
-## Plan naprawy
-
-### Plik 1: `src/pages/Tasks.tsx` i `src/pages/MyTasks.tsx`
-Dodac nasluchiwanie na event `open-task`:
-- `useEffect` z `addEventListener('open-task', ...)` 
-- Gdy event przyjdzie, pobrac zadanie po ID z supabase (lub z cache)
-- Otworzyc TaskDetailSheet z nowym zadaniem
-- Cleanup w `return` useEffect
-
-### Plik 2: `src/components/tasks/TaskDetailSheet.tsx`
-- Dodac wiersz "Lejek" w sekcji metadanych -- wyswietlic `task.deal_team?.name` z kolorem i linkiem do `/deals-team`
-- Poprawic `handleComplete` i `handleStatusChange`: zamiast emitowac event `open-task`, uzyc callbacka przekazanego z rodzica (np. `onOpenNextTask?: (taskId: string) => void`)
-- Alternatywnie: zachowac event ale dodac listener w samym komponencie, ktory pobierze i wyswietli nowe zadanie bezposrednio (zamieni `task` w stanie)
-- Usunac ewentualne proby ustawiania `completed_at` na tabeli tasks (jesli istnieja)
-
-### Podejscie do "Otworz nastepne zadanie"
-Zamiast custom event, zmienie podejscie:
-- Po zakonczeniu zadania cyklicznego i pobraniu nextTask, **nie zamykac sheeta** 
-- Wyswietlic w panelu informacje "Zadanie zakonczone. Nastepne zadanie:" z przyciskiem
-- Klikniecie przycisku zamieni wyswietlane zadanie na nowe (podmiana `task` w stanie rodzica przez callback `onTaskSwitch`)
-
-### Plik 3: `src/pages/Tasks.tsx`
-- Dodac callback `handleTaskSwitch` ktory zmienia `selectedTask` na nowe zadanie
-- Przekazac go do `TaskDetailSheet` jako `onTaskSwitch`
-
-### Plik 4: `src/pages/MyTasks.tsx`
-- Analogiczna zmiana jak w Tasks.tsx
-
-### Szczegoly techniczne
-
-#### Wyswietlanie lejka w TaskDetailSheet (po sekcji "Kontakt"):
-```
-{task.deal_team && (
-  <MetaRow label="Lejek">
-    <div className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
-         onClick={() => navigate('/deals-team')}>
-      <FolderKanban className="h-3.5 w-3.5" />
-      <span>{task.deal_team.name}</span>
-    </div>
-  </MetaRow>
-)}
+### Flow krok po kroku
+```text
+Uzytkownik klika "completed" na zadaniu w lejku
+  -> Dialog "Dalsze dzialania" (NextActionDialog)
+     Opcje:
+       - Umow spotkanie -> tytul: "Umowic spotkanie z X", kanban: meeting_plan
+       - Spotkanie umowione -> otwiera MeetingScheduledDialog (data), kanban: meeting_scheduled
+       - Wyslij oferte -> tytul: "Wyslac oferte do X", kanban: offering/handshake
+       - Zadzwon -> tytul: "Zadzwonic do X", kanban: bez zmiany
+       - Wyslij mail -> tytul: "Wyslac maila do X", kanban: bez zmiany
+       - Odloz (10x) -> kanban: 10x, zadanie zamkniete
+       - Klient -> konwersja (ConvertToClientDialog)
+       - Utracony -> kanban: lost, zadanie zamkniete
+     Uzytkownik wybiera:
+       - Osobe odpowiedzialna (select z czlonkow zespolu)
+       - Date (calendar)
+     Klikniecie "Zapisz":
+       - UPDATE tasks SET title=nowy, due_date=nowa, status='todo', assigned_to=nowy
+       - UPDATE deal_team_contacts SET offering_stage=nowy, category=nowy (jesli zmiana)
+       - Log aktywnosci w task_activity_log
+  -> Sheet pozostaje otwarty z zaktualizowanym zadaniem
 ```
 
-#### Mechanizm podmiany zadania po zakonczeniu cyklicznego:
+## Pliki do zmiany
+
+### 1. NOWY: `src/components/deals-team/NextActionDialog.tsx`
+Uniwersalny dialog "Dalsze dzialania" zamiast obecnego MeetingOutcomeDialog (ktory pozostanie jako sub-dialog dla opcji "Spotkanie umowione"):
+- Lista akcji (umow spotkanie, zadzwon, wyslij oferte, wyslij mail, inne, odloz, klient, utracony)
+- Select osoby odpowiedzialnej (czlonkowie zespolu)
+- Kalendarz z data
+- Pole na notatke
+- Po zapisaniu: UPDATE istniejacego zadania (nie INSERT nowego)
+- Aktualizacja offering_stage / category w deal_team_contacts
+
+### 2. ZMIANA: `src/components/deals-team/ContactTasksSheet.tsx`
+- `handleTaskStatusChange`: zamiast bezposrednio zamykac task i otwierac MeetingOutcomeDialog, otworzy nowy `NextActionDialog` dla KAZDEGO zadania (nie tylko spotkaniowego)
+- Usunac osobna logike `isMeetingTask` -- kazde zadanie w lejku wchodzi w petle "co dalej?"
+- Przekazac `taskId` do NextActionDialog zeby wiedział ktore zadanie recyklowac
+- Po zapisaniu: odswiezyc liste zadan (invalidate queries)
+
+### 3. ZMIANA: `src/components/deals-team/MeetingOutcomeDialog.tsx`
+- Zmiana logiki `next_meeting`: zamiast `createTask.mutateAsync()` zwracac informacje do rodzica ze nalezy zaktualizowac istniejace zadanie
+- Dodac prop `existingTaskId` -- jesli podany, UPDATE zamiast INSERT
+- Alternatywnie: MeetingOutcomeDialog staje sie sub-widokiem NextActionDialog (opcja "spotkanie odbyte" otwiera go)
+
+### 4. ZMIANA: `src/components/deals-team/MeetingScheduledDialog.tsx`
+- Analogicznie: zamiast `createTask.mutateAsync()` -- UPDATE istniejacego zadania
+- Dodac prop `existingTaskId` -- jesli podany, zmiana tytulu i daty na istniejacym tasku
+
+## Szczegoly techniczne
+
+### NextActionDialog -- logika zapisu:
 ```typescript
-// TaskDetailSheet - handleComplete
-const handleComplete = async () => {
-  await updateTask.mutateAsync({ id: task.id, status: 'completed' });
-  if ((task as any).recurrence_rule) {
-    toast.success('Zadanie zakonczone. Tworze nastepne...');
-    setTimeout(async () => {
-      const { data: nextTask } = await supabase
-        .from('tasks')
-        .select('id, title, due_date')
-        .eq('source_task_id', task.id)
-        .eq('status', 'todo')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (nextTask && onTaskSwitch) {
-        toast.success(`Nastepne: ${nextTask.title}`, {
-          duration: 8000,
-          action: {
-            label: 'Otworz',
-            onClick: () => onTaskSwitch(nextTask.id),
-          },
-        });
-      }
-      onOpenChange(false);
-    }, 800);
-  } else {
-    toast.success('Zadanie zakonczone');
-    onOpenChange(false);
-  }
-};
+// Recyklowanie zadania
+await updateTask.mutateAsync({
+  id: existingTaskId,
+  title: newTitle,        // np. "Umowic spotkanie z Jan Kowalski"
+  status: 'todo',         // reset
+  due_date: selectedDate, // nowa data
+  assigned_to: selectedPerson,
+});
+
+// Aktualizacja etapu w kanbanie
+await updateContact.mutateAsync({
+  id: teamContactId,
+  teamId,
+  offeringStage: newStage,     // np. 'meeting_plan'
+  category: newCategory,        // np. 'offering' (jesli zmiana)
+});
+
+// Log
+await supabase.from('task_activity_log').insert({
+  task_id: existingTaskId,
+  field_name: 'recycled',
+  old_value: oldTitle,
+  new_value: newTitle,
+});
 ```
 
-#### W Tasks.tsx / MyTasks.tsx:
-```typescript
-const handleTaskSwitch = async (taskId: string) => {
-  const task = allTasks.find(t => t.id === taskId);
-  if (task) {
-    setSelectedTask(task);
-    setIsDetailOpen(true);
-  } else {
-    // Fetch from DB if not in cache yet
-    const { data } = await supabase
-      .from('tasks')
-      .select('*, deal_team:deal_teams(id, name, color), task_contacts(...), ...')
-      .eq('id', taskId)
-      .single();
-    if (data) {
-      setSelectedTask(data as TaskWithDetails);
-      setIsDetailOpen(true);
-    }
-  }
-};
-```
+### Mapowanie akcji na etapy kanbana:
+| Akcja              | Tytul zadania                | offering_stage     | category (jesli zmiana) |
+|--------------------|-----------------------------|--------------------|-----------------------|
+| Umow spotkanie     | Umowic spotkanie z X        | meeting_plan       | bez zmiany           |
+| Spotkanie umowione | Spotkanie z X - data        | meeting_scheduled  | bez zmiany           |
+| Wyslij oferte      | Wyslac oferte do X          | handshake          | offering             |
+| Zadzwon            | Zadzwonic do X              | bez zmiany         | bez zmiany           |
+| Wyslij mail        | Wyslac maila do X           | bez zmiany         | bez zmiany           |
+| Odloz (10x)        | --                          | --                 | 10x (task completed) |
+| Klient             | -> ConvertToClientDialog    | --                 | client (won)         |
+| Utracony           | --                          | --                 | lost                 |
 
-### Pliki do zmiany:
-1. `src/components/tasks/TaskDetailSheet.tsx` -- dodanie lejka, naprawa flow zamykania
-2. `src/pages/Tasks.tsx` -- dodanie handleTaskSwitch i przekazanie do sheeta
-3. `src/pages/MyTasks.tsx` -- analogiczne zmiany
+### Integracja z istniejacymi dialogi:
+- "Spotkanie umowione" -> otwiera MeetingScheduledDialog z `existingTaskId` (zeby zaktualizowac task zamiast tworzec nowy)
+- "Klient" -> otwiera ConvertToClientDialog (istniejacy flow)
+- "Odloz" / "Utracony" -> zamyka zadanie definitywnie (status completed), zmienia kategorie
 
+### Zabezpieczenia:
+- Ref guard `actionInProgressRef` przeciw podwojnym kliknieciam
+- Po zapisie: `invalidateQueries` dla `deal-team-contacts`, `deal-contact-all-tasks`, `tasks`
+- Toast z potwierdzeniem co sie zmienilo
+
+## Pliki do zmiany (podsumowanie):
+1. **NOWY** `src/components/deals-team/NextActionDialog.tsx` -- glowny dialog "co dalej?"
+2. **ZMIANA** `src/components/deals-team/ContactTasksSheet.tsx` -- nowy flow zamykania
+3. **ZMIANA** `src/components/deals-team/MeetingScheduledDialog.tsx` -- prop existingTaskId, UPDATE zamiast INSERT
+4. **ZMIANA** `src/components/deals-team/MeetingOutcomeDialog.tsx` -- dostosowanie do recyklowania zadan
