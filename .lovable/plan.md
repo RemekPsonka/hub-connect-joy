@@ -1,52 +1,49 @@
 
-# Poprawka sugestii AI — tylko dokladne dopasowania
+# Szybka edycja terminu z historia przesuniec
 
 ## Problem
-Hook `useWantedAISuggestions` wyszukuje kontakty po fragmencie branzy/firmy (`company.ilike.%budowlana%`), co zwraca losowe kontakty z calej branzy budowlanej. Uzytkownik chce widziec TYLKO kontakty z dokladnie tej samej firmy lub o tym samym nazwisku.
+W panelu szczegolowym zadania (TaskDetailSheet) pole "Data wykonania" jest tylko do odczytu. Nie mozna szybko zmienic terminu, a zmiany daty nie sa rejestrowane w historii zmian.
 
 ## Rozwiazanie
 
-### 1. Zmiana w `WantedContactCard.tsx`
-Przekazac do `WantedAISuggestions` zarowno `company_name` jak i `person_name` (zamiast samej branzy):
+### 1. Migracja bazy danych — dodanie sledzenia zmian daty
+Rozszerzenie istniejacego triggera `log_task_changes()` o sledzenie zmian `due_date`:
 
-```
-<WantedAISuggestions
-  companyName={item.company_name}
-  personName={item.person_name}
-  wantedId={item.id}
-/>
-```
-
-### 2. Zmiana w `WantedAISuggestions.tsx`
-Zaktualizowac props na `companyName` i `personName`, uzyc nowego hooka.
-
-### 3. Zmiana w `useWantedContacts.ts` — hook `useWantedAISuggestions`
-Zamiast szukac po branzy, szukac po:
-- dokladnej nazwie firmy (`company.ilike.${companyName}`) — case-insensitive ale pelna nazwa
-- LUB dokladnym nazwisku (`full_name.ilike.%${personName}%`) — jesli person_name jest podane
-
-Nowa sygnatura:
-```
-useWantedAISuggestions(companyName: string | null, personName: string | null)
-```
-
-Nowe zapytanie:
-```typescript
-// Budujemy filtr OR: ta sama firma LUB to samo nazwisko
-const filters = [];
-if (companyName) filters.push(`company.ilike.${companyName}`);
-if (personName) filters.push(`full_name.ilike.%${personName}%`);
-
-const { data } = await supabase
-  .from('contacts')
-  .select('id, full_name, company, position')
-  .or(filters.join(','))
-  .limit(5);
+```text
+CREATE OR REPLACE FUNCTION public.log_task_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_director_id UUID;
+BEGIN
+  SELECT id INTO v_director_id FROM public.directors WHERE user_id = auth.uid() LIMIT 1;
+  
+  -- existing checks: status, priority, assigned_to, title ...
+  
+  IF OLD.due_date IS DISTINCT FROM NEW.due_date THEN
+    INSERT INTO public.task_activity_log (task_id, actor_id, action, old_value, new_value, tenant_id)
+    VALUES (NEW.id, v_director_id, 'due_date_changed', 
+            OLD.due_date::text, NEW.due_date::text, NEW.tenant_id);
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 ```
 
-Dzieki temu dla "Eurovia Polska" pokaze TYLKO kontakty z firmy "Eurovia Polska", a nie z Rex-Bud Budownictwo czy Kdbudownictwo.
+### 2. TaskDetailSheet — edytowalny termin inline
+Zamiana statycznego tekstu daty na klikalny element z Popover + Calendar (react-day-picker):
+
+- Klikniecie na date otwiera popover z kalendarzem
+- Wybranie nowej daty natychmiast aktualizuje zadanie przez `updateTask.mutateAsync({ id, due_date })`
+- Jesli zadanie nie ma daty — pokazuje przycisk "Dodaj termin"
+
+### 3. TaskActivityLog — obsluga nowej akcji
+Dodanie etykiety i formatowania dla `due_date_changed` w komponencie `TaskActivityLog.tsx`:
+
+- `actionLabels`: `due_date_changed: 'Termin'`
+- Nowa funkcja `formatValue` — formatuje daty w czytelny sposob (np. "17 lut 2026 -> 24 lut 2026")
 
 ### Pliki do zmiany:
-1. `src/hooks/useWantedContacts.ts` — zmiana hooka `useWantedAISuggestions`
-2. `src/components/wanted/WantedAISuggestions.tsx` — nowe props
-3. `src/components/wanted/WantedContactCard.tsx` — przekazanie `company_name` i `person_name`
+1. **Migracja SQL** — rozszerzenie triggera o `due_date`
+2. **`src/components/tasks/TaskDetailSheet.tsx`** — zamiana statycznego wyswietlania daty na Popover z kalendarzem
+3. **`src/components/tasks/TaskActivityLog.tsx`** — dodanie etykiety i formatowania dla `due_date_changed`
