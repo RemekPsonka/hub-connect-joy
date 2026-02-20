@@ -368,6 +368,22 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
               </MetaRow>
             )}
 
+            {/* Contact */}
+            {task.task_contacts && task.task_contacts.length > 0 && task.task_contacts[0]?.contacts && (
+              <MetaRow label="Kontakt">
+                <div
+                  className="flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline"
+                  onClick={() => navigate(`/contacts/${task.task_contacts![0].contacts.id}`)}
+                >
+                  <User className="h-3.5 w-3.5" />
+                  <span>{task.task_contacts[0].contacts.full_name}</span>
+                  {task.task_contacts[0].contacts.company && (
+                    <span className="text-muted-foreground">({task.task_contacts[0].contacts.company})</span>
+                  )}
+                </div>
+              </MetaRow>
+            )}
+
             {/* Due date */}
             <MetaRow label="Data wykonania">
               <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
