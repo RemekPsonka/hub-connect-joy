@@ -76,7 +76,7 @@ export function BulkTaskActions({ selectedIds, onClearSelection }: BulkTaskActio
           <SelectValue placeholder="Zmień status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="pending">Oczekujące</SelectItem>
+          <SelectItem value="todo">Do zrobienia</SelectItem>
           <SelectItem value="in_progress">W trakcie</SelectItem>
           <SelectItem value="completed">Zakończone</SelectItem>
         </SelectContent>

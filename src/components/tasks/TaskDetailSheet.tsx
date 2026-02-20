@@ -59,6 +59,7 @@ import {
   useUpdateCrossTaskStatus,
   useDuplicateTask,
 } from '@/hooks/useTasks';
+import { supabase } from '@/integrations/supabase/client';
 import { useTaskReorder } from '@/hooks/useTaskReorder';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { toast } from 'sonner';
@@ -225,8 +226,39 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
   const handleComplete = async () => {
     try {
       await updateTask.mutateAsync({ id: task.id, status: 'completed' });
-      toast.success('Zadanie zakończone');
-      onOpenChange(false);
+      if ((task as any).recurrence_rule) {
+        toast.success('Zadanie zakończone. Tworzę następne…');
+        // Wait for trigger to create next task, then fetch it
+        setTimeout(async () => {
+          const { data: nextTask } = await supabase
+            .from('tasks')
+            .select('id, title, due_date')
+            .eq('source_task_id', task.id)
+            .eq('status', 'todo')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (nextTask) {
+            toast.success(
+              `Następne: ${nextTask.title} — termin ${nextTask.due_date ? format(new Date(nextTask.due_date), 'd MMM yyyy', { locale: pl }) : 'brak'}`,
+              {
+                duration: 8000,
+                action: {
+                  label: 'Otwórz',
+                  onClick: () => {
+                    // Re-open sheet with new task by navigating
+                    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: nextTask.id } }));
+                  },
+                },
+              }
+            );
+          }
+          onOpenChange(false);
+        }, 800);
+      } else {
+        toast.success('Zadanie zakończone');
+        onOpenChange(false);
+      }
     } catch { toast.error('Wystąpił błąd'); }
   };
 
@@ -263,7 +295,38 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit }: TaskDetail
 
   const handleStatusChange = async (newStatus: string) => {
     await updateTask.mutateAsync({ id: task.id, status: newStatus });
-    if (newStatus === 'completed') onOpenChange(false);
+    if (newStatus === 'completed') {
+      if ((task as any).recurrence_rule) {
+        toast.success('Zadanie zakończone. Tworzę następne…');
+        setTimeout(async () => {
+          const { data: nextTask } = await supabase
+            .from('tasks')
+            .select('id, title, due_date')
+            .eq('source_task_id', task.id)
+            .eq('status', 'todo')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (nextTask) {
+            toast.success(
+              `Następne: ${nextTask.title} — termin ${nextTask.due_date ? format(new Date(nextTask.due_date), 'd MMM yyyy', { locale: pl }) : 'brak'}`,
+              {
+                duration: 8000,
+                action: {
+                  label: 'Otwórz',
+                  onClick: () => {
+                    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: nextTask.id } }));
+                  },
+                },
+              }
+            );
+          }
+          onOpenChange(false);
+        }, 800);
+      } else {
+        onOpenChange(false);
+      }
+    }
   };
 
   const handlePriorityChange = async (newPriority: string) => {
