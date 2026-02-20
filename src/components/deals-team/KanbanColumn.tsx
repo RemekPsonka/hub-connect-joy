@@ -23,6 +23,10 @@ interface KanbanColumnProps {
   isDropTarget?: boolean;
   onHeaderClick?: () => void;
   headerExtra?: ReactNode;
+  isHovered?: boolean;
+  isShrunk?: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export type { KanbanColumnProps };
@@ -33,6 +37,10 @@ const colorClasses: Record<string, string> = {
   blue: 'border-t-blue-500',
   purple: 'border-t-purple-500',
   slate: 'border-t-slate-400',
+  emerald: 'border-t-emerald-500',
+  violet: 'border-t-violet-500',
+  cyan: 'border-t-cyan-500',
+  gray: 'border-t-gray-400',
 };
 
 export function KanbanColumn({
@@ -53,20 +61,27 @@ export function KanbanColumn({
   isDropTarget = false,
   onHeaderClick,
   headerExtra,
+  isHovered = false,
+  isShrunk = false,
+  onMouseEnter,
+  onMouseLeave,
 }: KanbanColumnProps) {
   const hasChildren = Children.count(children) > 0;
 
   return (
     <div
       className={cn(
-        `bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-280px)] transition-all`,
+        `bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-280px)] transition-all duration-300 ease-in-out`,
         colorClasses[color] || 'border-t-primary',
-        isDropTarget && 'ring-2 ring-primary/50 bg-primary/5'
+        isDropTarget && 'ring-2 ring-primary/50 bg-primary/5',
+        isShrunk && 'opacity-70 scale-[0.98]'
       )}
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {/* Header */}
       <div
