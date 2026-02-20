@@ -22,7 +22,10 @@ interface KanbanColumnProps {
   onDrop?: (e: React.DragEvent) => void;
   isDropTarget?: boolean;
   onHeaderClick?: () => void;
+  headerExtra?: ReactNode;
 }
+
+export type { KanbanColumnProps };
 
 const colorClasses: Record<string, string> = {
   red: 'border-t-red-500',
@@ -49,6 +52,7 @@ export function KanbanColumn({
   onDrop,
   isDropTarget = false,
   onHeaderClick,
+  headerExtra,
 }: KanbanColumnProps) {
   const hasChildren = Children.count(children) > 0;
 
@@ -83,6 +87,7 @@ export function KanbanColumn({
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </div>
+          {headerExtra && <div>{headerExtra}</div>}
         </div>
         {totalValue !== undefined && totalValue > 0 && (
           <p className="text-xs text-muted-foreground mt-1">

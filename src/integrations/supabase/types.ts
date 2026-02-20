@@ -3114,6 +3114,69 @@ export type Database = {
           },
         ]
       }
+      deal_team_watched_contacts: {
+        Row: {
+          added_by: string | null
+          contact_id: string
+          created_at: string | null
+          id: string
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          added_by?: string | null
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_watched_contacts_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_watched_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_watched_contacts_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_watched_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_watched_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_team_weekly_statuses: {
         Row: {
           blockers: string | null
