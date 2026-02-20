@@ -1,10 +1,10 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   ExternalLink, Plus, CheckSquare, User, Building2, StickyNote,
-  Mail, Phone, MapPin, Calendar, Target, BarChart3, History, Loader2,
+  Mail, Phone, MapPin, Calendar as CalendarIcon, Target, BarChart3, History, Loader2,
   AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -23,6 +23,12 @@ import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
+import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
+import { useAuth } from '@/contexts/AuthContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 
@@ -70,6 +76,8 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: strin
 export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskOpen }: ContactTasksSheetProps) {
   const { data: tasks = [], isLoading } = useDealContactAllTasks(contact?.contact_id, contact?.id);
   const { data: weeklyStatuses = [], isLoading: statusesLoading } = useTeamContactWeeklyStatuses(contact?.id);
+  const { data: teamMembers = [] } = useTeamMembers(teamId);
+  const { director } = useAuth();
   const updateTask = useUpdateTask();
   const updateContact = useUpdateTeamContact();
   const createTask = useCreateTask();
@@ -79,6 +87,13 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const customInputRef = useRef<HTMLInputElement>(null);
+  const [assignTo, setAssignTo] = useState<string>(director?.id || '');
+  const [taskDueDate, setTaskDueDate] = useState<Date | undefined>(undefined);
+
+  // Reset assignTo when director changes
+  useEffect(() => {
+    if (director?.id && !assignTo) setAssignTo(director.id);
+  }, [director?.id]);
 
   const openTasks = useMemo(() => tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled'), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled'), [tasks]);
@@ -244,7 +259,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                   {contact.next_meeting_date && (
                     <section>
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" /> Następne spotkanie
+                        <CalendarIcon className="h-3.5 w-3.5" /> Następne spotkanie
                       </h4>
                       <p className="text-sm">
                         {(() => { try { return format(new Date(contact.next_meeting_date), 'd MMM yyyy', { locale: pl }); } catch { return contact.next_meeting_date; } })()}
@@ -269,9 +284,51 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                         )}
                       </h4>
                     </div>
+                    {/* Assignee + Due date controls */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Select value={assignTo} onValueChange={setAssignTo}>
+                        <SelectTrigger className="h-7 w-[160px] text-xs">
+                          <User className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="Przypisz do..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover z-50">
+                          {teamMembers.map((m) => (
+                            <SelectItem key={m.director_id} value={m.director_id} className="text-xs">
+                              {m.director?.full_name || 'Nieznany'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn("h-7 px-2 text-xs gap-1 font-normal", !taskDueDate && "text-muted-foreground")}
+                          >
+                            <CalendarIcon className="h-3 w-3" />
+                            {taskDueDate ? format(taskDueDate, 'd MMM', { locale: pl }) : 'Termin'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-50" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={taskDueDate}
+                            onSelect={setTaskDueDate}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {taskDueDate && (
+                        <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs text-muted-foreground" onClick={() => setTaskDueDate(undefined)}>
+                          ✕
+                        </Button>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {[
-                        { icon: Calendar, label: 'Umów spotkanie', title: `Umówić spotkanie z ${c.full_name}` },
+                        { icon: CalendarIcon, label: 'Umów spotkanie', title: `Umówić spotkanie z ${c.full_name}` },
                         { icon: PhoneCall, label: 'Zadzwoń', title: `Zadzwonić do ${c.full_name}` },
                         { icon: FileText, label: 'Wyślij ofertę', title: `Wysłać ofertę do ${c.full_name}` },
                         { icon: Send, label: 'Wyślij mail', title: `Wysłać maila do ${c.full_name}` },
@@ -285,10 +342,15 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           onClick={async () => {
                             try {
                               await createTask.mutateAsync({
-                                task: { title: tpl.title, status: 'todo' },
+                                task: {
+                                  title: tpl.title,
+                                  status: 'todo',
+                                  ...(taskDueDate ? { due_date: taskDueDate.toISOString().split('T')[0] } : {}),
+                                },
                                 contactId: contact.contact_id,
                                 dealTeamId: teamId,
                                 dealTeamContactId: contact.id,
+                                assignedTo: assignTo || undefined,
                               });
                               toast.success(`Zadanie dodane: ${tpl.title}`);
                             } catch {
@@ -323,10 +385,15 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           if (!title) return;
                           try {
                             await createTask.mutateAsync({
-                              task: { title, status: 'todo' },
+                              task: {
+                                title,
+                                status: 'todo',
+                                ...(taskDueDate ? { due_date: taskDueDate.toISOString().split('T')[0] } : {}),
+                              },
                               contactId: contact.contact_id,
                               dealTeamId: teamId,
                               dealTeamContactId: contact.id,
+                              assignedTo: assignTo || undefined,
                             });
                             toast.success(`Zadanie dodane: ${title}`);
                             setCustomTitle('');

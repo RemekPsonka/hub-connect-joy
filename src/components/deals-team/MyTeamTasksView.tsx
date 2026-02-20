@@ -129,7 +129,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const filtered = useMemo(() => {
     let result = [...assignments];
     if (filterMember === 'mine') {
-      result = result.filter((a) => a.assigned_to === director?.id);
+      result = result.filter((a) => a.assigned_to === director?.id || (!a.assigned_to && a.owner_id === director?.id));
     } else if (filterMember !== 'all') {
       result = result.filter((a) => a.assigned_to === filterMember);
     }
