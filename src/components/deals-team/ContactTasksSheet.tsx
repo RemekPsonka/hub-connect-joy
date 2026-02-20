@@ -7,8 +7,7 @@ import {
   Mail, Phone, MapPin, Calendar as CalendarIcon, Target, BarChart3, History, Loader2,
   AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send, Trash2,
 } from 'lucide-react';
-import { MeetingScheduledDialog } from './MeetingScheduledDialog';
-import { MeetingOutcomeDialog } from './MeetingOutcomeDialog';
+import { NextActionDialog } from './NextActionDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -105,9 +104,9 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [taskDueDate, setTaskDueDate] = useState<Date | undefined>(undefined);
 
   // Workflow dialog states
-  const [meetingScheduledOpen, setMeetingScheduledOpen] = useState(false);
-  const [meetingOutcomeOpen, setMeetingOutcomeOpen] = useState(false);
+  const [nextActionOpen, setNextActionOpen] = useState(false);
   const [pendingCompleteTaskId, setPendingCompleteTaskId] = useState<string | null>(null);
+  const [pendingCompleteTaskTitle, setPendingCompleteTaskTitle] = useState<string>('');
 
   // Reset assignTo when director changes
   useEffect(() => {
@@ -120,29 +119,16 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   // Reset notes when contact changes
   const currentNotes = notesValue ?? contact?.notes ?? '';
 
-  // Workflow: detect meeting tasks and intercept completion
-  const isMeetingTask = (title: string) => {
-    const t = title.toLowerCase();
-    return t.includes('spotkanie') || t.includes('meeting');
-  };
-
+  // Every task completion in the pipeline opens NextActionDialog (continuous loop)
   const handleTaskStatusChange = useCallback((taskId: string, newStatus: string) => {
     if (newStatus === 'completed' && contact) {
       const task = tasks.find((t: any) => t.id === taskId);
-      if (task && isMeetingTask(task.title)) {
-        const stage = contact.offering_stage;
-        if (stage === 'meeting_plan') {
-          updateTask.mutate({ id: taskId, status: 'completed' });
-          setPendingCompleteTaskId(taskId);
-          setMeetingScheduledOpen(true);
-          return;
-        }
-        if (stage === 'meeting_scheduled') {
-          updateTask.mutate({ id: taskId, status: 'completed' });
-          setPendingCompleteTaskId(taskId);
-          setMeetingOutcomeOpen(true);
-          return;
-        }
+      if (task) {
+        // Don't actually mark as completed yet — NextActionDialog will recycle it
+        setPendingCompleteTaskId(taskId);
+        setPendingCompleteTaskTitle(task.title);
+        setNextActionOpen(true);
+        return;
       }
     }
     updateTask.mutate({ id: taskId, status: newStatus });
@@ -648,28 +634,21 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
         />
       )}
 
-      {/* Meeting Workflow Dialogs */}
-      {contact && (
-        <MeetingScheduledDialog
-          open={meetingScheduledOpen}
-          onOpenChange={setMeetingScheduledOpen}
+      {/* Next Action Dialog (continuous loop) */}
+      {contact && pendingCompleteTaskId && (
+        <NextActionDialog
+          open={nextActionOpen}
+          onOpenChange={(v) => {
+            setNextActionOpen(v);
+            if (!v) { setPendingCompleteTaskId(null); setPendingCompleteTaskTitle(''); }
+          }}
           contactName={c.full_name}
           contactId={contact.contact_id}
           teamContactId={contact.id}
           teamId={teamId}
-          onConfirm={() => setPendingCompleteTaskId(null)}
-        />
-      )}
-      {contact && (
-        <MeetingOutcomeDialog
-          open={meetingOutcomeOpen}
-          onOpenChange={setMeetingOutcomeOpen}
-          contactName={c.full_name}
-          contactId={contact.contact_id}
-          teamContactId={contact.id}
-          teamId={teamId}
-          currentCategory={contact.category}
-          onConfirm={() => setPendingCompleteTaskId(null)}
+          existingTaskId={pendingCompleteTaskId}
+          existingTaskTitle={pendingCompleteTaskTitle}
+          onConfirm={() => { setPendingCompleteTaskId(null); setPendingCompleteTaskTitle(''); }}
         />
       )}
 
