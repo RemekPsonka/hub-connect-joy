@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { isPast, isToday, format } from 'date-fns';
 import {
   CheckCircle2, User, Building2,
@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useMyTeamAssignments, useUpdateAssignment, useCreateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
+import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DealTeamAssignment } from '@/hooks/useDealsTeamAssignments';
 import {
@@ -22,6 +23,8 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
+import { MeetingScheduledDialog } from '@/components/deals-team/MeetingScheduledDialog';
+import { MeetingOutcomeDialog } from '@/components/deals-team/MeetingOutcomeDialog';
 import { UnifiedTaskRow, STATUS_CYCLE, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -106,6 +109,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { director } = useAuth();
   const { data: assignments = [], isLoading } = useMyTeamAssignments(teamId);
   const { data: members = [] } = useTeamMembers(teamId);
+  const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
 
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
@@ -117,6 +121,14 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Workflow dialog states
+  const [meetingScheduledOpen, setMeetingScheduledOpen] = useState(false);
+  const [meetingOutcomeOpen, setMeetingOutcomeOpen] = useState(false);
+  const [workflowTask, setWorkflowTask] = useState<DealTeamAssignment | null>(null);
+  const [workflowContact, setWorkflowContact] = useState<{
+    contactName: string; contactId: string; teamContactId: string; category: string;
+  } | null>(null);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups(prev => {
@@ -195,13 +207,52 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     });
   }, [filtered, members]);
 
-  const handleStatusChange = (taskId: string, task: DealTeamAssignment, newStatus: string) => {
-    updateAssignment.mutate({
-      id: taskId,
-      teamContactId: task.deal_team_contact_id || '',
-      status: newStatus,
-    });
+  const isMeetingTask = (title: string) => {
+    const t = title.toLowerCase();
+    return t.includes('spotkanie') || t.includes('meeting');
   };
+
+  const handleStatusChange = useCallback((taskId: string, task: DealTeamAssignment, newStatus: string) => {
+    if (newStatus === 'completed' && task.deal_team_contact_id && isMeetingTask(task.title)) {
+      // Find the team contact to check offering_stage
+      const tc = teamContacts.find(c => c.id === task.deal_team_contact_id);
+      if (tc) {
+        const stage = tc.offering_stage;
+        if (stage === 'meeting_plan') {
+          // Complete task, then open MeetingScheduledDialog
+          updateAssignment.mutate({
+            id: taskId, teamContactId: task.deal_team_contact_id || '', status: 'completed',
+          });
+          setWorkflowTask(task);
+          setWorkflowContact({
+            contactName: tc.contact?.full_name || task.contact_name || '',
+            contactId: tc.contact_id,
+            teamContactId: tc.id,
+            category: tc.category,
+          });
+          setMeetingScheduledOpen(true);
+          return;
+        }
+        if (stage === 'meeting_scheduled') {
+          updateAssignment.mutate({
+            id: taskId, teamContactId: task.deal_team_contact_id || '', status: 'completed',
+          });
+          setWorkflowTask(task);
+          setWorkflowContact({
+            contactName: tc.contact?.full_name || task.contact_name || '',
+            contactId: tc.contact_id,
+            teamContactId: tc.id,
+            category: tc.category,
+          });
+          setMeetingOutcomeOpen(true);
+          return;
+        }
+      }
+    }
+    updateAssignment.mutate({
+      id: taskId, teamContactId: task.deal_team_contact_id || '', status: newStatus,
+    });
+  }, [teamContacts, updateAssignment]);
 
   const handleQuickUpdate = (task: DealTeamAssignment, field: string, value: string) => {
     updateAssignment.mutate({
@@ -549,6 +600,31 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
       {/* ─── Create Task Modal ────────────────────────── */}
       <TaskModal open={showCreateModal} onOpenChange={setShowCreateModal} dealTeamId={teamId} />
+
+      {/* ─── Meeting Workflow Dialogs ─────────────────── */}
+      {workflowContact && (
+        <MeetingScheduledDialog
+          open={meetingScheduledOpen}
+          onOpenChange={setMeetingScheduledOpen}
+          contactName={workflowContact.contactName}
+          contactId={workflowContact.contactId}
+          teamContactId={workflowContact.teamContactId}
+          teamId={teamId}
+          onConfirm={() => { setWorkflowTask(null); setWorkflowContact(null); }}
+        />
+      )}
+      {workflowContact && (
+        <MeetingOutcomeDialog
+          open={meetingOutcomeOpen}
+          onOpenChange={setMeetingOutcomeOpen}
+          contactName={workflowContact.contactName}
+          contactId={workflowContact.contactId}
+          teamContactId={workflowContact.teamContactId}
+          teamId={teamId}
+          currentCategory={workflowContact.category as any}
+          onConfirm={() => { setWorkflowTask(null); setWorkflowContact(null); }}
+        />
+      )}
     </div>
   );
 }

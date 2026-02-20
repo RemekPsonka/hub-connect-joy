@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -7,6 +7,8 @@ import {
   Mail, Phone, MapPin, Calendar as CalendarIcon, Target, BarChart3, History, Loader2,
   AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send,
 } from 'lucide-react';
+import { MeetingScheduledDialog } from './MeetingScheduledDialog';
+import { MeetingOutcomeDialog } from './MeetingOutcomeDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +92,11 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [assignTo, setAssignTo] = useState<string>(director?.id || '');
   const [taskDueDate, setTaskDueDate] = useState<Date | undefined>(undefined);
 
+  // Workflow dialog states
+  const [meetingScheduledOpen, setMeetingScheduledOpen] = useState(false);
+  const [meetingOutcomeOpen, setMeetingOutcomeOpen] = useState(false);
+  const [pendingCompleteTaskId, setPendingCompleteTaskId] = useState<string | null>(null);
+
   // Reset assignTo when director changes
   useEffect(() => {
     if (director?.id && !assignTo) setAssignTo(director.id);
@@ -100,6 +107,34 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
 
   // Reset notes when contact changes
   const currentNotes = notesValue ?? contact?.notes ?? '';
+
+  // Workflow: detect meeting tasks and intercept completion
+  const isMeetingTask = (title: string) => {
+    const t = title.toLowerCase();
+    return t.includes('spotkanie') || t.includes('meeting');
+  };
+
+  const handleTaskStatusChange = useCallback((taskId: string, newStatus: string) => {
+    if (newStatus === 'completed' && contact) {
+      const task = tasks.find((t: any) => t.id === taskId);
+      if (task && isMeetingTask(task.title)) {
+        const stage = contact.offering_stage;
+        if (stage === 'meeting_plan') {
+          updateTask.mutate({ id: taskId, status: 'completed' });
+          setPendingCompleteTaskId(taskId);
+          setMeetingScheduledOpen(true);
+          return;
+        }
+        if (stage === 'meeting_scheduled') {
+          updateTask.mutate({ id: taskId, status: 'completed' });
+          setPendingCompleteTaskId(taskId);
+          setMeetingOutcomeOpen(true);
+          return;
+        }
+      }
+    }
+    updateTask.mutate({ id: taskId, status: newStatus });
+  }, [contact, tasks, updateTask]);
 
   if (!contact || !contact.contact) return null;
 
@@ -353,6 +388,14 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                                 dealTeamContactId: contact.id,
                                 assignedTo: assignTo || undefined,
                               });
+                              // Auto-update offering_stage for "Umów spotkanie" on HOT/TOP contacts
+                              if (tpl.label === 'Umów spotkanie' && ['hot', 'top'].includes(contact.category)) {
+                                await updateContact.mutateAsync({
+                                  id: contact.id,
+                                  teamId,
+                                  offeringStage: 'meeting_plan',
+                                });
+                              }
                               toast.success(`Zadanie dodane: ${tpl.title}`);
                             } catch {
                               toast.error('Nie udało się utworzyć zadania');
@@ -434,7 +477,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           task={task}
                           compact
                           showSubtasks={false}
-                          onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                          onStatusChange={(taskId, newStatus) => handleTaskStatusChange(taskId, newStatus)}
                           onClick={handleTaskClick}
                         />
                       ))}
@@ -452,7 +495,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                                 task={task}
                                 compact
                                 showSubtasks={false}
-                                onStatusChange={(taskId, newStatus) => updateTask.mutate({ id: taskId, status: newStatus })}
+                                onStatusChange={(taskId, newStatus) => handleTaskStatusChange(taskId, newStatus)}
                                 onClick={handleTaskClick}
                               />
                             ))}
@@ -577,6 +620,31 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
           currentCategory={contact.category}
           open={showStatusForm}
           onClose={() => setShowStatusForm(false)}
+        />
+      )}
+
+      {/* Meeting Workflow Dialogs */}
+      {contact && (
+        <MeetingScheduledDialog
+          open={meetingScheduledOpen}
+          onOpenChange={setMeetingScheduledOpen}
+          contactName={c.full_name}
+          contactId={contact.contact_id}
+          teamContactId={contact.id}
+          teamId={teamId}
+          onConfirm={() => setPendingCompleteTaskId(null)}
+        />
+      )}
+      {contact && (
+        <MeetingOutcomeDialog
+          open={meetingOutcomeOpen}
+          onOpenChange={setMeetingOutcomeOpen}
+          contactName={c.full_name}
+          contactId={contact.contact_id}
+          teamContactId={contact.id}
+          teamId={teamId}
+          currentCategory={contact.category}
+          onConfirm={() => setPendingCompleteTaskId(null)}
         />
       )}
     </>
