@@ -162,6 +162,15 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     setDragOverColumn(null);
   }, [contacts, teamId, updateContact]);
 
+  // Categories that support drill-down sub-kanbans
+  const DRILLDOWN_CATEGORIES = new Set<DealCategory>(['audit', 'hot', 'top']);
+
+  // Get contacts for drill-down category
+  const drillDownContacts = useMemo(() => {
+    if (!drillDownCategory) return [];
+    return filteredContacts.filter(c => c.category === drillDownCategory);
+  }, [filteredContacts, drillDownCategory]);
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -175,14 +184,6 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     );
   }
 
-  // Categories that support drill-down sub-kanbans
-  const DRILLDOWN_CATEGORIES = new Set<DealCategory>(['audit', 'hot', 'top']);
-
-  // Get contacts for drill-down category
-  const drillDownContacts = useMemo(() => {
-    if (!drillDownCategory) return [];
-    return filteredContacts.filter(c => c.category === drillDownCategory);
-  }, [filteredContacts, drillDownCategory]);
 
   if (drillDownCategory && SUB_KANBAN_CONFIGS[drillDownCategory]) {
     const config = SUB_KANBAN_CONFIGS[drillDownCategory];
