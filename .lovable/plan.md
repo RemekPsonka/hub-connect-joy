@@ -1,28 +1,53 @@
 
-# Oznaczenie zadan lejkowych na stronie Zadania
+# Rozszerzenie tworzenia zadan w lejku: przypisanie osoby + termin
 
-## Diagnoza
-Zadania tworzone z poziomu lejka SGU **poprawnie zapisuja `deal_team_id` w bazie danych** — problem nie lezy w tworzeniu, lecz w wyswietlaniu. Komponent `UnifiedTaskRow` nie pokazuje zadnej informacji o przynaleznosci do lejka, przez co zadania lejkowe wygladaja identycznie jak ogolne.
+## Problem
+Zadania tworzone z poziomu lejka (ContactTasksSheet) nie maja:
+1. Selektora "Przypisz do" -- nie mozna przypisac taska do innego czlonka zespolu
+2. Daty terminu (due_date) -- nie mozna ustawic, do kiedy task ma byc zrobiony
+3. Filtr "Moje" w MyTeamTasksView nie pokazuje taskow z `assigned_to = null`
 
 ## Rozwiazanie
 
-### 1. Plik: `src/hooks/useTasks.ts` — wzbogacenie query o dane zespolu
+### 1. `src/components/deals-team/ContactTasksSheet.tsx`
 
-Rozszerzyc select w glownym uzyciu `useTasks` o relacje `deal_teams`, aby pobierac nazwe i kolor zespolu:
+Dodac nad przyciskami szablonow kompaktowy wiersz z dwoma kontrolkami:
+
+- **Select "Przypisz do:"** -- lista czlonkow zespolu z `useTeamMembers(teamId)`, domyslna wartosc: zalogowany dyrektor (`director?.id` z `useAuth`)
+- **Date picker "Termin:"** -- maly Popover z kalendarzem (wzorzec z TaskModal), opcjonalny
+
+Oba pola beda przekazywane do kazdego wywolania `createTask.mutateAsync()`:
+- `assignedTo: selectedMemberId`
+- `task.due_date: dueDate?.toISOString().split('T')[0]`
+
+Dotyczy zarowno szablonow ("Umow spotkanie", "Zadzwon" itd.) jak i pola "+ Inne".
+
+### 2. `src/components/deals-team/MyTeamTasksView.tsx`
+
+Rozszerzenie filtra "Moje" (linia 131-132):
 
 ```text
-deal_team:deal_teams(id, name, color)
+Przed: a.assigned_to === director?.id
+Po:    a.assigned_to === director?.id || (!a.assigned_to && a.owner_id === director?.id)
 ```
 
-Dodac pole `deal_team` do typu `TaskWithDetails`.
-
-### 2. Plik: `src/components/tasks/UnifiedTaskRow.tsx` — badge lejka
-
-Dodac maly badge obok tytulu zadania, jesli `task.deal_team_id` jest ustawione. Badge powinien:
-- Wyswietlac nazwe zespolu (np. "SGU") w kolorze zespolu
-- Byc maly i nieinwazyjny (text-xs, rounded-full)
-- Pojawiac sie miedzy statusem a tytulem
-
 ### Pliki do zmiany:
-1. **`src/hooks/useTasks.ts`** — dodanie relacji `deal_teams` do selecta w `useTasks()` + aktualizacja typu
-2. **`src/components/tasks/UnifiedTaskRow.tsx`** — wyswietlenie badge z nazwa lejka obok tytulu zadania
+1. **`src/components/deals-team/ContactTasksSheet.tsx`** -- dodanie selektora osoby + date pickera + przekazywanie do createTask
+2. **`src/components/deals-team/MyTeamTasksView.tsx`** -- rozszerzenie filtra "Moje" o owner_id
+
+### Szczegoly techniczne
+
+Nowe importy w ContactTasksSheet:
+- `useTeamMembers` z `@/hooks/useDealsTeamMembers`
+- `useAuth` z `@/contexts/AuthContext`
+- `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` z `@/components/ui/select`
+- `Popover, PopoverContent, PopoverTrigger` z `@/components/ui/popover`
+- `Calendar` z `@/components/ui/calendar`
+- `CalendarIcon` z `lucide-react`
+- `cn` z `@/lib/utils`
+
+Nowe stany:
+- `assignTo` -- string, domyslnie `director?.id`
+- `taskDueDate` -- `Date | undefined`
+
+Uklad kontrolek: kompaktowy wiersz `flex gap-2` z dwoma malymi Select/Popover (rozmiar sm, h-7) umieszczony miedzy naglowkiem "Zadania" a przyciskami szablonow.
