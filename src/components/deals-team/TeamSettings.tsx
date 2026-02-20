@@ -40,6 +40,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProductCategoryManager } from './ProductCategoryManager';
 import { StatusFrequencyConfig } from './StatusFrequencyConfig';
+import { WatchedContactsConfig } from './WatchedContactsConfig';
 import type { DealTeamRole } from '@/types/dealTeam';
 
 interface TeamSettingsProps {
@@ -89,7 +90,7 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
   // Add member state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>('');
-
+  const [showWatchedConfig, setShowWatchedConfig] = useState(false);
   // Initialize form when team loads
   const hasInitialized = useState(false)[0];
   if (team && !hasInitialized && teamName === '') {
@@ -363,6 +364,23 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
 
                 <Separator />
 
+                {/* Watched Contacts (Poszukiwani) */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Monitorowane kontakty (Poszukiwani)</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Wybierz kontakty CRM, których wpisy "Poszukiwani" będą widoczne w lejku.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowWatchedConfig(true)}
+                  >
+                    Konfiguruj monitorowane kontakty
+                  </Button>
+                </div>
+
+                <Separator />
+
                 {/* Product Categories */}
                 <ProductCategoryManager teamId={teamId} />
               </div>
@@ -399,6 +417,14 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Watched Contacts Config */}
+      <WatchedContactsConfig
+        teamId={teamId}
+        tenantId={team?.tenant_id || ''}
+        open={showWatchedConfig}
+        onOpenChange={setShowWatchedConfig}
+      />
     </>
   );
 }

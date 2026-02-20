@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Eye } from 'lucide-react';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
@@ -7,6 +7,7 @@ import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamConta
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
 import { useActiveTaskContacts } from '@/hooks/useActiveTaskContacts';
+import { useTeamWatchedContacts, useWantedForWatchedContacts } from '@/hooks/useTeamWatchedContacts';
 import { KanbanColumn } from './KanbanColumn';
 import { SubKanbanView, SUB_KANBAN_CONFIGS } from './SubKanbanView';
 import { HotLeadCard } from './HotLeadCard';
@@ -14,14 +15,17 @@ import { TopLeadCard } from './TopLeadCard';
 import { LeadCard } from './LeadCard';
 import { ColdLeadCard } from './ColdLeadCard';
 import { ProspectCard } from './ProspectCard';
+import { WantedKanbanCard } from './WantedKanbanCard';
 import { AddContactDialog } from './AddContactDialog';
 import { AddProspectDialog } from './AddProspectDialog';
 import { ContactTasksSheet } from './ContactTasksSheet';
 import { SnoozedContactsBar } from './SnoozedContactsBar';
 import { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';
+import { WatchedContactsConfig } from './WatchedContactsConfig';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useCurrentDirector } from '@/hooks/useDirectors';
 import type { DealCategory, DealTeamContact } from '@/types/dealTeam';
 
 interface KanbanBoardProps {
@@ -29,13 +33,22 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ teamId }: KanbanBoardProps) {
+  const { data: currentDirector } = useCurrentDirector();
+  const tenantId = currentDirector?.tenant_id || '';
   const { data: contacts = [], isLoading: contactsLoading } = useTeamContacts(teamId);
   const { data: prospects = [], isLoading: prospectsLoading } = useTeamProspects(teamId);
   const updateContact = useUpdateTeamContact();
   const { data: activeTaskMap } = useActiveTaskContacts(teamId);
   const { columns: visibleColumns, toggleColumn, visibleCount } = useKanbanColumnSettings();
+
+  // Watched contacts (Poszukiwani from CRM)
+  const { data: watchedContacts = [] } = useTeamWatchedContacts(teamId);
+  const watchedContactIds = useMemo(() => watchedContacts.map(w => w.contact_id), [watchedContacts]);
+  const { data: wantedItems = [] } = useWantedForWatchedContacts(watchedContactIds);
+
   const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
+  const [showWatchedConfig, setShowWatchedConfig] = useState(false);
   const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
   const [draggingContactId, setDraggingContactId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
@@ -509,19 +522,34 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           </KanbanColumn>
         )}
 
-        {/* PROSPECTS column */}
+        {/* PROSPECTS + WANTED column */}
         {visibleColumns.prospecting && (
           <KanbanColumn
             title="POSZUKIWANI"
             icon="🔍"
             color="purple"
-            count={prospects.length}
+            count={prospects.length + wantedItems.length}
             onAdd={() => setShowAddProspect(true)}
             addButtonLabel="+ Szukaj"
             emptyMessage="Brak poszukiwanych. Dodaj osobę/firmę do znalezienia →"
+            headerExtra={
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowWatchedConfig(true); }}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Konfiguruj monitorowane kontakty"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            }
           >
             {prospects.map((prospect) => (
               <ProspectCard key={prospect.id} prospect={prospect} teamId={teamId} />
+            ))}
+            {wantedItems.length > 0 && prospects.length > 0 && (
+              <div className="border-t border-dashed border-muted-foreground/30 my-2" />
+            )}
+            {wantedItems.map((item) => (
+              <WantedKanbanCard key={item.id} item={item as any} />
             ))}
           </KanbanColumn>
         )}
@@ -540,6 +568,14 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         open={showAddProspect}
         onOpenChange={setShowAddProspect}
         teamId={teamId}
+      />
+
+      {/* Watched Contacts Config */}
+      <WatchedContactsConfig
+        teamId={teamId}
+        tenantId={tenantId}
+        open={showWatchedConfig}
+        onOpenChange={setShowWatchedConfig}
       />
 
       {/* Contact Tasks Sheet */}
