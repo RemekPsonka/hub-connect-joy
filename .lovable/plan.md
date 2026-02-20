@@ -1,43 +1,41 @@
 
-
-# Naprawa: Kalendarz w panelu szczegolowym zadania nie reaguje na klikniecie
+# Szybkie tworzenie taskow z szablonami w Kanban deals
 
 ## Problem
-Popover z kalendarzem (DayPicker) otwiera sie poprawnie w panelu bocznym zadania (Sheet), ale klikniecie na dzien nie wywoluje zadnej akcji — data nie jest zapisywana, kalendarz nie zamyka sie. Przyczyna: Sheet (Radix Dialog) przechwytuje focus i blokuje interakcje z elementami renderowanymi przez Portal Popovera poza drzewem DOM Sheeta.
+Przy tworzeniu zadania z poziomu ContactTasksSheet (panel boczny kontaktu na Kanban):
+1. Brak szybkich opcji jak "Umow spotkanie", "Zadzwon", "Wyslij oferte"
+2. Task tworzony z generycznym tytulem "Nowe zadanie" — uzytkownik nie wie co sie stalo
+3. Przycisk "Zapisz" w panelu szczegolow wyglada na nieaktywny, bo task juz zostal zapisany w tle
 
 ## Rozwiazanie
 
-### Plik: `src/components/tasks/TaskDetailSheet.tsx`
+### 1. Dodanie szybkich szablonow zadan w `ContactTasksSheet.tsx`
 
-Zamiana standardowego `PopoverContent` (ktory uzywa Portal) na wersje renderowana bez Portala, bezposrednio w drzewie DOM Sheeta. Dzieki temu focus trap Sheeta nie blokuje klikniec w kalendarz.
-
-Konkretnie:
-- Zaimportowac `PopoverPrimitive` z `@radix-ui/react-popover`
-- Zamiast `<PopoverContent>` uzyc `<PopoverPrimitive.Content>` (bez Portal) z odpowiednimi stylami i `pointer-events-auto`
-- Dodac `try/catch` wokol `updateTask.mutateAsync` dla bezpieczenstwa
-- Po wybraniu daty zamknac popover ustawiajac stan `open`
-
-### Szczegoly techniczne
+Zamiast jednego przycisku "Nowe zadanie", dodac sekcje z szybkimi akcjami:
 
 ```text
-// Zamiast:
-<PopoverContent className="w-auto p-0 z-50" align="start">
-  <DayPickerCalendar ... />
-</PopoverContent>
-
-// Uzyc:
-<PopoverPrimitive.Content
-  align="start"
-  sideOffset={4}
-  className="z-[100] w-auto rounded-md border bg-popover p-0 shadow-md pointer-events-auto"
-  onOpenAutoFocus={(e) => e.preventDefault()}
->
-  <DayPickerCalendar ... />
-</PopoverPrimitive.Content>
+[Umow spotkanie] [Zadzwon] [Wyslij oferte] [Wyslij mail] [+ Inne]
 ```
 
-To eliminuje Portal i renderuje kalendarz wewnatrz Sheeta, co rozwiazuje problem z przechwytywaniem focusu.
+Kazdy przycisk tworzy task z konkretnym tytulem:
+- "Umow spotkanie" -> tytul: "Umowic spotkanie z {nazwa_kontaktu}"
+- "Zadzwon" -> tytul: "Zadzwonic do {nazwa_kontaktu}"
+- "Wyslij oferte" -> tytul: "Wyslac oferte do {nazwa_kontaktu}"
+- "Wyslij mail" -> tytul: "Wyslac maila do {nazwa_kontaktu}"
+- "+ Inne" -> otwiera pole tekstowe do wpisania wlasnego tytulu
+
+Po kliknieciu szybkiej akcji:
+- Task tworzony od razu z odpowiednim tytulem
+- Toast "Zadanie dodane: Umowic spotkanie z Jan Kowalski"
+- Task pojawia sie na liscie zadan kontaktu (bez otwierania panelu szczegolow)
+- Uzytkownik moze kliknac na zadanie jesli chce dodac wiecej szczegolow
+
+### 2. Przycisk "+ Inne" z polem tekstowym
+
+Klikniecie "+ Inne" rozwija inline input (podobnie jak `KanbanInlineCreate`):
+- Pole tekstowe z autofocusem
+- Enter = zapisz, Escape = anuluj
+- Po zapisaniu — toast z potwierdzeniem
 
 ### Pliki do zmiany:
-1. **`src/components/tasks/TaskDetailSheet.tsx`** — zamiana PopoverContent na PopoverPrimitive.Content bez Portala + dodanie obslugi bledow w `onSelect`
-
+1. **`src/components/deals-team/ContactTasksSheet.tsx`** — zastapienie przycisku "Nowe zadanie" sekcja szybkich akcji z szablonami + inline input dla wlasnego tytulu
