@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
-import type { TaskStatus } from '@/hooks/useActiveTaskContacts';
+import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
 
 interface ColdLeadCardProps {
   contact: DealTeamContact;
@@ -11,7 +11,7 @@ interface ColdLeadCardProps {
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
-  taskStatus?: TaskStatus;
+  taskStatus?: TaskContactInfo;
 }
 
 export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging, taskStatus }: ColdLeadCardProps) {
@@ -30,11 +30,11 @@ export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragg
     >
       <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
         {taskStatus && (
-          <span title={taskStatus === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
+          <span title={taskStatus.status === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
             <CheckCircle2
               className={cn(
                 "w-3 h-3 shrink-0",
-                taskStatus === 'overdue' ? 'text-destructive' : 'text-green-500'
+                taskStatus.status === 'overdue' ? 'text-destructive' : 'text-green-500'
               )}
             />
           </span>

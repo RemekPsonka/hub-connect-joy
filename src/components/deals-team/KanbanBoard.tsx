@@ -1,13 +1,14 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { Search, X, Eye, ArrowLeft } from 'lucide-react';
+import { Search, X, Eye, ArrowLeft, Users } from 'lucide-react';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
-import { useActiveTaskContacts } from '@/hooks/useActiveTaskContacts';
+import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
 import { useTeamWatchedContacts, useWantedForWatchedContacts } from '@/hooks/useTeamWatchedContacts';
+import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { KanbanColumn } from './KanbanColumn';
 import { SubKanbanView, SUB_KANBAN_CONFIGS } from './SubKanbanView';
 import { HotLeadCard } from './HotLeadCard';
@@ -24,6 +25,7 @@ import { KanbanColumnConfigPopover } from './KanbanColumnConfigPopover';
 import { WatchedContactsConfig } from './WatchedContactsConfig';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCurrentDirector } from '@/hooks/useDirectors';
 import type { DealCategory, DealTeamContact } from '@/types/dealTeam';
@@ -39,7 +41,9 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const { data: prospects = [], isLoading: prospectsLoading } = useTeamProspects(teamId);
   const updateContact = useUpdateTeamContact();
   const { data: activeTaskMap } = useActiveTaskContacts(teamId);
+  const { data: members = [] } = useTeamMembers(teamId);
   const { columns: visibleColumns, toggleColumn, visibleCount } = useKanbanColumnSettings();
+  const [filterMember, setFilterMember] = useState<string>('all');
 
   // Watched contacts (Poszukiwani from CRM)
   const { data: watchedContacts = [] } = useTeamWatchedContacts(teamId);
@@ -75,7 +79,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   }, [contacts]);
 
   // Filter active contacts by search
-  const filteredContacts = useMemo(() => {
+  const searchFilteredContacts = useMemo(() => {
     if (!searchQuery.trim()) return activeContacts;
     const q = searchQuery.toLowerCase();
     return activeContacts.filter(
@@ -84,6 +88,20 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         c.contact?.company?.toLowerCase().includes(q)
     );
   }, [activeContacts, searchQuery]);
+
+  // Filter by assigned member
+  const filteredContacts = useMemo(() => {
+    if (filterMember === 'all') return searchFilteredContacts;
+    if (filterMember === 'unassigned') {
+      return searchFilteredContacts.filter(c => !activeTaskMap?.get(c.id));
+    }
+    const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
+    return searchFilteredContacts.filter(c => {
+      const info = activeTaskMap?.get(c.id);
+      if (!info) return filterMember === 'mine'; // shared contacts visible in "mine"
+      return info.assignedTo === targetId;
+    });
+  }, [searchFilteredContacts, filterMember, activeTaskMap, currentDirector]);
 
   const hotContacts = useMemo(
     () => filteredContacts.filter((c) => c.category === 'hot'),
@@ -214,6 +232,9 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
           onBack={() => setDrillDownCategory(null)}
           onContactClick={handleCardClick}
           activeTaskMap={activeTaskMap}
+          filterMember={filterMember}
+          currentDirectorId={currentDirector?.id}
+          teamMembers={members}
         />
 
         <ContactTasksSheet
@@ -342,6 +363,45 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         <KanbanColumnConfigPopover columns={visibleColumns} onToggle={toggleColumn} />
       </div>
 
+      {/* Member filter bar */}
+      <div className="mb-3 flex flex-wrap gap-1.5 items-center">
+        <Users className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+        <Button
+          size="sm"
+          variant={filterMember === 'all' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setFilterMember('all')}
+        >
+          Wszyscy
+        </Button>
+        <Button
+          size="sm"
+          variant={filterMember === 'mine' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setFilterMember('mine')}
+        >
+          Moje
+        </Button>
+        {members.map((m) => (
+          <Button
+            key={m.director_id}
+            size="sm"
+            variant={filterMember === m.director_id ? 'default' : 'outline'}
+            className="h-6 text-[11px] px-2"
+            onClick={() => setFilterMember(m.director_id)}
+          >
+            {m.director?.full_name?.split(' ')[0] || 'Członek'}
+          </Button>
+        ))}
+        <Button
+          size="sm"
+          variant={filterMember === 'unassigned' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setFilterMember('unassigned')}
+        >
+          Nieprzypisane
+        </Button>
+      </div>
       {/* Snoozed contacts bar */}
       <SnoozedContactsBar
         snoozedContacts={snoozedContacts}
