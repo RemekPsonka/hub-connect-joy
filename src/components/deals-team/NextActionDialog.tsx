@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   CalendarIcon, Loader2, PhoneCall, FileText, Send, Moon, UserCheck, XCircle,
-  Handshake, Plus,
+  Handshake, Plus, ClipboardCheck,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -23,14 +23,15 @@ import { toast } from 'sonner';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
 
 type ActionType =
-  | 'schedule_meeting'    // Umów spotkanie → meeting_plan
-  | 'meeting_scheduled'   // Spotkanie umówione → opens MeetingScheduledDialog
-  | 'send_offer'          // Wyślij ofertę → offering/handshake
-  | 'call'                // Zadzwoń → no stage change
-  | 'send_email'          // Wyślij mail → no stage change
-  | 'snooze'              // Odłóż → 10x, task completed
-  | 'client'              // Klient → ConvertToClientDialog
-  | 'lost';               // Utracony → lost, task completed
+  | 'schedule_meeting'
+  | 'meeting_scheduled'
+  | 'audit'
+  | 'send_offer'
+  | 'call'
+  | 'send_email'
+  | 'snooze'
+  | 'client'
+  | 'lost';
 
 interface ActionOption {
   value: ActionType;
@@ -44,6 +45,7 @@ interface ActionOption {
 const ACTION_OPTIONS: ActionOption[] = [
   { value: 'schedule_meeting', label: 'Umów spotkanie', description: 'Zaplanuj termin spotkania', icon: CalendarIcon, needsDate: true, closesTask: false },
   { value: 'meeting_scheduled', label: 'Spotkanie umówione', description: 'Podaj datę umówionego spotkania', icon: Handshake, needsDate: true, closesTask: false },
+  { value: 'audit', label: 'Audyt', description: 'Umówione spotkanie audytowe', icon: ClipboardCheck, needsDate: true, closesTask: false },
   { value: 'send_offer', label: 'Wyślij ofertę', description: 'Przenieś do etapu ofertowania', icon: FileText, needsDate: true, closesTask: false },
   { value: 'call', label: 'Zadzwoń', description: 'Zaplanuj telefon', icon: PhoneCall, needsDate: true, closesTask: false },
   { value: 'send_email', label: 'Wyślij mail', description: 'Zaplanuj wysłanie maila', icon: Send, needsDate: true, closesTask: false },
@@ -141,6 +143,11 @@ export function NextActionDialog({
           newOfferingStage = 'handshake';
           newCategory = 'offering';
           break;
+        case 'audit':
+          newTitle = `Audyt u ${contactName} - ${dueDate ? format(dueDate, 'd MMM', { locale: pl }) : ''}`;
+          newCategory = 'audit';
+          newOfferingStage = 'audit_scheduled';
+          break;
         case 'call':
           newTitle = `Zadzwonić do ${contactName}`;
           break;
@@ -180,6 +187,10 @@ export function NextActionDialog({
         if (note) contactUpdate.notes = note;
         if (selected === 'meeting_scheduled' && dateStr) {
           contactUpdate.nextMeetingDate = dateStr;
+        }
+        if (selected === 'audit') {
+          if (dateStr) contactUpdate.nextMeetingDate = dateStr;
+          if (assignedTo) contactUpdate.nextMeetingWith = assignedTo;
         }
 
         if (newOfferingStage || newCategory || note || contactUpdate.nextMeetingDate) {
@@ -249,7 +260,7 @@ export function NextActionDialog({
 
         <div className="space-y-4 py-2">
           {/* Action selection */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {ACTION_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
