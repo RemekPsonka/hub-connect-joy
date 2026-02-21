@@ -8,6 +8,8 @@ import {
   AlertCircle, CheckCircle2, ChevronRight, PhoneCall, FileText, Send, Trash2,
 } from 'lucide-react';
 import { NextActionDialog } from './NextActionDialog';
+import { SnoozeDialog } from './SnoozeDialog';
+import { ConvertToClientDialog } from './ConvertToClientDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -107,7 +109,8 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [nextActionOpen, setNextActionOpen] = useState(false);
   const [pendingCompleteTaskId, setPendingCompleteTaskId] = useState<string | null>(null);
   const [pendingCompleteTaskTitle, setPendingCompleteTaskTitle] = useState<string>('');
-
+  const [showSnooze, setShowSnooze] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
   // Reset assignTo when director changes
   useEffect(() => {
     if (director?.id && !assignTo) setAssignTo(director.id);
@@ -350,7 +353,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           <Button
                             variant="outline"
                             size="sm"
-                            className={cn("h-7 px-2 text-xs gap-1 font-normal", !taskDueDate && "text-muted-foreground border-red-300")}
+                            className={cn("h-7 px-2 text-xs gap-1 font-normal", !taskDueDate && "text-muted-foreground border-destructive/50")}
                           >
                             <CalendarIcon className="h-3 w-3" />
                             {taskDueDate ? format(taskDueDate, 'd MMM', { locale: pl }) : 'Termin'}
@@ -372,6 +375,11 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                         </Button>
                       )}
                     </div>
+                    {openTasks.length > 0 ? (
+                      <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                        Zakończ bieżące zadanie, aby dodać następne działanie.
+                      </p>
+                    ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {[
                         { icon: CalendarIcon, label: 'Umów spotkanie', title: `Umówić spotkanie z ${c.full_name}` },
@@ -431,6 +439,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                         Inne
                       </Button>
                     </div>
+                    )}
                     {showCustomInput && (
                       <form
                         className="flex gap-1.5"
@@ -649,6 +658,55 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
           existingTaskId={pendingCompleteTaskId}
           existingTaskTitle={pendingCompleteTaskTitle}
           onConfirm={() => { setPendingCompleteTaskId(null); setPendingCompleteTaskTitle(''); }}
+          onSnooze={() => setShowSnooze(true)}
+          onConvertToClient={() => setShowConvert(true)}
+        />
+      )}
+
+      {/* Snooze Dialog */}
+      {contact && (
+        <SnoozeDialog
+          open={showSnooze}
+          onOpenChange={setShowSnooze}
+          contactName={c.full_name}
+          isPending={updateContact.isPending || updateTask.isPending}
+          onSnooze={async (until, reason) => {
+            try {
+              // Mark task as completed
+              if (pendingCompleteTaskId) {
+                await updateTask.mutateAsync({ id: pendingCompleteTaskId, status: 'completed' });
+              }
+              // Snooze the contact
+              await updateContact.mutateAsync({
+                id: contact.id,
+                teamId,
+                category: '10x' as any,
+                snoozedUntil: until,
+                snoozeReason: reason || null,
+                snoozedFromCategory: contact.category,
+              });
+              toast.success(`Kontakt odłożony do ${until}`);
+              setShowSnooze(false);
+              setPendingCompleteTaskId(null);
+              setPendingCompleteTaskTitle('');
+            } catch {
+              toast.error('Nie udało się odłożyć kontaktu');
+            }
+          }}
+        />
+      )}
+
+      {/* Convert to Client Dialog */}
+      {contact && (
+        <ConvertToClientDialog
+          open={showConvert}
+          onOpenChange={(v) => {
+            setShowConvert(v);
+            if (!v) { setPendingCompleteTaskId(null); setPendingCompleteTaskTitle(''); }
+          }}
+          teamContactId={contact.id}
+          teamId={teamId}
+          contactName={c.full_name}
         />
       )}
 
