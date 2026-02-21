@@ -134,7 +134,6 @@ export function useUpdateAssignment() {
 
       if (params.status !== undefined) {
         updates.status = params.status;
-        updates.completed_at = params.status === 'completed' ? new Date().toISOString() : null;
       }
       if (params.title !== undefined) updates.title = params.title;
       if (params.description !== undefined) updates.description = params.description;
