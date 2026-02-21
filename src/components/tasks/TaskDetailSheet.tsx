@@ -94,6 +94,10 @@ import { TaskAttachments } from './TaskAttachments';
 import { getRecurrenceLabel } from './RecurrenceSelector';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from './UnifiedTaskRow';
 import { useProjectMilestones } from '@/hooks/useProjectMilestones';
+import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
+import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
+import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
+import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { cn } from '@/lib/utils';
 
 // ─── Sortable subtask ──────────────────────────────────────
@@ -179,6 +183,19 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   const [descriptionValue, setDescriptionValue] = useState(task.description || '');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
+  // Pipeline workflow states
+  const [nextActionOpen, setNextActionOpen] = useState(false);
+  const [showSnooze, setShowSnooze] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+  const updateTeamContact = useUpdateTeamContact();
+
+  // Extract pipeline data from task
+  const isPipelineTask = !!(task as any).deal_team_id;
+  const pipelineContactId = task.task_contacts?.[0]?.contacts?.id || '';
+  const pipelineContactName = task.task_contacts?.[0]?.contacts?.full_name || '';
+  const pipelineTeamContactId = (task as any).deal_team_contact_id || '';
+  const pipelineTeamId = (task as any).deal_team_id || '';
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
@@ -254,6 +271,11 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   };
 
   const handleComplete = async () => {
+    // Pipeline tasks → open NextActionDialog instead of direct completion
+    if (isPipelineTask) {
+      setNextActionOpen(true);
+      return;
+    }
     try {
       await updateTask.mutateAsync({ id: task.id, status: 'completed' });
       if ((task as any).recurrence_rule) {
@@ -297,6 +319,11 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    // Pipeline tasks completing → open NextActionDialog
+    if (newStatus === 'completed' && isPipelineTask) {
+      setNextActionOpen(true);
+      return;
+    }
     await updateTask.mutateAsync({ id: task.id, status: newStatus });
     if (newStatus === 'completed') {
       if ((task as any).recurrence_rule) {
@@ -329,6 +356,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[560px] sm:max-w-[560px] overflow-y-auto p-0 flex flex-col">
         {/* ─── Action bar ─────────────────────────────────── */}
@@ -746,5 +774,54 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
         </div>
       </SheetContent>
     </Sheet>
+
+    {/* Pipeline workflow dialogs */}
+    {isPipelineTask && (
+      <>
+        <NextActionDialog
+          open={nextActionOpen}
+          onOpenChange={setNextActionOpen}
+          contactName={pipelineContactName}
+          contactId={pipelineContactId}
+          teamContactId={pipelineTeamContactId}
+          teamId={pipelineTeamId}
+          existingTaskId={task.id}
+          existingTaskTitle={task.title}
+          onConfirm={() => {
+            setNextActionOpen(false);
+            onOpenChange(false);
+          }}
+          onSnooze={() => setShowSnooze(true)}
+          onConvertToClient={() => setShowConvert(true)}
+        />
+        <SnoozeDialog
+          open={showSnooze}
+          onOpenChange={setShowSnooze}
+          contactName={pipelineContactName}
+          onSnooze={async (until, reason) => {
+            try {
+              await updateTask.mutateAsync({ id: task.id, status: 'completed' });
+              await updateTeamContact.mutateAsync({
+                id: pipelineTeamContactId,
+                teamId: pipelineTeamId,
+                category: '10x' as any,
+                notes: reason || undefined,
+              });
+              toast.success('Kontakt odłożony');
+              setShowSnooze(false);
+              onOpenChange(false);
+            } catch { toast.error('Wystąpił błąd'); }
+          }}
+        />
+        <ConvertToClientDialog
+          open={showConvert}
+          onOpenChange={setShowConvert}
+          teamContactId={pipelineTeamContactId}
+          teamId={pipelineTeamId}
+          contactName={pipelineContactName}
+        />
+      </>
+    )}
+    </>
   );
 }
