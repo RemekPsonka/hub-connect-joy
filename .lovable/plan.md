@@ -1,89 +1,45 @@
 
-# Naprawa brakujacego powiazania kontaktu CRM z zadaniami w lejku
 
-## Problem
-Z 40 aktywnych zadan w lejku sprzedazy, **29 nie ma powiazania z kontaktem CRM** (brak rekordu w tabeli `task_contacts`). Dlatego w panelu szczegolów zadania (TaskDetailSheet) nie wyswietla sie wiersz "Kontakt".
+# Naprawa pelnego flow "dalsze dzialania" w lejku
 
-## Przyczyna glowna
-Sa **3 miejsca** w kodzie, ktore tworza zadania w kontekscie lejka BEZ tworzenia rekordu `task_contacts`:
+## Zidentyfikowane problemy
 
-### 1. `useCreateAssignment` (src/hooks/useDealsTeamAssignments.ts, linia 68-83)
-Uzywany przez `ProspectingConvertDialog` przy konwersji prospekta do lejka. Tworzy zadanie z `deal_team_contact_id`, ale **nie tworzy rekordu `task_contacts`**. To jest glowne zrodlo problemu -- kazdy nowy kontakt w lejku dostaje zadanie bez powiazania CRM.
+### 1. Brak przekazania callbackow `onSnooze` i `onConvertToClient`
+`ContactTasksSheet` (linie 638-652) renderuje `NextActionDialog` ale NIE przekazuje `onSnooze` ani `onConvertToClient`. Dlatego klikniecie "Odloz" lub "Klient" w dialogu nic nie robi -- callback jest `undefined`.
 
-### 2. `NextActionDialog` (src/components/deals-team/NextActionDialog.tsx, linia 166-174)
-Recykluje zadanie (UPDATE title, status, due_date), ale nie sprawdza czy `task_contacts` istnieje i nie tworzy go jesli brakuje. Jesli wejsciowe zadanie nie mialo kontaktu, recyklowane tez go nie bedzie miec.
+### 2. Przyciski szybkiego dodawania tworza duplikaty
+Przyciski "Umow spotkanie", "Zadzwon", "Wyslij oferte", "Wyslij mail" (linie 376-432) uzywaja `createTask.mutateAsync()` -- czyli tworza NOWE zadanie za kazdym razem. Powinny byc uzywane TYLKO jesli kontakt nie ma jeszcze zadnego aktywnego zadania.
 
-### 3. `MeetingOutcomeDialog` (src/components/deals-team/MeetingOutcomeDialog.tsx, linia 94-102)
-Tworzy NOWE zadanie przez `createTask.mutateAsync()` z `contactId` -- to jest OK, ale powoduje duplikaty zadan zamiast recyklowania (osobny problem, juz czesciowo rozwiazany).
+### 3. Brak stanu dla SnoozeDialog i ConvertToClientDialog
+`ContactTasksSheet` nie ma zmiennych stanu (`showSnooze`, `showConvert`) ani nie renderuje tych dialogow.
 
 ## Plan naprawy
 
-### Krok 1: Migracja SQL -- napraw istniejace dane
-Dla wszystkich zadan w lejku (`deal_team_contact_id IS NOT NULL`) ktore nie maja rekordu `task_contacts`, utworzyc brakujace powiazania:
+### Plik 1: `src/components/deals-team/ContactTasksSheet.tsx`
 
-```sql
-INSERT INTO task_contacts (task_id, contact_id, role)
-SELECT t.id, dtc.contact_id, 'primary'
-FROM tasks t
-JOIN deal_team_contacts dtc ON dtc.id = t.deal_team_contact_id
-WHERE t.deal_team_contact_id IS NOT NULL
-  AND t.id NOT IN (SELECT task_id FROM task_contacts)
-  AND dtc.contact_id IS NOT NULL;
-```
-
-### Krok 2: `src/hooks/useDealsTeamAssignments.ts` -- useCreateAssignment
-Po pomyslnym INSERT zadania, dodac tworzenie `task_contacts`:
-
+**A) Dodac stany i renderowanie SnoozeDialog + ConvertToClientDialog:**
 ```typescript
-// Po: const { data, error } = await supabase.from('tasks').insert({...})
-// Dodac:
-if (data) {
-  // Pobierz contact_id z deal_team_contacts
-  const { data: dtc } = await supabase
-    .from('deal_team_contacts')
-    .select('contact_id')
-    .eq('id', params.teamContactId)
-    .single();
-  
-  if (dtc?.contact_id) {
-    await supabase.from('task_contacts').insert({
-      task_id: data.id,
-      contact_id: dtc.contact_id,
-      role: 'primary',
-    });
-  }
-}
+const [showSnooze, setShowSnooze] = useState(false);
+const [showConvert, setShowConvert] = useState(false);
 ```
 
-### Krok 3: `src/components/deals-team/NextActionDialog.tsx` -- zabezpieczenie przy recyklowaniu
-Po recyklowaniu zadania, sprawdzic czy `task_contacts` istnieje. Jesli nie -- utworzyc:
-
+**B) Przekazac callbacki do NextActionDialog:**
 ```typescript
-// Po updateTask.mutateAsync (linia ~174):
-// Ensure task_contacts exists
-const { data: existingTc } = await supabase
-  .from('task_contacts')
-  .select('id')
-  .eq('task_id', existingTaskId)
-  .limit(1)
-  .maybeSingle();
-
-if (!existingTc && contactId) {
-  await supabase.from('task_contacts').insert({
-    task_id: existingTaskId,
-    contact_id: contactId,
-    role: 'primary',
-  });
-}
+<NextActionDialog
+  ...
+  onSnooze={() => setShowSnooze(true)}
+  onConvertToClient={() => setShowConvert(true)}
+/>
 ```
 
-Wymaga dodania `contactId` do props `NextActionDialog` (aktualnie jest `contactName` ale nie ma `contactId` -- trzeba dodac i przekazac z `ContactTasksSheet`).
+**C) Renderowac SnoozeDialog i ConvertToClientDialog pod NextActionDialog.**
 
-### Krok 4: `src/components/deals-team/ContactTasksSheet.tsx`
-Przekazac `contactId={contact.contact_id}` do `NextActionDialog`.
+**D) Zablokowac przyciski szybkiego dodawania jesli istnieje aktywne zadanie:**
+Jesli `openTasks.length > 0` -- ukryc przyciski szybkiego dodawania lub wyswietlic komunikat "Zakoncz biezace zadanie zeby dodac nastepne". Jedno zadanie na kontakt.
 
-## Pliki do zmiany (podsumowanie)
-1. **Migracja SQL** -- naprawienie 29 istniejacych zadan bez `task_contacts`
-2. **src/hooks/useDealsTeamAssignments.ts** -- `useCreateAssignment`: dodanie INSERT do `task_contacts`
-3. **src/components/deals-team/NextActionDialog.tsx** -- dodanie prop `contactId`, zabezpieczenie `task_contacts` przy recyklowaniu
-4. **src/components/deals-team/ContactTasksSheet.tsx** -- przekazanie `contactId` do `NextActionDialog`
+### Plik 2: `src/components/deals-team/NextActionDialog.tsx`
+- Bez zmian -- logika jest poprawna, brakuje tylko callbackow z rodzica.
+
+### Pliki do zmiany:
+1. `src/components/deals-team/ContactTasksSheet.tsx` -- dodanie SnoozeDialog, ConvertToClientDialog, przekazanie callbackow, blokada duplikatow
+
