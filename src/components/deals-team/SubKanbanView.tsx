@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Users } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { HotLeadCard } from './HotLeadCard';
 import type { DealTeamContact, OfferingStage, DealCategory } from '@/types/dealTeam';
+import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
 
 export interface SubStageConfig {
   id: OfferingStage;
@@ -24,7 +25,10 @@ interface SubKanbanViewProps {
   defaultStage: OfferingStage;
   onBack: () => void;
   onContactClick: (contact: DealTeamContact) => void;
-  activeTaskMap?: Map<string, string>;
+  activeTaskMap?: Map<string, TaskContactInfo>;
+  filterMember?: string;
+  currentDirectorId?: string;
+  teamMembers?: { director_id: string; director?: { full_name: string } | null }[];
 }
 
 export const SUB_KANBAN_CONFIGS: Record<string, { title: string; icon: string; stages: SubStageConfig[]; defaultStage: OfferingStage }> = {
@@ -70,22 +74,40 @@ export function SubKanbanView({
   onBack,
   onContactClick,
   activeTaskMap,
+  filterMember = 'all',
+  currentDirectorId,
+  teamMembers = [],
 }: SubKanbanViewProps) {
   const updateContact = useUpdateTeamContact();
   const [dragOverStage, setDragOverStage] = useState<OfferingStage | null>(null);
+  const [localFilterMember, setLocalFilterMember] = useState<string>(filterMember);
+
+  // Apply member filter to contacts
+  const memberFilteredContacts = useMemo(() => {
+    if (localFilterMember === 'all') return contacts;
+    if (localFilterMember === 'unassigned') {
+      return contacts.filter(c => !activeTaskMap?.get(c.id));
+    }
+    const targetId = localFilterMember === 'mine' ? currentDirectorId : localFilterMember;
+    return contacts.filter(c => {
+      const info = activeTaskMap?.get(c.id);
+      if (!info) return localFilterMember === 'mine';
+      return info.assignedTo === targetId;
+    });
+  }, [contacts, localFilterMember, activeTaskMap, currentDirectorId]);
 
   const contactsByStage = useMemo(() => {
     const map = new Map<OfferingStage, DealTeamContact[]>();
     for (const stage of stages) {
       map.set(stage.id, []);
     }
-    for (const c of contacts) {
+    for (const c of memberFilteredContacts) {
       const stage = (c.offering_stage || defaultStage) as OfferingStage;
       const arr = map.get(stage) || map.get(defaultStage)!;
       arr.push(c);
     }
     return map;
-  }, [contacts, stages, defaultStage]);
+  }, [memberFilteredContacts, stages, defaultStage]);
 
   const handleDragStart = useCallback((e: React.DragEvent, contactId: string) => {
     e.dataTransfer.setData('text/plain', contactId);
@@ -117,8 +139,48 @@ export function SubKanbanView({
         <div className="flex items-center gap-2">
           <span className="text-lg">{icon}</span>
           <h2 className="font-semibold text-base">{title}</h2>
-          <Badge variant="secondary">{contacts.length}</Badge>
+          <Badge variant="secondary">{memberFilteredContacts.length}</Badge>
         </div>
+      </div>
+
+      {/* Member filter bar */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <Users className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+        <Button
+          size="sm"
+          variant={localFilterMember === 'all' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setLocalFilterMember('all')}
+        >
+          Wszyscy
+        </Button>
+        <Button
+          size="sm"
+          variant={localFilterMember === 'mine' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setLocalFilterMember('mine')}
+        >
+          Moje
+        </Button>
+        {teamMembers.map((m) => (
+          <Button
+            key={m.director_id}
+            size="sm"
+            variant={localFilterMember === m.director_id ? 'default' : 'outline'}
+            className="h-6 text-[11px] px-2"
+            onClick={() => setLocalFilterMember(m.director_id)}
+          >
+            {m.director?.full_name?.split(' ')[0] || 'Członek'}
+          </Button>
+        ))}
+        <Button
+          size="sm"
+          variant={localFilterMember === 'unassigned' ? 'default' : 'outline'}
+          className="h-6 text-[11px] px-2"
+          onClick={() => setLocalFilterMember('unassigned')}
+        >
+          Nieprzypisane
+        </Button>
       </div>
 
       <ScrollArea className="w-full">
@@ -165,7 +227,7 @@ export function SubKanbanView({
                           onDragStart={(e) => handleDragStart(e, contact.id)}
                           onDragEnd={() => {}}
                           isDragging={false}
-                          taskStatus={activeTaskMap?.get(contact.id) as any}
+                          taskStatus={activeTaskMap?.get(contact.id)}
                         />
                       ))}
                     </div>
