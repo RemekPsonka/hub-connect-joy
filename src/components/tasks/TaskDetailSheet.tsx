@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   DndContext,
   closestCenter,
@@ -84,6 +85,7 @@ import { calculateCrossTaskStatus } from '@/utils/crossTaskStatus';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { TaskLinkedMeetings } from './TaskLinkedMeetings';
+import { offeringStageLabel } from '@/utils/offeringStageLabels';
 import { TaskComments } from './TaskComments';
 import { TaskLabelsManager } from './TaskLabelsManager';
 import { TaskDependencies } from './TaskDependencies';
@@ -141,6 +143,38 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
       >
         <Diamond className="h-3.5 w-3.5 text-amber-500" />
         <span>{milestone.name}</span>
+      </div>
+    </MetaRow>
+  );
+}
+
+// ─── Pipeline stage row (fetches deal_team_contact data) ────
+
+function PipelineStageRow({ teamContactId }: { teamContactId: string }) {
+  const { data } = useQuery({
+    queryKey: ['deal-team-contact-stage', teamContactId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('deal_team_contacts')
+        .select('category, offering_stage')
+        .eq('id', teamContactId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!teamContactId,
+    staleTime: 30_000,
+  });
+
+  const label = data ? (offeringStageLabel(data.offering_stage, data.category) || data.category?.toUpperCase()) : null;
+
+  if (!label) return null;
+
+  return (
+    <MetaRow label="Etap lejka">
+      <div className="flex items-center gap-2 text-sm">
+        <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" />
+        <span>{label}</span>
       </div>
     </MetaRow>
   );
@@ -451,6 +485,11 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
                   )}
                 </div>
               </MetaRow>
+            )}
+
+            {/* Pipeline stage info */}
+            {isPipelineTask && (
+              <PipelineStageRow teamContactId={pipelineTeamContactId} />
             )}
 
             {/* Due date */}

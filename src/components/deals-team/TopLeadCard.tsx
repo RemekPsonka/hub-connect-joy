@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { offeringStageLabel } from '@/utils/offeringStageLabels';
 
 interface TopLeadCardProps {
   contact: DealTeamContact;
@@ -17,6 +18,8 @@ interface TopLeadCardProps {
 export function TopLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging, taskStatus }: TopLeadCardProps) {
   if (!contact.contact) return null;
 
+  const stageLabel = offeringStageLabel(contact.offering_stage, contact.category);
+
   return (
     <Card
       className={cn(
@@ -28,35 +31,44 @@ export function TopLeadCard({ contact, onClick, onDragStart, onDragEnd, isDraggi
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
-        {taskStatus && (
-          <span title={taskStatus.status === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
-            <CheckCircle2
-              className={cn(
-                "w-3 h-3 shrink-0",
-                taskStatus.status === 'overdue' ? 'text-destructive' : 'text-green-500'
-              )}
-            />
-          </span>
-        )}
-        <span className="text-xs font-medium truncate">
-          {contact.contact.full_name}
-        </span>
-        {contact.contact.company && (
-          <>
-            <span className="text-muted-foreground text-xs shrink-0">·</span>
-            <span className="text-xs text-muted-foreground truncate">
-              {contact.contact.company}
+      <div className="px-2 py-1.5 space-y-0.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {taskStatus && (
+            <span title={taskStatus.status === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
+              <CheckCircle2
+                className={cn(
+                  "w-3 h-3 shrink-0",
+                  taskStatus.status === 'overdue' ? 'text-destructive' : 'text-green-500'
+                )}
+              />
             </span>
-          </>
-        )}
-        <div
-          className={cn(
-            "w-1.5 h-1.5 rounded-full shrink-0 ml-auto",
-            contact.status_overdue ? 'bg-destructive' : 'bg-primary'
           )}
-          title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
-        />
+          <span className="text-xs font-medium truncate">
+            {contact.contact.full_name}
+          </span>
+          {contact.contact.company && (
+            <>
+              <span className="text-muted-foreground text-xs shrink-0">·</span>
+              <span className="text-xs text-muted-foreground truncate">
+                {contact.contact.company}
+              </span>
+            </>
+          )}
+          <div
+            className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0 ml-auto",
+              contact.status_overdue ? 'bg-destructive' : 'bg-primary'
+            )}
+            title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
+          />
+        </div>
+        {stageLabel && (
+          <div className="pl-[18px]">
+            <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+              {stageLabel}
+            </span>
+          </div>
+        )}
       </div>
     </Card>
   );
