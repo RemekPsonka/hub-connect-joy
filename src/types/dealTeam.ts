@@ -263,6 +263,9 @@ export interface UpdateTeamContactInput {
   notes?: string | null;
   reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   offeringStage?: OfferingStage;
+  snoozedUntil?: string | null;
+  snoozeReason?: string | null;
+  snoozedFromCategory?: string | null;
 }
 
 export interface PromoteContactInput {

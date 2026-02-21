@@ -249,6 +249,9 @@ export function useUpdateTeamContact() {
       notes,
       reviewFrequency,
       offeringStage,
+      snoozedUntil,
+      snoozeReason,
+      snoozedFromCategory,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -282,6 +285,9 @@ export function useUpdateTeamContact() {
       if (notes !== undefined) updates.notes = notes;
       if (reviewFrequency !== undefined) updates.review_frequency = reviewFrequency;
       if (offeringStage !== undefined) updates.offering_stage = offeringStage;
+      if (snoozedUntil !== undefined) updates.snoozed_until = snoozedUntil;
+      if (snoozeReason !== undefined) updates.snooze_reason = snoozeReason;
+      if (snoozedFromCategory !== undefined) updates.snoozed_from_category = snoozedFromCategory;
 
       const { error } = await supabase
         .from('deal_team_contacts')
