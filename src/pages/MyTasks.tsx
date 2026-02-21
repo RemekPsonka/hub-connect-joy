@@ -7,6 +7,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
+import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
+import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
+import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
+import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTasks, useUpdateTask, type TaskWithDetails } from '@/hooks/useTasks';
 import { useCurrentDirector } from '@/hooks/useDirectors';
 import { Loader2, Calendar, Plus, CheckCircle2, Clock, CalendarDays, Inbox } from 'lucide-react';
@@ -124,6 +128,13 @@ export default function MyTasks() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
+  // Pipeline workflow states
+  const [nextActionOpen, setNextActionOpen] = useState(false);
+  const [showSnooze, setShowSnooze] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+  const [pipelineTask, setPipelineTask] = useState<TaskWithDetails | null>(null);
+  const updateTeamContact = useUpdateTeamContact();
+
   const { myTasks, teamTasks, otherTasks } = useMemo(() => {
     if (!directorId) return { myTasks: [], teamTasks: [], otherTasks: [] };
     const my: TaskWithDetails[] = [];
@@ -149,6 +160,15 @@ export default function MyTasks() {
   }, [allTasks, directorId]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
+    // Pipeline task completing → open NextActionDialog
+    if (newStatus === 'completed') {
+      const task = allTasks.find(t => t.id === taskId);
+      if (task && (task as any).deal_team_id) {
+        setPipelineTask(task);
+        setNextActionOpen(true);
+        return;
+      }
+    }
     try {
       await updateTask.mutateAsync({ id: taskId, status: newStatus });
       toast.success('Status zaktualizowany');
@@ -294,6 +314,51 @@ export default function MyTasks() {
           onEdit={handleEditFromDetail}
           onTaskSwitch={handleTaskSwitch}
         />
+      )}
+
+      {/* Pipeline workflow dialogs */}
+      {pipelineTask && (
+        <>
+          <NextActionDialog
+            open={nextActionOpen}
+            onOpenChange={setNextActionOpen}
+            contactName={pipelineTask.task_contacts?.[0]?.contacts?.full_name || ''}
+            contactId={pipelineTask.task_contacts?.[0]?.contacts?.id || ''}
+            teamContactId={(pipelineTask as any).deal_team_contact_id || ''}
+            teamId={(pipelineTask as any).deal_team_id || ''}
+            existingTaskId={pipelineTask.id}
+            existingTaskTitle={pipelineTask.title}
+            onConfirm={() => { setPipelineTask(null); }}
+            onSnooze={() => setShowSnooze(true)}
+            onConvertToClient={() => setShowConvert(true)}
+          />
+          <SnoozeDialog
+            open={showSnooze}
+            onOpenChange={setShowSnooze}
+            contactName={pipelineTask.task_contacts?.[0]?.contacts?.full_name || ''}
+            onSnooze={async (until, reason) => {
+              try {
+                await updateTask.mutateAsync({ id: pipelineTask.id, status: 'completed' });
+                await updateTeamContact.mutateAsync({
+                  id: (pipelineTask as any).deal_team_contact_id,
+                  teamId: (pipelineTask as any).deal_team_id,
+                  category: '10x' as any,
+                  notes: reason || undefined,
+                });
+                toast.success('Kontakt odłożony');
+                setShowSnooze(false);
+                setPipelineTask(null);
+              } catch { toast.error('Wystąpił błąd'); }
+            }}
+          />
+          <ConvertToClientDialog
+            open={showConvert}
+            onOpenChange={setShowConvert}
+            teamContactId={(pipelineTask as any).deal_team_contact_id || ''}
+            teamId={(pipelineTask as any).deal_team_id || ''}
+            contactName={pipelineTask.task_contacts?.[0]?.contacts?.full_name || ''}
+          />
+        </>
       )}
     </div>
   );

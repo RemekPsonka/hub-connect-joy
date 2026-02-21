@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
 import { isPast, isToday, format } from 'date-fns';
 import {
   CheckCircle2, User, Building2,
@@ -23,8 +24,9 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
-import { MeetingScheduledDialog } from '@/components/deals-team/MeetingScheduledDialog';
-import { MeetingOutcomeDialog } from '@/components/deals-team/MeetingOutcomeDialog';
+import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
+import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
+import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
 import { UnifiedTaskRow, STATUS_CYCLE, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -122,9 +124,10 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Workflow dialog states
-  const [meetingScheduledOpen, setMeetingScheduledOpen] = useState(false);
-  const [meetingOutcomeOpen, setMeetingOutcomeOpen] = useState(false);
+  // Universal pipeline workflow dialog states
+  const [nextActionOpen, setNextActionOpen] = useState(false);
+  const [showSnooze, setShowSnooze] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
   const [workflowTask, setWorkflowTask] = useState<DealTeamAssignment | null>(null);
   const [workflowContact, setWorkflowContact] = useState<{
     contactName: string; contactId: string; teamContactId: string; category: string;
@@ -207,46 +210,20 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     });
   }, [filtered, members]);
 
-  const isMeetingTask = (title: string) => {
-    const t = title.toLowerCase();
-    return t.includes('spotkanie') || t.includes('meeting');
-  };
-
   const handleStatusChange = useCallback((taskId: string, task: DealTeamAssignment, newStatus: string) => {
-    if (newStatus === 'completed' && task.deal_team_contact_id && isMeetingTask(task.title)) {
-      // Find the team contact to check offering_stage
+    // ALL completed pipeline tasks → open universal NextActionDialog
+    if (newStatus === 'completed' && task.deal_team_contact_id) {
       const tc = teamContacts.find(c => c.id === task.deal_team_contact_id);
       if (tc) {
-        const stage = tc.offering_stage;
-        if (stage === 'meeting_plan') {
-          // Complete task, then open MeetingScheduledDialog
-          updateAssignment.mutate({
-            id: taskId, teamContactId: task.deal_team_contact_id || '', status: 'completed',
-          });
-          setWorkflowTask(task);
-          setWorkflowContact({
-            contactName: tc.contact?.full_name || task.contact_name || '',
-            contactId: tc.contact_id,
-            teamContactId: tc.id,
-            category: tc.category,
-          });
-          setMeetingScheduledOpen(true);
-          return;
-        }
-        if (stage === 'meeting_scheduled') {
-          updateAssignment.mutate({
-            id: taskId, teamContactId: task.deal_team_contact_id || '', status: 'completed',
-          });
-          setWorkflowTask(task);
-          setWorkflowContact({
-            contactName: tc.contact?.full_name || task.contact_name || '',
-            contactId: tc.contact_id,
-            teamContactId: tc.id,
-            category: tc.category,
-          });
-          setMeetingOutcomeOpen(true);
-          return;
-        }
+        setWorkflowTask(task);
+        setWorkflowContact({
+          contactName: tc.contact?.full_name || task.contact_name || '',
+          contactId: tc.contact_id,
+          teamContactId: tc.id,
+          category: tc.category,
+        });
+        setNextActionOpen(true);
+        return;
       }
     }
     updateAssignment.mutate({
@@ -601,29 +578,48 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       {/* ─── Create Task Modal ────────────────────────── */}
       <TaskModal open={showCreateModal} onOpenChange={setShowCreateModal} dealTeamId={teamId} />
 
-      {/* ─── Meeting Workflow Dialogs ─────────────────── */}
-      {workflowContact && (
-        <MeetingScheduledDialog
-          open={meetingScheduledOpen}
-          onOpenChange={setMeetingScheduledOpen}
-          contactName={workflowContact.contactName}
-          contactId={workflowContact.contactId}
-          teamContactId={workflowContact.teamContactId}
-          teamId={teamId}
-          onConfirm={() => { setWorkflowTask(null); setWorkflowContact(null); }}
-        />
-      )}
-      {workflowContact && (
-        <MeetingOutcomeDialog
-          open={meetingOutcomeOpen}
-          onOpenChange={setMeetingOutcomeOpen}
-          contactName={workflowContact.contactName}
-          contactId={workflowContact.contactId}
-          teamContactId={workflowContact.teamContactId}
-          teamId={teamId}
-          currentCategory={workflowContact.category as any}
-          onConfirm={() => { setWorkflowTask(null); setWorkflowContact(null); }}
-        />
+      {/* ─── Universal Pipeline Workflow Dialogs ─────── */}
+      {workflowContact && workflowTask && (
+        <>
+          <NextActionDialog
+            open={nextActionOpen}
+            onOpenChange={setNextActionOpen}
+            contactName={workflowContact.contactName}
+            contactId={workflowContact.contactId}
+            teamContactId={workflowContact.teamContactId}
+            teamId={teamId}
+            existingTaskId={workflowTask.id}
+            existingTaskTitle={workflowTask.title}
+            onConfirm={() => { setWorkflowTask(null); setWorkflowContact(null); }}
+            onSnooze={() => setShowSnooze(true)}
+            onConvertToClient={() => setShowConvert(true)}
+          />
+          <SnoozeDialog
+            open={showSnooze}
+            onOpenChange={setShowSnooze}
+            contactName={workflowContact.contactName}
+            onSnooze={async (until, reason) => {
+              try {
+                updateAssignment.mutate({
+                  id: workflowTask.id,
+                  teamContactId: workflowContact.teamContactId,
+                  status: 'completed',
+                });
+                toast.success('Kontakt odłożony');
+                setShowSnooze(false);
+                setWorkflowTask(null);
+                setWorkflowContact(null);
+              } catch { toast.error('Wystąpił błąd'); }
+            }}
+          />
+          <ConvertToClientDialog
+            open={showConvert}
+            onOpenChange={setShowConvert}
+            teamContactId={workflowContact.teamContactId}
+            teamId={teamId}
+            contactName={workflowContact.contactName}
+          />
+        </>
       )}
     </div>
   );
