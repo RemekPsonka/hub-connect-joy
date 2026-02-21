@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { utils, writeFile } from 'xlsx';
 import { ArrowUp, ArrowDown, Download, Filter, AlertTriangle } from 'lucide-react';
+import { offeringStageLabel } from '@/utils/offeringStageLabels';
 import { toast } from 'sonner';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
@@ -376,7 +377,7 @@ export function TableView({ teamId }: TableViewProps) {
               <SortableHeader column="name">Kontakt</SortableHeader>
               <SortableHeader column="company">Firma</SortableHeader>
               <SortableHeader column="category">Kategoria</SortableHeader>
-              <SortableHeader column="status">Status</SortableHeader>
+              <TableHead>Etap</TableHead>
               <SortableHeader column="priority">Priorytet</SortableHeader>
               <SortableHeader column="assignedTo">Odpowiedzialny</SortableHeader>
               <TableHead>Nast. akcja</TableHead>
@@ -388,7 +389,7 @@ export function TableView({ teamId }: TableViewProps) {
           <TableBody>
             {sortedContacts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                   {filters.overdueOnly ||
                   filters.category ||
                   filters.status ||
@@ -422,6 +423,15 @@ export function TableView({ teamId }: TableViewProps) {
                       {categoryConfig[contact.category].icon}{' '}
                       {categoryConfig[contact.category].label}
                     </Badge>
+                  </TableCell>
+
+                  {/* Etap (offering_stage) */}
+                  <TableCell>
+                    {offeringStageLabel(contact.offering_stage, contact.category) ? (
+                      <span className="text-xs text-muted-foreground">
+                        {offeringStageLabel(contact.offering_stage, contact.category)}
+                      </span>
+                    ) : '—'}
                   </TableCell>
 
                   {/* Status */}
