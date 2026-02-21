@@ -1,91 +1,109 @@
 
-# Dodanie filtra osoby odpowiedzialnej do widoku Kanban
+# Przebudowa flow zadan w lejku sprzedazy
 
-## Cel
-Dodac filtr "kto zajmuje sie kontaktem" na widoku Kanban (glowny i sub-kanban). Kontakt jest "przypisany" do osoby przez pole `assigned_to` na jego aktywnym zadaniu. Kontakty bez zadania sa "wspolne" (widoczne dla wszystkich).
+## Analiza obecnego stanu
 
-## Podejscie
+Aktualnie dialog "Dalsze dzialania" (`NextActionDialog`) dziala TYLKO z jednego miejsca: `ContactTasksSheet` (boczny panel po kliknieciu karty na Kanbanie). Problem w tym, ze sa 3 inne punkty, z ktorych uzytkownik moze zakonczyc zadanie pipeline'owe -- i we wszystkich flow jest zepsuty:
 
-### 1. Rozszerzenie hooka `useActiveTaskContacts`
-Obecny hook zwraca `Map<contactId, TaskStatus>`. Trzeba rozszerzyc go o `assigned_to`, zeby wiedziec KTO jest przypisany do kontaktu.
+```text
+PUNKT WEJSCIA                      CO SIE DZIEJE TERAZ              CO POWINNO SIE DZIAC
+---------------------------------  -------------------------------  --------------------------
+1. ContactTasksSheet (Kanban)      NextActionDialog -- OK            OK (dziala)
+2. TaskDetailSheet (karta zadania) Bezposrednie "completed"          NextActionDialog
+3. MyTeamTasksView (Zadania tab)   Tylko meeting workflow            NextActionDialog
+4. Tasks/MyTasks (globalne)        Bezposrednie "completed"          NextActionDialog
+```
 
-**Plik:** `src/hooks/useActiveTaskContacts.ts`
-- Dodac `assigned_to` do selecta: `.select('deal_team_contact_id, status, due_date, assigned_to')`
-- Zmienic typ zwracany z `Map<string, TaskStatus>` na `Map<string, { status: TaskStatus; assignedTo: string | null }>`
-- Karty kanban (HotLeadCard, TopLeadCard itp.) beda mialy dostep do informacji o osobie
+## Projektowy przeplywy sprzedazowy (CRM best practices)
 
-### 2. Dodanie paska filtra czlonkow do KanbanBoard
-Wzorowany na istniejacym pasku w `MyTeamTasksView` (linie 362-374): przyciski "Wszyscy", "Moje" + przycisk dla kazdego czlonka zespolu + "Nieprzypisane".
+Kazdy kontakt w lejku ma JEDNO aktywne zadanie. Po jego zakonczeniu, system wymusza wybor nastepnego kroku:
 
-**Plik:** `src/components/deals-team/KanbanBoard.tsx`
-- Nowy state: `filterMember: string` (wartosci: `'all'`, `'mine'`, `'unassigned'`, lub `director_id`)
-- Import `useTeamMembers` (juz uzywany w wielu miejscach)
-- Dodac pasek przyciskow pod wyszukiwarka (przed kolumnami)
-- Filtrowac `filteredContacts` na podstawie `activeTaskMap`:
-  - `'all'` -> bez filtra
-  - `'mine'` -> kontakty gdzie `assignedTo === currentDirector.id` LUB brak zadania (wspolne)
-  - `'unassigned'` -> kontakty bez aktywnego zadania
-  - `director_id` -> kontakty gdzie `assignedTo === director_id`
+```text
+COLD/LEAD -> Zadzwon -> Umow spotkanie -> Spotkanie umowione -> 
+  Po spotkaniu:
+    -> Kolejne spotkanie (pozostaje w HOT/TOP)
+    -> Wyslij oferte (przechodzi do OFERTOWANIE)  
+    -> Odloz (przechodzi do 10x)
+    -> Utracony (przechodzi do LOST)
+    -> Klient (konwersja na CLIENT)
+    
+  W kazdym kroku:
+    - Wybor osoby odpowiedzialnej (dyrektor)
+    - Termin wykonania
+    - Notatka
+    - Automatyczna zmiana etapu w lejku (offering_stage + category)
+```
 
-### 3. Propagacja filtra do SubKanbanView
-Gdy uzytkownik jest w trybie drill-down (sub-kanban), filtr musi tez dzialac.
+## Plan naprawy -- 3 kroki
 
-**Plik:** `src/components/deals-team/SubKanbanView.tsx`
-- Dodac prop `filterMember?: string` i `currentDirectorId?: string`
-- Filtrowac `contacts` przed grupowaniem po `stages`
-- Logika filtrowania: taka sama jak w KanbanBoard (na podstawie `activeTaskMap`)
+### Krok 1: TaskDetailSheet -- dodanie NextActionDialog
 
-### 4. Aktualizacja typow kart
-Obecne karty otrzymuja `taskStatus` jako `string`. Po zmianie bedzie to obiekt `{ status, assignedTo }`.
+**Plik:** `src/components/tasks/TaskDetailSheet.tsx`
 
-**Pliki:** `HotLeadCard.tsx`, `TopLeadCard.tsx`, `LeadCard.tsx`, `ColdLeadCard.tsx`
-- Zaktualizowac typ `taskStatus` na nowy format
-- Wyswietlanie statusu zadania pozostaje bez zmian (uzywa tylko `.status`)
+Problem: Przycisk "Oznacz jako ukonczone" i dropdown statusu bezposrednio zamykaja zadanie. Dla zadan pipeline'owych (`deal_team_id IS NOT NULL`) musi otworzyc NextActionDialog.
+
+Zmiany:
+- Dodac state: `nextActionOpen`, `pendingTaskId`, `showSnooze`, `showConvert`
+- W `handleComplete()` i `handleStatusChange()`: sprawdzic czy `task.deal_team_id` istnieje. Jesli tak -- zamiast bezposredniego `status: 'completed'`, otworzyc `NextActionDialog`
+- Potrzebne dane do NextActionDialog: `contactName`, `contactId`, `teamContactId`, `teamId` -- trzeba je pobrac z `task.deal_team_contact_id` i `task.task_contacts`
+- Renderowac `NextActionDialog`, `SnoozeDialog`, `ConvertToClientDialog` pod glownym Sheet
+
+Logika:
+```text
+handleComplete():
+  IF task.deal_team_id EXISTS:
+    -> otworz NextActionDialog (recykling zadania)
+  ELSE IF task.recurrence_rule EXISTS:
+    -> handleRecurringNextTask() (jak teraz)
+  ELSE:
+    -> bezposrednie completed (jak teraz)
+```
+
+### Krok 2: MyTeamTasksView -- zunifikowany NextActionDialog
+
+**Plik:** `src/components/deals-team/MyTeamTasksView.tsx`
+
+Problem: `handleStatusChange()` obsluguje tylko spotkania (MeetingScheduledDialog / MeetingOutcomeDialog). Wszystkie inne zadania sa zamykane bez dalszych dzialan.
+
+Zmiany:
+- Dodac state i rendering `NextActionDialog`, `SnoozeDialog`, `ConvertToClientDialog`
+- W `handleStatusChange()`: zamiast osobnych warunkow na meeting, ZAWSZE otwierac `NextActionDialog` gdy `newStatus === 'completed'` i zadanie ma `deal_team_contact_id`
+- Usunac osobne MeetingScheduledDialog/MeetingOutcomeDialog -- NextActionDialog juz ma opcje "Spotkanie umowione" i "Umow spotkanie" ktore to pokrywaja
+- Nie zamykac zadania bezposrednio -- NextActionDialog decyduje co dalej
+
+Logika:
+```text
+handleStatusChange(taskId, task, newStatus):
+  IF newStatus === 'completed' AND task.deal_team_contact_id:
+    -> otworz NextActionDialog z danymi kontaktu
+  ELSE:
+    -> bezposrednie update (jak teraz)
+```
+
+### Krok 3: Globalne widoki Tasks/MyTasks -- propagacja
+
+**Pliki:** `src/pages/Tasks.tsx`, `src/pages/MyTasks.tsx`
+
+Problem: Te widoki uzywaja `TaskDetailSheet` -- po zmianach z Kroku 1, TaskDetailSheet bedzie juz obslugiwac NextActionDialog. Ale `UnifiedTaskRow.onStatusChange` w tych widokach tez bezposrednio zmienia status.
+
+Zmiany:
+- W callbackach `onStatusChange` sprawdzic czy zadanie ma `deal_team_id`. Jesli tak -- otworzyc NextActionDialog zamiast bezposredniego update
+- Alternatywnie: dodac logike do `UnifiedTaskRow` zeby emitowac event "pipeline_complete" zamiast bezposredniego statusu -- ale to byloby zbyt inwazyjne. Lepiej na poziomie rodzica.
 
 ## Szczegoly techniczne
 
-### Zmieniony hook useActiveTaskContacts:
-```typescript
-// Nowy typ
-export type TaskContactInfo = { status: TaskStatus; assignedTo: string | null };
+### Dane potrzebne dla NextActionDialog:
+NextActionDialog wymaga: `contactName`, `contactId`, `teamContactId`, `teamId`, `existingTaskId`, `existingTaskTitle`
 
-// Select z assigned_to
-.select('deal_team_contact_id, status, due_date, assigned_to')
+W `TaskDetailSheet` te dane sa dostepne z:
+- `task.task_contacts[0].contacts` -> contactName, contactId
+- `task.deal_team_id` -> teamId
+- `task.deal_team_contact_id` -> teamContactId (trzeba dodac do selecta w hookach)
 
-// Map zwraca pelne info
-statusMap.set(contactId, { 
-  status: isOverdue ? 'overdue' : 'active', 
-  assignedTo: task.assigned_to 
-});
-```
+W `MyTeamTasksView` dane sa juz dostepne z `DealTeamAssignment` i `teamContacts`.
 
-### Logika filtrowania w KanbanBoard:
-```typescript
-const memberFilteredContacts = useMemo(() => {
-  if (filterMember === 'all') return filteredContacts;
-  if (filterMember === 'unassigned') {
-    return filteredContacts.filter(c => !activeTaskMap?.get(c.id));
-  }
-  const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
-  return filteredContacts.filter(c => {
-    const info = activeTaskMap?.get(c.id);
-    if (!info) return filterMember === 'mine'; // wspolne widoczne w "Moje"
-    return info.assignedTo === targetId;
-  });
-}, [filteredContacts, filterMember, activeTaskMap, currentDirector]);
-```
-
-### Pasek filtra (pod wyszukiwarka):
-```text
-[Wszyscy] [Moje] [Jan Kowalski] [Anna Nowak] [Nieprzypisane]
-```
-Styl: identyczny jak w MyTeamTasksView -- male przyciski `variant="outline"` / `variant="default"`.
-
-## Pliki do zmiany (podsumowanie):
-1. `src/hooks/useActiveTaskContacts.ts` -- rozszerzenie o `assigned_to`
-2. `src/components/deals-team/KanbanBoard.tsx` -- state filtra, pasek przyciskow, filtrowanie
-3. `src/components/deals-team/SubKanbanView.tsx` -- prop filtra, filtrowanie kontaktow
-4. `src/components/deals-team/HotLeadCard.tsx` -- aktualizacja typu `taskStatus`
-5. `src/components/deals-team/TopLeadCard.tsx` -- aktualizacja typu `taskStatus`
-6. `src/components/deals-team/LeadCard.tsx` -- aktualizacja typu `taskStatus`
-7. `src/components/deals-team/ColdLeadCard.tsx` -- aktualizacja typu `taskStatus`
+### Pliki do zmiany (podsumowanie):
+1. **`src/components/tasks/TaskDetailSheet.tsx`** -- dodanie NextActionDialog + SnoozeDialog + ConvertToClientDialog, zmiana handleComplete/handleStatusChange
+2. **`src/components/deals-team/MyTeamTasksView.tsx`** -- zamiana meeting-specific dialogow na uniwersalny NextActionDialog
+3. **`src/pages/Tasks.tsx`** -- dodanie interceptu statusu dla zadan pipeline
+4. **`src/pages/MyTasks.tsx`** -- dodanie interceptu statusu dla zadan pipeline
