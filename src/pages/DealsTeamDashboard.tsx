@@ -138,20 +138,6 @@ export default function DealsTeamDashboard() {
           />
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowWeeklyStatus(true)}
-              className="gap-2"
-            >
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Statusy</span>
-              {overdueCount > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {overdueCount}
-                </Badge>
-              )}
-            </Button>
-
             <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
               <Plus className="h-4 w-4" />
             </Button>
