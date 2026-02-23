@@ -24,6 +24,8 @@ export interface DealTeamAssignment {
   // Enriched fields from joins
   contact_name?: string;
   contact_company?: string | null;
+  contact_category?: string | null;
+  contact_offering_stage?: string | null;
 }
 
 
@@ -192,25 +194,27 @@ export function useMyTeamAssignments(teamId: string | undefined) {
 
       const { data: teamContacts } = await supabase
         .from('deal_team_contacts')
-        .select('id, contact_id')
+        .select('id, contact_id, category, offering_stage')
         .in('id', teamContactIds);
 
-      const contactIds = [...new Set((teamContacts || []).map((tc: { contact_id: string }) => tc.contact_id))];
+      const contactIds = [...new Set((teamContacts || []).map((tc: any) => tc.contact_id))];
       const { data: contacts } = await supabase
         .from('contacts')
         .select('id, full_name, company')
         .in('id', contactIds);
 
       const contactMap = new Map((contacts || []).map((c: { id: string; full_name: string; company: string | null }) => [c.id, c]));
-      const tcMap = new Map((teamContacts || []).map((tc: { id: string; contact_id: string }) => [tc.id, tc.contact_id]));
+      const tcMap = new Map((teamContacts || []).map((tc: any) => [tc.id, tc]));
 
       return tasks.map((t: any) => {
-        const contactId = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
-        const contact = contactId ? contactMap.get(contactId) : null;
+        const tc = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
+        const contact = tc?.contact_id ? contactMap.get(tc.contact_id) : null;
         return {
           ...t,
           contact_name: contact?.full_name || 'Kontakt',
           contact_company: contact?.company || null,
+          contact_category: tc?.category || null,
+          contact_offering_stage: tc?.offering_stage || null,
         };
       }) as DealTeamAssignment[];
     },
