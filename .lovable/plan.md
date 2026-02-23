@@ -1,48 +1,39 @@
 
 
-# Dodanie opcji "Audyt" do dialogu Dalsze Działania
+# Dodanie kolumn sub-Kanban dla OFERTOWANIE
 
 ## Problem
-W dialogu "Dalsze działania" (NextActionDialog) brakuje opcji przeniesienia kontaktu do kategorii AUDYT. Obecnie dostepne sa tylko: spotkanie, oferta, telefon, mail, odloz, klient, utracony -- ale nie ma mozliwosci awansu do etapu Audyt.
+Po kliknieciu w naglowek kolumny OFERTOWANIE, kontakty wyswietlaja sie w plaskim ukladzie siatki (grid) zamiast w kolumnach sub-Kanban. Dzieje sie tak, poniewaz kategoria `offering` nie ma wpisu w `SUB_KANBAN_CONFIGS`, wiec system uzywa uproszczonego widoku fokusowego.
 
 ## Rozwiazanie
+Dodac konfiguracje sub-Kanban dla kategorii `offering` z odpowiednimi etapami ofertowania.
 
-**Plik:** `src/components/deals-team/NextActionDialog.tsx`
+## Etapy ofertowania (kolumny)
 
-Zmiany:
-1. Dodac nowy `ActionType`: `'audit'`
-2. Dodac opcje w `ACTION_OPTIONS`: "Audyt -- umowione spotkanie" z ikona i `needsDate: true`
-3. Dodac nowy import ikony (`ClipboardCheck` lub uzyc istniejacego `CalendarIcon`)
-4. W `handleSave` switch: ustawic `newCategory = 'audit'`, `newOfferingStage = 'audit_scheduled'`, tytul zadania np. "Audyt u {contactName} - {data}"
-5. Zapisac `nextMeetingDate` (tak jak przy `meeting_scheduled`) -- wymaganie z zasad systemu: awans do AUDYT wymaga daty spotkania i osoby
-
-Kolejnosc przyciskow w dialogu (zaktualizowana):
-- Umow spotkanie
-- Spotkanie umowione
-- **Audyt (NOWY)**
-- Wyslij oferte
-- Zadzwon
-- Wyslij mail
-- Odloz (10x)
-- Klient
-- Utracony
-
-Dialog bedzie mial 9 opcji (5 w pierwszej kolumnie, 4 w drugiej, lub grid 3-kolumnowy dla lepszego ukladu z 9 elementami).
-
-## Szczegoly techniczne
-
-W switch w `handleSave`:
-```
-case 'audit':
-  newTitle = `Audyt u ${contactName} - ${format(dueDate, 'd MMM', { locale: pl })}`;
-  newCategory = 'audit';
-  newOfferingStage = 'audit_scheduled';
-  // + zapis nextMeetingDate i next_meeting_with (assignedTo)
-  break;
+```text
+Handshake --> Pelnomocnictwo --> Przygotowanie --> Negocjacje --> Zaakceptowano --> Przegrano
 ```
 
-Przy zapisie kontaktu, jesli `selected === 'audit'`, nalezy dodatkowo ustawic:
-- `contactUpdate.nextMeetingDate = dateStr`
-- `contactUpdate.nextMeetingWith = assignedTo` (pole `next_meeting_with` w tabeli `deal_team_contacts`)
+## Zmiany techniczne
 
-To spelnia wymaganie systemowe: awans do AUDYT wymaga daty spotkania i osoby odpowiedzialnej.
+**Plik: `src/components/deals-team/SubKanbanView.tsx`**
+
+Dodac nowy wpis w `SUB_KANBAN_CONFIGS`:
+
+```typescript
+offering: {
+  title: 'OFERTOWANIE',
+  icon: '📝',
+  defaultStage: 'handshake',
+  stages: [
+    { id: 'handshake',        label: 'Handshake',       icon: '🤝', color: 'border-t-slate-500' },
+    { id: 'power_of_attorney', label: 'Pelnomocnictwo', icon: '📄', color: 'border-t-blue-500' },
+    { id: 'preparation',      label: 'Przygotowanie',   icon: '📋', color: 'border-t-amber-500' },
+    { id: 'negotiation',      label: 'Negocjacje',      icon: '💬', color: 'border-t-purple-500' },
+    { id: 'accepted',         label: 'Zaakceptowano',   icon: '✅', color: 'border-t-green-500' },
+    { id: 'lost',             label: 'Przegrano',       icon: '✖️', color: 'border-t-gray-400' },
+  ],
+},
+```
+
+Dzieki temu klikniecie w naglowek OFERTOWANIE otworzy widok SubKanbanView z 6 kolumnami zamiast plaskiej siatki. Zmiana w jednym miejscu, bez koniecznosci modyfikacji KanbanBoard.tsx (logika juz poprawnie sprawdza `SUB_KANBAN_CONFIGS`).
