@@ -45,6 +45,52 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Anulowane', color: 'bg-muted/50' },
 };
 
+// ─── Workflow Column Configuration ───────────────────────────
+interface WorkflowColumn {
+  id: string;
+  label: string;
+  icon: string;
+  color: string;
+  section: string;
+  match: (category: string | null | undefined, stage: string | null | undefined) => boolean;
+}
+
+const WORKFLOW_COLUMNS: WorkflowColumn[] = [
+  // SPOTKANIA
+  { id: 'meeting_plan', label: 'Umów spotkanie', icon: '📞', color: 'amber', section: 'spotkania',
+    match: (cat, stage) => (cat === 'hot' || cat === 'top') && (!stage || stage === 'meeting_plan') },
+  { id: 'meeting_scheduled', label: 'Spotkanie umówione', icon: '📅', color: 'blue', section: 'spotkania',
+    match: (cat, stage) => (cat === 'hot' || cat === 'top') && stage === 'meeting_scheduled' },
+  { id: 'meeting_done', label: 'Spotkanie odbyte', icon: '✅', color: 'emerald', section: 'spotkania',
+    match: (cat, stage) => (cat === 'hot' || cat === 'top') && stage === 'meeting_done' },
+  // OFERTOWANIE
+  { id: 'handshake', label: 'Handshake', icon: '🤝', color: 'slate', section: 'ofertowanie',
+    match: (cat, stage) => cat === 'offering' && (!stage || stage === 'handshake') },
+  { id: 'power_of_attorney', label: 'Pełnomocnictwo', icon: '📄', color: 'blue', section: 'ofertowanie',
+    match: (cat, stage) => cat === 'offering' && stage === 'power_of_attorney' },
+  { id: 'preparation', label: 'Przygotowanie', icon: '📋', color: 'amber', section: 'ofertowanie',
+    match: (cat, stage) => cat === 'offering' && stage === 'preparation' },
+  { id: 'negotiation', label: 'Negocjacje', icon: '💬', color: 'purple', section: 'ofertowanie',
+    match: (cat, stage) => cat === 'offering' && stage === 'negotiation' },
+  { id: 'accepted', label: 'Zaakceptowano', icon: '🎉', color: 'emerald', section: 'ofertowanie',
+    match: (cat, stage) => cat === 'offering' && stage === 'accepted' },
+  // AUDYT
+  { id: 'audit_plan', label: 'Audyt - planowanie', icon: '🔍', color: 'cyan', section: 'audyt',
+    match: (cat, stage) => cat === 'audit' && (!stage || stage === 'audit_plan') },
+  { id: 'audit_scheduled', label: 'Audyt zaplanowany', icon: '📅', color: 'blue', section: 'audyt',
+    match: (cat, stage) => cat === 'audit' && stage === 'audit_scheduled' },
+  { id: 'audit_done', label: 'Audyt odbyty', icon: '✅', color: 'emerald', section: 'audyt',
+    match: (cat, stage) => cat === 'audit' && stage === 'audit_done' },
+  // ZAMKNIĘCIE
+  { id: 'client', label: 'Klient', icon: '🏆', color: 'emerald', section: 'zamkniecie',
+    match: (cat) => cat === 'client' },
+  { id: 'lost', label: 'Przegrane', icon: '✖️', color: 'gray', section: 'zamkniecie',
+    match: (cat) => cat === 'lost' },
+  // INNE
+  { id: 'other', label: 'Inne', icon: '📁', color: 'slate', section: 'inne',
+    match: (cat) => !cat || cat === 'lead' || cat === 'cold' || cat === '10x' },
+];
+
 // ─── Inline Quick-Add ────────────────────────────────────────
 function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
   teamId: string;
@@ -180,15 +226,16 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     return Array.from(map.values());
   }, [filtered]);
 
-  // Kanban columns
-  const kanbanColumns = useMemo(() => {
-    const cols: Record<string, DealTeamAssignment[]> = {
-      todo: [], in_progress: [], completed: [], cancelled: [],
-    };
+  // Workflow Kanban columns
+  const workflowKanban = useMemo(() => {
+    const cols = new Map<string, DealTeamAssignment[]>();
+    for (const col of WORKFLOW_COLUMNS) cols.set(col.id, []);
     for (const a of filtered) {
-      const s = a.status || 'todo';
-      if (cols[s]) cols[s].push(a);
-      else cols.todo.push(a);
+      const cat = a.contact_category;
+      const stage = a.contact_offering_stage;
+      const matchedCol = WORKFLOW_COLUMNS.find(c => c.match(cat, stage));
+      const colId = matchedCol?.id || 'other';
+      cols.get(colId)!.push(a);
     }
     return cols;
   }, [filtered]);
@@ -439,38 +486,54 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         </Card>
       )}
 
-      {/* ─── VIEW: Kanban ─────────────────────────────── */}
+      {/* ─── VIEW: Workflow Kanban ─────────────────────── */}
       {filtered.length > 0 && viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(STATUS_LABELS).map(([status, { label, color }]) => {
-            const tasks = kanbanColumns[status] || [];
-            return (
-              <div key={status} className="space-y-2">
-                <div className={cn("px-3 py-2 rounded-lg flex items-center justify-between", color)}>
-                  <span className="text-sm font-medium">{label}</span>
-                  <Badge variant="secondary" className="text-xs">{tasks.length}</Badge>
-                </div>
-                <div className="space-y-2">
-                  {tasks.map((task) => (
-                    <Card
-                      key={task.id}
-                      className="p-3 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => handleOpenDetail(task)}
-                    >
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium leading-tight">{task.title}</p>
-                        {(task.contact_name || task.contact_company) && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <User className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {task.contact_name}
-                              {task.contact_company && <span className="ml-1 opacity-70">· {task.contact_company}</span>}
-                            </span>
+        <div className="overflow-x-auto -mx-4 px-4 pb-4">
+          <div className="flex gap-3 min-w-max">
+            {WORKFLOW_COLUMNS.map((col) => {
+              const tasks = workflowKanban.get(col.id) || [];
+              const colorMap: Record<string, string> = {
+                red: 'border-t-red-500', amber: 'border-t-amber-500', blue: 'border-t-blue-500',
+                purple: 'border-t-purple-500', slate: 'border-t-slate-400', emerald: 'border-t-emerald-500',
+                cyan: 'border-t-cyan-500', gray: 'border-t-gray-400',
+              };
+              return (
+                <div
+                  key={col.id}
+                  className={cn(
+                    'w-[220px] shrink-0 bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-300px)]',
+                    colorMap[col.color] || 'border-t-primary'
+                  )}
+                >
+                  {/* Header */}
+                  <div className="p-2.5 border-b bg-muted/50">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base">{col.icon}</span>
+                      <h3 className="font-semibold text-xs truncate">{col.label}</h3>
+                      <Badge variant="secondary" className="text-[10px] ml-auto">{tasks.length}</Badge>
+                    </div>
+                  </div>
+                  {/* Cards */}
+                  <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+                    {tasks.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground text-center py-8">Brak zadań</p>
+                    )}
+                    {tasks.map((task: DealTeamAssignment) => (
+                      <Card
+                        key={task.id}
+                        className="p-2 cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => handleOpenDetail(task)}
+                      >
+                        <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{task.title}</p>
+                        {task.contact_name && (
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
+                            <User className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{task.contact_name}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {task.priority && task.priority !== 'medium' && (
-                            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
+                            <Badge variant="outline" className={cn("text-[9px] px-1 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
                               {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
                             </Badge>
                           )}
@@ -478,33 +541,26 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
                             <span className={cn(
                               "text-[10px]",
                               isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed'
-                                ? 'text-destructive font-medium'
-                                : 'text-muted-foreground'
+                                ? 'text-destructive font-medium' : 'text-muted-foreground'
                             )}>
                               {format(new Date(task.due_date), 'dd.MM')}
                             </span>
                           )}
-                          {/* Status change buttons */}
-                          <div className="ml-auto flex gap-1">
-                            {status !== 'completed' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-5 px-1.5 text-[10px]"
-                                onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, status === 'todo' ? 'in_progress' : 'completed'); }}
-                              >
-                                {status === 'todo' ? '→ Rozpocznij' : '✓ Zakończ'}
-                              </Button>
-                            )}
-                          </div>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-4 px-1 text-[9px] ml-auto"
+                            onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, task.status === 'todo' ? 'in_progress' : 'completed'); }}
+                          >
+                            {task.status === 'todo' ? '→' : '✓'}
+                          </Button>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
