@@ -62,6 +62,19 @@ export const SUB_KANBAN_CONFIGS: Record<string, { title: string; icon: string; s
       { id: 'meeting_done', label: 'Spotkanie odbyte', icon: '✅', color: 'border-t-green-500' },
     ],
   },
+  offering: {
+    title: 'OFERTOWANIE',
+    icon: '📝',
+    defaultStage: 'handshake',
+    stages: [
+      { id: 'handshake', label: 'Handshake', icon: '🤝', color: 'border-t-slate-500' },
+      { id: 'power_of_attorney', label: 'Pełnomocnictwo', icon: '📄', color: 'border-t-blue-500' },
+      { id: 'preparation', label: 'Przygotowanie', icon: '📋', color: 'border-t-amber-500' },
+      { id: 'negotiation', label: 'Negocjacje', icon: '💬', color: 'border-t-purple-500' },
+      { id: 'accepted', label: 'Zaakceptowano', icon: '✅', color: 'border-t-green-500' },
+      { id: 'lost', label: 'Przegrano', icon: '✖️', color: 'border-t-gray-400' },
+    ],
+  },
 };
 
 export function SubKanbanView({
