@@ -3,18 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { KanbanColumnVisibility } from '@/hooks/useKanbanColumnSettings';
+import { KANBAN_COLUMN_LABELS } from '@/config/pipelineStages';
 
-const COLUMN_LABELS: Record<keyof KanbanColumnVisibility, string> = {
-  offering: 'OFERTOWANIE',
-  hot: 'HOT LEAD',
-  audit: 'AUDYT',
-  top: 'TOP LEAD',
-  lead: 'LEAD',
-  tenx: '10x',
-  cold: 'COLD LEAD',
-  lost: 'PRZEGRANE',
-  prospecting: 'POSZUKIWANI',
-};
+const COLUMN_LABELS = KANBAN_COLUMN_LABELS as Record<keyof KanbanColumnVisibility, string>;
 
 interface KanbanColumnConfigPopoverProps {
   columns: KanbanColumnVisibility;

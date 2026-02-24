@@ -1,19 +1,4 @@
-const STAGE_LABELS: Record<string, string> = {
-  handshake: 'Handshake',
-  power_of_attorney: 'Pełnomocnictwo',
-  preparation: 'Przygotowanie',
-  negotiation: 'Negocjacje',
-  accepted: 'Zaakceptowano',
-  lost: 'Przegrano',
-  audit_plan: 'Do zaplanowania',
-  audit_scheduled: 'Zaplanowany',
-  audit_done: 'Odbyty',
-  meeting_plan: 'Zaplanować spotkanie',
-  meeting_scheduled: 'Spotkanie umówione',
-  meeting_done: 'Spotkanie odbyte',
-};
-
-const CATEGORIES_WITH_SUBSTAGES = new Set(['offering', 'audit', 'hot', 'top']);
+import { STAGE_LABELS, CATEGORIES_WITH_SUBSTAGES, DEFAULT_STAGES } from '@/config/pipelineStages';
 
 /**
  * Returns a human-readable label for the offering_stage,
@@ -25,13 +10,6 @@ export function offeringStageLabel(
 ): string | null {
   if (!stage) return null;
   if (!CATEGORIES_WITH_SUBSTAGES.has(category)) return null;
-  // Don't show default stages (handshake for offering, meeting_plan for hot/top, audit_plan for audit)
-  const defaults: Record<string, string> = {
-    offering: 'handshake',
-    hot: 'meeting_plan',
-    top: 'meeting_plan',
-    audit: 'audit_plan',
-  };
-  if (defaults[category] === stage) return null;
+  if (DEFAULT_STAGES[category] === stage) return null;
   return STAGE_LABELS[stage] || null;
 }

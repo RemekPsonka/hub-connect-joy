@@ -150,21 +150,9 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 
 // ─── Pipeline stage row (interactive dropdowns) ────────────
 
-import { SUB_KANBAN_CONFIGS } from '@/components/deals-team/SubKanbanView';
+import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
-
-const CATEGORY_OPTIONS: { value: DealCategory; label: string; color: string; icon: string }[] = [
-  { value: 'hot', label: 'HOT LEAD', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300', icon: '🔥' },
-  { value: 'top', label: 'TOP LEAD', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300', icon: '⭐' },
-  { value: 'offering', label: 'OFERTOWANIE', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300', icon: '📝' },
-  { value: 'audit', label: 'AUDYT', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300', icon: '📅' },
-  { value: 'lead', label: 'LEAD', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/40 dark:text-gray-300', icon: '📋' },
-  { value: '10x' as DealCategory, label: '10X', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300', icon: '🚀' },
-  { value: 'cold', label: 'COLD LEAD', color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-300', icon: '❄️' },
-  { value: 'client', label: 'KLIENT', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', icon: '✅' },
-  { value: 'lost', label: 'PRZEGRANE', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: '✖️' },
-];
 
 function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId: string; teamId: string }) {
   const { data } = useQuery({

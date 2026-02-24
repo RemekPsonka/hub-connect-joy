@@ -8,13 +8,10 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { HotLeadCard } from './HotLeadCard';
 import type { DealTeamContact, OfferingStage, DealCategory } from '@/types/dealTeam';
 import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { SUB_KANBAN_CONFIGS, type SubStageConfig } from '@/config/pipelineStages';
 
-export interface SubStageConfig {
-  id: OfferingStage;
-  label: string;
-  icon: string;
-  color: string;
-}
+export type { SubStageConfig } from '@/config/pipelineStages';
+export { SUB_KANBAN_CONFIGS } from '@/config/pipelineStages';
 
 interface SubKanbanViewProps {
   title: string;
@@ -30,52 +27,6 @@ interface SubKanbanViewProps {
   currentDirectorId?: string;
   teamMembers?: { director_id: string; director?: { full_name: string } | null }[];
 }
-
-export const SUB_KANBAN_CONFIGS: Record<string, { title: string; icon: string; stages: SubStageConfig[]; defaultStage: OfferingStage }> = {
-  audit: {
-    title: 'AUDYT',
-    icon: '📅',
-    defaultStage: 'audit_plan',
-    stages: [
-      { id: 'audit_plan', label: 'Do zaplanowania', icon: '📋', color: 'border-t-slate-500' },
-      { id: 'audit_scheduled', label: 'Zaplanowany', icon: '📅', color: 'border-t-blue-500' },
-      { id: 'audit_done', label: 'Odbyty', icon: '✅', color: 'border-t-green-500' },
-    ],
-  },
-  hot: {
-    title: 'HOT LEAD',
-    icon: '🔥',
-    defaultStage: 'meeting_plan',
-    stages: [
-      { id: 'meeting_plan', label: 'Zaplanować spotkanie', icon: '📋', color: 'border-t-slate-500' },
-      { id: 'meeting_scheduled', label: 'Spotkanie umówione', icon: '📅', color: 'border-t-blue-500' },
-      { id: 'meeting_done', label: 'Spotkanie odbyte', icon: '✅', color: 'border-t-green-500' },
-    ],
-  },
-  top: {
-    title: 'TOP LEAD',
-    icon: '⭐',
-    defaultStage: 'meeting_plan',
-    stages: [
-      { id: 'meeting_plan', label: 'Zaplanować spotkanie', icon: '📋', color: 'border-t-slate-500' },
-      { id: 'meeting_scheduled', label: 'Spotkanie umówione', icon: '📅', color: 'border-t-blue-500' },
-      { id: 'meeting_done', label: 'Spotkanie odbyte', icon: '✅', color: 'border-t-green-500' },
-    ],
-  },
-  offering: {
-    title: 'OFERTOWANIE',
-    icon: '📝',
-    defaultStage: 'handshake',
-    stages: [
-      { id: 'handshake', label: 'Handshake', icon: '🤝', color: 'border-t-slate-500' },
-      { id: 'power_of_attorney', label: 'Pełnomocnictwo', icon: '📄', color: 'border-t-blue-500' },
-      { id: 'preparation', label: 'Przygotowanie', icon: '📋', color: 'border-t-amber-500' },
-      { id: 'negotiation', label: 'Negocjacje', icon: '💬', color: 'border-t-purple-500' },
-      { id: 'accepted', label: 'Zaakceptowano', icon: '✅', color: 'border-t-green-500' },
-      { id: 'lost', label: 'Przegrano', icon: '✖️', color: 'border-t-gray-400' },
-    ],
-  },
-};
 
 export function SubKanbanView({
   title,
