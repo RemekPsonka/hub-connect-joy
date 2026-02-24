@@ -217,7 +217,11 @@ function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId:
       { cat: '10x' as DealCategory },
     ];
 
-    const match = testMappings.find(m => col.match(m.cat, m.stage || null));
+    // Preferuj mapowanie z aktualna kategoria (aby TOP nie przeskoczyl do HOT)
+    const matchSameCat = testMappings.find(
+      m => m.cat === currentCategory && col.match(m.cat, m.stage || null)
+    );
+    const match = matchSameCat || testMappings.find(m => col.match(m.cat, m.stage || null));
     if (!match) return;
 
     const updates: { id: string; teamId: string; category?: DealCategory; offeringStage?: OfferingStage } = {
