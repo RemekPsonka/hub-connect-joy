@@ -45,51 +45,8 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Anulowane', color: 'bg-muted/50' },
 };
 
-// ─── Workflow Column Configuration ───────────────────────────
-interface WorkflowColumn {
-  id: string;
-  label: string;
-  icon: string;
-  color: string;
-  section: string;
-  match: (category: string | null | undefined, stage: string | null | undefined) => boolean;
-}
-
-const WORKFLOW_COLUMNS: WorkflowColumn[] = [
-  // SPOTKANIA
-  { id: 'meeting_plan', label: 'Umów spotkanie', icon: '📞', color: 'amber', section: 'spotkania',
-    match: (cat, stage) => (cat === 'hot' || cat === 'top') && (!stage || stage === 'meeting_plan') },
-  { id: 'meeting_scheduled', label: 'Spotkanie umówione', icon: '📅', color: 'blue', section: 'spotkania',
-    match: (cat, stage) => (cat === 'hot' || cat === 'top') && stage === 'meeting_scheduled' },
-  { id: 'meeting_done', label: 'Spotkanie odbyte', icon: '✅', color: 'emerald', section: 'spotkania',
-    match: (cat, stage) => (cat === 'hot' || cat === 'top') && stage === 'meeting_done' },
-  // OFERTOWANIE
-  { id: 'handshake', label: 'Handshake', icon: '🤝', color: 'slate', section: 'ofertowanie',
-    match: (cat, stage) => cat === 'offering' && (!stage || stage === 'handshake') },
-  { id: 'power_of_attorney', label: 'Pełnomocnictwo', icon: '📄', color: 'blue', section: 'ofertowanie',
-    match: (cat, stage) => cat === 'offering' && stage === 'power_of_attorney' },
-  { id: 'preparation', label: 'Przygotowanie', icon: '📋', color: 'amber', section: 'ofertowanie',
-    match: (cat, stage) => cat === 'offering' && stage === 'preparation' },
-  { id: 'negotiation', label: 'Negocjacje', icon: '💬', color: 'purple', section: 'ofertowanie',
-    match: (cat, stage) => cat === 'offering' && stage === 'negotiation' },
-  { id: 'accepted', label: 'Zaakceptowano', icon: '🎉', color: 'emerald', section: 'ofertowanie',
-    match: (cat, stage) => cat === 'offering' && stage === 'accepted' },
-  // AUDYT
-  { id: 'audit_plan', label: 'Audyt - planowanie', icon: '🔍', color: 'cyan', section: 'audyt',
-    match: (cat, stage) => cat === 'audit' && (!stage || stage === 'audit_plan') },
-  { id: 'audit_scheduled', label: 'Audyt zaplanowany', icon: '📅', color: 'blue', section: 'audyt',
-    match: (cat, stage) => cat === 'audit' && stage === 'audit_scheduled' },
-  { id: 'audit_done', label: 'Audyt odbyty', icon: '✅', color: 'emerald', section: 'audyt',
-    match: (cat, stage) => cat === 'audit' && stage === 'audit_done' },
-  // ZAMKNIĘCIE
-  { id: 'client', label: 'Klient', icon: '🏆', color: 'emerald', section: 'zamkniecie',
-    match: (cat) => cat === 'client' },
-  { id: 'lost', label: 'Przegrane', icon: '✖️', color: 'gray', section: 'zamkniecie',
-    match: (cat) => cat === 'lost' },
-  // INNE
-  { id: 'other', label: 'Inne', icon: '📁', color: 'slate', section: 'inne',
-    match: (cat) => !cat || cat === 'lead' || cat === 'cold' || cat === '10x' },
-];
+// ─── Workflow Column Configuration (from central config) ────
+import { WORKFLOW_COLUMNS, type WorkflowColumn } from '@/config/pipelineStages';
 
 // ─── Inline Quick-Add ────────────────────────────────────────
 function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
