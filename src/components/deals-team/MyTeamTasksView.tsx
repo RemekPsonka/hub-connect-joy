@@ -2,6 +2,11 @@ import { useMemo, useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { isPast, isToday, format } from 'date-fns';
 import {
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
+  useDroppable, useDraggable,
+  type DragStartEvent, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
   CheckCircle2, User, Building2,
   Plus, Search,
   ChevronDown, ChevronRight, Filter, AlertTriangle, Circle,
@@ -15,7 +20,7 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useMyTeamAssignments, useUpdateAssignment, useCreateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
-import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
+import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DealTeamAssignment } from '@/hooks/useDealsTeamAssignments';
 import {
@@ -47,6 +52,51 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 // ─── Workflow Column Configuration (from central config) ────
 import { WORKFLOW_COLUMNS, type WorkflowColumn } from '@/config/pipelineStages';
+
+// ─── Reverse-mapping: workflow column → (category, offering_stage) ──
+function reverseMapColumn(colId: string, currentCategory: string | null): { category: string; offeringStage?: string } {
+  const meetingStages = ['meeting_plan', 'meeting_scheduled', 'meeting_done'];
+  if (meetingStages.includes(colId)) {
+    // Keep hot/top if already one of them, otherwise default to hot
+    const cat = (currentCategory === 'hot' || currentCategory === 'top') ? currentCategory : 'hot';
+    return { category: cat, offeringStage: colId };
+  }
+  const offeringStages: Record<string, string> = {
+    handshake: 'handshake', power_of_attorney: 'power_of_attorney',
+    preparation: 'preparation', negotiation: 'negotiation',
+    accepted: 'accepted', offering_lost: 'lost',
+  };
+  if (offeringStages[colId]) return { category: 'offering', offeringStage: offeringStages[colId] };
+  const auditStages = ['audit_plan', 'audit_scheduled', 'audit_done'];
+  if (auditStages.includes(colId)) return { category: 'audit', offeringStage: colId };
+  if (colId === 'client') return { category: 'client' };
+  if (colId === 'lost') return { category: 'lost' };
+  return { category: 'lead' };
+}
+
+// ─── DnD Wrappers ────────────────────────────────────────────
+function DroppableWorkflowColumn({ colId, children, className }: { colId: string; children: React.ReactNode; className?: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: colId });
+  return (
+    <div ref={setNodeRef} className={cn(className, isOver && 'ring-2 ring-primary/50 bg-primary/5')}>
+      {children}
+    </div>
+  );
+}
+
+function DraggableWorkflowCard({ taskId, children }: { taskId: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: taskId });
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.4 : undefined,
+    cursor: 'grab',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+}
 
 // ─── Inline Quick-Add ────────────────────────────────────────
 function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
@@ -116,6 +166,11 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: members = [] } = useTeamMembers(teamId);
   const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
+  const updateTeamContact = useUpdateTeamContact();
+
+  // DnD sensors & state
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const [activeDragTask, setActiveDragTask] = useState<DealTeamAssignment | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [filterMember, setFilterMember] = useState<string>('mine');
@@ -170,6 +225,41 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     }
     return result;
   }, [assignments, filterMember, filterStatus, filterPriority, searchQuery, director?.id]);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const task = filtered.find(t => t.id === event.active.id);
+    setActiveDragTask(task || null);
+  }, [filtered]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveDragTask(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const taskId = active.id as string;
+    const colId = over.id as string;
+    const task = filtered.find(t => t.id === taskId);
+    if (!task || !task.deal_team_contact_id) return;
+
+    const targetCol = WORKFLOW_COLUMNS.find(c => c.id === colId);
+    if (!targetCol) return;
+    if (targetCol.match(task.contact_category ?? null, task.contact_offering_stage ?? null)) return;
+
+    const { category, offeringStage } = reverseMapColumn(colId, task.contact_category ?? null);
+
+    updateTeamContact.mutate({
+      id: task.deal_team_contact_id,
+      teamId,
+      category: category as any,
+      offeringStage: offeringStage as any,
+    });
+
+    updateAssignment.mutate({
+      id: taskId,
+      teamContactId: task.deal_team_contact_id,
+      title: targetCol.label,
+    });
+  }, [filtered, teamId, updateTeamContact, updateAssignment]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { contactName: string; company: string | null; teamContactId: string; tasks: DealTeamAssignment[] }>();
@@ -451,80 +541,97 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
       {/* ─── VIEW: Workflow Kanban ─────────────────────── */}
       {filtered.length > 0 && viewMode === 'kanban' && (
-        <div className="overflow-x-auto -mx-4 px-4 pb-4">
-          <div className="flex gap-3 min-w-max">
-            {WORKFLOW_COLUMNS.map((col) => {
-              const tasks = workflowKanban.get(col.id) || [];
-              const colorMap: Record<string, string> = {
-                red: 'border-t-red-500', amber: 'border-t-amber-500', blue: 'border-t-blue-500',
-                purple: 'border-t-purple-500', slate: 'border-t-slate-400', emerald: 'border-t-emerald-500',
-                cyan: 'border-t-cyan-500', gray: 'border-t-gray-400',
-              };
-              return (
-                <div
-                  key={col.id}
-                  className={cn(
-                    'w-[220px] shrink-0 bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-300px)]',
-                    colorMap[col.color] || 'border-t-primary'
-                  )}
-                >
-                  {/* Header */}
-                  <div className="p-2.5 border-b bg-muted/50">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-base">{col.icon}</span>
-                      <h3 className="font-semibold text-xs truncate">{col.label}</h3>
-                      <Badge variant="secondary" className="text-[10px] ml-auto">{tasks.length}</Badge>
-                    </div>
-                  </div>
-                  {/* Cards */}
-                  <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
-                    {tasks.length === 0 && (
-                      <p className="text-[11px] text-muted-foreground text-center py-8">Brak zadań</p>
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="overflow-x-auto -mx-4 px-4 pb-4">
+            <div className="flex gap-3 min-w-max">
+              {WORKFLOW_COLUMNS.map((col) => {
+                const tasks = workflowKanban.get(col.id) || [];
+                const colorMap: Record<string, string> = {
+                  red: 'border-t-red-500', amber: 'border-t-amber-500', blue: 'border-t-blue-500',
+                  purple: 'border-t-purple-500', slate: 'border-t-slate-400', emerald: 'border-t-emerald-500',
+                  cyan: 'border-t-cyan-500', gray: 'border-t-gray-400',
+                };
+                return (
+                  <DroppableWorkflowColumn
+                    key={col.id}
+                    colId={col.id}
+                    className={cn(
+                      'w-[220px] shrink-0 bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-300px)] transition-all',
+                      colorMap[col.color] || 'border-t-primary'
                     )}
-                    {tasks.map((task: DealTeamAssignment) => (
-                      <Card
-                        key={task.id}
-                        className="p-2 cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => handleOpenDetail(task)}
-                      >
-                        <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{task.title}</p>
-                        {task.contact_name && (
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
-                            <User className="h-2.5 w-2.5 shrink-0" />
-                            <span className="truncate">{task.contact_name}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {task.priority && task.priority !== 'medium' && (
-                            <Badge variant="outline" className={cn("text-[9px] px-1 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
-                              {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
-                            </Badge>
-                          )}
-                          {task.due_date && (
-                            <span className={cn(
-                              "text-[10px]",
-                              isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed'
-                                ? 'text-destructive font-medium' : 'text-muted-foreground'
-                            )}>
-                              {format(new Date(task.due_date), 'dd.MM')}
-                            </span>
-                          )}
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-4 px-1 text-[9px] ml-auto"
-                            onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, task.status === 'todo' ? 'in_progress' : 'completed'); }}
+                  >
+                    {/* Header */}
+                    <div className="p-2.5 border-b bg-muted/50">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{col.icon}</span>
+                        <h3 className="font-semibold text-xs truncate">{col.label}</h3>
+                        <Badge variant="secondary" className="text-[10px] ml-auto">{tasks.length}</Badge>
+                      </div>
+                    </div>
+                    {/* Cards */}
+                    <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+                      {tasks.length === 0 && (
+                        <p className="text-[11px] text-muted-foreground text-center py-8">Brak zadań</p>
+                      )}
+                      {tasks.map((task: DealTeamAssignment) => (
+                        <DraggableWorkflowCard key={task.id} taskId={task.id}>
+                          <Card
+                            className="p-2 cursor-grab hover:shadow-md transition-shadow"
+                            onClick={() => handleOpenDetail(task)}
                           >
-                            {task.status === 'todo' ? '→' : '✓'}
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                            <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{task.title}</p>
+                            {task.contact_name && (
+                              <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
+                                <User className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{task.contact_name}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {task.priority && task.priority !== 'medium' && (
+                                <Badge variant="outline" className={cn("text-[9px] px-1 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
+                                  {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
+                                </Badge>
+                              )}
+                              {task.due_date && (
+                                <span className={cn(
+                                  "text-[10px]",
+                                  isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed'
+                                    ? 'text-destructive font-medium' : 'text-muted-foreground'
+                                )}>
+                                  {format(new Date(task.due_date), 'dd.MM')}
+                                </span>
+                              )}
+                              <Button
+                                size="sm" variant="ghost"
+                                className="h-4 px-1 text-[9px] ml-auto"
+                                onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, task.status === 'todo' ? 'in_progress' : 'completed'); }}
+                              >
+                                {task.status === 'todo' ? '→' : '✓'}
+                              </Button>
+                            </div>
+                          </Card>
+                        </DraggableWorkflowCard>
+                      ))}
+                    </div>
+                  </DroppableWorkflowColumn>
+                );
+              })}
+            </div>
           </div>
-        </div>
+          <DragOverlay>
+            {activeDragTask && (
+              <Card className="p-2 w-[220px] shadow-lg rotate-2 opacity-90">
+                <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{activeDragTask.title}</p>
+                {activeDragTask.contact_name && (
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <User className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{activeDragTask.contact_name}</span>
+                  </div>
+                )}
+              </Card>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* ─── VIEW: Team ───────────────────────────────── */}
