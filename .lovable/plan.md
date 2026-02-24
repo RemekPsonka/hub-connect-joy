@@ -1,80 +1,109 @@
 
 
-# Konfigurator przeplyvu na jednym ekranie
+# Logiczny układ konfiguratora przepływu
 
 ## Problem
-Obecny konfigurator rozdziela 3 kanbany na osobne zakladki -- nie mozna laczyc etapow miedzy nimi. Uzytkownik chce widziec wszystkie etapy na jednym canvas React Flow i moc definiowac polaczenia miedzy dowolnymi etapami (w tym cross-kanban).
+Obecny konfigurator używa algorytmu dagre do rozmieszczania etapów. Bez zdefiniowanych połączeń dagre nie wie jak ułożyć nody -- wynik jest chaotyczny i nieczytelny. Etapy z różnych kanbanów mieszają się ze sobą.
 
-## Rozwiazanie
+## Rozwiązanie
+Zastąpienie dagre prostym, deterministycznym układem siatkowym (grid), który zawsze wygląda logicznie niezależnie od tego czy są połączenia czy nie.
 
-Przebudowa `PipelineConfigurator.tsx` tak, aby na jednym ekranie React Flow wyswietlaly sie WSZYSTKIE etapy ze wszystkich 3 kanbanow, pogrupowane wizualnie w sekcje (z etykietami grup). Istniejace polaczenia (transitions) z bazy beda wczytywane i wyswietlane na starcie.
-
-### Uklad wizualny na canvas
+### Układ wizualny
 
 ```text
-+---------------------------+     +---------------------------+     +---------------------------+
-| LEJEK GLOWNY              |     | SUB-KANBANY               |     | KANBAN ZADAN              |
-|                           |     |                           |     |                           |
-| [HOT] [TOP] [OFFERING]   |     | hot:                      |     | [Zaplanowac spotkanie]    |
-| [AUDIT] [LEAD] [10X]     |     |   [plan] [scheduled] [done]|    | [Spotkanie umowione]      |
-| [COLD] [KLIENT] [PRZEG.] |     | offering:                 |     | [Handshake] [Pelnom.]     |
-|                           |     |   [handshake] [pelnom] ...|     | [Przygotowanie] ...       |
-+---------------------------+     +---------------------------+     +---------------------------+
+LEJEK GŁÓWNY          SUB-KANBANY                    WORKFLOW ZADAŃ
+(kolumna 1)           (kolumna 2)                    (kolumna 3)
+
+🔥 HOT LEAD           --- HOT/TOP ---                --- Spotkania ---
+⭐ TOP LEAD            📋 Zaplanować spotkanie        📞 Zaplanować spotkanie
+📝 OFERTOWANIE         📅 Spotkanie umówione          📅 Spotkanie umówione
+📋 AUDYT               ✅ Spotkanie odbyte             ✅ Spotkanie odbyte
+📋 LEAD                                               
+🚀 10X                 --- OFERTOWANIE ---             --- Ofertowanie ---
+❄️ COLD LEAD           🤝 Handshake                   🤝 Handshake
+✅ KLIENT              📄 Pełnomocnictwo              📄 Pełnomocnictwo
+✖️ PRZEGRANE           📋 Przygotowanie               📋 Przygotowanie
+                       💬 Negocjacje                  💬 Negocjacje
+                       ✅ Zaakceptowano                🎉 Zaakceptowano
+                       ✖️ Przegrano                   ✖️ Przegrano
+
+                       --- AUDYT ---                   --- Audyt ---
+                       📋 Do zaplanowania              🔍 Do zaplanowania
+                       📅 Zaplanowany                  📅 Zaplanowany
+                       ✅ Odbyty                       ✅ Odbyty
+
+                                                      --- Zamknięcie ---
+                                                      🏆 Klient
+                                                      ✖️ Przegrane
+
+                                                      --- Inne ---
+                                                      📁 Inne
 ```
 
-Nody beda rozmieszczone automatycznie przez dagre z `rankdir: 'TB'` (top-bottom) wewnatrz kazdej grupy, a grupy ulozone obok siebie (offsetX per kanban_type).
-
-### Zmiany w StageNode
-
-Dodanie informacji o typie kanbana (np. mala etykieta "main" / "sub:hot" / "workflow") i kolorowe tlo grup, zeby wizualnie rozrozniac sekcje.
-
-### Zmiany w onConnect
-
-Przy tworzeniu polaczenia miedzy nodami z roznych kanban_type -- `kanban_type` w transition zostanie ustawiony na `'cross'` lub na typ zrodlowego noda. Upsert transition bedzie dzialal jak dotychczas (klucz unikalny to `team_id, from_stage_id, to_stage_id`).
-
-### Wczytywanie istniejacych polaczen
-
-Obecnie transitions sa filtrowane po `kanban_type === tab` -- to filtrowanie zostanie usuniete. Wszystkie transitions dla teamId beda wyswietlane jako edge'e na canvas.
+Każda kolumna ma nagłówek (nieklikalna etykieta). Sub-kanbany mają podgrupowe nagłówki (np. "HOT/TOP", "OFERTOWANIE", "AUDYT"). Etapy ułożone pionowo w stałych odstępach -- czytelne i przewidywalne.
 
 ## Plan techniczny
 
 ### Plik: `src/components/deals-team/PipelineConfigurator.tsx`
 
-1. **Usunac zakladki (Tabs)** -- zamiast przelaczania miedzy main/sub/workflow, wszystko na jednym canvas
-2. **Usunac filtrowanie `filteredStages`** -- uzywac `allStages` bezposrednio
-3. **Usunac filtrowanie `filteredTransitions`** -- uzywac `allTransitions` bezposrednio
-4. **Zmodyfikowac budowanie nodow** -- dodac grupowanie wizualne:
-   - Etapy `main` -- offset X=0, uklad pionowy
-   - Etapy `sub` pogrupowane wg `parent_stage_key` -- offset X=400, kazda grupa pod soba
-   - Etapy `workflow` -- offset X=800, uklad pionowy
-   - Dodac "group label" nody (nieklikalne) jako naglowki sekcji
-5. **Zmodyfikowac `onConnect`** -- wyznaczac `kanban_type` z noda zrodlowego (lub 'cross' jesli rozne typy)
-6. **Zmodyfikowac `onNodeClick`** -- szukac w `allStages` zamiast `filteredStages`
-7. **Zmodyfikowac `handleAddStage`** -- dodac dropdown lub domyslnie dodawac do 'main'
-8. **Zachowac Select do sub-parent** przy dodawaniu nowych etapow sub-kanban
+1. **Usunięcie dagre** -- zastąpienie funkcji `layoutGroup` prostym algorytmem pozycjonowania:
+   - Kolumna Main: x=0, etapy co 100px w pionie
+   - Kolumna Sub: x=350, etapy pogrupowane wg parent_stage_key, z nagłówkami grup, co 90px
+   - Kolumna Workflow: x=700, etapy pogrupowane wg section, z nagłówkami, co 90px
+
+2. **Nagłówki grup** -- dodanie "label nodes" (type: 'group-label') -- prostokąty z tytułem sekcji, bez handles, niereagujące na kliknięcia. Każda z 3 kolumn ma nagłówek główny, sub i workflow mają też nagłówki podgrup.
+
+3. **Handles** -- zmiana pozycji: Handle source na dole (Position.Bottom), target na górze (Position.Top) w pionie, ALBO pozostawienie Left/Right dla połączeń cross-kanban. Najlepiej: handles na wszystkich 4 stronach żeby połączenia wyglądały dobrze niezależnie od kierunku.
+
+4. **fitView** -- zachowanie, żeby canvas automatycznie skalował się do widoku.
 
 ### Plik: `src/components/deals-team/StageNode.tsx`
 
-Dodac wyswietlanie typu kanbana jako mala etykieta pod nazwa (np. "main", "sub: offering", "workflow") zeby wizualnie rozrozniac etapy na jednym canvas.
+Dodanie handles na wszystkich 4 pozycjach (Top, Bottom, Left, Right) żeby połączenia między kolumnami wyglądały naturalnie.
 
-### Plik: `src/hooks/usePipelineConfig.ts`
-
-Bez zmian -- hook juz pobiera wszystkie etapy i transitions gdy nie podano kanbanType.
-
-### Logika layoutu
-
-Zamiast jednego wywolania `getLayoutedElements` na wszystkich nodach (co pomieszaloby grupy), zastosowac layout per grupa z offsetem:
+### Logika pozycjonowania (pseudokod)
 
 ```text
-function layoutAllStages(allStages, allTransitions) {
-  // Grupa 1: main stages -> dagre layout, offsetX = 0
-  // Grupa 2: sub stages per parent -> dagre layout, offsetX = 500
-  // Grupa 3: workflow stages -> dagre layout, offsetX = 1000
-  // Polacz wszystkie nody i edge'e w jeden zestaw
-}
+function buildNodes(allStages, selectedId):
+  nodes = []
+  
+  // Kolumna 1: Main (x=0)
+  nodes.push(labelNode("LEJEK GŁÓWNY", 0, 0))
+  mainStages = allStages.filter(main).sortBy(position)
+  mainStages.forEach((s, i) => nodes.push(stageNode(s, 0, 50 + i * 100)))
+  
+  // Kolumna 2: Sub (x=350)  
+  nodes.push(labelNode("SUB-KANBANY", 350, 0))
+  subGroups = groupBy(allStages.filter(sub), parent_stage_key)
+  offsetY = 50
+  subGroups.forEach((parentKey, stages) => {
+    nodes.push(labelNode(parentKey.toUpperCase(), 350, offsetY))
+    offsetY += 35
+    stages.forEach((s, i) => {
+      nodes.push(stageNode(s, 350, offsetY))
+      offsetY += 90
+    })
+    offsetY += 20  // gap between groups
+  })
+  
+  // Kolumna 3: Workflow (x=700)
+  nodes.push(labelNode("WORKFLOW ZADAŃ", 700, 0))
+  workGroups = groupBy(allStages.filter(workflow), section)
+  offsetY = 50
+  workGroups.forEach((section, stages) => {
+    nodes.push(labelNode(section, 700, offsetY))
+    offsetY += 35
+    stages.forEach((s, i) => {
+      nodes.push(stageNode(s, 700, offsetY))
+      offsetY += 90
+    })
+    offsetY += 20
+  })
+  
+  return nodes
 ```
 
 ### Modyfikowane pliki
-- `src/components/deals-team/PipelineConfigurator.tsx` -- glowna przebudowa
-- `src/components/deals-team/StageNode.tsx` -- dodanie etykiety typu kanbana
+- `src/components/deals-team/PipelineConfigurator.tsx` -- nowa logika pozycjonowania, usunięcie dagre
+- `src/components/deals-team/StageNode.tsx` -- handles na 4 pozycjach
 
