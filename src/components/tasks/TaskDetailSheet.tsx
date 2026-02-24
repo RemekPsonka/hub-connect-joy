@@ -154,7 +154,7 @@ import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
 
-function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId: string; teamId: string }) {
+function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: { teamContactId: string; teamId: string; onTitleChange?: (title: string) => void }) {
   const { data } = useQuery({
     queryKey: ['deal-team-contact-stage', teamContactId],
     queryFn: async () => {
@@ -188,6 +188,8 @@ function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId:
   const handleStageChange = (newStage: OfferingStage) => {
     if (newStage === currentStage) return;
     updateContact.mutate({ id: teamContactId, teamId, offeringStage: newStage });
+    const stageLabel = subConfig?.stages.find(s => s.id === newStage)?.label;
+    if (stageLabel) onTitleChange?.(stageLabel);
   };
 
   const handleWorkflowChange = (col: typeof WORKFLOW_COLUMNS[number]) => {
@@ -239,6 +241,7 @@ function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId:
     }
 
     updateContact.mutate(updates);
+    onTitleChange?.(col.label);
   };
 
   if (!data) return null;
@@ -650,7 +653,10 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
             {/* Pipeline stage info */}
             {isPipelineTask && (
-              <InteractivePipelineStageRow teamContactId={pipelineTeamContactId} teamId={pipelineTeamId} />
+              <InteractivePipelineStageRow teamContactId={pipelineTeamContactId} teamId={pipelineTeamId} onTitleChange={async (newTitle) => {
+                setTitleValue(newTitle);
+                await updateTask.mutateAsync({ id: task.id, title: newTitle });
+              }} />
             )}
 
             {/* Due date */}
