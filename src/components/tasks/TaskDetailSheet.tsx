@@ -150,7 +150,7 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 
 // ─── Pipeline stage row (interactive dropdowns) ────────────
 
-import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS } from '@/config/pipelineStages';
+import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
 
@@ -177,6 +177,9 @@ function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId:
   const catOption = CATEGORY_OPTIONS.find(c => c.value === currentCategory) || CATEGORY_OPTIONS[4];
   const subConfig = SUB_KANBAN_CONFIGS[currentCategory];
 
+  // Find current workflow column
+  const currentWorkflowCol = WORKFLOW_COLUMNS.find(col => col.match(currentCategory, currentStage));
+
   const handleCategoryChange = (newCat: DealCategory) => {
     if (newCat === currentCategory) return;
     updateContact.mutate({ id: teamContactId, teamId, category: newCat });
@@ -187,63 +190,150 @@ function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId:
     updateContact.mutate({ id: teamContactId, teamId, offeringStage: newStage });
   };
 
+  const handleWorkflowChange = (col: typeof WORKFLOW_COLUMNS[number]) => {
+    if (col.id === currentWorkflowCol?.id) return;
+    // Reverse-map: determine category and stage from the workflow column
+    // Check which category this column belongs to by testing match
+    const testMappings: { cat: DealCategory; stage?: OfferingStage }[] = [
+      { cat: 'hot', stage: 'meeting_plan' as OfferingStage },
+      { cat: 'hot', stage: 'meeting_scheduled' as OfferingStage },
+      { cat: 'hot', stage: 'meeting_done' as OfferingStage },
+      { cat: 'top', stage: 'meeting_plan' as OfferingStage },
+      { cat: 'top', stage: 'meeting_scheduled' as OfferingStage },
+      { cat: 'top', stage: 'meeting_done' as OfferingStage },
+      { cat: 'offering', stage: 'handshake' as OfferingStage },
+      { cat: 'offering', stage: 'power_of_attorney' as OfferingStage },
+      { cat: 'offering', stage: 'preparation' as OfferingStage },
+      { cat: 'offering', stage: 'negotiation' as OfferingStage },
+      { cat: 'offering', stage: 'accepted' as OfferingStage },
+      { cat: 'offering', stage: 'lost' as OfferingStage },
+      { cat: 'audit', stage: 'audit_plan' as OfferingStage },
+      { cat: 'audit', stage: 'audit_scheduled' as OfferingStage },
+      { cat: 'audit', stage: 'audit_done' as OfferingStage },
+      { cat: 'client' },
+      { cat: 'lost' },
+      { cat: 'lead' },
+      { cat: 'cold' },
+      { cat: '10x' as DealCategory },
+    ];
+
+    const match = testMappings.find(m => col.match(m.cat, m.stage || null));
+    if (!match) return;
+
+    const updates: { id: string; teamId: string; category?: DealCategory; offeringStage?: OfferingStage } = {
+      id: teamContactId,
+      teamId,
+    };
+
+    // If category changes, set it (offering_stage auto-resets via hook logic)
+    if (match.cat !== currentCategory) {
+      updates.category = match.cat;
+    }
+    // If stage specified and differs, set it
+    if (match.stage) {
+      updates.offeringStage = match.stage;
+    }
+
+    updateContact.mutate(updates);
+  };
+
   if (!data) return null;
 
-  return (
-    <MetaRow label="Etap lejka">
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Category dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:opacity-80',
-              catOption.color
-            )}>
-              <span>{catOption.icon}</span>
-              <span>{catOption.label}</span>
-              <ChevronDown className="h-3 w-3 opacity-60" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[180px]">
-            {CATEGORY_OPTIONS.map(opt => (
-              <DropdownMenuItem
-                key={opt.value}
-                onClick={() => handleCategoryChange(opt.value)}
-                className={cn('gap-2', opt.value === currentCategory && 'bg-accent')}
-              >
-                <span>{opt.icon}</span>
-                <span>{opt.label}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+  // Group workflow columns by section for dropdown
+  const workflowSections = WORKFLOW_COLUMNS.reduce((acc, col) => {
+    if (!acc[col.section]) acc[col.section] = [];
+    acc[col.section].push(col);
+    return acc;
+  }, {} as Record<string, typeof WORKFLOW_COLUMNS>);
 
-        {/* Sub-stage dropdown (conditional) */}
-        {subConfig && (
+  return (
+    <>
+      <MetaRow label="Etap lejka">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Category dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-muted hover:bg-muted/80 transition-colors">
-                <span>{subConfig.stages.find(s => s.id === currentStage)?.icon || subConfig.stages[0].icon}</span>
-                <span>{subConfig.stages.find(s => s.id === currentStage)?.label || subConfig.stages[0].label}</span>
+              <button className={cn(
+                'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:opacity-80',
+                catOption.color
+              )}>
+                <span>{catOption.icon}</span>
+                <span>{catOption.label}</span>
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[200px]">
-              {subConfig.stages.map(stage => (
+            <DropdownMenuContent align="start" className="min-w-[180px]">
+              {CATEGORY_OPTIONS.map(opt => (
                 <DropdownMenuItem
-                  key={stage.id}
-                  onClick={() => handleStageChange(stage.id)}
-                  className={cn('gap-2', stage.id === currentStage && 'bg-accent')}
+                  key={opt.value}
+                  onClick={() => handleCategoryChange(opt.value)}
+                  className={cn('gap-2', opt.value === currentCategory && 'bg-accent')}
                 >
-                  <span>{stage.icon}</span>
-                  <span>{stage.label}</span>
+                  <span>{opt.icon}</span>
+                  <span>{opt.label}</span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
-      </div>
-    </MetaRow>
+
+          {/* Sub-stage dropdown (conditional) */}
+          {subConfig && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-muted hover:bg-muted/80 transition-colors">
+                  <span>{subConfig.stages.find(s => s.id === currentStage)?.icon || subConfig.stages[0].icon}</span>
+                  <span>{subConfig.stages.find(s => s.id === currentStage)?.label || subConfig.stages[0].label}</span>
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[200px]">
+                {subConfig.stages.map(stage => (
+                  <DropdownMenuItem
+                    key={stage.id}
+                    onClick={() => handleStageChange(stage.id)}
+                    className={cn('gap-2', stage.id === currentStage && 'bg-accent')}
+                  >
+                    <span>{stage.icon}</span>
+                    <span>{stage.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </MetaRow>
+
+      {/* Workflow stage row (task kanban column) */}
+      <MetaRow label="Etap zadania">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-muted hover:bg-muted/80 transition-colors">
+              <span>{currentWorkflowCol?.icon || '📁'}</span>
+              <span>{currentWorkflowCol?.label || 'Inne'}</span>
+              <span className="text-muted-foreground ml-0.5">({currentWorkflowCol?.section || 'inne'})</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[240px] max-h-[360px] overflow-y-auto">
+            {Object.entries(workflowSections).map(([section, cols]) => (
+              <div key={section}>
+                <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{section}</div>
+                {cols.map(col => (
+                  <DropdownMenuItem
+                    key={col.id}
+                    onClick={() => handleWorkflowChange(col)}
+                    className={cn('gap-2', col.id === currentWorkflowCol?.id && 'bg-accent')}
+                  >
+                    <span>{col.icon}</span>
+                    <span>{col.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </MetaRow>
+    </>
   );
 }
 
