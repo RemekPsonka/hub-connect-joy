@@ -1,57 +1,43 @@
 
-# Dodanie mozliwosci zmiany osoby odpowiedzialnej za zadanie
 
-## Opis
-Wiersz "Osoba odpowiedzialna" w panelu bocznym zadania (TaskDetailSheet) jest obecnie statyczny -- wyswietla imie, ale nie pozwala na zmiane. Plan zamienia go na interaktywny dropdown, pozwalajacy wybrac dowolnego czlonka zespolu na kazdym etapie.
+# Przebudowa kolejnosci sekcji w panelu bocznym zadania
+
+## Obecna kolejnosc (po bloku metadanych)
+1. Etykiety
+2. Dodatkowe pola
+3. Zaleznosci
+4. Powiazane kontakty
+5. Subtaski
+6. Opis
+7. Zalaczniki
+8. Sledzenie czasu
+9. Spotkania GCal
+10. Historia zmian
+11. Komentarze
+
+## Nowa kolejnosc (zgodnie z referencja)
+1. **Opis** (przeniesiony w gore)
+2. **Historia zmian** (przeniesiona w gore)
+3. **Komentarze** (przeniesione w gore)
+4. Etykiety
+5. Dodatkowe pola
+6. Zaleznosci
+7. Powiazane kontakty
+8. Subtaski
+9. Zalaczniki
+10. Sledzenie czasu
+11. Spotkania GCal
 
 ## Plan techniczny
 
 ### Plik: `src/components/tasks/TaskDetailSheet.tsx`
 
-1. **Import `useTeamMembers`** z `@/hooks/useDealsTeamMembers` oraz `useDirectors` z `@/hooks/useDirectors` (fallback dla zadan nie-lejkowych).
+Przeorganizowanie sekcji w renderze (linie 856-1045). Blok metadanych (linia 692-856) pozostaje bez zmian. Po nim:
 
-2. **Pobranie listy czlonkow** -- w komponencie `TaskDetailSheetContent`:
-   - Dla zadan lejkowych (`isPipelineTask`): `useTeamMembers(pipelineTeamId)`
-   - Dla pozostalych zadan: `useDirectors()` (wszyscy dyrektorzy w tenancie)
+1. Przeniesienie sekcji "Opis" (linie 1005-1029) zaraz po zamknieciu `</div>` metadanych (linia 856)
+2. Przeniesienie "Activity Log" (linia 1041) po opisie
+3. Przeniesienie "Comments" (linie 1043-1045) po historii
+4. Nastepnie pozostale sekcje w dotychczasowej kolejnosci (Labels, Custom Fields, Dependencies, Related contacts, Subtasks, Attachments, Time Tracker, Linked meetings)
 
-3. **Zamiana statycznego wiersza "Osoba odpowiedzialna"** (linie 628-636) na interaktywny `DropdownMenu`:
-   - Trigger: przycisk z ikonka User + imie aktualnie przypisanej osoby + ChevronDown
-   - Content: lista czlonkow zespolu (lub directorow) z opcja "Nieprzypisane"
-   - Styl: identyczny jak istniejace dropdowny (Priorytet, Status) -- `hover:bg-muted/50 rounded px-1.5 py-0.5`
+Zadna logika ani stanu nie ulega zmianie -- to czysto przeorganizowanie kolejnosci renderowania sekcji JSX.
 
-4. **Obsluga zmiany** -- `handleAssigneeChange(directorId: string | null)`:
-   - Wywolanie `updateTask.mutateAsync({ id: task.id, assigned_to: directorId })`
-   - Natychmiastowa aktualizacja UI
-
-5. **Widocznosc wiersza** -- wiersz jest zawsze widoczny (nie tylko gdy `owner || assignee`), aby mozna bylo przypisac osobe do zadan, ktore jeszcze nie maja opiekuna.
-
-### Przyklad kodu nowego wiersza:
-
-```text
-<MetaRow label="Osoba odpowiedzialna">
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <button className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-1.5 py-0.5 -ml-1.5 transition-colors">
-        <User className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>{assignee?.full_name || owner?.full_name || 'Nieprzypisane'}</span>
-        <ChevronDown className="h-3 w-3 opacity-60" />
-      </button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="min-w-[200px]">
-      <DropdownMenuItem onClick={() => handleAssigneeChange(null)}>
-        <User className="h-3.5 w-3.5 mr-2 opacity-50" />
-        Nieprzypisane
-      </DropdownMenuItem>
-      {availableMembers.map(m => (
-        <DropdownMenuItem key={m.id} onClick={() => handleAssigneeChange(m.id)}>
-          <User className="h-3.5 w-3.5 mr-2" />
-          {m.full_name}
-        </DropdownMenuItem>
-      ))}
-    </DropdownMenuContent>
-  </DropdownMenu>
-</MetaRow>
-```
-
-### Modyfikowane pliki
-- `src/components/tasks/TaskDetailSheet.tsx` -- jedyny plik do zmiany
