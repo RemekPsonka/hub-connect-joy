@@ -36,7 +36,8 @@ export const StageNode = memo(function StageNode({ data, selected }: NodeProps) 
         d.isDefault && 'ring-1 ring-green-500/50'
       )}
     >
-      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-primary" />
+      <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-primary" id="top" />
+      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-primary" id="left" />
       <div className="flex items-center gap-2 justify-center">
         <span className="text-lg">{d.icon}</span>
         <span className="text-sm font-medium">{d.label}</span>
@@ -47,7 +48,23 @@ export const StageNode = memo(function StageNode({ data, selected }: NodeProps) 
       {d.isDefault && (
         <span className="text-[10px] text-green-600 dark:text-green-400 block">domyślny</span>
       )}
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-primary" />
+      <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-primary" id="bottom" />
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-primary" id="right" />
+    </div>
+  );
+});
+
+/** Non-interactive label node for group headers */
+export const GroupLabelNode = memo(function GroupLabelNode({ data }: NodeProps) {
+  const d = data as { label: string; isMain?: boolean };
+  return (
+    <div className={cn(
+      'px-3 py-1 rounded font-semibold select-none pointer-events-none',
+      d.isMain
+        ? 'text-sm text-foreground bg-muted/60 border border-border'
+        : 'text-xs text-muted-foreground'
+    )}>
+      {d.label as string}
     </div>
   );
 });
