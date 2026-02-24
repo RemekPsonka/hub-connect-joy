@@ -12,7 +12,6 @@ import {
   MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import dagre from 'dagre';
 import { Plus, RotateCcw, Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -28,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { toast } from 'sonner';
 import {
   usePipelineStages,
   usePipelineTransitions,
@@ -39,10 +37,10 @@ import {
   useSeedPipelineStages,
   type PipelineStage,
 } from '@/hooks/usePipelineConfig';
-import { StageNode, type StageNodeData } from './StageNode';
+import { StageNode, GroupLabelNode, type StageNodeData } from './StageNode';
 import { StageEditPanel } from './StageEditPanel';
 
-const nodeTypes = { stage: StageNode };
+const nodeTypes = { stage: StageNode, 'group-label': GroupLabelNode };
 
 interface PipelineConfiguratorProps {
   teamId: string;
@@ -51,50 +49,139 @@ interface PipelineConfiguratorProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// ─── Per-group dagre layout with offset ──────────────────────
+// ─── Deterministic grid layout ──────────────────────────────
 
-function layoutGroup(
-  stages: PipelineStage[],
-  edges: Edge[],
-  offsetX: number,
-  offsetY: number,
+const COL_MAIN = 0;
+const COL_SUB = 350;
+const COL_WORK = 700;
+const ROW_HEIGHT = 90;
+const GROUP_GAP = 25;
+const HEADER_HEIGHT = 35;
+
+function buildGridNodes(
+  allStages: PipelineStage[],
   selectedId: string | undefined,
-): { nodes: Node[]; edges: Edge[] } {
-  if (!stages.length) return { nodes: [], edges };
+): Node[] {
+  const nodes: Node[] = [];
 
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 60 });
+  // ── Column 1: Main pipeline ──
+  const mainStages = allStages
+    .filter(s => s.kanban_type === 'main')
+    .sort((a, b) => a.position - b.position);
 
-  const stageIds = new Set(stages.map(s => s.id));
-  const groupEdges = edges.filter(e => stageIds.has(e.source) && stageIds.has(e.target));
-
-  stages.forEach(s => g.setNode(s.id, { width: 180, height: 70 }));
-  groupEdges.forEach(e => g.setEdge(e.source, e.target));
-
-  dagre.layout(g);
-
-  const nodes: Node[] = stages.map(s => {
-    const pos = g.node(s.id);
-    return {
-      id: s.id,
-      type: 'stage',
-      position: { x: pos.x - 90 + offsetX, y: pos.y - 35 + offsetY },
-      data: {
-        label: s.label,
-        icon: s.icon,
-        color: s.color,
-        stageKey: s.stage_key,
-        isDefault: s.is_default,
-        isSelected: selectedId === s.id,
-        kanbanType: s.kanban_type,
-        parentStageKey: s.parent_stage_key,
-      } satisfies StageNodeData,
-    };
+  nodes.push({
+    id: 'label-main',
+    type: 'group-label',
+    position: { x: COL_MAIN, y: 0 },
+    data: { label: 'LEJEK GŁÓWNY', isMain: true },
+    selectable: false,
+    draggable: false,
   });
 
-  return { nodes, edges: groupEdges };
+  mainStages.forEach((s, i) => {
+    nodes.push(makeStageNode(s, COL_MAIN, 50 + i * ROW_HEIGHT, selectedId));
+  });
+
+  // ── Column 2: Sub-kanbany ──
+  const subStages = allStages
+    .filter(s => s.kanban_type === 'sub')
+    .sort((a, b) => a.position - b.position);
+
+  const subByParent = new Map<string, PipelineStage[]>();
+  subStages.forEach(s => {
+    const key = s.parent_stage_key || '_none';
+    if (!subByParent.has(key)) subByParent.set(key, []);
+    subByParent.get(key)!.push(s);
+  });
+
+  nodes.push({
+    id: 'label-sub',
+    type: 'group-label',
+    position: { x: COL_SUB, y: 0 },
+    data: { label: 'SUB-KANBANY', isMain: true },
+    selectable: false,
+    draggable: false,
+  });
+
+  let subY = 50;
+  subByParent.forEach((stages, parentKey) => {
+    nodes.push({
+      id: `label-sub-${parentKey}`,
+      type: 'group-label',
+      position: { x: COL_SUB, y: subY },
+      data: { label: `── ${parentKey.toUpperCase()} ──` },
+      selectable: false,
+      draggable: false,
+    });
+    subY += HEADER_HEIGHT;
+    stages.forEach(s => {
+      nodes.push(makeStageNode(s, COL_SUB, subY, selectedId));
+      subY += ROW_HEIGHT;
+    });
+    subY += GROUP_GAP;
+  });
+
+  // ── Column 3: Workflow ──
+  const workStages = allStages
+    .filter(s => s.kanban_type === 'workflow')
+    .sort((a, b) => a.position - b.position);
+
+  const workBySection = new Map<string, PipelineStage[]>();
+  workStages.forEach(s => {
+    const key = s.section || '_none';
+    if (!workBySection.has(key)) workBySection.set(key, []);
+    workBySection.get(key)!.push(s);
+  });
+
+  nodes.push({
+    id: 'label-work',
+    type: 'group-label',
+    position: { x: COL_WORK, y: 0 },
+    data: { label: 'WORKFLOW ZADAŃ', isMain: true },
+    selectable: false,
+    draggable: false,
+  });
+
+  let workY = 50;
+  workBySection.forEach((stages, section) => {
+    nodes.push({
+      id: `label-work-${section}`,
+      type: 'group-label',
+      position: { x: COL_WORK, y: workY },
+      data: { label: `── ${section.toUpperCase()} ──` },
+      selectable: false,
+      draggable: false,
+    });
+    workY += HEADER_HEIGHT;
+    stages.forEach(s => {
+      nodes.push(makeStageNode(s, COL_WORK, workY, selectedId));
+      workY += ROW_HEIGHT;
+    });
+    workY += GROUP_GAP;
+  });
+
+  return nodes;
 }
+
+function makeStageNode(s: PipelineStage, x: number, y: number, selectedId?: string): Node {
+  return {
+    id: s.id,
+    type: 'stage',
+    position: { x, y },
+    data: {
+      label: s.label,
+      icon: s.icon,
+      color: s.color,
+      stageKey: s.stage_key,
+      isDefault: s.is_default,
+      isSelected: selectedId === s.id,
+      kanbanType: s.kanban_type,
+      parentStageKey: s.parent_stage_key,
+    } satisfies StageNodeData,
+  };
+}
+
+// ─── Component ──────────────────────────────────────────────
 
 export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: PipelineConfiguratorProps) {
   const [selectedStage, setSelectedStage] = useState<PipelineStage | null>(null);
@@ -112,7 +199,7 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Build all edges from transitions
+  // Build edges from transitions
   const allEdges = useMemo<Edge[]>(() =>
     allTransitions.map(t => ({
       id: t.id,
@@ -126,52 +213,13 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
     [allTransitions]
   );
 
-  // Group stages and layout
+  // Build grid layout
   useEffect(() => {
-    const mainStages = allStages.filter(s => s.kanban_type === 'main').sort((a, b) => a.position - b.position);
-    const subStages = allStages.filter(s => s.kanban_type === 'sub').sort((a, b) => a.position - b.position);
-    const workflowStages = allStages.filter(s => s.kanban_type === 'workflow').sort((a, b) => a.position - b.position);
-
-    // Sub-stages grouped by parent
-    const subByParent = new Map<string, PipelineStage[]>();
-    subStages.forEach(s => {
-      const key = s.parent_stage_key || '_none';
-      if (!subByParent.has(key)) subByParent.set(key, []);
-      subByParent.get(key)!.push(s);
-    });
-
-    const sid = selectedStage?.id;
-
-    // Layout main at x=0
-    const mainLayout = layoutGroup(mainStages, allEdges, 0, 60, sid);
-
-    // Layout sub groups stacked vertically at x=500
-    let subOffsetY = 60;
-    const subNodes: Node[] = [];
-    const subEdgesAll: Edge[] = [];
-    subByParent.forEach((stages, _parentKey) => {
-      const { nodes: gn, edges: ge } = layoutGroup(stages, allEdges, 500, subOffsetY, sid);
-      subNodes.push(...gn);
-      subEdgesAll.push(...ge);
-      subOffsetY += stages.length * 90 + 60;
-    });
-
-    // Layout workflow at x=1000
-    const workLayout = layoutGroup(workflowStages, allEdges, 1000, 60, sid);
-
-    // Cross-group edges (edges not assigned to any single group)
-    const assignedEdgeIds = new Set([
-      ...mainLayout.edges.map(e => e.id),
-      ...subEdgesAll.map(e => e.id),
-      ...workLayout.edges.map(e => e.id),
-    ]);
-    const crossEdges = allEdges.filter(e => !assignedEdgeIds.has(e.id));
-
-    setNodes([...mainLayout.nodes, ...subNodes, ...workLayout.nodes]);
-    setEdges([...mainLayout.edges, ...subEdgesAll, ...workLayout.edges, ...crossEdges]);
+    const gridNodes = buildGridNodes(allStages, selectedStage?.id);
+    setNodes(gridNodes);
+    setEdges(allEdges);
   }, [allStages, allTransitions, selectedStage?.id]);
 
-  // Create transition on connect
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target) return;
@@ -193,7 +241,6 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
     [teamId, tenantId, allStages, upsertTransition, setEdges]
   );
 
-  // Delete transition on edge click
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: Edge) => {
       deleteTransitionMut.mutate({ id: edge.id, teamId });
@@ -202,7 +249,6 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
     [deleteTransitionMut, teamId, setEdges]
   );
 
-  // Select stage on node click
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const stage = allStages.find(s => s.id === node.id);
@@ -211,7 +257,6 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
     [allStages]
   );
 
-  // Add new stage
   const handleAddStage = () => {
     const newKey = `stage_${Date.now()}`;
     upsertStage.mutate({
@@ -325,7 +370,7 @@ export function PipelineConfigurator({ teamId, tenantId, open, onOpenChange }: P
         </div>
 
         <div className="px-6 py-3 border-t text-xs text-muted-foreground">
-          Wszystkie 3 kanbany na jednym canvas. Połącz dowolne etapy przeciągając między nimi. Kliknij na połączenie aby je usunąć.
+          3 kanbany na jednym canvas. Połącz etapy przeciągając między nimi. Kliknij połączenie aby usunąć.
         </div>
       </DialogContent>
     </Dialog>
