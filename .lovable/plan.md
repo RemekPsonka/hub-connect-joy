@@ -1,76 +1,52 @@
 
 
-# Audyt spojnosci lejkow i zadan -- wyniki i plan napraw
+# Automatyczna zmiana tytulu zadania przy zmianie etapu
 
-## Status po poprzednich naprawach
+## Problem
+Gdy uzytkownik zmienia "Etap zadania" lub "Etap lejka" (pod-etap) w panelu bocznym, tytul zadania pozostaje niezmieniony. Uzytkownik chce, aby tytul automatycznie aktualizowal sie do nazwy wybranego etapu (np. "Zaplanowac spotkanie", "Handshake", "Negocjacje").
 
-### Co dziala poprawnie
-1. **Centralna konfiguracja** -- `pipelineStages.ts` jest jedynym zrodlem prawdy, wszystkie 5 konsumentow importuje z niego
-2. **Etykiety** -- spojne we wszystkich widokach (SubKanban, Kanban zadan, TaskDetailSheet, badge'e)
-3. **Cache invalidation** -- `useUpdateTeamContact` invaliduje `deal-team-contact-stage` i `deal-team-assignments-all`
-4. **Kanban kontaktow** -- KanbanBoard + SubKanbanView korzystaja z centralnej konfiguracji
-5. **Kanban zadan** -- WORKFLOW_COLUMNS mapuje zadania na kolumny na podstawie `contact_category + contact_offering_stage`
+## Plan
 
-### Znalezione problemy
+### Plik: `src/components/tasks/TaskDetailSheet.tsx`
 
-#### Problem 1: Odwrotne mapowanie HOT/TOP w "Etap zadania" (KRYTYCZNY)
-
-Gdy uzytkownik zmienia "Etap zadania" w panelu bocznym (np. na "Spotkanie umowione"), system szuka w `testMappings` pierwszego pasujacego wpisu. HOT jest zawsze przed TOP na liscie, wiec:
-
-- Kontakt w kategorii **TOP** + zmiana etapu na `meeting_scheduled` -> system **blednie zmienia kategorie na HOT** (bo `hot + meeting_scheduled` pasuje jako pierwszy)
-
-Naprawa: W `handleWorkflowChange` preferowac aktualna kategorie kontaktu. Jezeli `match()` pasuje do aktualnej kategorii, uzywac jej zamiast pierwszego znalezionego wpisu.
-
-#### Problem 2: Brak danych kontaktu w panelu bocznym z widoku Kanban zadan
-
-W `MyTeamTasksView` obiekt `selectedTask` (mapowany z `DealTeamAssignment`) ustawia `task_contacts: []`. Przez to w panelu bocznym (TaskDetailSheet) wiersz "Kontakt" jest pusty -- nie widac nazwy kontaktu ani firmy. Dane `deal_team_id` i `deal_team_contact_id` sa poprawne, wiec dropdowny etapow dzialaja, ale brakuje informacji kontaktowej.
-
-Naprawa: Dodac `task_contacts` do obiektu `selectedTask` na podstawie danych z `DealTeamAssignment` (ktore zawieraja `contact_name`, `contact_company`, `contact_id`).
-
-## Plan napraw technicznych
-
-### Plik 1: `src/components/tasks/TaskDetailSheet.tsx`
-
-Zmiana w `handleWorkflowChange` -- preferowanie aktualnej kategorii:
+1. **Rozszerzyc props `InteractivePipelineStageRow`** -- dodac `taskId` i `onTitleChange` callback:
 
 ```text
-Obecny kod (linia 220):
-  const match = testMappings.find(m => col.match(m.cat, m.stage || null));
-
-Nowy kod:
-  // Preferuj mapowanie z aktualna kategoria (aby TOP nie przeskoczyl do HOT)
-  const matchSameCat = testMappings.find(
-    m => m.cat === currentCategory && col.match(m.cat, m.stage || null)
-  );
-  const match = matchSameCat || testMappings.find(m => col.match(m.cat, m.stage || null));
+function InteractivePipelineStageRow({ 
+  teamContactId, teamId, taskId, onTitleChange 
+}: { 
+  teamContactId: string; teamId: string; 
+  taskId: string; onTitleChange: (title: string) => void;
+})
 ```
 
-### Plik 2: `src/components/deals-team/MyTeamTasksView.tsx`
+2. **W `handleWorkflowChange`** -- po `updateContact.mutate(updates)` wywolac `onTitleChange(col.label)` aby zaktualizowac tytul zadania na nazwe kolumny workflow (np. "Zaplanowac spotkanie").
 
-Zmiana w `selectedTask` (linie 258-268) -- dodanie `task_contacts`:
+3. **W `handleStageChange`** -- po zmianie pod-etapu, pobrac label etapu z `subConfig` i wywolac `onTitleChange(stageLabel)`.
+
+4. **W komponencie glownym `TaskDetailSheetContent`** -- dodac callback `handlePipelineTitleChange`:
 
 ```text
-Obecny kod:
-  task_contacts: [],
-
-Nowy kod:
-  task_contacts: a.contact_id ? [{
-    contacts: {
-      id: a.contact_id,
-      full_name: a.contact_name || '',
-      company: a.contact_company || null,
-    }
-  }] : [],
+const handlePipelineTitleChange = async (newTitle: string) => {
+  setTitleValue(newTitle);
+  await updateTask.mutateAsync({ id: task.id, title: newTitle });
+};
 ```
 
-Dzieki temu panel boczny bedzie wyswietlal nazwe kontaktu i firme, oraz link do profilu kontaktu.
+5. **Zaktualizowac wywolanie komponentu** (linia ~653):
 
-## Efekt koncowy
+```text
+<InteractivePipelineStageRow 
+  teamContactId={pipelineTeamContactId} 
+  teamId={pipelineTeamId}
+  taskId={task.id}
+  onTitleChange={handlePipelineTitleChange}
+/>
+```
 
-Po naprawach caly flow bedzie spojny:
-1. **Kanban kontaktow** -- przenoszenie kontaktow miedzy kolumnami zmienia `category`
-2. **Sub-kanban kontaktow** -- przenoszenie zmienia `offering_stage`
-3. **Kanban zadan** -- zadania sa automatycznie mapowane na kolumny workflow na podstawie `category + offering_stage` kontaktu
-4. **Panel boczny zadania** -- 3 interaktywne wiersze (Etap lejka, Pod-etap, Etap zadania) synchronizuja wszystkie 3 widoki
-5. **Zmiana z TOP** -- nie powoduje blednego przeskoku do HOT
+## Efekt
+
+- Zmiana "Etap zadania" -> tytul = label kolumny workflow (np. "Zaplanowac spotkanie")
+- Zmiana pod-etapu w "Etap lejka" -> tytul = label pod-etapu (np. "Handshake", "Spotkanie umowione")
+- Tytul aktualizuje sie natychmiast w UI i jest zapisywany do bazy
 
