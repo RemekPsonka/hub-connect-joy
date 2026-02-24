@@ -1,86 +1,95 @@
 
-# Kanban zadaniowy oparty na workflow sprzedazowym
+# Interaktywna zmiana etapu lejka i zadania w TaskDetailSheet
 
-## Koncepcja
+## Problem
+Wiersz "Etap lejka" w panelu bocznym zadania (TaskDetailSheet) jest statyczny -- wyswietla tylko tekst. Uzytkownik nie moze zmienic ani kategorii (glownego etapu lejka), ani pod-etapu (offering_stage) bezposrednio z poziomu zadania.
 
-Zamiast prostego Kanbanu statusowego (Do zrobienia / W trakcie / Zakonczone), zastepujemy widok "Kanban" w zakladce **Zadania** pelnym widokiem workflow sprzedazowego. Kazde zadanie jest umieszczone w kolumnie odpowiadajacej aktualnemu krokowi workflow kontaktu (category + offering_stage).
+## Rozwiazanie
+Zastapic statyczny komponent `PipelineStageRow` interaktywnym komponentem z dwoma dropdownami:
 
-## Kolumny workflow
+1. **Dropdown kategorii** -- zmiana glownego etapu lejka (HOT, TOP, OFFERING, AUDIT, LEAD, 10X, COLD, CLIENT, LOST)
+2. **Dropdown pod-etapu** -- zmiana offering_stage, widoczny tylko dla kategorii z sub-kanbanami (hot, top, offering, audit)
 
-Kolumny sa pogrupowane w sekcje logiczne:
+## Konfiguracja powiazan (mapowanie etapow)
+
+Wykorzystujemy istniejaca konfiguracje `SUB_KANBAN_CONFIGS` z SubKanbanView.tsx jako zrodlo prawdy:
 
 ```text
-SPOTKANIA                  OFERTOWANIE                    AUDYT              ZAMKNIECIE
------------               ---------------                -------            -----------
-Umow spotkanie     -->    Handshake                      Zaplanowany        Klient (sukces)
-Spotkanie umowione -->    Pelnomocnictwo                 Odbyty             Przegrane
-Spotkanie odbyte   -->    Przygotowanie                                     Inne
-                          Negocjacje
-                          Zaakceptowano
+Kategoria    Pod-etapy
+---------    ---------
+HOT/TOP      meeting_plan -> meeting_scheduled -> meeting_done
+OFFERING     handshake -> power_of_attorney -> preparation -> negotiation -> accepted -> lost
+AUDIT        audit_plan -> audit_scheduled -> audit_done
+LEAD         (brak pod-etapow)
+10X          (brak pod-etapow)
+COLD         (brak pod-etapow)
+CLIENT       (brak pod-etapow)
+LOST         (brak pod-etapow)
 ```
-
-Po "Spotkanie odbyte" uzytkownik musi wybrac sciezke (ofertowanie, audyt, 10x itd.) -- to juz realizuje NextActionDialog.
-
-## Mapowanie: kontakt --> kolumna
-
-Kazde zadanie jest powiazane z kontaktem przez `deal_team_contact_id`. Na podstawie `category` i `offering_stage` kontaktu okreslamy kolumne:
-
-| Kontakt (category + stage)      | Kolumna workflow          |
-|----------------------------------|---------------------------|
-| hot/top + meeting_plan           | Umow spotkanie            |
-| hot/top + meeting_scheduled      | Spotkanie umowione        |
-| hot/top + meeting_done           | Spotkanie odbyte          |
-| offering + handshake             | Handshake                 |
-| offering + power_of_attorney     | Pelnomocnictwo            |
-| offering + preparation           | Przygotowanie             |
-| offering + negotiation           | Negocjacje                |
-| offering + accepted              | Zaakceptowano             |
-| audit + audit_plan               | Audyt - planowanie        |
-| audit + audit_scheduled          | Audyt zaplanowany         |
-| audit + audit_done               | Audyt odbyty              |
-| lead / cold / 10x               | Inne                      |
-| client                           | Klient                    |
-| lost                             | Przegrane                 |
-
-## Interakcje
-
-- **Klikniecie w zadanie** --> otwiera TaskDetailSheet (panel boczny Asana-style)
-- **Drag & drop miedzy kolumnami** --> uruchamia NextActionDialog z odpowiednim pre-selectem akcji (np. przeciagniecie do "Spotkanie umowione" automatycznie wybiera akcje "meeting_scheduled")
-- **Prosta zmiana w ramach jednej sekcji** (np. Handshake -> Pelnomocnictwo) --> bezposrednia aktualizacja offering_stage bez dialogu
-- **Zmiana miedzy sekcjami** (np. Spotkanie odbyte -> Handshake) --> dialog z potwierdzeniem zmiany kategorii
-
-## Filtrowanie
-
-Zachowane istniejace filtry:
-- Filtr czlonkow zespolu (Wszyscy / Moje / konkretna osoba)
-- Filtr statusu (Aktywne / Wszystkie)
-- Filtr priorytetu
-- Wyszukiwanie tekstowe
-- Kolumna **Inne** dla zadan bez powiazania z kontaktem lub w kategoriach bez workflow
 
 ## Zmiany techniczne
 
-### Plik: `src/components/deals-team/MyTeamTasksView.tsx`
+### Plik: `src/components/tasks/TaskDetailSheet.tsx`
 
-1. **Nowy widok `viewMode === 'kanban'`** -- zastepuje obecny prosty grid statusowy
-2. Dodac konfiguracje `WORKFLOW_COLUMNS` definiujaca kolumny, ikony, kolory i mapowanie z category+stage
-3. Nowy `useMemo` do przypisania zadan do kolumn workflow na podstawie powiazanego kontaktu (dociagniecie `teamContacts` juz istnieje)
-4. Drag & drop miedzy kolumnami z logika:
-   - W ramach tej samej kategorii (np. offering stages) --> bezposredni update `offering_stage`
-   - Miedzy kategoriami --> otwarcie NextActionDialog z pre-selectem
-5. Kazda kolumna uzywa ScrollArea z kartami zadan (kontakt + tytul + data + priorytet)
-6. Horizontalny scroll jak w SubKanbanView
+**1. Nowy komponent `InteractivePipelineStageRow`** (zastepuje `PipelineStageRow` w liniach 153-181):
 
-### Plik: `src/hooks/useDealsTeamAssignments.ts`
+- Pobiera `category` i `offering_stage` z `deal_team_contacts` (istniejacy query)
+- Importuje `SUB_KANBAN_CONFIGS` z `SubKanbanView`
+- Uzywa `useUpdateTeamContact` (juz zaimportowany w pliku) do zapisu zmian
+- Invaliduje klucze query: `deal-team-contact-stage`, `deals-team-contacts`, `deal-team-assignments`
 
-Drobna zmiana w `useMyTeamAssignments` -- dolaczenie informacji o `category` i `offering_stage` kontaktu do kazdego zadania (dodanie tych pol do mapowania z `deal_team_contacts`).
+**Dropdown kategorii:**
+- Konfiguracja:
+  ```text
+  hot   -> HOT LEAD    (kolor: czerwony)
+  top   -> TOP LEAD    (kolor: zolty)  
+  offering -> OFERTOWANIE (kolor: niebieski)
+  audit -> AUDYT       (kolor: cyan)
+  lead  -> LEAD        (kolor: szary)
+  10x   -> 10X         (kolor: fioletowy)
+  cold  -> COLD LEAD   (kolor: slate)
+  client -> KLIENT     (kolor: zielony)
+  lost  -> PRZEGRANE   (kolor: czerwony)
+  ```
+- Zmiana kategorii automatycznie resetuje offering_stage do domyslnego (juz obslugiwane przez `useUpdateTeamContact`)
+- Wyswietla badge z kolorem odpowiednim dla kategorii
 
-### Bez zmian:
-- NextActionDialog -- juz obsluguje wszystkie przejscia
-- KanbanBoard (etapy kontaktow) -- zostaje bez zmian
-- SubKanbanView -- zostaje bez zmian
-- TaskDetailSheet -- zostaje bez zmian
+**Dropdown pod-etapu (warunkowy):**
+- Widoczny tylko gdy `SUB_KANBAN_CONFIGS[category]` istnieje (hot, top, offering, audit)
+- Wyswietla etapy z konfiguracji sub-kanbana (np. dla offering: Handshake, Pelnomocnictwo, Przygotowanie...)
+- Zmiana aktualizuje tylko `offering_stage`
+
+**2. Zamiana uzycia** (linia 492):
+
+Z:
+```tsx
+<PipelineStageRow teamContactId={pipelineTeamContactId} />
+```
+Na:
+```tsx
+<InteractivePipelineStageRow 
+  teamContactId={pipelineTeamContactId} 
+  teamId={pipelineTeamId} 
+/>
+```
+
+### Uklad UI w panelu bocznym
+
+```text
+Etap lejka     [v HOT LEAD]    [v Spotkanie umowione]
+```
+
+Oba dropdowny stylizowane identycznie jak istniejace "Priorytet" i "Status" -- hover, ikony, ten sam pattern DropdownMenu.
+
+### Bez zmian w pozostalych plikach
+- `useUpdateTeamContact` -- juz obsluguje `category` i `offeringStage` z automatycznym resetem
+- `SUB_KANBAN_CONFIGS` -- juz zawiera pelna konfiguracje pod-etapow
+- `offeringStageLabels.ts` -- juz zawiera etykiety
+- Kanban kontaktow i sub-kanbany -- reaguja automatycznie dzieki invalidacji query
+- Kanban zadan -- reaguje automatycznie (czyta `contact_category` i `contact_offering_stage` z danych)
 
 ## Efekt koncowy
-
-Uzytkownik widzi pelny pipeline sprzedazowy z perspektywy **zadan** -- widzi ktore zadanie jest na jakim etapie workflow, moze przeciagac miedzy etapami, a system automatycznie synchronizuje etapy kontaktow. To uzupelnia istniejacy Kanban kontaktow (ktory pokazuje to samo z perspektywy **kontaktow**).
+Uzytkownik moze z poziomu panelu bocznego zadania:
+1. Zmienic glowny etap lejka kontaktu (np. HOT -> OFFERING) -- kontakt przesunie sie na Kanbanie kontaktow
+2. Zmienic pod-etap (np. Handshake -> Pelnomocnictwo) -- kontakt przesunie sie na sub-Kanbanie
+3. Zadanie automatycznie przesunie sie na Kanbanie zadan (bo kolumna zalezy od category+stage kontaktu)
