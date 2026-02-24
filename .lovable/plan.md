@@ -1,133 +1,71 @@
 
 
-# Audyt spojnosci etapow/kategorii zadan w systemie
+# Naprawa interaktywnej zmiany etapu lejka w TaskDetailSheet
 
-## Zidentyfikowane zrodla konfiguracji
+## Zidentyfikowane problemy
 
-System posiada **5 niezaleznych miejsc**, gdzie definiowane sa etykiety i mapowania etapow. Kazde moze odbiegac od pozostalych.
+### 1. Zmiana etapu nie odswierza UI
+Hook `useUpdateTeamContact` w `onSuccess` invaliduje klucze:
+- `deal-team-contacts`
+- `deal-team-contact`
+- `contact-deal-teams`
+- `contact-deal-teams-bulk`
 
----
+**Brakuje invalidacji:**
+- `deal-team-contact-stage` -- klucz uzywany przez `InteractivePipelineStageRow` (query w TaskDetailSheet). Dlatego po zmianie dane nie odswiezaja sie w panelu bocznym.
+- `deal-team-assignments-all` -- klucz uzywany przez Kanban zadan. Dlatego zmiana kategorii/etapu nie przesuwa zadania na Kanbanie workflow.
 
-## Porownanie konfiguracji
+### 2. Brak trzeciego wiersza -- etap workflow (Kanban zadan)
+W panelu bocznym widac:
+- **Etap lejka** = kategoria (HOT, TOP, OFFERING...) + pod-etap (Handshake, Spotkanie umowione...)
 
-### 1. SUB_KANBAN_CONFIGS (SubKanbanView.tsx) -- ZRODLO PRAWDY dla sub-kanbanow kontaktow
+Ale brakuje informacji o tym, w ktorej **kolumnie Kanbana zadan** aktualnie znajduje sie zadanie. To jest wazne, bo Kanban zadan mapuje category+stage na kolumne workflow (np. "Spotkanie umowione", "Negocjacje").
 
-```text
-audit:     audit_plan ("Do zaplanowania") -> audit_scheduled ("Zaplanowany") -> audit_done ("Odbyty")
-hot:       meeting_plan ("Zaplanowac spotkanie") -> meeting_scheduled ("Spotkanie umowione") -> meeting_done ("Spotkanie odbyte")
-top:       meeting_plan ("Zaplanowac spotkanie") -> meeting_scheduled ("Spotkanie umowione") -> meeting_done ("Spotkanie odbyte")
-offering:  handshake ("Handshake") -> power_of_attorney ("Pelnomocnictwo") -> preparation ("Przygotowanie") -> negotiation ("Negocjacje") -> accepted ("Zaakceptowano") -> lost ("Przegrano")
-```
+Uzytkownik chce widziec i zmieniac rowniez ten etap -- co efektywnie zmienia kombinacje category + offering_stage kontaktu.
 
-### 2. WORKFLOW_COLUMNS (MyTeamTasksView.tsx) -- Kanban zadan
+### 3. Spojnosc: zmiana lejka vs zmiana zadan
+Obecny model jest spojny pod warunkiem prawidlowej synchronizacji:
+- Zmiana **kategorii** (np. HOT -> OFFERING) automatycznie resetuje `offering_stage` do domyslnego -- OK
+- Zmiana **pod-etapu** (np. meeting_plan -> meeting_scheduled) aktualizuje `offering_stage` -- OK
+- Kanban zadan czyta `contact_category` + `contact_offering_stage` -- wiec zmiana w panelu bocznym powinna automatycznie przesuwac zadanie na Kanbanie
 
-```text
-meeting_plan:       "Umow spotkanie"          <-- ROZNICA: SubKanban = "Zaplanowac spotkanie"
-meeting_scheduled:  "Spotkanie umowione"      OK
-meeting_done:       "Spotkanie odbyte"         OK
-handshake:          "Handshake"                OK
-power_of_attorney:  "Pelnomocnictwo"           OK
-preparation:        "Przygotowanie"            OK
-negotiation:        "Negocjacje"               OK
-accepted:           "Zaakceptowano"            OK
-audit_plan:         "Audyt - planowanie"       <-- ROZNICA: SubKanban = "Do zaplanowania"
-audit_scheduled:    "Audyt zaplanowany"        <-- ROZNICA: SubKanban = "Zaplanowany"
-audit_done:         "Audyt odbyty"             <-- ROZNICA: SubKanban = "Odbyty"
-```
-**Brak kolumny:** `offering.lost` ("Przegrano") -- istnieje w SubKanban, ale nie w WORKFLOW_COLUMNS
-
-### 3. offeringStageLabels.ts -- Uzywane w badge'ach na kartach kontaktow
-
-```text
-handshake:          "Handshake"                OK
-power_of_attorney:  "Pelnomocnictwo"           OK
-preparation:        "Przygotowanie"            OK
-negotiation:        "Negocjacje"               OK
-accepted:           "Zaakceptowano"            OK
-lost:               "Przegrano"                OK
-audit_plan:         "Do zaplanowania"          <-- Zgadza sie z SubKanban, NIE z WORKFLOW_COLUMNS
-audit_scheduled:    "Zaplanowany"              <-- Zgadza sie z SubKanban, NIE z WORKFLOW_COLUMNS
-audit_done:         "Odbyty"                   <-- Zgadza sie z SubKanban, NIE z WORKFLOW_COLUMNS
-meeting_plan:       "Zaplanowac spotkanie"     <-- Zgadza sie z SubKanban, NIE z WORKFLOW_COLUMNS
-meeting_scheduled:  "Spotkanie umowione"       OK
-meeting_done:       "Spotkanie odbyte"          OK
-```
-
-### 4. CATEGORY_OPTIONS (TaskDetailSheet.tsx) -- Dropdown w panelu bocznym
-
-```text
-hot -> "HOT LEAD"      OK
-top -> "TOP LEAD"       OK
-offering -> "OFERTOWANIE" OK
-audit -> "AUDYT"        OK -- ikona: 📅 (powinno byc 🔍 lub inne?)
-lead -> "LEAD"          OK
-10x -> "10X"            OK
-cold -> "COLD LEAD"     OK
-client -> "KLIENT"      OK
-lost -> "PRZEGRANE"     OK
-```
-Sub-etapy pobierane z SUB_KANBAN_CONFIGS -- **SPOJNE** (jedyna konfiguracja ktora korzysta z jednego zrodla)
-
-### 5. KanbanColumnConfigPopover + KanbanBoard -- Glowny Kanban kontaktow
-
-```text
-Kolumny: offering, hot, audit, top, lead, tenx, cold, lost, prospecting
-```
-**Brak kolumny "client"** w KanbanBoard (klienci nie sa wyswietlani na Kanbanie kontaktow).
-KanbanColumnConfigPopover nie uwzglednia "client" -- to moze byc swiadome.
-
----
-
-## Podsumowanie niespojnosci
-
-| # | Problem | Gdzie | Co poprawic |
-|---|---------|-------|-------------|
-| 1 | `meeting_plan` label | WORKFLOW_COLUMNS | "Umow spotkanie" vs "Zaplanowac spotkanie" |
-| 2 | `audit_plan` label | WORKFLOW_COLUMNS | "Audyt - planowanie" vs "Do zaplanowania" |
-| 3 | `audit_scheduled` label | WORKFLOW_COLUMNS | "Audyt zaplanowany" vs "Zaplanowany" |
-| 4 | `audit_done` label | WORKFLOW_COLUMNS | "Audyt odbyty" vs "Odbyty" |
-| 5 | Brak `offering.lost` | WORKFLOW_COLUMNS | Brakuje kolumny "Przegrano" w Kanbanie zadan |
-| 6 | Ikona audytu | CATEGORY_OPTIONS (TaskDetailSheet) | Uzywa 📅 zamiast 📋 lub 🔍 |
-
----
+Problem jest tylko w **brakujacej invalidacji cache** -- po naprawie wszystko bedzie dzialac spojnie.
 
 ## Plan naprawy
 
-### Krok 1: Utworzyc jedno zrodlo prawdy -- `src/config/pipelineStages.ts`
+### Plik: `src/hooks/useDealsTeamContacts.ts`
 
-Nowy plik eksportujacy pelna konfiguracje etapow:
-- Kategorie glowne (hot, top, offering, audit, lead, 10x, cold, client, lost) z labelami, ikonami, kolorami
-- Sub-etapy per kategoria (SUB_KANBAN_CONFIGS)
-- Mapowanie workflow kolumn (WORKFLOW_COLUMNS)
-- Domyslne etapy per kategoria
+W `useUpdateTeamContact` -> `onSuccess` dodac brakujace invalidacje:
 
-Wszystkie komponenty beda importowac z tego jednego pliku.
+```text
++ queryClient.invalidateQueries({ queryKey: ['deal-team-contact-stage'] });
++ queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
+```
 
-### Krok 2: Ujednolicic etykiety
+To naprawi:
+1. Natychmiastowe odswierzenie dropdownow w TaskDetailSheet po zmianie
+2. Automatyczne przesuniecie zadania na Kanbanie zadan
 
-Przyjac SUB_KANBAN_CONFIGS jako bazowe etykiety (bo sa bardziej opisowe w kontekscie Kanbana kontaktow), a WORKFLOW_COLUMNS dostosowac:
-- `meeting_plan` -> "Zaplanowac spotkanie" (zamiast "Umow spotkanie")
-- `audit_plan` -> "Do zaplanowania" (zamiast "Audyt - planowanie")
-- `audit_scheduled` -> "Zaplanowany" (zamiast "Audyt zaplanowany")
-- `audit_done` -> "Odbyty" (zamiast "Audyt odbyty")
-- Dodac kolumne `offering_lost` -> "Przegrano" w WORKFLOW_COLUMNS
+### Plik: `src/components/tasks/TaskDetailSheet.tsx`
 
-### Krok 3: Zaktualizowac importy
+Dodac trzeci wiersz **"Etap zadania"** pod "Etap lejka", pokazujacy w ktorej kolumnie workflow znajduje sie zadanie:
 
-Pliki do zmiany:
-- `src/components/deals-team/SubKanbanView.tsx` -- eksport SUB_KANBAN_CONFIGS przeniesiony do nowego pliku
-- `src/components/deals-team/MyTeamTasksView.tsx` -- WORKFLOW_COLUMNS zastapione importem
-- `src/components/tasks/TaskDetailSheet.tsx` -- CATEGORY_OPTIONS zastapione importem
-- `src/utils/offeringStageLabels.ts` -- STAGE_LABELS zastapione importem
-- `src/components/deals-team/KanbanColumnConfigPopover.tsx` -- COLUMN_LABELS zastapione importem
+- Import `WORKFLOW_COLUMNS` z `pipelineStages.ts`
+- Na podstawie aktualnego `category` + `offering_stage` wyszukac pasujaca kolumne workflow (`match()`)
+- Wyswietlic jako DropdownMenu z lista wszystkich kolumn workflow
+- Zmiana kolumny workflow automatycznie aktualizuje `category` i `offering_stage` kontaktu (odwrotne mapowanie)
 
-### Krok 4: Ujednolicic ikone audytu
+Uklad UI:
+```text
+Etap lejka      [v TOP LEAD]    [v Zaplanowac spotkanie]
+Etap zadania    [v Zaplanowac spotkanie (Spotkania)]
+```
 
-W CATEGORY_OPTIONS (TaskDetailSheet): zmienic ikone audytu z 📅 na 📋 (spojna z SubKanban).
+Zmiana w "Etap zadania" bedzie:
+- W ramach tej samej kategorii -- aktualizacja `offering_stage`
+- Miedzy kategoriami -- aktualizacja `category` (z automatycznym resetem `offering_stage`)
 
----
-
-## Efekt koncowy
-
-Jeden plik konfiguracyjny `pipelineStages.ts` jest jedynym zrodlem prawdy. Zmiana etykiety lub dodanie nowego etapu wymaga edycji tylko jednego pliku -- wszystkie widoki (Kanban kontaktow, Sub-kanban, Kanban zadan, TaskDetailSheet, badge'e) automatycznie sie aktualizuja.
-
+### Bez zmian w pozostalych plikach
+- `pipelineStages.ts` -- konfiguracja WORKFLOW_COLUMNS juz zawiera mapowanie i `match()`
+- `MyTeamTasksView.tsx` -- Kanban zadan automatycznie sie odswieza dzieki invalidacji `deal-team-assignments-all`
+- `SubKanbanView.tsx` -- sub-kanban odswieza sie dzieki invalidacji `deal-team-contacts`
