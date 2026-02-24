@@ -263,7 +263,13 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       category_id: null, visibility: 'private', milestone_id: null,
       completed_at: a.completed_at, sort_order: null, source_task_id: null,
       recurrence_rule: null, deal_team_id: a.deal_team_id,
-      deal_team_contact_id: a.deal_team_contact_id, task_contacts: [],
+      deal_team_contact_id: a.deal_team_contact_id, task_contacts: a.contact_id ? [{
+        contacts: {
+          id: a.contact_id,
+          full_name: a.contact_name || '',
+          company: a.contact_company || null,
+        }
+      }] : [],
       cross_tasks: [], parent_task_id: null, estimated_hours: null,
     } as any;
   }, [selectedTaskId, assignments]);

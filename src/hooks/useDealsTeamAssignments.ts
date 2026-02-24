@@ -26,6 +26,7 @@ export interface DealTeamAssignment {
   contact_company?: string | null;
   contact_category?: string | null;
   contact_offering_stage?: string | null;
+  contact_id?: string | null;
 }
 
 
@@ -215,6 +216,7 @@ export function useMyTeamAssignments(teamId: string | undefined) {
           contact_company: contact?.company || null,
           contact_category: tc?.category || null,
           contact_offering_stage: tc?.offering_stage || null,
+          contact_id: tc?.contact_id || null,
         };
       }) as DealTeamAssignment[];
     },
