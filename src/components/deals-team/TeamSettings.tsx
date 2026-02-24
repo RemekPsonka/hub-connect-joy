@@ -41,6 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ProductCategoryManager } from './ProductCategoryManager';
 import { StatusFrequencyConfig } from './StatusFrequencyConfig';
 import { WatchedContactsConfig } from './WatchedContactsConfig';
+import { PipelineConfigurator } from './PipelineConfigurator';
 import type { DealTeamRole } from '@/types/dealTeam';
 
 interface TeamSettingsProps {
@@ -91,6 +92,7 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>('');
   const [showWatchedConfig, setShowWatchedConfig] = useState(false);
+  const [showPipelineConfig, setShowPipelineConfig] = useState(false);
   // Initialize form when team loads
   const hasInitialized = useState(false)[0];
   if (team && !hasInitialized && teamName === '') {
@@ -381,6 +383,23 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
 
                 <Separator />
 
+                {/* Pipeline Configurator */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Konfigurator przepływu</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Definiuj etapy i dozwolone przejścia dla wszystkich 3 kanbanów.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowPipelineConfig(true)}
+                  >
+                    Otwórz konfigurator przepływu
+                  </Button>
+                </div>
+
+                <Separator />
+
                 {/* Product Categories */}
                 <ProductCategoryManager teamId={teamId} />
               </div>
@@ -424,6 +443,14 @@ export function TeamSettings({ teamId, open, onOpenChange }: TeamSettingsProps) 
         tenantId={team?.tenant_id || ''}
         open={showWatchedConfig}
         onOpenChange={setShowWatchedConfig}
+      />
+
+      {/* Pipeline Configurator */}
+      <PipelineConfigurator
+        teamId={teamId}
+        tenantId={team?.tenant_id || ''}
+        open={showPipelineConfig}
+        onOpenChange={setShowPipelineConfig}
       />
     </>
   );

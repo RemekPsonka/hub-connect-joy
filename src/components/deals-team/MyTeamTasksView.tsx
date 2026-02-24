@@ -52,6 +52,8 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 // ─── Workflow Column Configuration (from central config) ────
 import { WORKFLOW_COLUMNS, type WorkflowColumn } from '@/config/pipelineStages';
+import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';
+import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';
 
 // ─── Reverse-mapping: workflow column → (category, offering_stage) ──
 function reverseMapColumn(colId: string, currentCategory: string | null): { category: string; offeringStage?: string } {
@@ -167,6 +169,8 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
   const updateTeamContact = useUpdateTeamContact();
+  const { data: wfPipelineStages = [] } = usePipelineStages(teamId, 'workflow');
+  const { data: wfPipelineTransitions = [] } = usePipelineTransitions(teamId, 'workflow');
 
   // DnD sensors & state
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -244,6 +248,13 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     const targetCol = WORKFLOW_COLUMNS.find(c => c.id === colId);
     if (!targetCol) return;
     if (targetCol.match(task.contact_category ?? null, task.contact_offering_stage ?? null)) return;
+
+    // Check workflow transition
+    const currentColId = WORKFLOW_COLUMNS.find(c => c.match(task.contact_category ?? null, task.contact_offering_stage ?? null))?.id;
+    if (currentColId && !isTransitionAllowed(wfPipelineTransitions, wfPipelineStages, currentColId, colId, 'workflow')) {
+      toast.error('To przejście nie jest dozwolone w konfiguracji przepływu');
+      return;
+    }
 
     const { category, offeringStage } = reverseMapColumn(colId, task.contact_category ?? null);
 

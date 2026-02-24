@@ -1,10 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 import { ArrowLeft, Users } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';
+import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';
 import { HotLeadCard } from './HotLeadCard';
 import type { DealTeamContact, OfferingStage, DealCategory } from '@/types/dealTeam';
 import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
@@ -83,6 +86,9 @@ export function SubKanbanView({
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
+  const { data: pipelineStages = [] } = usePipelineStages(teamId, 'sub');
+  const { data: pipelineTransitions = [] } = usePipelineTransitions(teamId, 'sub');
+
   const handleDrop = useCallback((e: React.DragEvent, stage: OfferingStage) => {
     e.preventDefault();
     setDragOverStage(null);
@@ -90,8 +96,13 @@ export function SubKanbanView({
     if (!contactId) return;
     const contact = contacts.find(c => c.id === contactId);
     if (!contact || contact.offering_stage === stage) return;
+    // Check transition
+    if (!isTransitionAllowed(pipelineTransitions, pipelineStages, contact.offering_stage || defaultStage, stage, 'sub')) {
+      toast('To przejście nie jest dozwolone w konfiguracji przepływu');
+      return;
+    }
     updateContact.mutate({ id: contactId, teamId, offeringStage: stage });
-  }, [contacts, teamId, updateContact]);
+  }, [contacts, teamId, updateContact, defaultStage, pipelineStages, pipelineTransitions]);
 
   return (
     <div className="space-y-3">

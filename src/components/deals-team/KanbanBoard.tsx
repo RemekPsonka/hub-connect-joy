@@ -1,9 +1,12 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { Search, X, Eye, ArrowLeft, Users } from 'lucide-react';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';
+import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';
 import { useTeamProspects } from '@/hooks/useDealsTeamProspects';
 import { useKanbanColumnSettings } from '@/hooks/useKanbanColumnSettings';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
@@ -183,16 +186,26 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     }
   }, []);
 
+  const { data: pipelineStages = [] } = usePipelineStages(teamId, 'main');
+  const { data: pipelineTransitions = [] } = usePipelineTransitions(teamId, 'main');
+
   const handleDrop = useCallback((e: React.DragEvent, newCategory: DealCategory) => {
     e.preventDefault();
     const contactId = e.dataTransfer.getData('contactId');
     const contact = contacts.find(c => c.id === contactId);
     if (contact && contact.category !== newCategory) {
+      // Check if transition is allowed
+      if (!isTransitionAllowed(pipelineTransitions, pipelineStages, contact.category || 'lead', newCategory, 'main')) {
+        toast.error('To przejście nie jest dozwolone w konfiguracji przepływu');
+        setDraggingContactId(null);
+        setDragOverColumn(null);
+        return;
+      }
       updateContact.mutate({ id: contactId, teamId, category: newCategory });
     }
     setDraggingContactId(null);
     setDragOverColumn(null);
-  }, [contacts, teamId, updateContact]);
+  }, [contacts, teamId, updateContact, pipelineStages, pipelineTransitions]);
 
   // Categories that support drill-down sub-kanbans
   const DRILLDOWN_CATEGORIES = new Set<DealCategory>(['audit', 'hot', 'top']);
