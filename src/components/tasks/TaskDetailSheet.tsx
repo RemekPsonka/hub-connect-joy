@@ -855,6 +855,39 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
             )}
           </div>
 
+          {/* ─── Description ─────────────────────────────── */}
+          <Separator />
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Opis</h4>
+            {editingDescription ? (
+              <Textarea
+                autoFocus
+                value={descriptionValue}
+                onChange={(e) => setDescriptionValue(e.target.value)}
+                onBlur={handleDescriptionSave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { setDescriptionValue(task.description || ''); setEditingDescription(false); }
+                }}
+                className="text-sm min-h-[80px]"
+                placeholder="Czego dotyczy to zadanie?"
+              />
+            ) : (
+              <p
+                className="text-sm cursor-pointer hover:bg-muted/50 rounded p-2 -m-2 transition-colors min-h-[32px]"
+                onClick={() => { setDescriptionValue(task.description || ''); setEditingDescription(true); }}
+              >
+                {task.description || <span className="text-muted-foreground italic">Czego dotyczy to zadanie? Kliknij, aby dodać opis...</span>}
+              </p>
+            )}
+          </div>
+
+          {/* Activity Log */}
+          <TaskActivityLog taskId={task.id} />
+
+          {/* Comments */}
+          <Separator />
+          <TaskComments taskId={task.id} />
+
           {/* Labels */}
           <TaskLabelsManager taskId={task.id} />
 
@@ -1002,32 +1035,6 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
             </div>
           </div>
 
-          {/* ─── Description ─────────────────────────────── */}
-          <Separator />
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Opis</h4>
-            {editingDescription ? (
-              <Textarea
-                autoFocus
-                value={descriptionValue}
-                onChange={(e) => setDescriptionValue(e.target.value)}
-                onBlur={handleDescriptionSave}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') { setDescriptionValue(task.description || ''); setEditingDescription(false); }
-                }}
-                className="text-sm min-h-[80px]"
-                placeholder="Czego dotyczy to zadanie?"
-              />
-            ) : (
-              <p
-                className="text-sm cursor-pointer hover:bg-muted/50 rounded p-2 -m-2 transition-colors min-h-[32px]"
-                onClick={() => { setDescriptionValue(task.description || ''); setEditingDescription(true); }}
-              >
-                {task.description || <span className="text-muted-foreground italic">Czego dotyczy to zadanie? Kliknij, aby dodać opis...</span>}
-              </p>
-            )}
-          </div>
-
           {/* Attachments */}
           <TaskAttachments taskId={task.id} />
 
@@ -1036,13 +1043,6 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
           {/* Linked GCal meetings */}
           <TaskLinkedMeetings taskId={task.id} />
-
-          {/* Activity Log */}
-          <TaskActivityLog taskId={task.id} />
-
-          {/* Comments */}
-          <Separator />
-          <TaskComments taskId={task.id} />
         </div>
       </SheetContent>
     </Sheet>
