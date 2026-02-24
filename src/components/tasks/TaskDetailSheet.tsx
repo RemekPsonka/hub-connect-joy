@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   DndContext,
@@ -100,6 +100,8 @@ import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
 import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
 import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
+import { useDirectors } from '@/hooks/useDirectors';
 import { cn } from '@/lib/utils';
 
 // ─── Sortable subtask ──────────────────────────────────────
@@ -341,6 +343,70 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
         </DropdownMenu>
       </MetaRow>
     </>
+  );
+}
+
+// ─── Assignee dropdown row ──────────────────────────────────
+
+function AssigneeDropdownRow({ task, owner, assignee, isPipelineTask, pipelineTeamId, updateTask }: {
+  task: TaskWithDetails;
+  owner: any;
+  assignee: any;
+  isPipelineTask: boolean;
+  pipelineTeamId: string;
+  updateTask: ReturnType<typeof useUpdateTask>;
+}) {
+  const { data: teamMembers = [] } = useTeamMembers(isPipelineTask ? pipelineTeamId : undefined);
+  const { data: allDirectors = [] } = useDirectors();
+
+  const availableMembers = useMemo(() => {
+    if (isPipelineTask && teamMembers.length > 0) {
+      return teamMembers
+        .filter(m => m.director)
+        .map(m => ({ id: m.director!.id, full_name: m.director!.full_name }));
+    }
+    return allDirectors.map(d => ({ id: d.id, full_name: d.full_name }));
+  }, [isPipelineTask, teamMembers, allDirectors]);
+
+  const currentAssigneeId = assignee?.id || owner?.id || null;
+  const currentAssigneeName = assignee?.full_name || owner?.full_name || 'Nieprzypisane';
+
+  const handleAssigneeChange = async (directorId: string | null) => {
+    try {
+      await updateTask.mutateAsync({ id: task.id, assigned_to: directorId });
+    } catch {
+      toast.error('Nie udało się zmienić osoby odpowiedzialnej');
+    }
+  };
+
+  return (
+    <MetaRow label="Osoba odpowiedzialna">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-1.5 py-0.5 -ml-1.5 transition-colors">
+            <User className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{currentAssigneeName}</span>
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[200px]">
+          <DropdownMenuItem onClick={() => handleAssigneeChange(null)}>
+            <User className="h-3.5 w-3.5 mr-2 opacity-50" />
+            Nieprzypisane
+          </DropdownMenuItem>
+          {availableMembers.map(m => (
+            <DropdownMenuItem
+              key={m.id}
+              onClick={() => handleAssigneeChange(m.id)}
+              className={cn(m.id === currentAssigneeId && 'bg-accent')}
+            >
+              <User className="h-3.5 w-3.5 mr-2" />
+              {m.full_name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </MetaRow>
   );
 }
 
@@ -625,15 +691,15 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
           {/* ─── Metadata table ──────────────────────────── */}
           <div className="space-y-0.5">
-            {/* Assignee */}
-            {(owner || assignee) && (
-              <MetaRow label="Osoba odpowiedzialna">
-                <div className="flex items-center gap-2 text-sm">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{assignee?.full_name || owner?.full_name}</span>
-                </div>
-              </MetaRow>
-            )}
+            {/* Assignee - interactive dropdown */}
+            <AssigneeDropdownRow
+              task={task}
+              owner={owner}
+              assignee={assignee}
+              isPipelineTask={isPipelineTask}
+              pipelineTeamId={pipelineTeamId}
+              updateTask={updateTask}
+            />
 
             {/* Contact */}
             {task.task_contacts && task.task_contacts.length > 0 && task.task_contacts[0]?.contacts && (
