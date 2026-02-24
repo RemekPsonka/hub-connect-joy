@@ -5183,6 +5183,151 @@ export type Database = {
           },
         ]
       }
+      pipeline_stages: {
+        Row: {
+          color: string
+          created_at: string | null
+          icon: string
+          id: string
+          is_default: boolean | null
+          kanban_type: string
+          label: string
+          parent_stage_key: string | null
+          position: number
+          section: string | null
+          stage_key: string
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string
+          created_at?: string | null
+          icon?: string
+          id?: string
+          is_default?: boolean | null
+          kanban_type: string
+          label: string
+          parent_stage_key?: string | null
+          position?: number
+          section?: string | null
+          stage_key: string
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string
+          created_at?: string | null
+          icon?: string
+          id?: string
+          is_default?: boolean | null
+          kanban_type?: string
+          label?: string
+          parent_stage_key?: string | null
+          position?: number
+          section?: string | null
+          stage_key?: string
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_stages_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_transitions: {
+        Row: {
+          created_at: string | null
+          from_stage_id: string
+          id: string
+          is_active: boolean | null
+          kanban_type: string
+          label: string | null
+          team_id: string
+          tenant_id: string
+          to_stage_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          from_stage_id: string
+          id?: string
+          is_active?: boolean | null
+          kanban_type: string
+          label?: string | null
+          team_id: string
+          tenant_id: string
+          to_stage_id: string
+        }
+        Update: {
+          created_at?: string | null
+          from_stage_id?: string
+          id?: string
+          is_active?: boolean | null
+          kanban_type?: string
+          label?: string | null
+          team_id?: string
+          tenant_id?: string
+          to_stage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_transitions_from_stage_id_fkey"
+            columns: ["from_stage_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_transitions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_transitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "pipeline_transitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_transitions_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       policy_production_records: {
         Row: {
           actual_commission: number | null
@@ -8576,6 +8721,10 @@ export type Database = {
       }
       seed_default_positions_for_tenant: {
         Args: { p_tenant_id: string }
+        Returns: undefined
+      }
+      seed_pipeline_stages_for_team: {
+        Args: { p_team_id: string; p_tenant_id: string }
         Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
