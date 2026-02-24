@@ -148,9 +148,25 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
   );
 }
 
-// ─── Pipeline stage row (fetches deal_team_contact data) ────
+// ─── Pipeline stage row (interactive dropdowns) ────────────
 
-function PipelineStageRow({ teamContactId }: { teamContactId: string }) {
+import { SUB_KANBAN_CONFIGS } from '@/components/deals-team/SubKanbanView';
+import { ChevronDown } from 'lucide-react';
+import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+
+const CATEGORY_OPTIONS: { value: DealCategory; label: string; color: string; icon: string }[] = [
+  { value: 'hot', label: 'HOT LEAD', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300', icon: '🔥' },
+  { value: 'top', label: 'TOP LEAD', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300', icon: '⭐' },
+  { value: 'offering', label: 'OFERTOWANIE', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300', icon: '📝' },
+  { value: 'audit', label: 'AUDYT', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300', icon: '📅' },
+  { value: 'lead', label: 'LEAD', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/40 dark:text-gray-300', icon: '📋' },
+  { value: '10x' as DealCategory, label: '10X', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300', icon: '🚀' },
+  { value: 'cold', label: 'COLD LEAD', color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-300', icon: '❄️' },
+  { value: 'client', label: 'KLIENT', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', icon: '✅' },
+  { value: 'lost', label: 'PRZEGRANE', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: '✖️' },
+];
+
+function InteractivePipelineStageRow({ teamContactId, teamId }: { teamContactId: string; teamId: string }) {
   const { data } = useQuery({
     queryKey: ['deal-team-contact-stage', teamContactId],
     queryFn: async () => {
@@ -166,15 +182,78 @@ function PipelineStageRow({ teamContactId }: { teamContactId: string }) {
     staleTime: 30_000,
   });
 
-  const label = data ? (offeringStageLabel(data.offering_stage, data.category) || data.category?.toUpperCase()) : null;
+  const updateContact = useUpdateTeamContact();
 
-  if (!label) return null;
+  const currentCategory = (data?.category || 'lead') as DealCategory;
+  const currentStage = data?.offering_stage as OfferingStage | null;
+  const catOption = CATEGORY_OPTIONS.find(c => c.value === currentCategory) || CATEGORY_OPTIONS[4];
+  const subConfig = SUB_KANBAN_CONFIGS[currentCategory];
+
+  const handleCategoryChange = (newCat: DealCategory) => {
+    if (newCat === currentCategory) return;
+    updateContact.mutate({ id: teamContactId, teamId, category: newCat });
+  };
+
+  const handleStageChange = (newStage: OfferingStage) => {
+    if (newStage === currentStage) return;
+    updateContact.mutate({ id: teamContactId, teamId, offeringStage: newStage });
+  };
+
+  if (!data) return null;
 
   return (
     <MetaRow label="Etap lejka">
-      <div className="flex items-center gap-2 text-sm">
-        <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>{label}</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Category dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:opacity-80',
+              catOption.color
+            )}>
+              <span>{catOption.icon}</span>
+              <span>{catOption.label}</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[180px]">
+            {CATEGORY_OPTIONS.map(opt => (
+              <DropdownMenuItem
+                key={opt.value}
+                onClick={() => handleCategoryChange(opt.value)}
+                className={cn('gap-2', opt.value === currentCategory && 'bg-accent')}
+              >
+                <span>{opt.icon}</span>
+                <span>{opt.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Sub-stage dropdown (conditional) */}
+        {subConfig && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-muted hover:bg-muted/80 transition-colors">
+                <span>{subConfig.stages.find(s => s.id === currentStage)?.icon || subConfig.stages[0].icon}</span>
+                <span>{subConfig.stages.find(s => s.id === currentStage)?.label || subConfig.stages[0].label}</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[200px]">
+              {subConfig.stages.map(stage => (
+                <DropdownMenuItem
+                  key={stage.id}
+                  onClick={() => handleStageChange(stage.id)}
+                  className={cn('gap-2', stage.id === currentStage && 'bg-accent')}
+                >
+                  <span>{stage.icon}</span>
+                  <span>{stage.label}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </MetaRow>
   );
@@ -489,7 +568,7 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
             {/* Pipeline stage info */}
             {isPipelineTask && (
-              <PipelineStageRow teamContactId={pipelineTeamContactId} />
+              <InteractivePipelineStageRow teamContactId={pipelineTeamContactId} teamId={pipelineTeamId} />
             )}
 
             {/* Due date */}
