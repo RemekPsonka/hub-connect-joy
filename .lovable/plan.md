@@ -1,71 +1,76 @@
 
 
-# Naprawa interaktywnej zmiany etapu lejka w TaskDetailSheet
+# Audyt spojnosci lejkow i zadan -- wyniki i plan napraw
 
-## Zidentyfikowane problemy
+## Status po poprzednich naprawach
 
-### 1. Zmiana etapu nie odswierza UI
-Hook `useUpdateTeamContact` w `onSuccess` invaliduje klucze:
-- `deal-team-contacts`
-- `deal-team-contact`
-- `contact-deal-teams`
-- `contact-deal-teams-bulk`
+### Co dziala poprawnie
+1. **Centralna konfiguracja** -- `pipelineStages.ts` jest jedynym zrodlem prawdy, wszystkie 5 konsumentow importuje z niego
+2. **Etykiety** -- spojne we wszystkich widokach (SubKanban, Kanban zadan, TaskDetailSheet, badge'e)
+3. **Cache invalidation** -- `useUpdateTeamContact` invaliduje `deal-team-contact-stage` i `deal-team-assignments-all`
+4. **Kanban kontaktow** -- KanbanBoard + SubKanbanView korzystaja z centralnej konfiguracji
+5. **Kanban zadan** -- WORKFLOW_COLUMNS mapuje zadania na kolumny na podstawie `contact_category + contact_offering_stage`
 
-**Brakuje invalidacji:**
-- `deal-team-contact-stage` -- klucz uzywany przez `InteractivePipelineStageRow` (query w TaskDetailSheet). Dlatego po zmianie dane nie odswiezaja sie w panelu bocznym.
-- `deal-team-assignments-all` -- klucz uzywany przez Kanban zadan. Dlatego zmiana kategorii/etapu nie przesuwa zadania na Kanbanie workflow.
+### Znalezione problemy
 
-### 2. Brak trzeciego wiersza -- etap workflow (Kanban zadan)
-W panelu bocznym widac:
-- **Etap lejka** = kategoria (HOT, TOP, OFFERING...) + pod-etap (Handshake, Spotkanie umowione...)
+#### Problem 1: Odwrotne mapowanie HOT/TOP w "Etap zadania" (KRYTYCZNY)
 
-Ale brakuje informacji o tym, w ktorej **kolumnie Kanbana zadan** aktualnie znajduje sie zadanie. To jest wazne, bo Kanban zadan mapuje category+stage na kolumne workflow (np. "Spotkanie umowione", "Negocjacje").
+Gdy uzytkownik zmienia "Etap zadania" w panelu bocznym (np. na "Spotkanie umowione"), system szuka w `testMappings` pierwszego pasujacego wpisu. HOT jest zawsze przed TOP na liscie, wiec:
 
-Uzytkownik chce widziec i zmieniac rowniez ten etap -- co efektywnie zmienia kombinacje category + offering_stage kontaktu.
+- Kontakt w kategorii **TOP** + zmiana etapu na `meeting_scheduled` -> system **blednie zmienia kategorie na HOT** (bo `hot + meeting_scheduled` pasuje jako pierwszy)
 
-### 3. Spojnosc: zmiana lejka vs zmiana zadan
-Obecny model jest spojny pod warunkiem prawidlowej synchronizacji:
-- Zmiana **kategorii** (np. HOT -> OFFERING) automatycznie resetuje `offering_stage` do domyslnego -- OK
-- Zmiana **pod-etapu** (np. meeting_plan -> meeting_scheduled) aktualizuje `offering_stage` -- OK
-- Kanban zadan czyta `contact_category` + `contact_offering_stage` -- wiec zmiana w panelu bocznym powinna automatycznie przesuwac zadanie na Kanbanie
+Naprawa: W `handleWorkflowChange` preferowac aktualna kategorie kontaktu. Jezeli `match()` pasuje do aktualnej kategorii, uzywac jej zamiast pierwszego znalezionego wpisu.
 
-Problem jest tylko w **brakujacej invalidacji cache** -- po naprawie wszystko bedzie dzialac spojnie.
+#### Problem 2: Brak danych kontaktu w panelu bocznym z widoku Kanban zadan
 
-## Plan naprawy
+W `MyTeamTasksView` obiekt `selectedTask` (mapowany z `DealTeamAssignment`) ustawia `task_contacts: []`. Przez to w panelu bocznym (TaskDetailSheet) wiersz "Kontakt" jest pusty -- nie widac nazwy kontaktu ani firmy. Dane `deal_team_id` i `deal_team_contact_id` sa poprawne, wiec dropdowny etapow dzialaja, ale brakuje informacji kontaktowej.
 
-### Plik: `src/hooks/useDealsTeamContacts.ts`
+Naprawa: Dodac `task_contacts` do obiektu `selectedTask` na podstawie danych z `DealTeamAssignment` (ktore zawieraja `contact_name`, `contact_company`, `contact_id`).
 
-W `useUpdateTeamContact` -> `onSuccess` dodac brakujace invalidacje:
+## Plan napraw technicznych
+
+### Plik 1: `src/components/tasks/TaskDetailSheet.tsx`
+
+Zmiana w `handleWorkflowChange` -- preferowanie aktualnej kategorii:
 
 ```text
-+ queryClient.invalidateQueries({ queryKey: ['deal-team-contact-stage'] });
-+ queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
+Obecny kod (linia 220):
+  const match = testMappings.find(m => col.match(m.cat, m.stage || null));
+
+Nowy kod:
+  // Preferuj mapowanie z aktualna kategoria (aby TOP nie przeskoczyl do HOT)
+  const matchSameCat = testMappings.find(
+    m => m.cat === currentCategory && col.match(m.cat, m.stage || null)
+  );
+  const match = matchSameCat || testMappings.find(m => col.match(m.cat, m.stage || null));
 ```
 
-To naprawi:
-1. Natychmiastowe odswierzenie dropdownow w TaskDetailSheet po zmianie
-2. Automatyczne przesuniecie zadania na Kanbanie zadan
+### Plik 2: `src/components/deals-team/MyTeamTasksView.tsx`
 
-### Plik: `src/components/tasks/TaskDetailSheet.tsx`
+Zmiana w `selectedTask` (linie 258-268) -- dodanie `task_contacts`:
 
-Dodac trzeci wiersz **"Etap zadania"** pod "Etap lejka", pokazujacy w ktorej kolumnie workflow znajduje sie zadanie:
-
-- Import `WORKFLOW_COLUMNS` z `pipelineStages.ts`
-- Na podstawie aktualnego `category` + `offering_stage` wyszukac pasujaca kolumne workflow (`match()`)
-- Wyswietlic jako DropdownMenu z lista wszystkich kolumn workflow
-- Zmiana kolumny workflow automatycznie aktualizuje `category` i `offering_stage` kontaktu (odwrotne mapowanie)
-
-Uklad UI:
 ```text
-Etap lejka      [v TOP LEAD]    [v Zaplanowac spotkanie]
-Etap zadania    [v Zaplanowac spotkanie (Spotkania)]
+Obecny kod:
+  task_contacts: [],
+
+Nowy kod:
+  task_contacts: a.contact_id ? [{
+    contacts: {
+      id: a.contact_id,
+      full_name: a.contact_name || '',
+      company: a.contact_company || null,
+    }
+  }] : [],
 ```
 
-Zmiana w "Etap zadania" bedzie:
-- W ramach tej samej kategorii -- aktualizacja `offering_stage`
-- Miedzy kategoriami -- aktualizacja `category` (z automatycznym resetem `offering_stage`)
+Dzieki temu panel boczny bedzie wyswietlal nazwe kontaktu i firme, oraz link do profilu kontaktu.
 
-### Bez zmian w pozostalych plikach
-- `pipelineStages.ts` -- konfiguracja WORKFLOW_COLUMNS juz zawiera mapowanie i `match()`
-- `MyTeamTasksView.tsx` -- Kanban zadan automatycznie sie odswieza dzieki invalidacji `deal-team-assignments-all`
-- `SubKanbanView.tsx` -- sub-kanban odswieza sie dzieki invalidacji `deal-team-contacts`
+## Efekt koncowy
+
+Po naprawach caly flow bedzie spojny:
+1. **Kanban kontaktow** -- przenoszenie kontaktow miedzy kolumnami zmienia `category`
+2. **Sub-kanban kontaktow** -- przenoszenie zmienia `offering_stage`
+3. **Kanban zadan** -- zadania sa automatycznie mapowane na kolumny workflow na podstawie `category + offering_stage` kontaktu
+4. **Panel boczny zadania** -- 3 interaktywne wiersze (Etap lejka, Pod-etap, Etap zadania) synchronizuja wszystkie 3 widoki
+5. **Zmiana z TOP** -- nie powoduje blednego przeskoku do HOT
+
