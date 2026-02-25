@@ -51,7 +51,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 // ─── Workflow Column Configuration (from central config) ────
-import { WORKFLOW_COLUMNS, type WorkflowColumn } from '@/config/pipelineStages';
+import { WORKFLOW_COLUMNS, CATEGORY_OPTIONS, type WorkflowColumn } from '@/config/pipelineStages';
 import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';
 import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';
 
@@ -297,6 +297,16 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     }
     return cols;
   }, [filtered]);
+
+  // Funnel stats per category
+  const FUNNEL_CATEGORIES = useMemo(() => ['hot', 'top', 'offering', 'audit', 'client', 'lost'], []);
+  const funnelStats = useMemo(() => {
+    return FUNNEL_CATEGORIES.map(catValue => {
+      const cfg = CATEGORY_OPTIONS.find(c => c.value === catValue);
+      const count = filtered.filter(t => t.contact_category === catValue).length;
+      return { value: catValue, label: cfg?.label ?? catValue, icon: cfg?.icon ?? '📋', color: cfg?.color ?? '', count };
+    });
+  }, [filtered, FUNNEL_CATEGORIES]);
 
   // Team view data
   const teamData = useMemo(() => {
@@ -552,6 +562,24 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
       {/* ─── VIEW: Workflow Kanban ─────────────────────── */}
       {filtered.length > 0 && viewMode === 'kanban' && (
+        <>
+        {/* Pipeline Funnel Indicator */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-2">
+          {funnelStats.map((stage, idx) => (
+            <div key={stage.value} className="flex items-center shrink-0">
+              {idx > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5 shrink-0" />}
+              <div className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-opacity',
+                stage.color,
+                stage.count === 0 && 'opacity-40'
+              )}>
+                <span>{stage.icon}</span>
+                <span>{stage.label}</span>
+                <span className="font-bold">({stage.count})</span>
+              </div>
+            </div>
+          ))}
+        </div>
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="overflow-x-auto -mx-4 px-4 pb-4">
             <div className="flex gap-3 min-w-max">
@@ -643,6 +671,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             )}
           </DragOverlay>
         </DndContext>
+        </>
       )}
 
       {/* ─── VIEW: Team ───────────────────────────────── */}
