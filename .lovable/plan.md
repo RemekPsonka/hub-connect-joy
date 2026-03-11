@@ -1,28 +1,31 @@
 
 
-# Przeniesienie nawigacji widoków z górnego menu do sidebara
+# Dodanie wizualnego wskaznika lejka nad Kanbanem
 
-## Zmiany
+## Cel
+Dodanie nad widokiem Kanban zadaniowego wizualnego paska pokazujacego glowne etapy lejka sprzedazy (HOT, TOP, OFERTOWANIE, AUDYT, KLIENT, PRZEGRANE) z informacja ile zadab jest na kazdym etapie. Uzytkownik widzi od razu, na ktorym etapie lejka znajduja sie zadania.
 
-### 1. `src/components/layout/AppSidebar.tsx`
+## Uklad wizualny
 
-- Usunac `{ title: 'Zadania sprzedaży', url: '/deals-team?view=tasks', ... }` z `salesItems`
-- Zamienic `{ title: 'Lejek sprzedaży', url: '/deals-team', icon: TrendingUp }` na element rozwijalny z podlinkamiz:
-  - Dashboard → `/deals-team?view=dashboard`
-  - Kanban → `/deals-team?view=kanban`
-  - Tabela → `/deals-team?view=table`
-  - Prospecting → `/deals-team?view=prospecting`
-  - Klienci → `/deals-team?view=clients`
-  - Ofertowanie → `/deals-team?view=offering`
-  - Zadania → `/deals-team?view=tasks`
-  - Prowizje → `/deals-team?view=commissions`
-  - Odlożone → `/deals-team?view=snoozed`
-- Uzyc `Collapsible` (juz zaimportowane) do rozwijania podlinków pod "Lejek sprzedazy"
-- Automatycznie rozwijac gdy uzytkownik jest na `/deals-team`
+```text
+🔥 HOT (2)  →  ⭐ TOP (1)  →  📝 OFERTOWANIE (4)  →  📋 AUDYT (0)  →  ✅ KLIENT (0)  →  ✖️ PRZEGRANE (0)
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[Zaplanować spotkanie] [Spotkanie umówione] [Spotkanie odbyte] [Handshake] [Pełnomocnictwo] [Przygotowanie] ...
+```
 
-### 2. `src/pages/DealsTeamDashboard.tsx`
+Pasek wyglada jak stepper/breadcrumb z kolorowymi badge'ami. Etapy z zadaniami sa podswietlone (pelny kolor), puste sa przygaszone. Klikniecie na etap moze filtrowac kanban do danej kategorii.
 
-- Usunac caly blok `<Tabs>` z gornego menu (linie 147-188)
-- Odczytywac `view` z `searchParams` reaktywnie (nie tylko na init) i ustawiac `viewMode` przy kazdej zmianie URL
-- Domyslny widok gdy brak `?view=` to `kanban`
+## Plan techniczny
 
+### Plik: `src/components/deals-team/MyTeamTasksView.tsx`
+
+1. Dodac blok `useMemo` obliczajacy ile zadan jest w kazdej kategorii glownej (`contact_category`) na podstawie `filtered`
+2. Dodac komponent paska lejka (inline lub wydzielony) renderowany **tylko w trybie kanban** (`viewMode === 'kanban'`), tuz przed `<DndContext>`
+3. Pasek uzywa `CATEGORY_OPTIONS` z `pipelineStages.ts` do wyswietlenia etapow w kolejnosci
+4. Kazdy etap pokazuje: ikone, nazwe, liczbe zadan w nawiasie
+5. Etapy z zadaniami maja pelny kolor tla, puste sa `opacity-50`
+6. Etapy polaczone strzalkami (`→` lub chevron) tworzac wizualny lejek
+7. Opcjonalnie: klikniecie na etap filtruje widok kanban do kolumn nalezacych do tej kategorii
+
+### Szacunkowe zmiany
+- **1 plik**: `src/components/deals-team/MyTeamTasksView.tsx` -- dodanie ~30 linii kodu paska lejka nad sekcja kanban (linie 553-556)

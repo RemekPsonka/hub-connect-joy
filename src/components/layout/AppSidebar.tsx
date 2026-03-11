@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  LayoutGrid,
+  List,
   Users,
   CheckSquare,
   MessageSquare,
@@ -27,6 +29,11 @@ import {
   Sparkles,
   ClipboardList,
   ChevronDown,
+  ChevronRight,
+  UserCheck,
+  Receipt,
+  Moon,
+  PieChart,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -76,11 +83,21 @@ const projectItems = [
 
 // SPRZEDAŻ
 const salesItems = [
-  { title: 'Lejek sprzedaży', url: '/deals-team', icon: TrendingUp, adminOnly: false },
-  { title: 'Zadania sprzedaży', url: '/deals-team?view=tasks', icon: ClipboardList, adminOnly: false },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound, adminOnly: false },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
   { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
+];
+
+const funnelSubItems = [
+  { title: 'Dashboard', url: '/deals-team?view=dashboard', icon: PieChart },
+  { title: 'Kanban', url: '/deals-team?view=kanban', icon: LayoutGrid },
+  { title: 'Tabela', url: '/deals-team?view=table', icon: List },
+  { title: 'Prospecting', url: '/deals-team?view=prospecting', icon: Search },
+  { title: 'Klienci', url: '/deals-team?view=clients', icon: UserCheck },
+  { title: 'Ofertowanie', url: '/deals-team?view=offering', icon: Briefcase },
+  { title: 'Zadania', url: '/deals-team?view=tasks', icon: ClipboardList },
+  { title: 'Prowizje', url: '/deals-team?view=commissions', icon: Receipt },
+  { title: 'Odłożone', url: '/deals-team?view=snoozed', icon: Moon },
 ];
 
 // AI
@@ -157,6 +174,56 @@ function CollapsibleGroupLabel({ children, isCollapsed, isOpen, onToggle }: { ch
   );
 }
 
+function FunnelCollapsible({ isCollapsed }: { isCollapsed: boolean }) {
+  const location = useLocation();
+  const isFunnelActive = location.pathname === '/deals-team';
+  const [open, setOpen] = useState(isFunnelActive);
+
+  const baseClass = "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150";
+  const activeClass = "bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]";
+
+  return (
+    <SidebarMenuItem>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button className={`${baseClass} w-full justify-between ${isFunnelActive ? 'text-sidebar-foreground font-medium' : ''}`}>
+            <span className="flex items-center gap-3">
+              <TrendingUp className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>Lejek sprzedaży</span>}
+            </span>
+            {!isCollapsed && (
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        {!isCollapsed && (
+          <CollapsibleContent>
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">
+              {funnelSubItems.map((sub) => {
+                const params = new URLSearchParams(sub.url.split('?')[1]);
+                const isActive = location.pathname === '/deals-team' &&
+                  Array.from(params.entries()).every(([k, v]) => new URLSearchParams(location.search).get(k) === v);
+
+                return (
+                  <SidebarMenuButton key={sub.title} asChild tooltip={sub.title}>
+                    <NavLink
+                      to={sub.url}
+                      end
+                      className={`${baseClass} py-1.5 text-xs ${isActive ? activeClass : ''}`}
+                    >
+                      <sub.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{sub.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        )}
+      </Collapsible>
+    </SidebarMenuItem>
+  );
+}
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
@@ -254,6 +321,10 @@ export function AppSidebar() {
             {(isCollapsed || openGroups[group.label] !== false) && (
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-0.5">
+                  {/* Funnel collapsible in Sprzedaż group */}
+                  {group.label === 'Sprzedaż' && !isAssistant && (
+                    <FunnelCollapsible isCollapsed={isCollapsed} />
+                  )}
                   {group.items
                     .filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin)
                     .map((item) => (
