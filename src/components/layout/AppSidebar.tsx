@@ -271,6 +271,10 @@ export function AppSidebar() {
             {(isCollapsed || openGroups[group.label] !== false) && (
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-0.5">
+                  {/* Funnel collapsible in Sprzedaż group */}
+                  {group.label === 'Sprzedaż' && !isAssistant && (
+                    <FunnelCollapsible isCollapsed={isCollapsed} />
+                  )}
                   {group.items
                     .filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin)
                     .map((item) => (
