@@ -224,8 +224,7 @@ function FunnelCollapsible({ isCollapsed }: { isCollapsed: boolean }) {
     </SidebarMenuItem>
   );
 }
-
-
+export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const { isAdmin } = useOwnerPanel();
