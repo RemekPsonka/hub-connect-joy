@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  LayoutGrid,
+  List,
   Users,
   CheckSquare,
   MessageSquare,
@@ -27,6 +29,11 @@ import {
   Sparkles,
   ClipboardList,
   ChevronDown,
+  ChevronRight,
+  UserCheck,
+  Receipt,
+  Moon,
+  PieChart,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
