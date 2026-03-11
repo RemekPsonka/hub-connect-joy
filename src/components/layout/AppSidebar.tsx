@@ -174,7 +174,58 @@ function CollapsibleGroupLabel({ children, isCollapsed, isOpen, onToggle }: { ch
   );
 }
 
-export function AppSidebar() {
+function FunnelCollapsible({ isCollapsed }: { isCollapsed: boolean }) {
+  const location = useLocation();
+  const isFunnelActive = location.pathname === '/deals-team';
+  const [open, setOpen] = useState(isFunnelActive);
+
+  const baseClass = "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150";
+  const activeClass = "bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]";
+
+  return (
+    <SidebarMenuItem>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button className={`${baseClass} w-full justify-between ${isFunnelActive ? 'text-sidebar-foreground font-medium' : ''}`}>
+            <span className="flex items-center gap-3">
+              <TrendingUp className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>Lejek sprzedaży</span>}
+            </span>
+            {!isCollapsed && (
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        {!isCollapsed && (
+          <CollapsibleContent>
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">
+              {funnelSubItems.map((sub) => {
+                const params = new URLSearchParams(sub.url.split('?')[1]);
+                const isActive = location.pathname === '/deals-team' &&
+                  Array.from(params.entries()).every(([k, v]) => new URLSearchParams(location.search).get(k) === v);
+
+                return (
+                  <SidebarMenuButton key={sub.title} asChild tooltip={sub.title}>
+                    <NavLink
+                      to={sub.url}
+                      end
+                      className={`${baseClass} py-1.5 text-xs ${isActive ? activeClass : ''}`}
+                    >
+                      <sub.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{sub.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        )}
+      </Collapsible>
+    </SidebarMenuItem>
+  );
+}
+
+
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const { isAdmin } = useOwnerPanel();
