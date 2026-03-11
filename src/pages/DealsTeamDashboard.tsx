@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { LayoutGrid, List, Users, Plus, BarChart3, Search, UserCheck, Receipt, ClipboardList, Moon, Briefcase, PieChart } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Users, Plus } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
 import {
@@ -20,33 +20,30 @@ import {
   SalesFunnelDashboard,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
 
 const STORAGE_KEY = 'deals-team-selected';
+const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
 
 export default function DealsTeamDashboard() {
   const { data: teams = [], isLoading: teamsLoading } = useMyDealTeams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  // Load selected team from localStorage
   const [selectedTeamId, setSelectedTeamId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY) || '';
   });
 
-  const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
   const currentView = searchParams.get('view') as ViewMode;
-  const viewMode: ViewMode = validViews.includes(currentView) ? currentView : 'kanban';
+  const viewMode: ViewMode = VALID_VIEWS.includes(currentView) ? currentView : 'kanban';
+
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
 
-  // Get stats for selected team
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
 
-  // Auto-select first team if none selected
   useEffect(() => {
     if (!teamsLoading && teams.length > 0 && !selectedTeamId) {
       const firstTeamId = teams[0].id;
@@ -55,28 +52,20 @@ export default function DealsTeamDashboard() {
     }
   }, [teams, teamsLoading, selectedTeamId]);
 
-  // Persist selected team to localStorage
   useEffect(() => {
     if (selectedTeamId) {
       localStorage.setItem(STORAGE_KEY, selectedTeamId);
     }
   }, [selectedTeamId]);
 
-  const handleTeamChange = (teamId: string) => {
-    setSelectedTeamId(teamId);
+  const handleTeamChange = (teamId: string) => setSelectedTeamId(teamId);
+  const handleTeamCreated = (teamId: string) => setSelectedTeamId(teamId);
+  const handleSettingsClick = () => setShowTeamSettings(true);
+
+  const handleNavigate = (view: string) => {
+    setSearchParams({ view });
   };
 
-  const handleTeamCreated = (teamId: string) => {
-    setSelectedTeamId(teamId);
-  };
-
-  const handleSettingsClick = () => {
-    setShowTeamSettings(true);
-  };
-
-  const overdueCount = contactStats?.overdue_count || 0;
-
-  // Loading state
   if (teamsLoading) {
     return (
       <div className="p-6 space-y-6">
@@ -95,7 +84,6 @@ export default function DealsTeamDashboard() {
     );
   }
 
-  // Empty state - no teams
   if (teams.length === 0) {
     return (
       <div className="p-6">
@@ -112,7 +100,6 @@ export default function DealsTeamDashboard() {
             Utwórz pierwszy zespół
           </Button>
         </div>
-
         <CreateTeamDialog
           open={showCreateTeam}
           onOpenChange={setShowCreateTeam}
@@ -125,131 +112,40 @@ export default function DealsTeamDashboard() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <TeamSelector
-            selectedTeamId={selectedTeamId}
-            onTeamChange={handleTeamChange}
-            teams={teams}
-            contactStats={contactStats}
-            onSettingsClick={handleSettingsClick}
-          />
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="w-full overflow-x-auto">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-            <TabsList className="w-max">
-              <TabsTrigger value="dashboard" className="gap-1.5 px-2.5">
-                <PieChart className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Dashboard</span>
-              </TabsTrigger>
-              <TabsTrigger value="kanban" className="gap-1.5 px-2.5">
-                <LayoutGrid className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Kanban</span>
-              </TabsTrigger>
-              <TabsTrigger value="table" className="gap-1.5 px-2.5">
-                <List className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Tabela</span>
-              </TabsTrigger>
-              <TabsTrigger value="prospecting" className="gap-1.5 px-2.5">
-                <Search className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Prospecting</span>
-              </TabsTrigger>
-              <TabsTrigger value="clients" className="gap-1.5 px-2.5">
-                <UserCheck className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Klienci</span>
-              </TabsTrigger>
-              <TabsTrigger value="offering" className="gap-1.5 px-2.5">
-                <Briefcase className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Ofertowanie</span>
-              </TabsTrigger>
-              <TabsTrigger value="tasks" className="gap-1.5 px-2.5">
-                <ClipboardList className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Zadania</span>
-              </TabsTrigger>
-              <TabsTrigger value="commissions" className="gap-1.5 px-2.5">
-                <Receipt className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Prowizje</span>
-              </TabsTrigger>
-              <TabsTrigger value="snoozed" className="gap-1.5 px-2.5">
-                <Moon className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Odłożone</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <TeamSelector
+          selectedTeamId={selectedTeamId}
+          onTeamChange={handleTeamChange}
+          teams={teams}
+          contactStats={contactStats}
+          onSettingsClick={handleSettingsClick}
+        />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
+            <Plus className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Stats - always visible when team selected (except dashboard) */}
+      {/* Stats - always visible when team selected (except dashboard, tasks, kanban) */}
       {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
-        <SalesFunnelDashboard teamId={selectedTeamId} onNavigate={(v) => setViewMode(v as ViewMode)} />
+        <SalesFunnelDashboard teamId={selectedTeamId} onNavigate={handleNavigate} />
       )}
+      {selectedTeamId && viewMode === 'kanban' && <KanbanBoard teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'table' && <TableView teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'commissions' && <CommissionsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'snoozed' && <SnoozedTeamView teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
 
-      {selectedTeamId && viewMode === 'kanban' && (
-        <KanbanBoard teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'table' && (
-        <TableView teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'prospecting' && (
-        <ProspectingTab teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'clients' && (
-        <ClientsTab teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'tasks' && (
-        <MyTeamTasksView teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'commissions' && (
-        <CommissionsTab teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'snoozed' && (
-        <SnoozedTeamView teamId={selectedTeamId} />
-      )}
-
-      {selectedTeamId && viewMode === 'offering' && (
-        <OfferingTab teamId={selectedTeamId} />
-      )}
-
-      {/* Create Team Dialog */}
-      <CreateTeamDialog
-        open={showCreateTeam}
-        onOpenChange={setShowCreateTeam}
-        onTeamCreated={handleTeamCreated}
-      />
-
-      {/* Weekly Status Panel */}
-      {selectedTeamId && (
-        <WeeklyStatusPanel
-          teamId={selectedTeamId}
-          open={showWeeklyStatus}
-          onOpenChange={setShowWeeklyStatus}
-        />
-      )}
-
-      {/* Team Settings */}
-      {selectedTeamId && (
-        <TeamSettings
-          teamId={selectedTeamId}
-          open={showTeamSettings}
-          onOpenChange={setShowTeamSettings}
-        />
-      )}
+      <CreateTeamDialog open={showCreateTeam} onOpenChange={setShowCreateTeam} onTeamCreated={handleTeamCreated} />
+      {selectedTeamId && <WeeklyStatusPanel teamId={selectedTeamId} open={showWeeklyStatus} onOpenChange={setShowWeeklyStatus} />}
+      {selectedTeamId && <TeamSettings teamId={selectedTeamId} open={showTeamSettings} onOpenChange={setShowTeamSettings} />}
     </div>
   );
 }
