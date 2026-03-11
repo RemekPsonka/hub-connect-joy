@@ -76,11 +76,21 @@ const projectItems = [
 
 // SPRZEDAŻ
 const salesItems = [
-  { title: 'Lejek sprzedaży', url: '/deals-team', icon: TrendingUp, adminOnly: false },
-  { title: 'Zadania sprzedaży', url: '/deals-team?view=tasks', icon: ClipboardList, adminOnly: false },
   { title: 'Spotkania', url: '/meetings', icon: UsersRound, adminOnly: false },
   { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
   { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
+];
+
+const funnelSubItems = [
+  { title: 'Dashboard', url: '/deals-team?view=dashboard', icon: PieChart },
+  { title: 'Kanban', url: '/deals-team?view=kanban', icon: LayoutGrid },
+  { title: 'Tabela', url: '/deals-team?view=table', icon: List },
+  { title: 'Prospecting', url: '/deals-team?view=prospecting', icon: Search },
+  { title: 'Klienci', url: '/deals-team?view=clients', icon: UserCheck },
+  { title: 'Ofertowanie', url: '/deals-team?view=offering', icon: Briefcase },
+  { title: 'Zadania', url: '/deals-team?view=tasks', icon: ClipboardList },
+  { title: 'Prowizje', url: '/deals-team?view=commissions', icon: Receipt },
+  { title: 'Odłożone', url: '/deals-team?view=snoozed', icon: Moon },
 ];
 
 // AI

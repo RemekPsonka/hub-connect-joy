@@ -37,10 +37,8 @@ export default function DealsTeamDashboard() {
   });
 
   const validViews: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
-  const initialView = searchParams.get('view') as ViewMode;
-  const [viewMode, setViewMode] = useState<ViewMode>(
-    validViews.includes(initialView) ? initialView : 'kanban'
-  );
+  const currentView = searchParams.get('view') as ViewMode;
+  const viewMode: ViewMode = validViews.includes(currentView) ? currentView : 'kanban';
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
