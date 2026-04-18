@@ -28,7 +28,6 @@ function mapRowToProspect(row: ProspectRow): DealTeamProspect {
   return {
     id: row.id,
     team_id: row.team_id || '',
-    deal_team_id: row.team_id || '',
     tenant_id: row.tenant_id,
     prospect_name: row.full_name,
     prospect_company: row.company,
@@ -41,7 +40,7 @@ function mapRowToProspect(row: ProspectRow): DealTeamProspect {
     found_via: null,
     intro_contact_id: null,
     assigned_to: null,
-    requested_by: row.imported_by,
+    requested_by: row.imported_by || '',
     requested_for_reason: null,
     priority: (row.priority || 'medium') as DealPriority,
     target_date: null,
