@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useWorkspaceSchedule } from '@/hooks/useWorkspace';
 import { useProjects } from '@/hooks/useProjects';
 import { WorkspaceDayCard } from '@/components/workspace/WorkspaceDayCard';
 import { WorkspaceDayDashboard } from '@/components/workspace/WorkspaceDayDashboard';
+import { WidgetGrid } from '@/components/workspace/widgets/WidgetGrid';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { startOfWeek, addWeeks, addDays, format, isToday, isSameWeek } from 'date-fns';
@@ -11,6 +14,9 @@ import { pl } from 'date-fns/locale';
 const DAY_NAMES = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela'];
 
 export default function Workspace() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'week' ? 'week' : 'cockpit';
+  const [tab, setTab] = useState<string>(initialTab);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const todayDayIndex = (new Date().getDay() + 6) % 7;
   const [activeDay, setActiveDay] = useState(todayDayIndex);
@@ -22,7 +28,6 @@ export default function Workspace() {
     [projectsRaw]
   );
 
-  // Group schedule entries by day_of_week
   const scheduleMap = useMemo(() => {
     const map: Record<number, any[]> = {};
     schedule.forEach((s: any) => {
@@ -35,69 +40,91 @@ export default function Workspace() {
   const isCurrentWeek = isSameWeek(weekStart, new Date(), { weekStartsOn: 1 });
   const activeEntries = scheduleMap[activeDay] || [];
 
+  const handleTabChange = (v: string) => {
+    setTab(v);
+    setSearchParams((sp) => {
+      sp.set('tab', v);
+      return sp;
+    });
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Workspace</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {format(weekStart, 'd MMM', { locale: pl })} – {format(addDays(weekStart, 6), 'd MMM yyyy', { locale: pl })}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeekStart(w => addWeeks(w, -1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={isCurrentWeek ? 'secondary' : 'outline'}
-            size="sm"
-            className="h-8 text-xs gap-1"
-            onClick={() => { setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 })); setActiveDay(todayDayIndex); }}
-          >
-            <CalendarDays className="h-3.5 w-3.5" /> Dziś
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeekStart(w => addWeeks(w, 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      <div className="px-6 py-4 border-b border-border/50">
+        <h1 className="text-xl font-bold text-foreground">Workspace</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Twój osobisty cockpit</p>
       </div>
 
-      {/* Day bar */}
-      <div className="flex gap-2 px-6 py-3 overflow-x-auto border-b border-border/30">
-        {DAY_NAMES.map((name, i) => {
-          const dayDate = addDays(weekStart, i);
-          const dayEntries = scheduleMap[i] || [];
-          const projects = dayEntries
-            .filter((e: any) => e.project)
-            .map((e: any) => ({ name: e.project.name, color: e.project.color }));
-          return (
-            <WorkspaceDayCard
-              key={i}
-              dayIndex={i}
-              dayName={format(dayDate, 'EEE d', { locale: pl })}
-              projects={projects}
-              isActive={activeDay === i}
-              isToday={isToday(dayDate)}
-              onClick={() => setActiveDay(i)}
-            />
-          );
-        })}
-      </div>
+      <Tabs value={tab} onValueChange={handleTabChange} className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-6 pt-3">
+          <TabsList>
+            <TabsTrigger value="cockpit">Cockpit</TabsTrigger>
+            <TabsTrigger value="week">Tydzień</TabsTrigger>
+          </TabsList>
+        </div>
 
-      {/* Dashboard */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        {isLoading ? (
-          <div className="text-muted-foreground text-sm py-12 text-center">Ładowanie...</div>
-        ) : (
-          <WorkspaceDayDashboard
-            dayOfWeek={activeDay}
-            dayName={DAY_NAMES[activeDay]}
-            entries={activeEntries}
-            allProjects={allProjects}
-          />
-        )}
-      </div>
+        <TabsContent value="cockpit" className="flex-1 overflow-y-auto px-6 py-5 mt-0">
+          <WidgetGrid />
+        </TabsContent>
+
+        <TabsContent value="week" className="flex-1 overflow-hidden flex flex-col mt-0">
+          <div className="flex items-center justify-between px-6 py-3 border-b border-border/30">
+            <p className="text-xs text-muted-foreground">
+              {format(weekStart, 'd MMM', { locale: pl })} – {format(addDays(weekStart, 6), 'd MMM yyyy', { locale: pl })}
+            </p>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeekStart(w => addWeeks(w, -1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={isCurrentWeek ? 'secondary' : 'outline'}
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={() => { setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 })); setActiveDay(todayDayIndex); }}
+              >
+                <CalendarDays className="h-3.5 w-3.5" /> Dziś
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeekStart(w => addWeeks(w, 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex gap-2 px-6 py-3 overflow-x-auto border-b border-border/30">
+            {DAY_NAMES.map((name, i) => {
+              const dayDate = addDays(weekStart, i);
+              const dayEntries = scheduleMap[i] || [];
+              const projects = dayEntries
+                .filter((e: any) => e.project)
+                .map((e: any) => ({ name: e.project.name, color: e.project.color }));
+              return (
+                <WorkspaceDayCard
+                  key={i}
+                  dayIndex={i}
+                  dayName={format(dayDate, 'EEE d', { locale: pl })}
+                  projects={projects}
+                  isActive={activeDay === i}
+                  isToday={isToday(dayDate)}
+                  onClick={() => setActiveDay(i)}
+                />
+              );
+            })}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {isLoading ? (
+              <div className="text-muted-foreground text-sm py-12 text-center">Ładowanie...</div>
+            ) : (
+              <WorkspaceDayDashboard
+                dayOfWeek={activeDay}
+                dayName={DAY_NAMES[activeDay]}
+                entries={activeEntries}
+                allProjects={allProjects}
+              />
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
