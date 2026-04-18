@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 interface MeetingDetailHeaderProps {
   meeting: GroupMeeting;
@@ -86,6 +87,7 @@ export function MeetingDetailHeader({
         </div>
 
         <div className="flex gap-2">
+          <SovraOpenButton scopeType="meeting" scopeId={meeting.id} />
           <Button variant="outline" size="sm" onClick={onEdit} className="gap-2">
             <Pencil className="h-4 w-4" />
             Edytuj

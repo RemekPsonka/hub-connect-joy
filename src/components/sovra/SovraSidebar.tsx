@@ -5,11 +5,15 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import type { SovraSession } from '@/hooks/useSovraSessions';
+import type { SovraScopeFilter } from '@/hooks/useSovraSessions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface SovraSidebarProps {
   sessions: SovraSession[];
   isLoading: boolean;
   activeSessionId: string | null;
+  scopeFilter: SovraScopeFilter;
+  onScopeFilterChange: (f: SovraScopeFilter) => void;
   onNewSession: () => void;
   onSelectSession: (id: string) => void;
 }
@@ -19,12 +23,27 @@ const TYPE_LABELS: Record<string, { label: string; emoji: string }> = {
   chat: { label: 'Chat', emoji: '💬' },
   debrief: { label: 'Debrief', emoji: '📝' },
   evening: { label: 'Wieczorny', emoji: '🌙' },
+  contact: { label: 'Kontakt', emoji: '👤' },
+  project: { label: 'Projekt', emoji: '📁' },
+  deal: { label: 'Szansa', emoji: '🎯' },
+  meeting: { label: 'Spotkanie', emoji: '📅' },
 };
+
+const FILTER_OPTIONS: Array<{ value: SovraScopeFilter; label: string }> = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'global', label: 'Globalne' },
+  { value: 'contact', label: 'Kontakty' },
+  { value: 'project', label: 'Projekty' },
+  { value: 'deal', label: 'Szanse' },
+  { value: 'meeting', label: 'Spotkania' },
+];
 
 export function SovraSidebar({
   sessions,
   isLoading,
   activeSessionId,
+  scopeFilter,
+  onScopeFilterChange,
   onNewSession,
   onSelectSession,
 }: SovraSidebarProps) {
@@ -37,6 +56,22 @@ export function SovraSidebar({
           <Plus className="h-3.5 w-3.5" />
           Nowa
         </Button>
+      </div>
+
+      {/* Scope filter */}
+      <div className="px-3 py-2 border-b border-border">
+        <Select value={scopeFilter} onValueChange={(v) => onScopeFilterChange(v as SovraScopeFilter)}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FILTER_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Sessions list */}

@@ -11,8 +11,9 @@ import { SovraInput } from '@/components/sovra/SovraInput';
 import { SovraModeSelector, type SovraMode } from '@/components/sovra/SovraModeSelector';
 import { SovraDebrief } from '@/components/sovra/SovraDebrief';
 import { SovraMorningBrief } from '@/components/sovra/SovraMorningBrief';
+import { SovraFallbackBanner } from '@/components/sovra/SovraFallbackBanner';
 import { useSovraChat } from '@/hooks/useSovraChat';
-import { useSovraSessions } from '@/hooks/useSovraSessions';
+import { useSovraSessions, type SovraScopeFilter } from '@/hooks/useSovraSessions';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 
@@ -84,17 +85,22 @@ export default function Sovra() {
     if (modeParam) clearModeParams();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [scopeFilter, setScopeFilter] = useState<SovraScopeFilter>('all');
+
   const {
     messages,
     isStreaming,
     sessionId,
+    lastError,
+    clearError,
+    retryLast,
     sendMessage,
     confirmAction,
     loadSession,
     newSession,
   } = useSovraChat({ contextType, contextId });
 
-  const { data: sessions = [], isLoading: sessionsLoading } = useSovraSessions();
+  const { data: sessions = [], isLoading: sessionsLoading } = useSovraSessions(scopeFilter);
 
   const handleSend = useCallback((text: string) => {
     sendMessage(text, contextType, contextId);
@@ -133,6 +139,8 @@ export default function Sovra() {
       sessions={sessions}
       isLoading={sessionsLoading}
       activeSessionId={sessionId}
+      scopeFilter={scopeFilter}
+      onScopeFilterChange={setScopeFilter}
       onNewSession={handleNewSession}
       onSelectSession={handleSelectSession}
     />
@@ -170,6 +178,9 @@ export default function Sovra() {
         {/* Content based on mode */}
         {mode === 'chat' && (
           <>
+            {lastError === 'unavailable' && (
+              <SovraFallbackBanner onRetry={retryLast} onDismiss={clearError} />
+            )}
             {messages.length === 0 ? (
               <SovraWelcome onQuickAction={handleSend} />
             ) : (

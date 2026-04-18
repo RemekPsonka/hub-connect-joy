@@ -8259,6 +8259,14 @@ export type Database = {
         Returns: Json[]
       }
       rpc_sovra_search_deals: { Args: { p_filters?: Json }; Returns: Json[] }
+      rpc_task_analytics: {
+        Args: { p_filters?: Json; p_range: Json }
+        Returns: Json
+      }
+      rpc_team_report: {
+        Args: { p_team_id?: string; p_week_start: string }
+        Returns: Json
+      }
       search_all_fts: {
         Args: {
           p_limit?: number

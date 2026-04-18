@@ -44,12 +44,17 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
   const [messages, setMessages] = useState<SovraMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<'unavailable' | null>(null);
+  const lastSentRef = useRef<{ text: string; ctxType?: string; ctxId?: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
 
   const sendMessage = useCallback(
     async (text: string, ctxType?: string, ctxId?: string) => {
       if (!text.trim() || isStreaming) return;
+
+      lastSentRef.current = { text, ctxType, ctxId };
+      setLastError(null);
 
       const userMsg: SovraMessage = { role: 'user', content: text, timestamp: new Date() };
       setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', timestamp: new Date() }]);
@@ -90,6 +95,12 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
         }
         if (response.status === 402) {
           toast.error('Wymagana płatność — doładuj kredyty AI.');
+          setMessages((prev) => prev.slice(0, -1));
+          setIsStreaming(false);
+          return;
+        }
+        if (response.status === 503 || response.status === 504) {
+          setLastError('unavailable');
           setMessages((prev) => prev.slice(0, -1));
           setIsStreaming(false);
           return;
@@ -205,7 +216,12 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
         console.error('Sovra chat error:', e);
-        toast.error('Nie udało się połączyć z Sovrą.');
+        // TypeError z fetch = network unavailable
+        if (e instanceof TypeError) {
+          setLastError('unavailable');
+        } else {
+          toast.error('Nie udało się połączyć z Sovrą.');
+        }
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant' && !last.content) return prev.slice(0, -1);
@@ -218,6 +234,15 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     },
     [isStreaming, sessionId, options.contextType, options.contextId, queryClient],
   );
+
+  const clearError = useCallback(() => setLastError(null), []);
+
+  const retryLast = useCallback(() => {
+    const last = lastSentRef.current;
+    if (!last) return;
+    setLastError(null);
+    void sendMessage(last.text, last.ctxType, last.ctxId);
+  }, [sendMessage]);
 
   const confirmAction = useCallback(
     async (pendingActionId: string, decision: 'confirm' | 'cancel') => {
@@ -303,6 +328,9 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     messages,
     isStreaming,
     sessionId,
+    lastError,
+    clearError,
+    retryLast,
     sendMessage,
     confirmAction,
     loadSession,
