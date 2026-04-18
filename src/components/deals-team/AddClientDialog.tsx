@@ -31,15 +31,24 @@ export function AddClientDialog({ open, onOpenChange, teamId }: AddClientDialogP
     queryKey: ['contacts-search-client', searchQuery, tenantId],
     queryFn: async () => {
       if (!tenantId || searchQuery.length < 2) return [];
-      const q = searchQuery.trim();
+      const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return [];
+      const primary = tokens.reduce((a, b) => (b.length > a.length ? b : a));
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, company, email')
+        .select('id, full_name, company, email, first_name, last_name')
         .eq('tenant_id', tenantId)
-        .or(`full_name.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%,email.ilike.%${q}%`)
-        .limit(20);
+        .or(`full_name.ilike.%${primary}%,first_name.ilike.%${primary}%,last_name.ilike.%${primary}%,company.ilike.%${primary}%,email.ilike.%${primary}%`)
+        .limit(50);
       if (error) throw error;
-      return data || [];
+      const filtered = (data || []).filter((c: any) => {
+        const haystack = [c.full_name, c.first_name, c.last_name, c.company, c.email]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return tokens.every((t) => haystack.includes(t));
+      });
+      return filtered.slice(0, 20);
     },
     enabled: !!tenantId && searchQuery.length >= 2,
   });
