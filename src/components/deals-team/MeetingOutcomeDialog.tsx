@@ -11,6 +11,7 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import type { DealCategory } from '@/types/dealTeam';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 type OutcomeOption = 'offer' | 'next_meeting' | '10x' | 'snooze' | 'client' | 'lost';
 
@@ -137,10 +138,15 @@ export function MeetingOutcomeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Spotkanie odbyte — co dalej?</DialogTitle>
-          <DialogDescription>
-            Spotkanie z {contactName} zakończone. Wybierz dalsze kroki.
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1.5">
+              <DialogTitle>Spotkanie odbyte — co dalej?</DialogTitle>
+              <DialogDescription>
+                Spotkanie z {contactName} zakończone. Wybierz dalsze kroki.
+              </DialogDescription>
+            </div>
+            <SovraOpenButton scopeType="contact" scopeId={contactId} />
+          </div>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
