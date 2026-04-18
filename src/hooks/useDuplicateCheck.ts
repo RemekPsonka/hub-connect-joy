@@ -519,8 +519,15 @@ export function useMergeMultipleContacts() {
           supabase.from('needs').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
           // Transfer offers
           supabase.from('offers').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
-          // Transfer business_interviews
-          supabase.from('business_interviews').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer contact_bi (BI 2.0): tylko jeśli primary nie ma wpisu — Postgres odrzuci konflikt PK
+          supabase.rpc('noop' as never).then(async () => {
+            const { data: primaryBI } = await supabase.from('contact_bi').select('contact_id').eq('contact_id', primaryContactId).maybeSingle();
+            if (!primaryBI) {
+              await supabase.from('contact_bi').update({ contact_id: primaryContactId }).eq('contact_id', dupId);
+            } else {
+              await supabase.from('contact_bi').delete().eq('contact_id', dupId);
+            }
+          }),
           // Transfer contact_activity_log
           supabase.from('contact_activity_log').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
         ]);

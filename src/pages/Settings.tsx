@@ -21,8 +21,8 @@ import { GroupRefreshPolicyEditor } from '@/components/settings/GroupRefreshPoli
 import { DataExportSettings } from '@/components/settings/DataExportSettings';
 import { GoogleCalendarSettings } from '@/components/settings/GoogleCalendarSettings';
 // SovraReportSettings usunięty w Sprincie 04 — tabela sovra_report_config zarchiwizowana.
+// Sprint 07: BI statistics widget usunięty (BI 2.0 — fresh build, jeszcze bez agregatów).
 import { useContactGroups } from '@/hooks/useContactGroups';
-import { useBIStatistics, useContactsWithoutBI } from '@/hooks/useBIInterview';
 interface EmbeddingStats {
   contacts_with: number;
   contacts_total: number;
@@ -51,8 +51,6 @@ export default function Settings() {
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   
   const { data: groups = [] } = useContactGroups();
-  const { data: biStats } = useBIStatistics(tenantId || undefined);
-  const { data: contactsWithoutBI = [] } = useContactsWithoutBI(tenantId || undefined);
 
   // For assistants, show only password change and 2FA
   if (isAssistant) {
@@ -304,7 +302,6 @@ export default function Settings() {
             <Database className="h-4 w-4 mr-1" />
             KRS / Rejestry
           </TabsTrigger>
-          <TabsTrigger value="bi">Business Intelligence</TabsTrigger>
           <TabsTrigger value="ai">AI & Embeddingi</TabsTrigger>
           <TabsTrigger value="export">
             <Download className="h-4 w-4 mr-1" />
@@ -389,102 +386,6 @@ export default function Settings() {
         <TabsContent value="security" className="space-y-6">
           <PasswordChangeForm />
           <TwoFactorSettings />
-        </TabsContent>
-
-        {/* BI Tab */}
-        <TabsContent value="bi" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="h-5 w-5" />
-                Statystyki Business Intelligence
-              </CardTitle>
-              <CardDescription>
-                Przegląd wywiadów BI z kontaktami
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Statistics Grid */}
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="flex flex-col items-center p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400 mb-2" />
-                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">{biStats?.completed || 0}</span>
-                  <span className="text-sm text-green-600 dark:text-green-400">Ukończonych wywiadów</span>
-                </div>
-                <div className="flex flex-col items-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400 mb-2" />
-                  <span className="text-2xl font-bold text-blue-700 dark:text-blue-300">{biStats?.avgCompleteness || 0}%</span>
-                  <span className="text-sm text-blue-600 dark:text-blue-400">Średnia kompletność</span>
-                </div>
-                <div className="flex flex-col items-center p-4 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <Calendar className="h-8 w-8 text-amber-600 dark:text-amber-400 mb-2" />
-                  <span className="text-2xl font-bold text-amber-700 dark:text-amber-300">{biStats?.needsReview || 0}</span>
-                  <span className="text-sm text-amber-600 dark:text-amber-400">Wymaga aktualizacji</span>
-                </div>
-              </div>
-
-              {/* Contacts without BI */}
-              {contactsWithoutBI.length > 0 && (
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-medium">Kontakty bez wywiadu BI ({contactsWithoutBI.length})</h3>
-                  </div>
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Kontakt</TableHead>
-                          <TableHead>Firma</TableHead>
-                          <TableHead className="text-right">Akcja</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {contactsWithoutBI.slice(0, 10).map((contact) => (
-                          <TableRow key={contact.id}>
-                            <TableCell className="font-medium">{contact.full_name}</TableCell>
-                            <TableCell className="text-muted-foreground">{contact.company || '-'}</TableCell>
-                            <TableCell className="text-right">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => navigate(`/contacts/${contact.id}`)}
-                              >
-                                Rozpocznij wywiad
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {contactsWithoutBI.length > 10 && (
-                    <p className="text-sm text-muted-foreground text-center">
-                      ...i {contactsWithoutBI.length - 10} więcej kontaktów
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {contactsWithoutBI.length === 0 && biStats?.total === 0 && (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Brak kontaktów w systemie. Dodaj kontakty, aby rozpocząć przeprowadzanie wywiadów BI.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {contactsWithoutBI.length === 0 && biStats && biStats.total > 0 && (
-                <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-700 dark:text-green-300">
-                    Wszystkie aktywne kontakty mają wywiad BI. Świetna robota!
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* AI Tab */}

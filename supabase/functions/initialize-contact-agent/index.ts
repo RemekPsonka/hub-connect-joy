@@ -72,7 +72,7 @@ serve(async (req) => {
       supabase.from('offers').select('*').eq('contact_id', contact_id),
       supabase.from('task_contacts').select('task_id, role, tasks(*)').eq('contact_id', contact_id),
       supabase.from('connections').select(`*, contact_a:contacts!connections_contact_a_id_fkey(id, full_name), contact_b:contacts!connections_contact_b_id_fkey(id, full_name)`).or(`contact_a_id.eq.${contact_id},contact_b_id.eq.${contact_id}`),
-      supabase.from('contact_bi_data').select('*').eq('contact_id', contact_id).maybeSingle(),
+      supabase.from('contact_bi').select('contact_id, answers, ai_summary, last_filled_at').eq('contact_id', contact_id).maybeSingle(),
       supabase.from('deal_team_contacts').select('id, notes, category, status').eq('contact_id', contact_id),
     ]);
 
