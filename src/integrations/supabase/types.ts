@@ -2920,84 +2920,6 @@ export type Database = {
           },
         ]
       }
-      deal_team_prospects: {
-        Row: {
-          assigned_to: string | null
-          company_id: string | null
-          contact_id: string | null
-          converted_to_contact_id: string | null
-          created_at: string | null
-          found_via: string | null
-          id: string
-          intro_contact_id: string | null
-          priority: string | null
-          prospect_company: string | null
-          prospect_email: string | null
-          prospect_linkedin: string | null
-          prospect_name: string
-          prospect_notes: string | null
-          prospect_phone: string | null
-          prospect_position: string | null
-          requested_by: string
-          requested_for_reason: string | null
-          status: string
-          target_date: string | null
-          team_id: string
-          tenant_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          assigned_to?: string | null
-          company_id?: string | null
-          contact_id?: string | null
-          converted_to_contact_id?: string | null
-          created_at?: string | null
-          found_via?: string | null
-          id?: string
-          intro_contact_id?: string | null
-          priority?: string | null
-          prospect_company?: string | null
-          prospect_email?: string | null
-          prospect_linkedin?: string | null
-          prospect_name: string
-          prospect_notes?: string | null
-          prospect_phone?: string | null
-          prospect_position?: string | null
-          requested_by: string
-          requested_for_reason?: string | null
-          status?: string
-          target_date?: string | null
-          team_id: string
-          tenant_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          assigned_to?: string | null
-          company_id?: string | null
-          contact_id?: string | null
-          converted_to_contact_id?: string | null
-          created_at?: string | null
-          found_via?: string | null
-          id?: string
-          intro_contact_id?: string | null
-          priority?: string | null
-          prospect_company?: string | null
-          prospect_email?: string | null
-          prospect_linkedin?: string | null
-          prospect_name?: string
-          prospect_notes?: string | null
-          prospect_phone?: string | null
-          prospect_position?: string | null
-          requested_by?: string
-          requested_for_reason?: string | null
-          status?: string
-          target_date?: string | null
-          team_id?: string
-          tenant_id?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       deal_team_revenue_forecasts: {
         Row: {
           amount: number
@@ -3176,6 +3098,7 @@ export type Database = {
           icon: string | null
           id: string
           is_active: boolean | null
+          kpi_targets: Json | null
           name: string
           status_frequency_days: Json | null
           tenant_id: string
@@ -3190,6 +3113,7 @@ export type Database = {
           icon?: string | null
           id?: string
           is_active?: boolean | null
+          kpi_targets?: Json | null
           name: string
           status_frequency_days?: Json | null
           tenant_id: string
@@ -3204,6 +3128,7 @@ export type Database = {
           icon?: string | null
           id?: string
           is_active?: boolean | null
+          kpi_targets?: Json | null
           name?: string
           status_frequency_days?: Json | null
           tenant_id?: string
@@ -3410,6 +3335,193 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deprecated_deal_team_prospects_20260418: {
+        Row: {
+          assigned_to: string | null
+          company_id: string | null
+          contact_id: string | null
+          converted_to_contact_id: string | null
+          created_at: string | null
+          found_via: string | null
+          id: string
+          intro_contact_id: string | null
+          priority: string | null
+          prospect_company: string | null
+          prospect_email: string | null
+          prospect_linkedin: string | null
+          prospect_name: string
+          prospect_notes: string | null
+          prospect_phone: string | null
+          prospect_position: string | null
+          requested_by: string
+          requested_for_reason: string | null
+          status: string
+          target_date: string | null
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          converted_to_contact_id?: string | null
+          created_at?: string | null
+          found_via?: string | null
+          id?: string
+          intro_contact_id?: string | null
+          priority?: string | null
+          prospect_company?: string | null
+          prospect_email?: string | null
+          prospect_linkedin?: string | null
+          prospect_name: string
+          prospect_notes?: string | null
+          prospect_phone?: string | null
+          prospect_position?: string | null
+          requested_by: string
+          requested_for_reason?: string | null
+          status?: string
+          target_date?: string | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          converted_to_contact_id?: string | null
+          created_at?: string | null
+          found_via?: string | null
+          id?: string
+          intro_contact_id?: string | null
+          priority?: string | null
+          prospect_company?: string | null
+          prospect_email?: string | null
+          prospect_linkedin?: string | null
+          prospect_name?: string
+          prospect_notes?: string | null
+          prospect_phone?: string | null
+          prospect_position?: string | null
+          requested_by?: string
+          requested_for_reason?: string | null
+          status?: string
+          target_date?: string | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      deprecated_meeting_prospects_20260418: {
+        Row: {
+          ai_brief: string | null
+          ai_brief_generated_at: string | null
+          company: string | null
+          converted_at: string | null
+          converted_to_contact_id: string | null
+          converted_to_team_contact_id: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          imported_at: string | null
+          imported_by: string
+          industry: string | null
+          is_prospecting: boolean | null
+          linkedin_url: string | null
+          meeting_id: string | null
+          phone: string | null
+          position: string | null
+          priority: string | null
+          prospecting_notes: string | null
+          prospecting_status: string | null
+          source_event: string | null
+          source_file_name: string | null
+          team_id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
+          company?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          imported_at?: string | null
+          imported_by: string
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          meeting_id?: string | null
+          phone?: string | null
+          position?: string | null
+          priority?: string | null
+          prospecting_notes?: string | null
+          prospecting_status?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          ai_brief?: string | null
+          ai_brief_generated_at?: string | null
+          company?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          imported_at?: string | null
+          imported_by?: string
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          meeting_id?: string | null
+          phone?: string | null
+          position?: string | null
+          priority?: string | null
+          prospecting_notes?: string | null
+          prospecting_status?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_prospects_converted_to_contact_id_fkey"
+            columns: ["converted_to_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_prospects_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "group_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_prospects_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
         ]
@@ -4389,116 +4501,7 @@ export type Database = {
             foreignKeyName: "meeting_participants_prospect_id_fkey"
             columns: ["prospect_id"]
             isOneToOne: false
-            referencedRelation: "meeting_prospects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meeting_prospects: {
-        Row: {
-          ai_brief: string | null
-          ai_brief_generated_at: string | null
-          company: string | null
-          converted_at: string | null
-          converted_to_contact_id: string | null
-          converted_to_team_contact_id: string | null
-          created_at: string | null
-          email: string | null
-          full_name: string
-          id: string
-          imported_at: string | null
-          imported_by: string
-          industry: string | null
-          is_prospecting: boolean | null
-          linkedin_url: string | null
-          meeting_id: string | null
-          phone: string | null
-          position: string | null
-          priority: string | null
-          prospecting_notes: string | null
-          prospecting_status: string | null
-          source_event: string | null
-          source_file_name: string | null
-          team_id: string
-          tenant_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          ai_brief?: string | null
-          ai_brief_generated_at?: string | null
-          company?: string | null
-          converted_at?: string | null
-          converted_to_contact_id?: string | null
-          converted_to_team_contact_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          full_name: string
-          id?: string
-          imported_at?: string | null
-          imported_by: string
-          industry?: string | null
-          is_prospecting?: boolean | null
-          linkedin_url?: string | null
-          meeting_id?: string | null
-          phone?: string | null
-          position?: string | null
-          priority?: string | null
-          prospecting_notes?: string | null
-          prospecting_status?: string | null
-          source_event?: string | null
-          source_file_name?: string | null
-          team_id: string
-          tenant_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          ai_brief?: string | null
-          ai_brief_generated_at?: string | null
-          company?: string | null
-          converted_at?: string | null
-          converted_to_contact_id?: string | null
-          converted_to_team_contact_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          full_name?: string
-          id?: string
-          imported_at?: string | null
-          imported_by?: string
-          industry?: string | null
-          is_prospecting?: boolean | null
-          linkedin_url?: string | null
-          meeting_id?: string | null
-          phone?: string | null
-          position?: string | null
-          priority?: string | null
-          prospecting_notes?: string | null
-          prospecting_status?: string | null
-          source_event?: string | null
-          source_file_name?: string | null
-          team_id?: string
-          tenant_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meeting_prospects_converted_to_contact_id_fkey"
-            columns: ["converted_to_contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meeting_prospects_meeting_id_fkey"
-            columns: ["meeting_id"]
-            isOneToOne: false
-            referencedRelation: "group_meetings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meeting_prospects_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "deal_teams"
+            referencedRelation: "prospects"
             referencedColumns: ["id"]
           },
         ]
@@ -4980,60 +4983,6 @@ export type Database = {
           },
         ]
       }
-      pipeline_kpi_targets: {
-        Row: {
-          created_at: string | null
-          id: string
-          month: number | null
-          notes: string | null
-          target_commission: number | null
-          target_commission_rate: number | null
-          target_premium: number
-          tenant_id: string
-          updated_at: string | null
-          year: number
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          month?: number | null
-          notes?: string | null
-          target_commission?: number | null
-          target_commission_rate?: number | null
-          target_premium?: number
-          tenant_id: string
-          updated_at?: string | null
-          year: number
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          month?: number | null
-          notes?: string | null
-          target_commission?: number | null
-          target_commission_rate?: number | null
-          target_premium?: number
-          tenant_id?: string
-          updated_at?: string | null
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_kpi_targets_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "pipeline_kpi_targets_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       pipeline_stages: {
         Row: {
           color: string
@@ -5103,78 +5052,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pipeline_transitions: {
-        Row: {
-          created_at: string | null
-          from_stage_id: string
-          id: string
-          is_active: boolean | null
-          kanban_type: string
-          label: string | null
-          team_id: string
-          tenant_id: string
-          to_stage_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          from_stage_id: string
-          id?: string
-          is_active?: boolean | null
-          kanban_type: string
-          label?: string | null
-          team_id: string
-          tenant_id: string
-          to_stage_id: string
-        }
-        Update: {
-          created_at?: string | null
-          from_stage_id?: string
-          id?: string
-          is_active?: boolean | null
-          kanban_type?: string
-          label?: string | null
-          team_id?: string
-          tenant_id?: string
-          to_stage_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_transitions_from_stage_id_fkey"
-            columns: ["from_stage_id"]
-            isOneToOne: false
-            referencedRelation: "pipeline_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_transitions_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "deal_teams"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_transitions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "pipeline_transitions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_transitions_to_stage_id_fkey"
-            columns: ["to_stage_id"]
-            isOneToOne: false
-            referencedRelation: "pipeline_stages"
             referencedColumns: ["id"]
           },
         ]
@@ -5758,6 +5635,124 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "project_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospects: {
+        Row: {
+          ai_brief: Json | null
+          ai_brief_generated_at: string | null
+          company: string | null
+          company_id: string | null
+          converted_at: string | null
+          converted_to_contact_id: string | null
+          converted_to_team_contact_id: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          imported_at: string | null
+          imported_by: string | null
+          industry: string | null
+          is_prospecting: boolean | null
+          linkedin_url: string | null
+          meeting_id: string | null
+          notes: string | null
+          phone: string | null
+          position: string | null
+          priority: string | null
+          source_event: string | null
+          source_file_name: string | null
+          source_id: string | null
+          source_type: string
+          status: string
+          team_id: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          ai_brief?: Json | null
+          ai_brief_generated_at?: string | null
+          company?: string | null
+          company_id?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          meeting_id?: string | null
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          priority?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          source_id?: string | null
+          source_type: string
+          status?: string
+          team_id?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          ai_brief?: Json | null
+          ai_brief_generated_at?: string | null
+          company?: string | null
+          company_id?: string | null
+          converted_at?: string | null
+          converted_to_contact_id?: string | null
+          converted_to_team_contact_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          industry?: string | null
+          is_prospecting?: boolean | null
+          linkedin_url?: string | null
+          meeting_id?: string | null
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          priority?: string | null
+          source_event?: string | null
+          source_file_name?: string | null
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          team_id?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospects_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospects_converted_to_contact_id_fkey"
+            columns: ["converted_to_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospects_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
             referencedColumns: ["id"]
           },
         ]

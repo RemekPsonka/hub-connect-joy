@@ -32,14 +32,23 @@ export async function matchContactsFromParsed(
       .eq('is_active', true)
       .limit(1000),
     supabase
-      .from('meeting_prospects')
-      .select('id, full_name, company, position, industry, ai_brief, prospecting_status')
+      .from('prospects')
+      .select('id, full_name, company, position, industry, ai_brief, status')
+      .eq('source_type', 'meeting')
       .eq('tenant_id', tenantId)
       .limit(1000),
   ]);
 
   const contactList = contactsResult.data || [];
-  const prospectList = prospectsResult.data || [];
+  const prospectList = (prospectsResult.data || []) as Array<{
+    id: string;
+    full_name: string;
+    company: string | null;
+    position: string | null;
+    industry: string | null;
+    ai_brief: { text?: string } | null;
+    status: string;
+  }>;
 
   return people.map((person) => {
     const nameLower = person.full_name.toLowerCase().trim();
@@ -82,7 +91,7 @@ export async function matchContactsFromParsed(
         prospectId: prospectMatch.id,
         contactFullName: prospectMatch.full_name,
         contactCompany: prospectMatch.company,
-        hasAiBrief: !!prospectMatch.ai_brief,
+        hasAiBrief: !!prospectMatch.ai_brief?.text,
       };
     }
 
@@ -155,11 +164,13 @@ export function useImportPDFParticipants() {
         if (error) throw error;
       }
 
-      // 3. Insert new prospects into meeting_prospects + meeting_participants
+      // 3. Insert new prospects into prospects + meeting_participants
       if (newProspects.length > 0) {
         const prospectRows = newProspects.map((p) => ({
-          team_id: teamId,
           tenant_id: tenantId,
+          source_type: 'meeting' as const,
+          source_id: teamId,
+          team_id: teamId,
           full_name: p.parsed.full_name,
           company: p.parsed.company,
           position: p.parsed.position,
@@ -168,18 +179,18 @@ export function useImportPDFParticipants() {
           source_file_name: sourceFileName,
           imported_by: directorId,
           is_prospecting: true,
-          prospecting_status: 'new',
+          status: 'new',
           meeting_id: meetingId,
         }));
 
-        const { data: insertedProspects, error: prospectError } = await (supabase as any)
-          .from('meeting_prospects')
+        const { data: insertedProspects, error: prospectError } = await supabase
+          .from('prospects')
           .insert(prospectRows)
           .select('id');
         if (prospectError) throw prospectError;
 
         if (insertedProspects && insertedProspects.length > 0) {
-          const prospectParticipantRows = insertedProspects.map((mp: any) => ({
+          const prospectParticipantRows = insertedProspects.map((mp: { id: string }) => ({
             meeting_id: meetingId,
             prospect_id: mp.id,
             is_member: false,
