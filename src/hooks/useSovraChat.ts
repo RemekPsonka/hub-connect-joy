@@ -53,6 +53,9 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     async (text: string, ctxType?: string, ctxId?: string) => {
       if (!text.trim() || isStreaming) return;
 
+      lastSentRef.current = { text, ctxType, ctxId };
+      setLastError(null);
+
       const userMsg: SovraMessage = { role: 'user', content: text, timestamp: new Date() };
       setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', timestamp: new Date() }]);
       setIsStreaming(true);
