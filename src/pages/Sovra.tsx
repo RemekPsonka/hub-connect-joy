@@ -89,6 +89,7 @@ export default function Sovra() {
     isStreaming,
     sessionId,
     sendMessage,
+    confirmAction,
     loadSession,
     newSession,
   } = useSovraChat({ contextType, contextId });
@@ -172,7 +173,7 @@ export default function Sovra() {
             {messages.length === 0 ? (
               <SovraWelcome onQuickAction={handleSend} />
             ) : (
-              <SovraMessages messages={messages} isStreaming={isStreaming} />
+              <SovraMessages messages={messages} isStreaming={isStreaming} onConfirm={confirmAction} />
             )}
             <SovraInput
               onSend={handleSend}
