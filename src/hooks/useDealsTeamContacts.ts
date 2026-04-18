@@ -526,16 +526,18 @@ export function useRevertToProspecting() {
       if (delErr) throw delErr;
 
       // 4. Log activity
-      await (supabase as any)
-        .from('deal_team_activity_log')
-        .insert({
+      await supabase.rpc('log_entity_change' as never, {
+        p_entity_type: 'deal_team',
+        p_entity_id: teamId,
+        p_actor_id: userId,
+        p_action: 'contact_removed',
+        p_diff: {},
+        p_metadata: {
           team_id: teamId,
-          tenant_id: tenantId,
           team_contact_id: null,
-          actor_id: userId,
-          action: 'contact_removed',
           note: `Cofnięto na listę prospecting: ${contact.full_name}`,
-        });
+        },
+      } as never);
 
       return { teamId };
     },
