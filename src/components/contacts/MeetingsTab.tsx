@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContactConsultationsTab } from './ContactConsultationsTab';
-import { BITab } from '@/components/bi/BITab';
-import { useAuth } from '@/contexts/AuthContext';
+import { ContactBI } from '@/components/bi';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactLinkedEvents } from './ContactLinkedEvents';
 import { useGCalConnection } from '@/hooks/useGoogleCalendar';
@@ -12,7 +11,7 @@ interface MeetingsTabProps {
   companyName?: string;
 }
 
-export function MeetingsTab({ contactId, contactName, companyName }: MeetingsTabProps) {
+export function MeetingsTab({ contactId, contactName }: MeetingsTabProps) {
   const { isAdmin } = useOwnerPanel();
   const { isConnected: gcalConnected } = useGCalConnection();
 
@@ -30,7 +29,7 @@ export function MeetingsTab({ contactId, contactName, companyName }: MeetingsTab
 
       {isAdmin && (
         <TabsContent value="bi">
-          <BITab contactId={contactId} contactName={contactName} companyName={companyName} />
+          <ContactBI contactId={contactId} contactName={contactName} />
         </TabsContent>
       )}
 
