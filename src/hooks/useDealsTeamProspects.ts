@@ -28,6 +28,7 @@ function mapRowToProspect(row: ProspectRow): DealTeamProspect {
   return {
     id: row.id,
     team_id: row.team_id || '',
+    deal_team_id: row.team_id || '',
     tenant_id: row.tenant_id,
     prospect_name: row.full_name,
     prospect_company: row.company,
