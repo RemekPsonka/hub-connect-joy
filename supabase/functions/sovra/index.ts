@@ -5,7 +5,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-import { callLLM, calcCostCents, logUsage, type LLMMessage } from '../_shared/llm-provider.ts';
+import { calcCostCents, logUsage, type LLMMessage } from '../_shared/llm-provider.ts';
 import { buildSovraPrompt, type ScopeContext } from '../_shared/prompts/sovra.v1.ts';
 import {
   TOOLS,
@@ -206,52 +206,17 @@ Deno.serve(async (req: Request) => {
             ...history,
           ];
 
-          // Use NON-STREAM call for tool-calling reliability (R1: streamed tool_calls fragment poorly across providers)
-          const llm = await callLLM({
-            messages: llmMessages,
-            stream: false,
-            tools: TOOLS,
-            tool_choice: 'auto',
-            request_id: `${requestId}-iter${iter}`,
-          });
-          lastModel = llm.model;
-
-          if (llm.status === 429) {
-            sendEvent({ type: 'error', error: 'rate_limit', message: 'Limit AI — spróbuj za chwilę.' });
-            break;
-          }
-          if (llm.status === 402) {
-            sendEvent({ type: 'error', error: 'payment_required', message: 'Wymagane kredyty AI.' });
-            break;
-          }
-          if (llm.status !== 200) {
-            sendEvent({ type: 'error', error: 'gateway_error', message: 'Błąd bramy AI.' });
-            break;
-          }
-
-          totalTokensIn += llm.tokens_in ?? 0;
-          totalTokensOut += llm.tokens_out ?? 0;
-
-          // Parse choice — czy są tool_calls?
-          const rawChoice = (llm as unknown as { raw?: { choices?: Array<{ message?: Record<string, unknown> }> } }).raw;
-          // callLLM nie zwraca raw — używamy text + osobnego parsowania.
-          // Robimy ponowny lekki call do parsowania? Nie — modyfikujemy callLLM nieinwazyjnie:
-          // tool_calls są w `text` jako JSON niemożliwe — dlatego parsujemy z parsedRaw poniżej.
-          // ZAMIAST tego: w llm.text mamy content. tool_calls musimy wyciągnąć inaczej.
-          // → Workaround: callLLM zwraca text=content. Tool calls Gemini przez Lovable Gateway zwracane są
-          //   w polu message.tool_calls. Zrobimy bezpośredni fetch tutaj zamiast callLLM dla iteracji tool-call:
-          // (już jest zrobione przez callLLM — patrz niżej fallback w tej iteracji)
-
-          // Re-fetch surowej odpowiedzi:
+          // Non-stream call (R1: streamed tool_calls fragment poorly across providers)
           const directRaw = await directLLMCall(llmMessages, requestId, iter);
           if (!directRaw.ok) {
-            sendEvent({ type: 'error', error: 'gateway_error', message: 'Błąd bramy AI (raw).' });
+            sendEvent({ type: 'error', error: 'gateway_error', message: 'Błąd bramy AI.' });
             break;
           }
           const choice = directRaw.data?.choices?.[0]?.message ?? {};
           const assistantText = (choice.content as string) ?? '';
           const toolCalls = (choice.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }>) ?? [];
 
+          lastModel = 'google/gemini-3-flash-preview';
           totalTokensIn += directRaw.data?.usage?.prompt_tokens ?? 0;
           totalTokensOut += directRaw.data?.usage?.completion_tokens ?? 0;
 
