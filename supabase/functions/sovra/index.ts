@@ -6,6 +6,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { calcCostCents, logUsage, type LLMMessage } from '../_shared/llm-provider.ts';
+import { captureException } from '../_shared/sentry.ts';
 import { buildSovraPrompt, type ScopeContext } from '../_shared/prompts/sovra.v1.ts';
 import {
   TOOLS,
@@ -63,6 +64,18 @@ Deno.serve(async (req: Request) => {
       status: 403,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+  }
+
+  // Sprint 10: lazy expire pending actions (taniej niż pg_cron)
+  try {
+    await supabase
+      .from('sovra_pending_actions')
+      .update({ status: 'expired' })
+      .eq('status', 'pending')
+      .eq('tenant_id', auth.tenantId)
+      .lt('expires_at', new Date().toISOString());
+  } catch (e) {
+    console.error('lazy-expire failed:', e);
   }
 
   // User-scoped client for RPC (RLS-aware)
@@ -306,6 +319,12 @@ Deno.serve(async (req: Request) => {
         }
       } catch (e) {
         console.error('Sovra loop error:', e);
+        captureException(e, {
+          function_name: 'sovra',
+          request_id: requestId,
+          user_id: auth.user.id,
+          tenant_id: auth.tenantId,
+        });
         sendEvent({ type: 'error', error: 'internal', message: String(e) });
       } finally {
         // [DONE] sentinel
@@ -327,6 +346,12 @@ Deno.serve(async (req: Request) => {
             cost_cents: cost,
             latency_ms: Date.now() - t0,
             request_id: requestId,
+            context: {
+              function_name: 'sovra',
+              persona: 'sovra',
+              actor_id: auth.directorId,
+              tenant_id: auth.tenantId,
+            },
           });
         } catch (e) {
           console.error('Failed to finalize conversation:', e);
