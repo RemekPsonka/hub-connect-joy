@@ -58,7 +58,6 @@ import {
 // OVERVIEW
 const overviewItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Mój Dzień', url: '/my-day', icon: Sun },
   { title: 'Workspace', url: '/workspace', icon: Briefcase },
   { title: 'Kalendarz', url: '/calendar', icon: CalendarDays },
 ];
@@ -67,15 +66,12 @@ const overviewItems = [
 const crmItems = [
   { title: 'Kontakty', url: '/contacts', icon: Users, adminOnly: false },
   { title: 'Poszukiwani', url: '/wanted', icon: Target, adminOnly: false },
-  { title: 'Zasoby', url: '/resources', icon: Landmark, adminOnly: false },
   { title: 'Sieć kontaktów', url: '/network', icon: Network, adminOnly: true },
 ];
 
 // PROJEKTY
 const projectItems = [
   { title: 'Projekty', url: '/projects', icon: FolderKanban },
-  { title: 'Zadania', url: '/tasks', icon: CheckSquare },
-  { title: 'Moje zadania', url: '/my-tasks', icon: CheckSquare },
   { title: 'Analityka zadań', url: '/tasks/analytics', icon: BarChart3 },
   { title: 'Raport zespołu', url: '/tasks/team-report', icon: Users2 },
   { title: 'Konsultacje', url: '/consultations', icon: CalendarCheck },
@@ -256,9 +252,6 @@ export function AppSidebar() {
     adminItems.push({ title: 'Przedstawiciele', url: '/representatives', icon: UserCog });
     adminItems.push({ title: 'Zgłoszenia', url: '/bug-reports', icon: Bug });
     adminItems.push({ title: 'Zarządzanie', url: '/owner', icon: Shield });
-  }
-  if (isSuperadmin) {
-    adminItems.push({ title: 'Superadmin', url: '/superadmin', icon: Building2 });
   }
 
   const navGroups = isAssistant
