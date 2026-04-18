@@ -99,6 +99,12 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
           setIsStreaming(false);
           return;
         }
+        if (response.status === 503 || response.status === 504) {
+          setLastError('unavailable');
+          setMessages((prev) => prev.slice(0, -1));
+          setIsStreaming(false);
+          return;
+        }
         if (!response.ok || !response.body) {
           const err = await response.json().catch(() => null);
           toast.error(err?.error || 'Błąd komunikacji z Sovra');
