@@ -44,6 +44,8 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
   const [messages, setMessages] = useState<SovraMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<'unavailable' | null>(null);
+  const lastSentRef = useRef<{ text: string; ctxType?: string; ctxId?: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
 
