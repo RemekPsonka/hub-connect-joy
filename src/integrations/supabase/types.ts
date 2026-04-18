@@ -4501,7 +4501,7 @@ export type Database = {
             foreignKeyName: "meeting_participants_prospect_id_fkey"
             columns: ["prospect_id"]
             isOneToOne: false
-            referencedRelation: "deprecated_meeting_prospects_20260418"
+            referencedRelation: "prospects"
             referencedColumns: ["id"]
           },
         ]
