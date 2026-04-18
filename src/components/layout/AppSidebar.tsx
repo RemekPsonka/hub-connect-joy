@@ -248,6 +248,7 @@ export function AppSidebar() {
     adminItems.push({ title: 'Przedstawiciele', url: '/representatives', icon: UserCog });
     adminItems.push({ title: 'Zgłoszenia', url: '/bug-reports', icon: Bug });
     adminItems.push({ title: 'Zarządzanie', url: '/owner', icon: Shield });
+    adminItems.push({ title: 'Koszty AI', url: '/owner/ai-costs', icon: DollarSign });
   }
 
   const navGroups = isAssistant
