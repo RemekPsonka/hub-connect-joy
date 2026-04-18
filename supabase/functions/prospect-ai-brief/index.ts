@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +47,16 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Sprint 01 — wymagaj JWT + rate limit 10/h
+    const auth = await verifyAuth(req, supabase);
+    if (isAuthError(auth)) return unauthorizedResponse(auth, corsHeaders);
+    const rl = await checkRateLimit(auth.user.id, "prospect-ai-brief", 10, 3600);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
+
     const body = await req.json();
     const source = body.source || "prospect";
     const prospectId = body.prospectId;
@@ -58,10 +70,6 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     let fullName = "";
     let company = "";

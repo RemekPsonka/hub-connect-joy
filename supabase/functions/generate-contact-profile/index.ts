@@ -2,8 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse, verifyResourceAccess, accessDeniedResponse } from "../_shared/auth.ts";
-// Rate limiting temporarily disabled due to bundle timeout
-// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

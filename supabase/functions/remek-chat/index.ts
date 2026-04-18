@@ -1,8 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
-// Rate limiting temporarily disabled due to bundle issues
-// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
