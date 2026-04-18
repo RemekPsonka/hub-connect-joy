@@ -280,192 +280,6 @@ export type Database = {
           },
         ]
       }
-      bi_ai_outputs: {
-        Row: {
-          business_interview_id: string
-          connection_recommendations: Json | null
-          created_at: string | null
-          error_message: string | null
-          id: string
-          missing_info: Json | null
-          needs_offers: Json | null
-          processing_status: string | null
-          summary: Json | null
-          task_proposals: Json | null
-          tenant_id: string
-          updated_at: string | null
-          version: number
-        }
-        Insert: {
-          business_interview_id: string
-          connection_recommendations?: Json | null
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          missing_info?: Json | null
-          needs_offers?: Json | null
-          processing_status?: string | null
-          summary?: Json | null
-          task_proposals?: Json | null
-          tenant_id: string
-          updated_at?: string | null
-          version?: number
-        }
-        Update: {
-          business_interview_id?: string
-          connection_recommendations?: Json | null
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          missing_info?: Json | null
-          needs_offers?: Json | null
-          processing_status?: string | null
-          summary?: Json | null
-          task_proposals?: Json | null
-          tenant_id?: string
-          updated_at?: string | null
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bi_ai_outputs_business_interview_id_fkey"
-            columns: ["business_interview_id"]
-            isOneToOne: false
-            referencedRelation: "business_interviews"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bi_ai_outputs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "bi_ai_outputs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      bi_interview_sessions: {
-        Row: {
-          completed_at: string | null
-          contact_bi_id: string | null
-          conversation_log: Json | null
-          id: string
-          questions_answered: number | null
-          questions_asked: number | null
-          sections_completed: string[] | null
-          session_type: string | null
-          started_at: string | null
-          status: string | null
-        }
-        Insert: {
-          completed_at?: string | null
-          contact_bi_id?: string | null
-          conversation_log?: Json | null
-          id?: string
-          questions_answered?: number | null
-          questions_asked?: number | null
-          sections_completed?: string[] | null
-          session_type?: string | null
-          started_at?: string | null
-          status?: string | null
-        }
-        Update: {
-          completed_at?: string | null
-          contact_bi_id?: string | null
-          conversation_log?: Json | null
-          id?: string
-          questions_answered?: number | null
-          questions_asked?: number | null
-          sections_completed?: string[] | null
-          session_type?: string | null
-          started_at?: string | null
-          status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bi_interview_sessions_contact_bi_id_fkey"
-            columns: ["contact_bi_id"]
-            isOneToOne: false
-            referencedRelation: "contact_bi_data"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      bi_versions: {
-        Row: {
-          ai_output_id: string | null
-          business_interview_id: string
-          created_at: string | null
-          created_by: string | null
-          id: string
-          snapshot: Json
-          tenant_id: string
-          version: number
-        }
-        Insert: {
-          ai_output_id?: string | null
-          business_interview_id: string
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          snapshot: Json
-          tenant_id: string
-          version: number
-        }
-        Update: {
-          ai_output_id?: string | null
-          business_interview_id?: string
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          snapshot?: Json
-          tenant_id?: string
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bi_versions_ai_output_id_fkey"
-            columns: ["ai_output_id"]
-            isOneToOne: false
-            referencedRelation: "bi_ai_outputs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bi_versions_business_interview_id_fkey"
-            columns: ["business_interview_id"]
-            isOneToOne: false
-            referencedRelation: "business_interviews"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bi_versions_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bi_versions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "bi_versions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       bug_reports: {
         Row: {
           context_data: Json | null
@@ -528,104 +342,6 @@ export type Database = {
           user_context?: Json | null
         }
         Relationships: []
-      }
-      business_interviews: {
-        Row: {
-          contact_id: string
-          created_at: string | null
-          filled_by: string | null
-          id: string
-          meeting_date: string | null
-          section_a_basic: Json | null
-          section_c_company_profile: Json | null
-          section_d_scale: Json | null
-          section_f_strategy: Json | null
-          section_g_needs: Json | null
-          section_h_investments: Json | null
-          section_j_value_for_cc: Json | null
-          section_k_engagement: Json | null
-          section_l_personal: Json | null
-          section_m_organizations: Json | null
-          section_n_followup: Json | null
-          status: string
-          tenant_id: string
-          updated_at: string | null
-          version: number
-        }
-        Insert: {
-          contact_id: string
-          created_at?: string | null
-          filled_by?: string | null
-          id?: string
-          meeting_date?: string | null
-          section_a_basic?: Json | null
-          section_c_company_profile?: Json | null
-          section_d_scale?: Json | null
-          section_f_strategy?: Json | null
-          section_g_needs?: Json | null
-          section_h_investments?: Json | null
-          section_j_value_for_cc?: Json | null
-          section_k_engagement?: Json | null
-          section_l_personal?: Json | null
-          section_m_organizations?: Json | null
-          section_n_followup?: Json | null
-          status?: string
-          tenant_id: string
-          updated_at?: string | null
-          version?: number
-        }
-        Update: {
-          contact_id?: string
-          created_at?: string | null
-          filled_by?: string | null
-          id?: string
-          meeting_date?: string | null
-          section_a_basic?: Json | null
-          section_c_company_profile?: Json | null
-          section_d_scale?: Json | null
-          section_f_strategy?: Json | null
-          section_g_needs?: Json | null
-          section_h_investments?: Json | null
-          section_j_value_for_cc?: Json | null
-          section_k_engagement?: Json | null
-          section_l_personal?: Json | null
-          section_m_organizations?: Json | null
-          section_n_followup?: Json | null
-          status?: string
-          tenant_id?: string
-          updated_at?: string | null
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "business_interviews_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "business_interviews_filled_by_fkey"
-            columns: ["filled_by"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "business_interviews_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "business_interviews_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       capital_group_members: {
         Row: {
@@ -1501,114 +1217,54 @@ export type Database = {
           },
         ]
       }
-      contact_bi_data: {
+      contact_bi: {
         Row: {
-          bi_profile: Json | null
-          bi_status: string | null
-          completeness_score: number | null
+          ai_summary: string | null
+          answers: Json
           contact_id: string
-          created_at: string | null
-          id: string
-          interviewer_name: string | null
-          last_bi_update: string | null
-          next_review_date: string | null
+          filled_by_ai: boolean
+          last_filled_at: string | null
           tenant_id: string
-          updated_at: string | null
+          updated_at: string
         }
         Insert: {
-          bi_profile?: Json | null
-          bi_status?: string | null
-          completeness_score?: number | null
+          ai_summary?: string | null
+          answers?: Json
           contact_id: string
-          created_at?: string | null
-          id?: string
-          interviewer_name?: string | null
-          last_bi_update?: string | null
-          next_review_date?: string | null
+          filled_by_ai?: boolean
+          last_filled_at?: string | null
           tenant_id: string
-          updated_at?: string | null
+          updated_at?: string
         }
         Update: {
-          bi_profile?: Json | null
-          bi_status?: string | null
-          completeness_score?: number | null
+          ai_summary?: string | null
+          answers?: Json
           contact_id?: string
-          created_at?: string | null
-          id?: string
-          interviewer_name?: string | null
-          last_bi_update?: string | null
-          next_review_date?: string | null
+          filled_by_ai?: boolean
+          last_filled_at?: string | null
           tenant_id?: string
-          updated_at?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "contact_bi_data_contact_id_fkey"
+            foreignKeyName: "contact_bi_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: true
             referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "contact_bi_data_tenant_id_fkey"
+            foreignKeyName: "contact_bi_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "mv_dashboard_stats"
             referencedColumns: ["tenant_id"]
           },
           {
-            foreignKeyName: "contact_bi_data_tenant_id_fkey"
+            foreignKeyName: "contact_bi_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contact_bi_history: {
-        Row: {
-          change_reason: string | null
-          changed_by: string | null
-          contact_bi_id: string | null
-          created_at: string | null
-          field_path: string
-          id: string
-          new_value: Json | null
-          old_value: Json | null
-        }
-        Insert: {
-          change_reason?: string | null
-          changed_by?: string | null
-          contact_bi_id?: string | null
-          created_at?: string | null
-          field_path: string
-          id?: string
-          new_value?: Json | null
-          old_value?: Json | null
-        }
-        Update: {
-          change_reason?: string | null
-          changed_by?: string | null
-          contact_bi_id?: string | null
-          created_at?: string | null
-          field_path?: string
-          id?: string
-          new_value?: Json | null
-          old_value?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contact_bi_history_changed_by_fkey"
-            columns: ["changed_by"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contact_bi_history_contact_bi_id_fkey"
-            columns: ["contact_bi_id"]
-            isOneToOne: false
-            referencedRelation: "contact_bi_data"
             referencedColumns: ["id"]
           },
         ]

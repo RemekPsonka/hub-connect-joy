@@ -163,6 +163,20 @@ export const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'fill_bi_from_notes',
+      description: 'Wypełnia ankietę BI 2.0 (contact_bi.answers + ai_summary) na podstawie notatek kontaktu i historii konsultacji. Wymaga potwierdzenia. Wymaga contact_id.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: { type: 'string', description: 'UUID kontaktu' },
+        },
+        required: ['contact_id'],
+      },
+    },
+  },
 
   // ============ ANALYTICS READ TOOLS (Sprint 06) ============
   {
@@ -354,6 +368,8 @@ export function humanSummary(name: string, args: Record<string, unknown>): strin
       return `Dopiszę notatkę do kontaktu: "${String(args.note ?? '').slice(0, 100)}${String(args.note ?? '').length > 100 ? '...' : ''}".`;
     case 'update_deal_stage':
       return `Zmienię etap szansy sprzedaży na: ${args.new_category ?? '?'}${args.reason ? ` (${args.reason})` : ''}.`;
+    case 'fill_bi_from_notes':
+      return `Wypełnię ankietę BI kontaktu (id: ${args.contact_id ?? '?'}) na podstawie notatek i konsultacji. Potwierdzasz?`;
     case 'draft_email':
       return `Przygotuję szkic e-maila: "${args.subject ?? '?'}" (integracja Gmail jeszcze nieaktywna).`;
     case 'create_calendar_event':

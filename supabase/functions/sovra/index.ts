@@ -414,15 +414,15 @@ async function buildScopeContext(
       if (c.email) lines.push(`E-mail: ${c.email}`);
       if (c.phone) lines.push(`Telefon: ${c.phone}`);
       if (c.profile_summary) lines.push(`Profil: ${c.profile_summary}`);
-      // BI summary (jeśli istnieje)
+      // BI 2.0 summary
       const { data: bi } = await supabase
-        .from('contact_bi_data')
-        .select('bi_profile, completeness_score')
+        .from('contact_bi')
+        .select('ai_summary, answers')
         .eq('contact_id', scopeId)
         .maybeSingle();
-      if (bi?.bi_profile) {
-        const summary = (bi.bi_profile as { summary?: string }).summary;
-        if (summary) lines.push(`BI summary: ${summary}`);
+      if (bi?.ai_summary) lines.push(`BI summary: ${bi.ai_summary}`);
+      if (bi?.answers && Object.keys(bi.answers as Record<string, unknown>).length > 0) {
+        lines.push(`BI answers: ${JSON.stringify(bi.answers).slice(0, 800)}`);
       }
       return {
         ...base,

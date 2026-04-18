@@ -75,8 +75,8 @@ Deno.serve(async (req) => {
     ] = await Promise.all([
       supabase.from('needs').select('id, title, description, contact_id').in('contact_id', contactIds).eq('status', 'active'),
       supabase.from('offers').select('id, title, description, contact_id').in('contact_id', contactIds).eq('status', 'active'),
-      supabase.from('business_interviews')
-        .select('contact_id, section_g_needs, section_j_value_for_cc, section_f_strategy, section_c_company_profile, section_l_personal')
+      supabase.from('contact_bi')
+        .select('contact_id, answers, ai_summary')
         .in('contact_id', contactIds),
       prospectIds.length > 0
         ? supabase.from('meeting_prospects').select('id, full_name, company, position, industry, ai_brief, prospecting_notes').in('id', prospectIds)

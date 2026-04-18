@@ -199,6 +199,90 @@ Deno.serve(async (req: Request) => {
           result = { deal_id: data.id, new_category: data.category };
           break;
         }
+        case 'fill_bi_from_notes': {
+          const contactId = String(args.contact_id);
+          const { data: contact, error: cErr } = await supabase
+            .from('contacts')
+            .select('id, full_name, company, position, notes, tenant_id')
+            .eq('id', contactId)
+            .eq('tenant_id', pa.tenant_id)
+            .maybeSingle();
+          if (cErr || !contact) throw new Error('Kontakt nie znaleziony');
+
+          const { data: consultations } = await supabase
+            .from('consultations')
+            .select('scheduled_at, notes, ai_summary, agenda')
+            .eq('contact_id', contactId)
+            .order('scheduled_at', { ascending: false })
+            .limit(10);
+
+          const BI_QUESTIONS = [
+            { id: 'business_focus', label: 'Czym zajmuje się biznes kontaktu?' },
+            { id: 'top_priority', label: 'Główny priorytet biznesowy na najbliższe 12 miesięcy' },
+            { id: 'how_can_we_help', label: 'W czym możemy pomóc?' },
+          ];
+
+          const consultationText = (consultations ?? [])
+            .map((c) => `- ${c.scheduled_at}: ${[c.agenda, c.notes, c.ai_summary].filter(Boolean).join(' | ')}`)
+            .join('\n') || '(brak)';
+
+          const sysPrompt = `Jesteś asystentem doradcy. Na podstawie notatek i konsultacji wypełnij ankietę BI dla kontaktu.
+Zwróć WYŁĄCZNIE czysty JSON (bez markdown, bez komentarzy) w formacie:
+{"answers": {"<question_id>": "<odpowiedź lub null>"}, "summary": "<2-3 zdania podsumowania>"}
+
+Pytania (użyj dokładnie tych id):
+${BI_QUESTIONS.map((q) => `- ${q.id}: ${q.label}`).join('\n')}`;
+
+          const userPrompt = `Kontakt: ${contact.full_name}${contact.position ? `, ${contact.position}` : ''}${contact.company ? ` @ ${contact.company}` : ''}
+
+NOTATKI:
+${contact.notes || '(brak)'}
+
+KONSULTACJE (najnowsze):
+${consultationText}`;
+
+          const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+          if (!lovableKey) throw new Error('LOVABLE_API_KEY missing');
+
+          const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lovableKey}` },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash',
+              messages: [
+                { role: 'system', content: sysPrompt },
+                { role: 'user', content: userPrompt },
+              ],
+            }),
+          });
+          if (!aiResp.ok) throw new Error(`AI gateway error: ${aiResp.status}`);
+          const aiJson = await aiResp.json();
+          const content: string = aiJson.choices?.[0]?.message?.content ?? '';
+
+          let parsed: { answers?: Record<string, unknown>; summary?: string } = {};
+          try {
+            const m = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
+            parsed = JSON.parse(m ? (m[1] || m[0]) : content);
+          } catch {
+            parsed = { answers: {}, summary: content.slice(0, 800) };
+          }
+
+          const { error: upErr } = await supabase
+            .from('contact_bi')
+            .upsert({
+              contact_id: contactId,
+              tenant_id: pa.tenant_id,
+              answers: parsed.answers ?? {},
+              ai_summary: parsed.summary ?? null,
+              filled_by_ai: true,
+              last_filled_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          if (upErr) throw new Error(upErr.message);
+
+          result = { contact_id: contactId, filled: true, fields_count: Object.keys(parsed.answers ?? {}).length };
+          break;
+        }
         default:
           execError = `Tool ${pa.tool} nie jest obsługiwany przez confirm.`;
       }
