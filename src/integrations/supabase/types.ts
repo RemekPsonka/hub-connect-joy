@@ -6293,6 +6293,96 @@ export type Database = {
           },
         ]
       }
+      sovra_pending_actions: {
+        Row: {
+          actor_id: string
+          args: Json
+          confirmed_at: string | null
+          conversation_id: string
+          created_at: string
+          error: string | null
+          expires_at: string
+          human_summary: string | null
+          id: string
+          message_id: string | null
+          metadata: Json
+          result: Json | null
+          status: string
+          tenant_id: string
+          tool: string
+        }
+        Insert: {
+          actor_id: string
+          args: Json
+          confirmed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          error?: string | null
+          expires_at?: string
+          human_summary?: string | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          result?: Json | null
+          status?: string
+          tenant_id: string
+          tool: string
+        }
+        Update: {
+          actor_id?: string
+          args?: Json
+          confirmed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          error?: string | null
+          expires_at?: string
+          human_summary?: string | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          result?: Json | null
+          status?: string
+          tenant_id?: string
+          tool?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sovra_pending_actions_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_pending_actions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_pending_actions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sovra_pending_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sovra_pending_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sovra_reminders: {
         Row: {
           channel: string | null
@@ -8152,6 +8242,23 @@ export type Database = {
         Args: { _contact_id: string; _rep_id: string }
         Returns: boolean
       }
+      rpc_sovra_analyze_pipeline: {
+        Args: { p_team_id?: string }
+        Returns: Json
+      }
+      rpc_sovra_get_contact_details: {
+        Args: { p_contact_id: string }
+        Returns: Json
+      }
+      rpc_sovra_search_companies: {
+        Args: { p_filters?: Json; p_query: string }
+        Returns: Json[]
+      }
+      rpc_sovra_search_contacts: {
+        Args: { p_filters?: Json; p_query: string }
+        Returns: Json[]
+      }
+      rpc_sovra_search_deals: { Args: { p_filters?: Json }; Returns: Json[] }
       search_all_fts: {
         Args: {
           p_limit?: number
