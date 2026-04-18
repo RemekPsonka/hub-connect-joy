@@ -189,6 +189,600 @@ export type Database = {
           },
         ]
       }
+      ai_usage_log: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_04: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_05: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_06: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_07: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_08: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_09: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_10: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_11: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2026_12: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
+      ai_usage_log_2027_01: {
+        Row: {
+          actor_id: string | null
+          cost_cents: number | null
+          created_at: string
+          error: string | null
+          function_name: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string | null
+          persona: string | null
+          provider: string
+          request_id: string | null
+          tenant_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          actor_id?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          error?: string | null
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string | null
+          persona?: string | null
+          provider?: string
+          request_id?: string | null
+          tenant_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
       assistant_group_access: {
         Row: {
           assistant_id: string
@@ -8053,6 +8647,18 @@ export type Database = {
       representative_can_access_contact: {
         Args: { _contact_id: string; _rep_id: string }
         Returns: boolean
+      }
+      rpc_ai_cost_summary: {
+        Args: { p_days_back?: number }
+        Returns: {
+          call_count: number
+          day: string
+          function_name: string
+          provider: string
+          total_cost_cents: number
+          total_tokens_in: number
+          total_tokens_out: number
+        }[]
       }
       rpc_sovra_analyze_pipeline: {
         Args: { p_team_id?: string }
