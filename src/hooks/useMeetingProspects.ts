@@ -33,6 +33,7 @@ export interface MeetingProspect {
   ai_brief_generated_at: string | null;
   created_at: string;
   updated_at: string;
+  meeting_id?: string | null;
 }
 
 export interface ParsedPerson {
@@ -40,6 +41,67 @@ export interface ParsedPerson {
   company: string | null;
   position: string | null;
   industry: string | null;
+}
+
+// Internal row from public.prospects (source_type='meeting')
+interface ProspectsRow {
+  id: string;
+  team_id: string | null;
+  tenant_id: string;
+  full_name: string;
+  company: string | null;
+  position: string | null;
+  industry: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  source_event: string | null;
+  source_file_name: string | null;
+  imported_at: string | null;
+  imported_by: string | null;
+  is_prospecting: boolean | null;
+  notes: string | null;
+  status: string;
+  converted_to_contact_id: string | null;
+  converted_to_team_contact_id: string | null;
+  converted_at: string | null;
+  priority: string | null;
+  ai_brief: { text?: string; generated_at?: string } | null;
+  ai_brief_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+  meeting_id: string | null;
+}
+
+function mapRowToProspect(row: ProspectsRow): MeetingProspect {
+  return {
+    id: row.id,
+    team_id: row.team_id || '',
+    tenant_id: row.tenant_id,
+    full_name: row.full_name,
+    company: row.company,
+    position: row.position,
+    industry: row.industry,
+    email: row.email,
+    phone: row.phone,
+    linkedin_url: row.linkedin_url,
+    source_event: row.source_event,
+    source_file_name: row.source_file_name,
+    imported_at: row.imported_at || row.created_at,
+    imported_by: row.imported_by || '',
+    is_prospecting: row.is_prospecting ?? true,
+    prospecting_notes: row.notes,
+    prospecting_status: (row.status || 'new') as ProspectingStatus,
+    converted_to_contact_id: row.converted_to_contact_id,
+    converted_to_team_contact_id: row.converted_to_team_contact_id,
+    converted_at: row.converted_at,
+    priority: row.priority,
+    ai_brief: row.ai_brief?.text ?? null,
+    ai_brief_generated_at: row.ai_brief_generated_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    meeting_id: row.meeting_id,
+  };
 }
 
 // ===== QUERIES =====
@@ -50,9 +112,10 @@ export function useMeetingProspects(teamId: string | undefined, onlyProspecting 
     queryFn: async () => {
       if (!teamId) return [];
 
-      let query = (supabase as any)
-        .from('meeting_prospects')
+      let query = supabase
+        .from('prospects')
         .select('*')
+        .eq('source_type', 'meeting')
         .eq('team_id', teamId);
 
       if (onlyProspecting) {
@@ -60,12 +123,12 @@ export function useMeetingProspects(teamId: string | undefined, onlyProspecting 
       }
 
       query = query
-        .not('prospecting_status', 'eq', 'converted')
+        .not('status', 'eq', 'converted')
         .order('created_at', { ascending: false });
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []) as MeetingProspect[];
+      return ((data as unknown as ProspectsRow[]) || []).map(mapRowToProspect);
     },
     enabled: !!teamId,
     staleTime: 2 * 60 * 1000,
@@ -78,15 +141,16 @@ export function useMeetingProspectsByEvent(teamId: string | undefined, sourceEve
     queryFn: async () => {
       if (!teamId || !sourceEvent) return [];
 
-      const { data, error } = await (supabase as any)
-        .from('meeting_prospects')
+      const { data, error } = await supabase
+        .from('prospects')
         .select('*')
+        .eq('source_type', 'meeting')
         .eq('team_id', teamId)
         .eq('source_event', sourceEvent)
         .order('full_name');
 
       if (error) throw error;
-      return (data || []) as MeetingProspect[];
+      return ((data as unknown as ProspectsRow[]) || []).map(mapRowToProspect);
     },
     enabled: !!teamId && !!sourceEvent,
   });
@@ -119,8 +183,10 @@ export function useImportMeetingProspects() {
       const selectedPeople = selectedIndices.map((i) => people[i]);
 
       const rows = selectedPeople.map((p) => ({
-        team_id: teamId,
         tenant_id: tenantId,
+        source_type: 'meeting' as const,
+        source_id: teamId,
+        team_id: teamId,
         full_name: p.full_name,
         company: p.company,
         position: p.position,
@@ -129,11 +195,11 @@ export function useImportMeetingProspects() {
         source_file_name: sourceFileName,
         imported_by: userId,
         is_prospecting: true,
-        prospecting_status: 'new',
+        status: 'new',
       }));
 
-      const { error } = await (supabase as any)
-        .from('meeting_prospects')
+      const { error } = await supabase
+        .from('prospects')
         .insert(rows);
 
       if (error) throw error;
@@ -156,7 +222,9 @@ export function useUpdateMeetingProspect() {
     mutationFn: async ({
       id,
       teamId,
-      ...updates
+      prospecting_status,
+      prospecting_notes,
+      ...rest
     }: {
       id: string;
       teamId: string;
@@ -168,8 +236,12 @@ export function useUpdateMeetingProspect() {
       linkedin_url?: string | null;
       priority?: string | null;
     }) => {
-      const { error } = await (supabase as any)
-        .from('meeting_prospects')
+      const updates: Record<string, unknown> = { ...rest };
+      if (prospecting_status !== undefined) updates.status = prospecting_status;
+      if (prospecting_notes !== undefined) updates.notes = prospecting_notes;
+
+      const { error } = await supabase
+        .from('prospects')
         .update(updates)
         .eq('id', id);
 
@@ -225,8 +297,8 @@ export function useDeleteMeetingProspect() {
 
   return useMutation({
     mutationFn: async ({ id, teamId }: { id: string; teamId: string }) => {
-      const { error } = await (supabase as any)
-        .from('meeting_prospects')
+      const { error } = await supabase
+        .from('prospects')
         .delete()
         .eq('id', id);
 

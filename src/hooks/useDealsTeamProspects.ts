@@ -4,11 +4,57 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { DealTeamProspect, ProspectStatus, DealPriority } from '@/types/dealTeam';
 
+// ===== INTERNAL ROW TYPE (z public.prospects) =====
+interface ProspectRow {
+  id: string;
+  team_id: string | null;
+  tenant_id: string;
+  full_name: string;
+  company: string | null;
+  position: string | null;
+  linkedin_url: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  status: string;
+  priority: string | null;
+  imported_by: string | null;
+  converted_to_contact_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapRowToProspect(row: ProspectRow): DealTeamProspect {
+  return {
+    id: row.id,
+    team_id: row.team_id || '',
+    tenant_id: row.tenant_id,
+    prospect_name: row.full_name,
+    prospect_company: row.company,
+    prospect_position: row.position,
+    prospect_linkedin: row.linkedin_url,
+    prospect_email: row.email,
+    prospect_phone: row.phone,
+    prospect_notes: row.notes,
+    status: (row.status || 'searching') as ProspectStatus,
+    found_via: null,
+    intro_contact_id: null,
+    assigned_to: null,
+    requested_by: row.imported_by,
+    requested_for_reason: null,
+    priority: (row.priority || 'medium') as DealPriority,
+    target_date: null,
+    converted_to_contact_id: row.converted_to_contact_id,
+    created_at: row.created_at || '',
+    updated_at: row.updated_at || '',
+  };
+}
+
 // ===== QUERIES =====
 
 /**
- * Pobiera prospektów zespołu
- * Domyślnie pomija zamknięte statusy (converted, cancelled)
+ * Pobiera prospektów zespołu (źródło: prospects, source_type='team').
+ * Domyślnie pomija zamknięte statusy (converted, cancelled).
  */
 export function useTeamProspects(teamId: string | undefined, includeClosedStatuses = false) {
   return useQuery({
@@ -17,8 +63,9 @@ export function useTeamProspects(teamId: string | undefined, includeClosedStatus
       if (!teamId) return [];
 
       let query = supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .select('*')
+        .eq('source_type', 'team')
         .eq('team_id', teamId);
 
       if (!includeClosedStatuses) {
@@ -32,30 +79,7 @@ export function useTeamProspects(teamId: string | undefined, includeClosedStatus
       const { data, error } = await query;
       if (error) throw error;
 
-      // Map database fields to our interface
-      return (data || []).map(row => ({
-        id: row.id,
-        team_id: row.team_id,
-        tenant_id: row.tenant_id,
-        prospect_name: row.prospect_name,
-        prospect_company: row.prospect_company,
-        prospect_position: row.prospect_position,
-        prospect_linkedin: row.prospect_linkedin,
-        prospect_email: row.prospect_email,
-        prospect_phone: row.prospect_phone,
-        prospect_notes: row.prospect_notes,
-        status: row.status as ProspectStatus,
-        found_via: row.found_via,
-        intro_contact_id: row.intro_contact_id,
-        assigned_to: row.assigned_to,
-        requested_by: row.requested_by,
-        requested_for_reason: row.requested_for_reason,
-        priority: (row.priority || 'medium') as DealPriority,
-        target_date: row.target_date,
-        converted_to_contact_id: row.converted_to_contact_id,
-        created_at: row.created_at || '',
-        updated_at: row.updated_at || '',
-      })) as DealTeamProspect[];
+      return ((data as unknown as ProspectRow[]) || []).map(mapRowToProspect);
     },
     enabled: !!teamId,
     staleTime: 2 * 60 * 1000,
@@ -78,9 +102,6 @@ export interface CreateProspectInput {
   targetDate?: string;
 }
 
-/**
- * Tworzy nowego prospekta (poszukiwanego)
- */
 export function useCreateProspect() {
   const queryClient = useQueryClient();
   const { director, assistant } = useAuth();
@@ -96,31 +117,30 @@ export function useCreateProspect() {
       prospectLinkedin,
       prospectEmail,
       prospectPhone,
-      assignedTo,
       priority = 'medium',
       notes,
-      targetDate,
     }: CreateProspectInput) => {
       if (!tenantId) throw new Error('Brak tenant_id');
       if (!directorId) throw new Error('Brak director_id');
 
       const { error } = await supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .insert({
-          team_id: teamId,
           tenant_id: tenantId,
-          prospect_name: prospectName,
-          prospect_company: prospectCompany || null,
-          prospect_position: prospectPosition || null,
-          prospect_linkedin: prospectLinkedin || null,
-          prospect_email: prospectEmail || null,
-          prospect_phone: prospectPhone || null,
-          prospect_notes: notes || null,
-          assigned_to: assignedTo || null,
-          requested_by: directorId,
+          source_type: 'team',
+          source_id: teamId,
+          team_id: teamId,
+          full_name: prospectName,
+          company: prospectCompany || null,
+          position: prospectPosition || null,
+          linkedin_url: prospectLinkedin || null,
+          email: prospectEmail || null,
+          phone: prospectPhone || null,
+          notes: notes || null,
+          imported_by: directorId,
           priority,
-          target_date: targetDate || null,
           status: 'searching',
+          is_prospecting: true,
         });
 
       if (error) throw error;
@@ -152,9 +172,6 @@ export interface UpdateProspectInput {
   foundVia?: string | null;
 }
 
-/**
- * Aktualizuje dane prospekta
- */
 export function useUpdateProspect() {
   const queryClient = useQueryClient();
 
@@ -169,27 +186,23 @@ export function useUpdateProspect() {
       prospectEmail,
       prospectPhone,
       status,
-      assignedTo,
       priority,
       notes,
-      foundVia,
     }: UpdateProspectInput) => {
       const updates: Record<string, unknown> = {};
 
-      if (prospectName !== undefined) updates.prospect_name = prospectName;
-      if (prospectCompany !== undefined) updates.prospect_company = prospectCompany;
-      if (prospectPosition !== undefined) updates.prospect_position = prospectPosition;
-      if (prospectLinkedin !== undefined) updates.prospect_linkedin = prospectLinkedin;
-      if (prospectEmail !== undefined) updates.prospect_email = prospectEmail;
-      if (prospectPhone !== undefined) updates.prospect_phone = prospectPhone;
+      if (prospectName !== undefined) updates.full_name = prospectName;
+      if (prospectCompany !== undefined) updates.company = prospectCompany;
+      if (prospectPosition !== undefined) updates.position = prospectPosition;
+      if (prospectLinkedin !== undefined) updates.linkedin_url = prospectLinkedin;
+      if (prospectEmail !== undefined) updates.email = prospectEmail;
+      if (prospectPhone !== undefined) updates.phone = prospectPhone;
       if (status !== undefined) updates.status = status;
-      if (assignedTo !== undefined) updates.assigned_to = assignedTo;
       if (priority !== undefined) updates.priority = priority;
-      if (notes !== undefined) updates.prospect_notes = notes;
-      if (foundVia !== undefined) updates.found_via = foundVia;
+      if (notes !== undefined) updates.notes = notes;
 
       const { error } = await supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .update(updates)
         .eq('id', id);
 
@@ -206,16 +219,13 @@ export function useUpdateProspect() {
   });
 }
 
-/**
- * Usuwa prospekta
- */
 export function useDeleteProspect() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, teamId }: { id: string; teamId: string }) => {
       const { error } = await supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .delete()
         .eq('id', id);
 
@@ -232,17 +242,13 @@ export function useDeleteProspect() {
   });
 }
 
-/**
- * Konwertuje prospekta do kontaktu LEAD (placeholder - wymaga więcej logiki)
- */
 export function useConvertProspect() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, teamId }: { id: string; teamId: string }) => {
-      // Placeholder - w przyszłości: utwórz kontakt CRM, dodaj do zespołu jako LEAD
       const { error } = await supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .update({ status: 'converted' })
         .eq('id', id);
 

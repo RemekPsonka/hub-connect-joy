@@ -58,26 +58,16 @@ export function usePipelineStages(teamId: string | undefined, kanbanType?: strin
   });
 }
 
-export function usePipelineTransitions(teamId: string | undefined, kanbanType?: string) {
+/**
+ * Sprint 03: pipeline_transitions zarchiwizowane (0 wierszy w użyciu).
+ * Zwracamy pustą listę, żeby istniejący kod (Kanban * useAllowedTransitions) traktował to jako "brak ograniczeń".
+ */
+export function usePipelineTransitions(teamId: string | undefined, _kanbanType?: string) {
   return useQuery({
-    queryKey: ['pipeline-transitions', teamId, kanbanType || 'all'],
-    queryFn: async () => {
-      if (!teamId) return [];
-      let query = supabase
-        .from('pipeline_transitions')
-        .select('*')
-        .eq('team_id', teamId)
-        .eq('is_active', true);
-
-      if (kanbanType) {
-        query = query.eq('kanban_type', kanbanType);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as PipelineTransition[];
-    },
+    queryKey: ['pipeline-transitions', teamId, 'archived'],
+    queryFn: async () => [] as PipelineTransition[],
     enabled: !!teamId,
+    staleTime: Infinity,
   });
 }
 
