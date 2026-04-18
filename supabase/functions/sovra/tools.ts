@@ -1,0 +1,333 @@
+// Sprint 05 — Sovra tool definitions + execution
+// 11 tools: 5 read (RPC), 4 write (pending_action), 2 stub (pending_action + integration_ready=false)
+
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+
+export interface ToolContext {
+  tenantId: string;
+  actorId: string; // director.id
+  conversationId: string;
+}
+
+export interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+// Tool registry — wysyłane do LLM gateway
+export const TOOLS: ToolDefinition[] = [
+  // ============ READ TOOLS ============
+  {
+    type: 'function',
+    function: {
+      name: 'search_contacts',
+      description: 'Wyszukuje kontakty w bazie po nazwisku, e-mailu, fragmencie tekstu. Użyj zawsze gdy Remek pyta o konkretną osobę.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Tekst do wyszukania (nazwisko, fragment imienia, fragment e-maila)' },
+          company_id: { type: 'string', description: 'Opcjonalny filtr po ID firmy' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_companies',
+      description: 'Wyszukuje firmy po nazwie lub numerze NIP.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Nazwa firmy lub NIP (10 cyfr)' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_deals',
+      description: 'Wyszukuje szanse sprzedaży (deal_team_contacts) z filtrami. Użyj gdy Remek pyta o lejek, status szans, najbliższe akcje.',
+      parameters: {
+        type: 'object',
+        properties: {
+          team_id: { type: 'string', description: 'ID zespołu sprzedażowego' },
+          status: { type: 'string', description: 'Status szansy (np. active, won, lost, postponed)' },
+          category: { type: 'string', description: 'Kategoria/etap lejka' },
+          contact_id: { type: 'string', description: 'ID konkretnego kontaktu' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_contact_details',
+      description: 'Pobiera pełne szczegóły kontaktu wraz z firmą i powiązanymi szansami sprzedaży. Użyj po znalezieniu kontaktu przez search_contacts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: { type: 'string', description: 'UUID kontaktu' },
+        },
+        required: ['contact_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'analyze_pipeline',
+      description: 'Analizuje lejek sprzedaży — zwraca podział szans po etapie i statusie.',
+      parameters: {
+        type: 'object',
+        properties: {
+          team_id: { type: 'string', description: 'Opcjonalny filtr po zespole sprzedażowym' },
+        },
+      },
+    },
+  },
+
+  // ============ WRITE TOOLS (wymagają potwierdzenia) ============
+  {
+    type: 'function',
+    function: {
+      name: 'create_contact',
+      description: 'Proponuje utworzenie nowego kontaktu. Wymaga potwierdzenia Remka. Wymagane: full_name. Opcjonalne: e-mail, telefon, firma.',
+      parameters: {
+        type: 'object',
+        properties: {
+          full_name: { type: 'string', description: 'Imię i nazwisko' },
+          email: { type: 'string' },
+          phone: { type: 'string' },
+          company: { type: 'string', description: 'Nazwa firmy (tekstowo)' },
+          position: { type: 'string', description: 'Stanowisko' },
+          notes: { type: 'string', description: 'Krótka notatka kontekstowa' },
+        },
+        required: ['full_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description: 'Proponuje utworzenie zadania powiązanego z konkretnym kontaktem. Wymaga potwierdzenia. Wymaga contact_id.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: { type: 'string', description: 'UUID kontaktu, do którego zadanie się odnosi (OBOWIĄZKOWE)' },
+          title: { type: 'string', description: 'Krótki tytuł zadania' },
+          description: { type: 'string' },
+          due_date: { type: 'string', description: 'Data w ISO 8601, np. 2026-04-25' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+        },
+        required: ['contact_id', 'title'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_note',
+      description: 'Proponuje dopisanie notatki do kontaktu (append do contacts.notes). Wymaga potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: { type: 'string' },
+          note: { type: 'string', description: 'Treść notatki' },
+        },
+        required: ['contact_id', 'note'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_deal_stage',
+      description: 'Proponuje zmianę etapu (kategorii) szansy sprzedaży. Wymaga potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          deal_id: { type: 'string', description: 'UUID rekordu deal_team_contacts' },
+          new_category: { type: 'string', description: 'Nowa kategoria/etap lejka' },
+          reason: { type: 'string', description: 'Krótkie uzasadnienie' },
+        },
+        required: ['deal_id', 'new_category'],
+      },
+    },
+  },
+
+  // ============ STUB TOOLS (integracje S14-S16) ============
+  {
+    type: 'function',
+    function: {
+      name: 'draft_email',
+      description: 'Proponuje przygotowanie szkicu e-maila (integracja Gmail planowana na później). Wymaga potwierdzenia, ale jeszcze nie wysyła.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: { type: 'string' },
+          subject: { type: 'string' },
+          body: { type: 'string' },
+        },
+        required: ['subject', 'body'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_calendar_event',
+      description: 'Proponuje utworzenie wydarzenia w kalendarzu (integracja Google Calendar planowana na później). Wymaga potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          start: { type: 'string', description: 'ISO 8601 datetime' },
+          end: { type: 'string', description: 'ISO 8601 datetime' },
+          contact_id: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['title', 'start'],
+      },
+    },
+  },
+];
+
+const READ_TOOLS = new Set(['search_contacts', 'search_companies', 'search_deals', 'get_contact_details', 'analyze_pipeline']);
+const STUB_TOOLS = new Set(['draft_email', 'create_calendar_event']);
+
+export function isReadTool(name: string): boolean {
+  return READ_TOOLS.has(name);
+}
+export function isStubTool(name: string): boolean {
+  return STUB_TOOLS.has(name);
+}
+export function isKnownTool(name: string): boolean {
+  return TOOLS.some((t) => t.function.name === name);
+}
+
+// ============ EXECUTION ============
+
+export async function executeReadTool(
+  name: string,
+  args: Record<string, unknown>,
+  userClient: SupabaseClient,
+): Promise<unknown> {
+  switch (name) {
+    case 'search_contacts': {
+      const q = String(args.query ?? '');
+      const filters: Record<string, unknown> = {};
+      if (args.company_id) filters.company_id = args.company_id;
+      const { data, error } = await userClient.rpc('rpc_sovra_search_contacts', {
+        p_query: q,
+        p_filters: filters,
+      });
+      if (error) return { error: error.message };
+      return { results: data ?? [] };
+    }
+    case 'search_companies': {
+      const { data, error } = await userClient.rpc('rpc_sovra_search_companies', {
+        p_query: String(args.query ?? ''),
+        p_filters: {},
+      });
+      if (error) return { error: error.message };
+      return { results: data ?? [] };
+    }
+    case 'search_deals': {
+      const filters: Record<string, unknown> = {};
+      for (const k of ['team_id', 'status', 'category', 'contact_id']) {
+        if (args[k]) filters[k] = args[k];
+      }
+      const { data, error } = await userClient.rpc('rpc_sovra_search_deals', { p_filters: filters });
+      if (error) return { error: error.message };
+      return { results: data ?? [] };
+    }
+    case 'get_contact_details': {
+      const { data, error } = await userClient.rpc('rpc_sovra_get_contact_details', {
+        p_contact_id: String(args.contact_id),
+      });
+      if (error) return { error: error.message };
+      return data ?? { error: 'Nie znaleziono kontaktu' };
+    }
+    case 'analyze_pipeline': {
+      const { data, error } = await userClient.rpc('rpc_sovra_analyze_pipeline', {
+        p_team_id: args.team_id ? String(args.team_id) : null,
+      });
+      if (error) return { error: error.message };
+      return data ?? {};
+    }
+    default:
+      return { error: `Unknown read tool: ${name}` };
+  }
+}
+
+export function humanSummary(name: string, args: Record<string, unknown>): string {
+  switch (name) {
+    case 'create_contact':
+      return `Utworzę kontakt: ${args.full_name ?? '?'}${args.email ? ` (${args.email})` : ''}${args.company ? `, firma: ${args.company}` : ''}.`;
+    case 'create_task':
+      return `Utworzę zadanie: "${args.title ?? '?'}"${args.due_date ? ` na ${args.due_date}` : ''}.`;
+    case 'create_note':
+      return `Dopiszę notatkę do kontaktu: "${String(args.note ?? '').slice(0, 100)}${String(args.note ?? '').length > 100 ? '...' : ''}".`;
+    case 'update_deal_stage':
+      return `Zmienię etap szansy sprzedaży na: ${args.new_category ?? '?'}${args.reason ? ` (${args.reason})` : ''}.`;
+    case 'draft_email':
+      return `Przygotuję szkic e-maila: "${args.subject ?? '?'}" (integracja Gmail jeszcze nieaktywna).`;
+    case 'create_calendar_event':
+      return `Utworzę wydarzenie: "${args.title ?? '?'}"${args.start ? ` o ${args.start}` : ''} (integracja Calendar jeszcze nieaktywna).`;
+    default:
+      return `Wykonam akcję: ${name}.`;
+  }
+}
+
+export interface PendingActionResult {
+  requires_confirmation: true;
+  pending_action_id: string;
+  tool: string;
+  human_summary: string;
+  integration_ready: boolean;
+}
+
+export async function createPendingAction(
+  serviceClient: SupabaseClient,
+  ctx: ToolContext,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<PendingActionResult | { error: string }> {
+  const summary = humanSummary(toolName, args);
+  const integrationReady = !isStubTool(toolName);
+
+  const { data, error } = await serviceClient
+    .from('sovra_pending_actions')
+    .insert({
+      tenant_id: ctx.tenantId,
+      actor_id: ctx.actorId,
+      conversation_id: ctx.conversationId,
+      tool: toolName,
+      args,
+      human_summary: summary,
+      metadata: { integration_ready: integrationReady },
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? 'Failed to create pending action' };
+  }
+
+  return {
+    requires_confirmation: true,
+    pending_action_id: data.id,
+    tool: toolName,
+    human_summary: summary,
+    integration_ready: integrationReady,
+  };
+}

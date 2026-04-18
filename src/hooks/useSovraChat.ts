@@ -3,9 +3,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 
-// Sprint 04: Sovra 2.0 — endpoint `sovra` + ai_conversations/ai_messages.
-// Tool actions / tool_results zostają w typach (kompatybilność z SovraMessages),
-// ale w S04 stream nie emituje tool_results — backend nie wykonuje narzędzi (S05).
+// Sprint 05: Sovra 2.0 + tool calling
+// Backend wysyła SSE z OpenAI delta + custom events: { type: 'tool_result' | 'pending_action' | 'error' }
 
 export interface ToolAction {
   tool: string;
@@ -13,11 +12,27 @@ export interface ToolAction {
   result: Record<string, unknown>;
 }
 
+export interface ToolResultEvent {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface PendingActionInfo {
+  pending_action_id: string;
+  tool: string;
+  human_summary: string;
+  integration_ready: boolean;
+  status?: 'pending' | 'confirmed' | 'cancelled' | 'failed';
+}
+
 export interface SovraMessage {
   role: 'user' | 'assistant' | 'tool_results';
   content: string;
   timestamp: Date;
   actions?: ToolAction[];
+  tool_results?: ToolResultEvent[];
+  pending_action?: PendingActionInfo;
 }
 
 interface UseSovraChatOptions {
@@ -28,7 +43,6 @@ interface UseSovraChatOptions {
 export function useSovraChat(options: UseSovraChatOptions = {}) {
   const [messages, setMessages] = useState<SovraMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  // sessionId trzymane dla zewnętrznych konsumentów (Sovra.tsx invaliduje sesje przy zmianie)
   const [sessionId, setSessionId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
@@ -97,6 +111,68 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
         let assistantContent = '';
         let streamDone = false;
 
+        const handleEvent = (parsed: Record<string, unknown>) => {
+          // Custom events
+          const type = parsed.type as string | undefined;
+          if (type === 'tool_result') {
+            const ev: ToolResultEvent = {
+              tool: String(parsed.tool ?? ''),
+              args: (parsed.args as Record<string, unknown>) ?? {},
+              result: parsed.result,
+            };
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              // Append do ostatniej assistant bańki jako tool_results
+              if (last?.role === 'assistant') {
+                updated[updated.length - 1] = {
+                  ...last,
+                  tool_results: [...(last.tool_results ?? []), ev],
+                };
+              }
+              return updated;
+            });
+            return;
+          }
+          if (type === 'pending_action') {
+            const pa: PendingActionInfo = {
+              pending_action_id: String(parsed.pending_action_id),
+              tool: String(parsed.tool),
+              human_summary: String(parsed.human_summary ?? ''),
+              integration_ready: parsed.integration_ready !== false,
+              status: 'pending',
+            };
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.role === 'assistant') {
+                updated[updated.length - 1] = { ...last, pending_action: pa };
+              }
+              return updated;
+            });
+            return;
+          }
+          if (type === 'error') {
+            toast.error(String(parsed.message ?? 'Błąd Sovry'));
+            return;
+          }
+
+          // OpenAI-format delta
+          const content = (parsed as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]?.delta?.content;
+          if (content) {
+            assistantContent += content;
+            const current = assistantContent;
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated.length - 1;
+              if (last >= 0 && updated[last].role === 'assistant') {
+                updated[last] = { ...updated[last], content: current };
+              }
+              return updated;
+            });
+          }
+        };
+
         while (!streamDone) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -117,19 +193,7 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
             }
             try {
               const parsed = JSON.parse(json);
-              const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-              if (content) {
-                assistantContent += content;
-                const current = assistantContent;
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated.length - 1;
-                  if (last >= 0 && updated[last].role === 'assistant') {
-                    updated[last] = { ...updated[last], content: current };
-                  }
-                  return updated;
-                });
-              }
+              handleEvent(parsed);
             } catch {
               textBuffer = line + '\n' + textBuffer;
               break;
@@ -137,37 +201,6 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
           }
         }
 
-        // Final flush
-        if (textBuffer.trim()) {
-          for (let raw of textBuffer.split('\n')) {
-            if (!raw) continue;
-            if (raw.endsWith('\r')) raw = raw.slice(0, -1);
-            if (raw.startsWith(':') || raw.trim() === '') continue;
-            if (!raw.startsWith('data: ')) continue;
-            const json = raw.slice(6).trim();
-            if (json === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(json);
-              const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-              if (content) {
-                assistantContent += content;
-                const current = assistantContent;
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated.length - 1;
-                  if (last >= 0 && updated[last].role === 'assistant') {
-                    updated[last] = { ...updated[last], content: current };
-                  }
-                  return updated;
-                });
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-
-        // Refresh sessions list (sidebar)
         queryClient.invalidateQueries({ queryKey: ['sovra-sessions'] });
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
@@ -186,11 +219,53 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     [isStreaming, sessionId, options.contextType, options.contextId, queryClient],
   );
 
+  const confirmAction = useCallback(
+    async (pendingActionId: string, decision: 'confirm' | 'cancel') => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          toast.error('Sesja wygasła');
+          return false;
+        }
+        const URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sovra-confirm`;
+        const res = await fetch(URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ pending_action_id: pendingActionId, decision }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+          toast.error(json?.error || 'Nie udało się przetworzyć akcji');
+          return false;
+        }
+        const newStatus: PendingActionInfo['status'] = decision === 'cancel' ? 'cancelled' : 'confirmed';
+        // Update pending_action status w wiadomościach
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.pending_action?.pending_action_id === pendingActionId
+              ? { ...m, pending_action: { ...m.pending_action, status: newStatus } }
+              : m,
+          ),
+        );
+        toast.success(decision === 'confirm' ? 'Wykonano' : 'Anulowano');
+        return true;
+      } catch (e) {
+        console.error('confirmAction error:', e);
+        toast.error('Błąd potwierdzenia akcji');
+        return false;
+      }
+    },
+    [],
+  );
+
   const loadSession = useCallback(async (id: string) => {
     try {
       const { data, error } = await supabase
         .from('ai_messages')
-        .select('role, content, created_at')
+        .select('role, content, created_at, tool_results')
         .eq('conversation_id', id)
         .order('created_at', { ascending: true });
 
@@ -229,6 +304,7 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     isStreaming,
     sessionId,
     sendMessage,
+    confirmAction,
     loadSession,
     newSession,
     stopStreaming,
