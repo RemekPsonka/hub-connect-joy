@@ -1,58 +1,84 @@
 
 
-# Sprint 10 — Observability (zaadaptowany, bez pg_cron)
+# Sprint 11 — Workspace 2.0 cz.1 (zaadaptowany)
 
 ## Korekty względem sprint MD
-- **pg_cron pominięty** (decyzja użytkownika). Triggery `trg_refresh_dash_*` zostają — żadnych DROP-ów, żadnego cron.schedule. Cleanup `sovra_pending_actions.expired` przeniesiony do `_shared/sovra-tools.ts` lub edge fn `sovra` (lazy expire on read).
-- **Sentry**: FE (`@sentry/react`) + lekki custom `_shared/sentry.ts` w edge fn (fetch do DSN, bez SDK npm). DSN-y jako secrets — poproszę po akceptacji planu (`VITE_SENTRY_DSN` build-secret + `SENTRY_DSN_EDGE` runtime).
-- **`ai_usage_log`**: zostaje partycjonowany miesięcznie (Apr 2026 → Jan 2027), zgodnie z MD.
-- **RLS**: `is_superadmin()` istnieje, `get_current_director_id()` istnieje — RPC i policy bezpieczne.
 
-## A. Migracja SQL `supabase/migrations/<ts>_sprint10_ai_usage_log.sql`
-1. `archive` schema check.
-2. `CREATE TABLE public.ai_usage_log` partycjonowany po `created_at` + 9 partycji miesięcznych (2026_04..2026_12) + `2027_01`.
-3. Indeksy: `(function_name, created_at DESC)`, `(created_at DESC)`, `(actor_id, created_at DESC)`.
-4. RLS: SELECT dla superadmin lub własny actor; INSERT `WITH CHECK (true)` (service_role bypass i tak).
-5. RPC `rpc_ai_cost_summary(p_days_back int default 30)` → `(day, function_name, provider, total_cost_cents, total_tokens)`. SQL STABLE SECURITY INVOKER, `SET search_path=public`.
-6. Komentarz `-- ROLLBACK:` z DROP table+RPC.
+1. **`Workspace.tsx` już istnieje** jako cockpit tygodniowy (schedule + day cards + projekty). Sprint MD nadpisuje go gridem KPI/notatek. **Decyzja:** zachowuję istniejący widok jako tab „Tydzień" w nowym `/workspace`, dodaję tab „Cockpit" z gridem KPI/notes/AI/calendar. Custom instructions: „nie twórz nowych stron jeśli istnieje równoważna". Default tab = Cockpit.
+2. **`workspace_topics`** ma 1 wiersz i **jest aktywnie używany** w `src/hooks/useWorkspace.ts` (`useWorkspaceTopics`, `useCreateTopic`, `useToggleTopicResolved`) oraz prawdopodobnie w komponentach projektów. **Nie DROPuję** — tylko archiwizuję `archive.workspace_topics_backup_20260418` na wszelki wypadek, tabela zostaje. Sprint MD pkt 1 (DROP) odrzucam — narusza konstytucję „dane produkcyjne, NIGDY DROP bez powodu", a tabela ma żywy hook.
+3. **`workspace_schedule` zostaje** (zgodnie z MD).
+4. **RPC KPI** — w MD `prospects` używa `tenant_id`, sprawdzam zgodność. `tasks` ma `tenant_id/status/due_date` ✅. `prospects` i `contacts` zakładam że mają `tenant_id` — zweryfikuję w migracji. Dodam `deals_team_contacts` MTD revenue jako 4. metrykę i `contacts_new` (utworzeni w okresie) jako 5.
+5. **react-grid-layout** — niewymieniony w „Stack" custom instructions, ale custom instructions też zakazują dodawania bibliotek bez wskazania. Sprint MD jawnie wymaga → akceptuję jako wyjątek (jedna nowa biblioteka grid + 4 tiptap).
+6. **tiptap** — 4 paczki: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-task-list`, `@tiptap/extension-task-item`, `@tiptap/extension-placeholder`.
+7. **Sidebar** — dodaję nawigację jeśli `/workspace` jeszcze nie ma (mam, jest aktywny route).
 
-## B. Edge Functions
-- **`_shared/llm-provider.ts`** — po każdym call (success + error) INSERT do `public.ai_usage_log` przez service_role client. Nowy parametr `CallLLMOptions.context?: { function_name, persona?, actor_id?, tenant_id? }`. Failure INSERT-u → `console.error`, nie blokuje response.
-- **`_shared/sentry.ts`** (nowy) — `captureException(err, context?)`: jeśli `SENTRY_DSN_EDGE` ustawiony → POST event do Sentry ingest endpoint (parsowanie DSN do `https://oXXX.ingest.sentry.io/api/PROJECT/store/`). Jeśli brak DSN → no-op.
-- **`sovra/index.ts` + `sovra-confirm/index.ts` + inne kluczowe fn** — w `catch` wołać `captureException(err, { function_name })`. Aktualizacja `callLLM` call-sites o `context`.
-- **Lazy expire pending** — w `sovra/index.ts` na początku handlera: `UPDATE sovra_pending_actions SET status='expired' WHERE status='pending' AND expires_at < now() AND tenant_id = current_tenant`. Tanio i nie wymaga crona.
+## A. Migracja SQL `supabase/migrations/<ts>_sprint11_workspace.sql`
 
-## C. Frontend
-- **Dependency**: `@sentry/react`.
-- **`src/main.tsx`**: `Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, tracesSampleRate: 0.1, environment: import.meta.env.MODE })` jeśli DSN ustawiony; owinięcie `<App/>` w `<Sentry.ErrorBoundary fallback={<ErrorBoundary>}>` (zachowując istniejący `ErrorBoundary` jako children fallback).
-- **`src/pages/owner/AICosts.tsx`** (nowy) — tabela + bar chart (recharts, już w stacku). Wykres: oś X = day, Y = sum cost_cents (PLN po `/100` jeśli grosze; tu USD cents — pokażę `$X.XX`), grupy = function_name. Tabela poniżej: function/provider/tokens/cost. Filtr dni (7/30/90).
-- **`src/hooks/useAICostSummary.ts`** — wywołanie `supabase.rpc('rpc_ai_cost_summary', { p_days_back: days })`.
-- **`src/App.tsx`**: dodać `lazy(() => import('./pages/owner/AICosts'))` + `<Route path="/owner/ai-costs" element={<DirectorGuard><AICosts/></DirectorGuard>} />`.
-- **`src/components/layout/AppSidebar.tsx`**: w bloku admin (linia ~250) dodać item „Koszty AI" → `/owner/ai-costs`, ikona `DollarSign`.
+1. `archive.workspace_topics_backup_20260418` (CREATE TABLE AS) — bez DROP.
+2. `workspace_notes` (id, tenant_id, actor_id, title, blocks jsonb, pinned bool, parent_note_id, position, created_at, updated_at) + indeks `(actor_id, pinned DESC, updated_at DESC)`.
+3. `workspace_widgets` (id, tenant_id, actor_id, widget_type CHECK kpi/note/ai_recs/calendar, config jsonb, grid_x/y/w/h int, size, created_at) + indeks `(actor_id)`.
+4. RLS na obu: `actor_id = get_current_director_id() AND tenant_id = get_current_tenant_id()` SELECT/INSERT/UPDATE/DELETE.
+5. Trigger `updated_at` na `workspace_notes`.
+6. RPC `rpc_workspace_kpi(p_metric, p_range)` zwracający jsonb. Metryki: `contacts_active`, `contacts_new`, `tasks_today`, `prospects_new`, `deals_revenue_mtd` (suma value z `deal_team_contacts` w okresie). SECURITY INVOKER, search_path=public.
+7. Komentarz `-- ROLLBACK:` (DROP nowych tabel + funkcji, restore topics niepotrzebny — nie usuwałem).
 
-## D. Sekrety (dodane po akceptacji)
-- `VITE_SENTRY_DSN` — **build secret** (workspace settings, użytkownik wkleja ręcznie).
-- `SENTRY_DSN_EDGE` — runtime secret (przez `add_secret`).
+## B. Frontend
 
-## E. Kolejność wykonania
-1. Migracja SQL (`ai_usage_log` + RPC + RLS).
-2. `_shared/sentry.ts` + update `_shared/llm-provider.ts` (INSERT do ai_usage_log).
-3. Lazy expire w `sovra/index.ts` + `captureException` w catch sovra/sovra-confirm.
-4. FE: `npm i @sentry/react`, `main.tsx`, `useAICostSummary`, `AICosts.tsx`, route, sidebar.
-5. Poprosić usera o `SENTRY_DSN_EDGE` (runtime) + instrukcję dla `VITE_SENTRY_DSN` (build-secret).
+**Nowe hooki:**
+- `src/hooks/useWorkspaceNotes.ts` — `useWorkspaceNotes()`, `useCreateNote`, `useUpdateNote` (debounce już w komponencie), `useDeleteNote`, `useTogglePin`.
+- `src/hooks/useWorkspaceWidgets.ts` — `useWorkspaceWidgets()`, `useUpsertWidget`, `useRemoveWidget`, `useUpdateWidgetLayout` (batch dla react-grid-layout `onLayoutChange`).
+- `src/hooks/useWorkspaceKPI.ts` — `useWorkspaceKPI(metric, range)` → RPC.
 
-## F. DoD
-- [ ] `ai_usage_log` istnieje z 9 partycjami + RLS + RPC.
-- [ ] Po wywołaniu Sovry: `SELECT COUNT(*) FROM ai_usage_log WHERE created_at > now() - interval '5 min'` ≥ 1.
-- [ ] `/owner/ai-costs` renderuje wykres (recharts) + tabelę.
-- [ ] Sidebar admin ma „Koszty AI".
-- [ ] FE Sentry init: gdy `VITE_SENTRY_DSN` puste → no-op (brak crashy).
-- [ ] Edge Sentry: `captureException` wywoływany w catch `sovra` + `sovra-confirm`.
-- [ ] Brak DROP trigger MV. Brak `cron.schedule`. `sovra_pending_actions` expirowane lazy.
+**Nowe komponenty (`src/components/workspace/widgets/`):**
+- `KPIWidget.tsx` — duża liczba + label, `useWorkspaceKPI`. Konfig metric/range z propsa (z `widget.config`).
+- `NoteWidget.tsx` — tiptap editor (StarterKit + TaskList + TaskItem + Placeholder). Auto-save 2s debounce → `useUpdateNote`. Toolbar minimalny (heading, list, todo, code).
+- `AIRecsWidget.tsx` — placeholder „Dostępne po Sprincie 12".
+- `CalendarWidget.tsx` — placeholder „Dostępne po Sprincie 12".
+- `WidgetGrid.tsx` — `react-grid-layout` ResponsiveGridLayout, mapuje `workspace_widgets` → komponenty. `onLayoutChange` → `useUpdateWidgetLayout`.
+- `AddWidgetMenu.tsx` — popover z 4 typami → `useUpsertWidget`.
 
-## G. Ryzyka
-- **R1** Brak `pg_cron` → MV refresh nadal triggerami (overhead OLTP zostaje, do Sprintu 10b jak Remek włączy Pro).
-- **R2** Lazy expire `sovra_pending_actions` działa tylko gdy ktoś woła Sovrę. Akceptowalne — pending actions per user, niski wolumen.
-- **R3** Sentry edge bez SDK = brak breadcrumbs/release tracking. Wystarczy do MVP error monitoring.
-- **R4** `cost_cents` jako `int` — przy pricing 0.0125 cents/1k tokens małe wartości zaokrąglane do 0. Poprawiam w llm-provider: store jako `numeric(10,4)` lub mnożnik ×10000 (mikrocenty). **Decyzja: zmieniam typ kolumny na `numeric(12,4)`** żeby zachować precyzję małych wywołań.
+**Edycja `src/pages/Workspace.tsx`:**
+- Owijam istniejący widok w `<Tabs>` z `Cockpit` (default, nowy WidgetGrid) + `Tydzień` (istniejący schedule).
+- Header zostaje, taby pod nim.
+
+**Edycja `src/components/sovra/SovraExportButton.tsx`:**
+- Z toast-stub na rzeczywiste wywołanie `supabase.functions.invoke('workspace-create-note-from-sovra', { body: { conversation_id, title? }})`.
+- Toast sukces + link `Otwórz` → `navigate('/workspace?tab=cockpit&note=' + note_id)`.
+- Props: `conversationId: string`. Update call-site w `SovraChat`/`Sovra.tsx`.
+
+## C. Edge Function
+
+`supabase/functions/workspace-create-note-from-sovra/index.ts`:
+- POST `{ conversation_id, title? }`.
+- `requireAuth(req)` z `_shared/auth.ts`.
+- SELECT `ai_messages` WHERE `conversation_id` ORDER created_at.
+- Buduj tiptap doc JSON: `[heading h1 = title || 'Eksport z Sovry'] + per message: heading h3 = role, paragraph = content]`.
+- INSERT do `workspace_notes` z `actor_id`/`tenant_id` z auth.
+- Zwróć `{ note_id }`. CORS standard.
+
+## D. Kolejność wykonania
+
+1. SQL migracja (archive + 2 tabele + RLS + RPC + trigger).
+2. Install dep: `@tiptap/react @tiptap/starter-kit @tiptap/extension-task-list @tiptap/extension-task-item @tiptap/extension-placeholder react-grid-layout`.
+3. 3 hooki (notes/widgets/kpi).
+4. 4 widgety + WidgetGrid + AddWidgetMenu.
+5. Refactor `Workspace.tsx` na taby Cockpit/Tydzień.
+6. Edge fn `workspace-create-note-from-sovra`.
+7. Update `SovraExportButton` na realny call.
+8. Smoke: `/workspace` renderuje, drag persistuje, tiptap auto-save, Sovra eksport.
+
+## E. DoD
+- [ ] `archive.workspace_topics_backup_20260418` istnieje, `workspace_topics` **zostaje** (z hookami).
+- [ ] `workspace_notes`, `workspace_widgets` z RLS.
+- [ ] `/workspace` ma tab Cockpit (nowy grid) + Tydzień (stare).
+- [ ] Drag widgetu zapisuje grid_x/y do DB.
+- [ ] NoteWidget tiptap: heading, paragraph, todo list, auto-save 2s.
+- [ ] Sovra „Eksportuj do notatki" → wpis w `workspace_notes` + toast z linkiem.
+
+## F. Ryzyka
+- **R1** `react-grid-layout` typings — wymaga `@types/react-grid-layout`. Dodam.
+- **R2** Tiptap SSR/Vite — działa bez konfiguracji w Vite, ale `useEditor` musi być w client component (jest, Vite czysty CSR).
+- **R3** Konflikt z istniejącym `WorkspaceNotes.tsx` (per-projekt notatki). **Nie ruszam** — to inna domena (project_notes). Nowe `workspace_notes` = personal notes Remka.
+- **R4** RPC `deals_revenue_mtd` — sprawdzę czy `deal_team_contacts` ma `value` i `tenant_id` w trakcie pisania migracji; jeśli nie, fallback na `prospects_new`.
+- **R5** Konstytucja zabrania DROP `workspace_topics` mimo MD — zostaje, hooki działają dalej. MD pkt 1 świadomie odrzucony.
 
