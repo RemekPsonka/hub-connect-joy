@@ -17,14 +17,25 @@ export function useSovraSessions() {
   return useQuery({
     queryKey: ['sovra-sessions', directorId],
     queryFn: async () => {
+      // Sprint 04: zmiana ze `sovra_sessions` na `ai_conversations` (persona='sovra').
+      // Pole `tasks_created` nieistniejące w nowym schemacie — zwracamy null (UI zignoruje).
+      // Sortujemy po last_message_at (świeżość).
       const { data, error } = await supabase
-        .from('sovra_sessions')
-        .select('id, type, title, started_at, tasks_created')
-        .order('started_at', { ascending: false })
+        .from('ai_conversations')
+        .select('id, scope_type, title, started_at, last_message_at')
+        .eq('persona', 'sovra')
+        .order('last_message_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      return (data || []) as SovraSession[];
+      return (data || []).map((row) => ({
+        id: row.id,
+        // Mapowanie scope_type → "type" (UI używa do badge'a). Brak scope = "chat".
+        type: row.scope_type && row.scope_type !== 'global' ? row.scope_type : 'chat',
+        title: row.title,
+        started_at: row.last_message_at ?? row.started_at,
+        tasks_created: null,
+      })) as SovraSession[];
     },
     enabled: !!directorId,
     staleTime: 30_000,

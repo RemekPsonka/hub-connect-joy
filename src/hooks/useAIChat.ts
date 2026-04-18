@@ -1,3 +1,8 @@
+// Sprint 04: thin wrapper na endpoint `ai-stream` (generyczny streaming AI dla featurów,
+// nie persona chat — to NIE Sovra).
+// Konsumenci: ConsultationBriefChat, ConsultationSummaryChat, ConsultationPreparationSection,
+// ConsultationSummarySection, MeetingRecommendationsTab.
+
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,24 +22,23 @@ export async function streamAIChat({
   messages,
   onDelta,
   onDone,
-  onError
+  onError,
 }: StreamChatOptions): Promise<void> {
-  const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
-  
+  const URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-stream`;
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-    const response = await fetch(CHAT_URL, {
+    const response = await fetch(URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ messages }),
     });
-    
-    // Handle rate limits and payment errors
+
     if (response.status === 429) {
       toast({
         title: 'Przekroczono limit zapytań',
@@ -44,7 +48,6 @@ export async function streamAIChat({
       onError?.(new Error('Rate limit exceeded'));
       return;
     }
-    
     if (response.status === 402) {
       toast({
         title: 'Wymagana płatność',
@@ -54,66 +57,61 @@ export async function streamAIChat({
       onError?.(new Error('Payment required'));
       return;
     }
-    
     if (!response.ok || !response.body) {
       throw new Error(`HTTP error: ${response.status}`);
     }
-    
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let textBuffer = '';
     let streamDone = false;
-    
+
     while (!streamDone) {
       const { done, value } = await reader.read();
       if (done) break;
-      
       textBuffer += decoder.decode(value, { stream: true });
-      
-      let newlineIndex: number;
-      while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-        let line = textBuffer.slice(0, newlineIndex);
-        textBuffer = textBuffer.slice(newlineIndex + 1);
-        
+
+      let nl: number;
+      while ((nl = textBuffer.indexOf('\n')) !== -1) {
+        let line = textBuffer.slice(0, nl);
+        textBuffer = textBuffer.slice(nl + 1);
         if (line.endsWith('\r')) line = line.slice(0, -1);
         if (line.startsWith(':') || line.trim() === '') continue;
         if (!line.startsWith('data: ')) continue;
-        
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === '[DONE]') {
+        const json = line.slice(6).trim();
+        if (json === '[DONE]') {
           streamDone = true;
           break;
         }
-        
         try {
-          const parsed = JSON.parse(jsonStr);
+          const parsed = JSON.parse(json);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
-          // Incomplete JSON, put it back and wait for more data
           textBuffer = line + '\n' + textBuffer;
           break;
         }
       }
     }
-    
-    // Final flush
+
     if (textBuffer.trim()) {
       for (let raw of textBuffer.split('\n')) {
         if (!raw) continue;
         if (raw.endsWith('\r')) raw = raw.slice(0, -1);
         if (raw.startsWith(':') || raw.trim() === '') continue;
         if (!raw.startsWith('data: ')) continue;
-        const jsonStr = raw.slice(6).trim();
-        if (jsonStr === '[DONE]') continue;
+        const json = raw.slice(6).trim();
+        if (json === '[DONE]') continue;
         try {
-          const parsed = JSON.parse(jsonStr);
+          const parsed = JSON.parse(json);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
-        } catch { /* ignore partial leftovers */ }
+        } catch {
+          /* ignore */
+        }
       }
     }
-    
+
     onDone();
   } catch (error) {
     console.error('AI chat error:', error);
@@ -126,15 +124,18 @@ export async function streamAIChat({
   }
 }
 
-// Non-streaming version for simple requests
 export async function invokeAIChat(messages: Message[]): Promise<string | null> {
   try {
     let result = '';
     await streamAIChat({
       messages,
-      onDelta: (chunk) => { result += chunk; },
+      onDelta: (chunk) => {
+        result += chunk;
+      },
       onDone: () => {},
-      onError: () => { result = ''; }
+      onError: () => {
+        result = '';
+      },
     });
     return result || null;
   } catch {
