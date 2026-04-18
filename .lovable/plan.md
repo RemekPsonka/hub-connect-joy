@@ -1,71 +1,62 @@
 
 
-# Sprint 07 — BI 2.0 fresh build
+# Sprint 08 — Companies 2.0 (zaadaptowany)
 
-## Decyzje (potwierdzone)
-- D1: 3 placeholderowe pytania z TODO w `src/lib/bi/questions.v2.ts`. Remek dorzuci 15 finalnych później.
-- D2: Kasujemy `src/components/agents/BIInterviewChat.tsx` + `BIDataViewer.tsx` (oraz wszystkie ich importy).
-- D3: Usuwamy widget statystyk BI z `Settings.tsx` (`useBIStatistics`, `useContactsWithoutBI` + ich wywołania).
-- D4: 13 wierszy `business_interviews` + 3 `bi_ai_outputs` → archive. Odpalamy one-shot migrację `ai_summary` z `business_interviews.ai_output` do nowej `contact_bi`.
+## Korekty względem sprint MD
 
-## A. Migracja SQL `supabase/migrations/<ts>_sprint07_bi2_schema.sql`
-1. Archiwizacja 6 tabel → `archive.*_backup_20260418` + `RAISE NOTICE` z liczbą wierszy.
-2. `CREATE TABLE public.contact_bi (contact_id PK→contacts, tenant_id, answers jsonb, ai_summary text, filled_by_ai bool, last_filled_at, updated_at)`. Indeks GIN po `answers` + indeks po `tenant_id`. RLS po `tenant_id = get_current_tenant_id()` (SELECT/INSERT/UPDATE/DELETE).
-3. One-shot INSERT z `archive.business_interviews_backup_20260418` (DISTINCT ON contact_id, najnowsze, `ai_summary = COALESCE(ai_output->>'summary', ai_output::text)`, `filled_by_ai=true`).
-4. DROP CASCADE 6 starych tabel.
-5. Komentarz `-- ROLLBACK:` ze skryptem przywracającym z archive.
+**Realia bazy (52 kolumn, 1738 firm):**
+- Faktyczne nazwy: `source_data_status/_date` (nie `source_data_api_status`), `financial_data_status/_date` (nie `financial_data_3y_status`), `company_analysis_status/_date` (nie `ai_analysis_status`).
+- `ai_analysis` (jsonb) jest **mocno używane** w 23 plikach (FE + edge functions). Rename = wybuch enrichmentu.
+- Dane do migracji: external=11, source_data_api=549, www=10, financial=11, ai_analysis=31. `is_group=0`, `group_companies` puste.
+
+**Decyzja architektoniczna — split na dwie fazy:**
+1. **TERAZ (ten sprint):** backend-only — nowa tabela `company_data_sources` + backfill + UNIQUE indexes + nowy hook. **NIE deprecate** kolumn (zachowuje kompatybilność z 23 plikami enrichment). Kolumny zostają jako "legacy mirror" do osobnego sprintu czyszczenia po pełnym przepięciu enrichment edge functions.
+2. **PÓŹNIEJ (Sprint 19+):** rename → deprecated_* kolumn po przepięciu wszystkich edge functions na `company_data_sources`.
+
+UI redesign **pomijam** — sprint MD wymaga briefu Remka "co nie pasuje w widoku Firm" (warunek startu). Dotykam tylko nowy tab "Dane zewnętrzne" w istniejącym `CompanyDetail`.
+
+## A. Migracja SQL `supabase/migrations/<ts>_sprint08_companies2.sql`
+
+1. Archiwizacja: `archive.companies_backup_20260418` (1738 wierszy).
+2. `CREATE TABLE public.company_data_sources` (id, tenant_id FK, company_id FK, source_type CHECK IN ('external_api','www','financial_3y','ai_analysis','source_data_api','other'), data jsonb, status, fetched_at, created_at). Indeksy: `(company_id, source_type)`, `(tenant_id)`. RLS po `tenant_id = get_current_tenant_id()` (SELECT/INSERT/UPDATE/DELETE).
+3. Backfill 5 INSERT-ów z nie-pustych kolumn (~612 wierszy razem).
+4. UNIQUE indexes: `uniq_companies_tenant_nip` i `uniq_companies_tenant_krs` (partial WHERE NOT NULL AND <> '').
+5. **Pomijam** rename kolumn na `deprecated_*` (osobny sprint po przepięciu enrichment).
+6. `-- ROLLBACK:` skrypt: DROP `company_data_sources` + DROP unique indexes.
 
 ## B. Frontend
-- **Nowe**:
-  - `src/lib/bi/questions.v2.ts` — typ `BIQuestion` + `BI_QUESTIONS_V2` z 3 placeholderami (sekcja `basics`) + `// TODO: Remek dostarcza 15 finalnych pytań`.
-  - `src/hooks/useContactBI.ts` — `useContactBI(contactId)` (SELECT) + `useUpsertContactBI` (UPSERT) + `useFillBIFromNotesViaSovra` (nawigacja do Sovry z prefilled message wywołującym tool `fill_bi_from_notes`).
-  - `src/components/bi/ContactBI.tsx` — formularz JSON-Schema-driven z `BI_QUESTIONS_V2`, grupowanie po `section`, tryb read-only z przyciskiem „Edytuj", przyciski „Zapisz" i „Wypełnij AI", wyświetlanie `ai_summary` jeśli istnieje.
-- **Edycje**:
-  - `src/components/contacts/MeetingsTab.tsx` — `<BITab />` → `<ContactBI contactId={contactId} />`.
-  - `src/pages/Settings.tsx` — usuń import + użycia `useBIStatistics`/`useContactsWithoutBI` + sekcję wyświetlającą statystyki.
-- **Kasacje**:
-  - Folder `src/components/bi/sections/` (cały, 19 plików).
-  - `src/components/bi/BITab.tsx`, `BIActionBar.tsx`, `BIFillFromNoteDialog.tsx`, `types.ts` (legacy).
-  - `src/components/bi/index.ts` → eksportuje tylko nowy `ContactBI`.
-  - `src/hooks/useBIInterview.ts`, `src/hooks/useBusinessInterview.ts`.
-  - `src/components/agents/BIInterviewChat.tsx`, `src/components/agents/BIDataViewer.tsx`.
-  - Sprawdzenie referencji do skasowanych plików (search) — jeśli są, czyszczę.
+
+- **Nowe `src/hooks/useCompanyDataSources.ts`** — `useCompanyDataSources(companyId)`: SELECT z `company_data_sources` zwraca `Record<source_type, DataSource>` (grupowane).
+- **Nowy `src/components/companies/CompanyExternalDataTab.tsx`** — render 5 sekcji (External API, KRS/CEIDG, WWW, Financial 3Y, AI Analysis) z JSON viewer + status badge + fetched_at. Fallback "brak danych" jeśli source_type nieobecny.
+- **Edycja `src/components/company/CompanyFlatTabs.tsx`** — dodaję tab "Dane zewnętrzne" → `<CompanyExternalDataTab companyId={company.id} />`.
+- `useCompanies.ts` **nie ruszam** — kolumny istnieją, FE działa.
 
 ## C. Edge functions
-- **Kasacje** (folder + `supabase/config.toml` jeśli ma wpis):
-  - `supabase/functions/bi-fill-from-note/`
-  - `supabase/functions/process-bi-ai/`
-  - `supabase/functions/bi-agent-interview/`
-- **Edycja `supabase/functions/sovra/tools.ts`**:
-  - Rejestracja write-toola `fill_bi_from_notes` (args: `{ contact_id: uuid }`, `human_summary`: „Wypełnię BI kontaktu {name} na podstawie notatek i konsultacji. Potwierdzasz?").
-  - INSERT do `sovra_pending_actions` z `metadata.tool='fill_bi_from_notes'`.
-- **Edycja `supabase/functions/sovra-confirm/index.ts`** (handler nowego toola):
-  - Pobranie kontaktu + ostatnich `contacts.notes` + `consultations` (`scheduled_at DESC LIMIT 10`).
-  - `callLLM` z systemowym promptem „wypełnij JSON BI na podstawie notatek wg schematu BI_QUESTIONS_V2" (schema embed).
-  - UPSERT do `public.contact_bi` z `answers`, `ai_summary`, `filled_by_ai=true`, `last_filled_at=now()`.
-  - Persist `tool_results` w `ai_messages`.
+
+**Bez zmian.** Enrichment functions nadal piszą do legacy kolumn `companies.*_data`. Synchronizacja do `company_data_sources` wprowadzimy w Sprincie 19 (refactor enrichment).
+
+**Opcjonalnie (decyzja Remka):** trigger `AFTER UPDATE ON companies` który mirroruje zmiany `external_data/www_data/financial_data_3y/ai_analysis/source_data_api` do `company_data_sources` (UPSERT po `(company_id, source_type)`). Daje to żywe dane w nowej tabeli bez ruszania edge fn. **Domyślnie: TAK** — to czysty zysk, pojedyncza migracja.
 
 ## D. Kolejność wykonania
-1. Migracja SQL (archive → contact_bi + RLS → migrate ai_summary → DROP).
-2. Nowe pliki FE (`questions.v2.ts`, `useContactBI.ts`, `ContactBI.tsx`).
-3. Podmiana `MeetingsTab` na nowy komponent.
-4. Edge functions: rejestracja toola w `sovra/tools.ts` + handler w `sovra-confirm/index.ts`.
-5. Czyszczenie: kasacja folderów/plików + czyszczenie `Settings.tsx` + index.
-6. `delete_edge_functions` dla 3 fn. Deploy `sovra` + `sovra-confirm`.
-7. Build + smoke.
+
+1. SQL migracja (archive + table + RLS + backfill + UNIQUE + trigger sync).
+2. `useCompanyDataSources.ts` (read hook).
+3. `CompanyExternalDataTab.tsx` + dopisanie taba w `CompanyFlatTabs.tsx`.
+4. Build + smoke (lista firm działa, CompanyDetail tab "Dane zewnętrzne" pokazuje dane).
 
 ## E. DoD
-- 6 tabel BI nie istnieje w `public`, są w `archive.*_backup_20260418`.
-- `public.contact_bi` z RLS działa, ai_summary zmigrowane (≥1 wiersz oczekiwany).
-- `/contacts/:id` → tab BI renderuje `<ContactBI/>` z 3 pytaniami placeholder.
-- „Wypełnij AI" → otwiera Sovrę → modal Potwierdź → po confirm `contact_bi.answers` i `ai_summary` wypełnione, `filled_by_ai=true`.
-- 3 edge fn (`bi-fill-from-note`, `process-bi-ai`, `bi-agent-interview`) skasowane.
-- `useBIInterview`, `useBusinessInterview`, `BIInterviewChat`, `BIDataViewer`, `BITab`, `sections/` — usunięte.
-- Build zielony, brak orphaned imports.
+
+- [ ] `archive.companies_backup_20260418` istnieje (1738 wierszy).
+- [ ] `public.company_data_sources` z RLS i ~612 wierszami po backfill.
+- [ ] UNIQUE(tenant_id, nip) i UNIQUE(tenant_id, krs) — partial.
+- [ ] Trigger sync utrzymuje `company_data_sources` przy UPDATE `companies`.
+- [ ] CompanyDetail ma nowy tab "Dane zewnętrzne" z 5 sekcjami source_type.
+- [ ] Brak regresji: enrichment flow (analyze-company-external, verify-company-source, fetch-company-financials, update-company-revenue) działa bez zmian.
 
 ## F. Ryzyka
-- R1: `Settings.tsx` może mieć większy fragment z BI (chips/listę). Zachowam tylko nagłówek sekcji jeśli sąsiaduje z innymi statystykami; w razie czego usunę całą kartę.
-- R2: `tasks.contact_id` constraint — nie dotyczy, ale UPSERT contact_bi musi mieć poprawny `tenant_id` (biorę z `contacts.tenant_id` w handlerze).
-- R3: LLM może zwrócić niepełny JSON — handler robi `JSON.parse` w try/catch, w razie błędu ustawia tylko `ai_summary` (raw text), `answers` zostaje `{}`.
-- R4: Schema `consultations` — używam `scheduled_at` + `notes` (potwierdzone w S06).
+
+- **R1: UNIQUE conflict.** W `companies` mogą istnieć duplikaty NIP w obrębie tenant_id. Migracja padnie. **Mitigacja:** przed CREATE UNIQUE — `SELECT tenant_id, nip, COUNT(*) FROM companies WHERE nip <> '' GROUP BY 1,2 HAVING COUNT(*)>1`. Jeśli są — `RAISE NOTICE` listę i abort. Naprawa duplikatów = osobna migracja.
+- **R2: Trigger overhead.** Sync trigger na każdym UPDATE companies. ~1738 wierszy, niski ruch — ok.
+- **R3: UI pominięte.** Sprint MD wymagał redesignu listy + 5 tabów. Czekamy na brief Remka. Dostarczamy tylko backend + 1 tab.
+- **R4: Schema mismatch.** Sprint MD odwołuje się do nieistniejących kolumn (`source_data_api_status`, `financial_data_3y_status`, `ai_analysis_status`). Backfill dostosowany do realiów (`source_data_status`, `financial_data_status`, `company_analysis_status`).
 
