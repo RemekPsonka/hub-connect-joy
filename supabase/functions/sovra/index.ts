@@ -198,9 +198,12 @@ Deno.serve(async (req: Request) => {
       };
 
       try {
+        // Sprint 06: build rich scope context once (label + summary)
+        const scopeCtx = await buildScopeContext(supabase, scopeType, scopeId);
+
         for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
           const history = await fetchHistory();
-          const systemPrompt = buildSovraPrompt({ scope_type: scopeType, scope_id: scopeId } as ScopeContext);
+          const systemPrompt = buildSovraPrompt(scopeCtx);
           const llmMessages: LLMMessage[] = [
             { role: 'system', content: systemPrompt },
             ...history,
