@@ -192,6 +192,10 @@ serve(async (req) => {
     const { tenantId } = authResult;
     // ============= END AUTHORIZATION CHECK =============
 
+    // Sprint 01 — rate limit 10/min
+    const rl = await checkRateLimit(authResult.user.id, "generate-contact-profile", 10, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
+
     // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
     // const rateLimit = await checkRateLimit(
     //   `contact-profile:${authResult.user.id}`,

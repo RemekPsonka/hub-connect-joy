@@ -151,6 +151,10 @@ Deno.serve(async (req: Request) => {
 
     const { tenantId, directorId, assistantId } = authResult;
 
+    // Sprint 01 — rate limit 30/min
+    const rl = await checkRateLimit(authResult.user.id, "remek-chat", 30, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
+
     // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
     // const rateLimit = await checkRateLimit(
     //   `remek:${authResult.user.id}`,
