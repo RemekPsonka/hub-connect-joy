@@ -14,60 +14,177 @@ export type Database = {
   }
   public: {
     Tables: {
-      agent_conversations: {
+      ai_conversations: {
         Row: {
-          actions_taken: Json[] | null
-          contact_id: string
-          content: string
-          created_at: string
-          extracted_data: Json | null
+          actor_id: string
           id: string
-          role: string
-          session_id: string
+          last_message_at: string
+          metadata: Json
+          persona: string
+          scope_id: string | null
+          scope_type: string | null
+          started_at: string
           tenant_id: string
+          title: string | null
         }
         Insert: {
-          actions_taken?: Json[] | null
-          contact_id: string
-          content: string
-          created_at?: string
-          extracted_data?: Json | null
+          actor_id: string
           id?: string
-          role: string
-          session_id?: string
+          last_message_at?: string
+          metadata?: Json
+          persona?: string
+          scope_id?: string | null
+          scope_type?: string | null
+          started_at?: string
           tenant_id: string
+          title?: string | null
         }
         Update: {
-          actions_taken?: Json[] | null
-          contact_id?: string
-          content?: string
-          created_at?: string
-          extracted_data?: Json | null
+          actor_id?: string
           id?: string
-          role?: string
-          session_id?: string
+          last_message_at?: string
+          metadata?: Json
+          persona?: string
+          scope_id?: string | null
+          scope_type?: string | null
+          started_at?: string
           tenant_id?: string
+          title?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "agent_conversations_contact_id_fkey"
-            columns: ["contact_id"]
+            foreignKeyName: "ai_conversations_actor_id_fkey"
+            columns: ["actor_id"]
             isOneToOne: false
-            referencedRelation: "contacts"
+            referencedRelation: "directors"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "agent_conversations_tenant_id_fkey"
+            foreignKeyName: "ai_conversations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "mv_dashboard_stats"
             referencedColumns: ["tenant_id"]
           },
           {
-            foreignKeyName: "agent_conversations_tenant_id_fkey"
+            foreignKeyName: "ai_conversations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_memory: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          embedding: string | null
+          id: string
+          memory_type: string
+          scope_id: string | null
+          scope_type: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by?: string | null
+          embedding?: string | null
+          id?: string
+          memory_type: string
+          scope_id?: string | null
+          scope_type: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          embedding?: string | null
+          id?: string
+          memory_type?: string
+          scope_id?: string | null
+          scope_type?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_memory_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_memory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ai_memory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          cost_cents: number | null
+          created_at: string
+          id: string
+          model: string | null
+          provider: string | null
+          role: string
+          tokens_in: number | null
+          tokens_out: number | null
+          tool_calls: Json | null
+          tool_results: Json | null
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          cost_cents?: number | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          provider?: string | null
+          role: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json | null
+          tool_results?: Json | null
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          cost_cents?: number | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          provider?: string | null
+          role?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json | null
+          tool_results?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -4338,54 +4455,6 @@ export type Database = {
           },
         ]
       }
-      master_agent_queries: {
-        Row: {
-          agents_consulted: string[] | null
-          created_at: string | null
-          id: string
-          query: string
-          query_type: string | null
-          reasoning: Json | null
-          response: string | null
-          tenant_id: string
-        }
-        Insert: {
-          agents_consulted?: string[] | null
-          created_at?: string | null
-          id?: string
-          query: string
-          query_type?: string | null
-          reasoning?: Json | null
-          response?: string | null
-          tenant_id: string
-        }
-        Update: {
-          agents_consulted?: string[] | null
-          created_at?: string | null
-          id?: string
-          query?: string
-          query_type?: string | null
-          reasoning?: Json | null
-          response?: string | null
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "master_agent_queries_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "master_agent_queries_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       matches: {
         Row: {
           ai_explanation: string | null
@@ -5792,137 +5861,6 @@ export type Database = {
           },
         ]
       }
-      remek_conversations: {
-        Row: {
-          assistant_id: string | null
-          context: Json | null
-          created_at: string | null
-          director_id: string | null
-          helpful_rating: number | null
-          id: string
-          message: string
-          role: string
-          session_id: string
-          tenant_id: string
-        }
-        Insert: {
-          assistant_id?: string | null
-          context?: Json | null
-          created_at?: string | null
-          director_id?: string | null
-          helpful_rating?: number | null
-          id?: string
-          message: string
-          role: string
-          session_id?: string
-          tenant_id: string
-        }
-        Update: {
-          assistant_id?: string | null
-          context?: Json | null
-          created_at?: string | null
-          director_id?: string | null
-          helpful_rating?: number | null
-          id?: string
-          message?: string
-          role?: string
-          session_id?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "remek_conversations_assistant_id_fkey"
-            columns: ["assistant_id"]
-            isOneToOne: false
-            referencedRelation: "assistants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "remek_conversations_director_id_fkey"
-            columns: ["director_id"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "remek_conversations_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "remek_conversations_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      remek_knowledge_base: {
-        Row: {
-          category: string
-          content: string
-          created_at: string | null
-          fts: unknown
-          id: string
-          is_global: boolean | null
-          keywords: string[] | null
-          module: string | null
-          related_articles: string[] | null
-          sort_order: number | null
-          tenant_id: string | null
-          title: string
-          updated_at: string | null
-        }
-        Insert: {
-          category: string
-          content: string
-          created_at?: string | null
-          fts?: unknown
-          id?: string
-          is_global?: boolean | null
-          keywords?: string[] | null
-          module?: string | null
-          related_articles?: string[] | null
-          sort_order?: number | null
-          tenant_id?: string | null
-          title: string
-          updated_at?: string | null
-        }
-        Update: {
-          category?: string
-          content?: string
-          created_at?: string | null
-          fts?: unknown
-          id?: string
-          is_global?: boolean | null
-          keywords?: string[] | null
-          module?: string | null
-          related_articles?: string[] | null
-          sort_order?: number | null
-          tenant_id?: string | null
-          title?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "remek_knowledge_base_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "remek_knowledge_base_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       representative_contacts: {
         Row: {
           assigned_at: string | null
@@ -6415,73 +6353,6 @@ export type Database = {
           },
           {
             foreignKeyName: "sovra_reminders_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sovra_report_config: {
-        Row: {
-          created_at: string | null
-          day_of_week: number | null
-          director_id: string
-          email_override: string | null
-          enabled: boolean | null
-          frequency: string | null
-          id: string
-          include_sections: Json | null
-          last_sent_at: string | null
-          tenant_id: string
-          time_of_day: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          day_of_week?: number | null
-          director_id: string
-          email_override?: string | null
-          enabled?: boolean | null
-          frequency?: string | null
-          id?: string
-          include_sections?: Json | null
-          last_sent_at?: string | null
-          tenant_id: string
-          time_of_day?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          day_of_week?: number | null
-          director_id?: string
-          email_override?: string | null
-          enabled?: boolean | null
-          frequency?: string | null
-          id?: string
-          include_sections?: Json | null
-          last_sent_at?: string | null
-          tenant_id?: string
-          time_of_day?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sovra_report_config_director_id_fkey"
-            columns: ["director_id"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sovra_report_config_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "sovra_report_config_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -7655,156 +7526,6 @@ export type Database = {
           slug?: string
         }
         Relationships: []
-      }
-      turbo_agent_sessions: {
-        Row: {
-          agents_responded: number | null
-          agents_selected: number | null
-          categories: Json | null
-          completed_at: string | null
-          created_at: string | null
-          id: string
-          insights: string[] | null
-          master_response: string | null
-          original_query: string
-          queries_completed_at: string | null
-          query_intent: string | null
-          selection_completed_at: string | null
-          started_at: string | null
-          status: string | null
-          tenant_id: string
-          top_results: Json | null
-          total_agents_available: number | null
-          total_duration_ms: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          agents_responded?: number | null
-          agents_selected?: number | null
-          categories?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          id?: string
-          insights?: string[] | null
-          master_response?: string | null
-          original_query: string
-          queries_completed_at?: string | null
-          query_intent?: string | null
-          selection_completed_at?: string | null
-          started_at?: string | null
-          status?: string | null
-          tenant_id: string
-          top_results?: Json | null
-          total_agents_available?: number | null
-          total_duration_ms?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          agents_responded?: number | null
-          agents_selected?: number | null
-          categories?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          id?: string
-          insights?: string[] | null
-          master_response?: string | null
-          original_query?: string
-          queries_completed_at?: string | null
-          query_intent?: string | null
-          selection_completed_at?: string | null
-          started_at?: string | null
-          status?: string | null
-          tenant_id?: string
-          top_results?: Json | null
-          total_agents_available?: number | null
-          total_duration_ms?: number | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "turbo_agent_sessions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "turbo_agent_sessions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      turbo_agent_sub_queries: {
-        Row: {
-          agent_response: string | null
-          confidence_score: number | null
-          contact_id: string
-          contact_name: string | null
-          evidence: string[] | null
-          id: string
-          processing_time_ms: number | null
-          query_sent_at: string | null
-          reasoning: Json | null
-          relevance_score: number | null
-          response_received_at: string | null
-          selection_reason: string | null
-          session_id: string | null
-          status: string | null
-          sub_query: string
-        }
-        Insert: {
-          agent_response?: string | null
-          confidence_score?: number | null
-          contact_id: string
-          contact_name?: string | null
-          evidence?: string[] | null
-          id?: string
-          processing_time_ms?: number | null
-          query_sent_at?: string | null
-          reasoning?: Json | null
-          relevance_score?: number | null
-          response_received_at?: string | null
-          selection_reason?: string | null
-          session_id?: string | null
-          status?: string | null
-          sub_query: string
-        }
-        Update: {
-          agent_response?: string | null
-          confidence_score?: number | null
-          contact_id?: string
-          contact_name?: string | null
-          evidence?: string[] | null
-          id?: string
-          processing_time_ms?: number | null
-          query_sent_at?: string | null
-          reasoning?: Json | null
-          relevance_score?: number | null
-          response_received_at?: string | null
-          selection_reason?: string | null
-          session_id?: string | null
-          status?: string | null
-          sub_query?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "turbo_agent_sub_queries_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "turbo_agent_sub_queries_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "turbo_agent_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_password_policies: {
         Row: {
