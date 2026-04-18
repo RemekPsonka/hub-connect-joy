@@ -122,8 +122,8 @@ Deno.serve(async (req) => {
       'master_agent_queries',
       'master_agent_memory',
       
-      // Contact related
-      'contact_merge_history',
+      // Audit log (unified)
+      'audit_log',
       
       // Groups and positions
       'assistant_group_access',

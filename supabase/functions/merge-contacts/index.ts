@@ -262,23 +262,32 @@ serve(async (req) => {
 
       if (updateError) throw updateError;
 
-      await supabase.from('contact_merge_history').insert({
+      await supabase.from('audit_log').insert({
         tenant_id: tenantId,
-        primary_contact_id: existingContactId,
-        merged_contact_data: newContactData,
-        merge_source: 'manual'
+        entity_type: 'contact',
+        entity_id: existingContactId,
+        actor_id: null,
+        action: 'merge',
+        diff: {},
+        metadata: {
+          merged_contact_data: newContactData,
+          merge_source: 'manual',
+        }
       });
 
       // Log merge activity
-      await supabase.from('contact_activity_log').insert({
+      await supabase.from('audit_log').insert({
         tenant_id: tenantId,
-        contact_id: existingContactId,
-        activity_type: 'merged',
-        description: companyCreated 
-          ? `Kontakt scalony z danymi wizytówki. Utworzono firmę: ${companyName}`
-          : 'Kontakt został scalony z innymi danymi',
-        metadata: { 
-          fields_updated: Object.keys(mergedData), 
+        entity_type: 'contact',
+        entity_id: existingContactId,
+        actor_id: null,
+        action: 'merged',
+        diff: {},
+        metadata: {
+          description: companyCreated
+            ? `Kontakt scalony z danymi wizytówki. Utworzono firmę: ${companyName}`
+            : 'Kontakt został scalony z innymi danymi',
+          fields_updated: Object.keys(mergedData),
           source: 'manual',
           company_created: companyCreated,
           company_id: companyId

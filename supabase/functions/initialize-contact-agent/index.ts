@@ -444,12 +444,18 @@ Zwróć JSON z ROZBUDOWANYMI sekcjami:
     }
 
     // Log AI agent initialization activity
-    await supabase.from('contact_activity_log').insert({
+    await supabase.from('audit_log').insert({
       tenant_id: tenantId,
-      contact_id: contact_id,
-      activity_type: 'ai_agent_initialized',
-      description: 'Zainicjalizowano agenta AI z regeneracją embeddingu',
-      metadata: { model: 'google/gemini-2.5-flash', embedding_regenerated: true }
+      entity_type: 'contact',
+      entity_id: contact_id,
+      actor_id: null,
+      action: 'ai_agent_initialized',
+      diff: {},
+      metadata: {
+        description: 'Zainicjalizowano agenta AI z regeneracją embeddingu',
+        model: 'google/gemini-2.5-flash',
+        embedding_regenerated: true,
+      }
     });
 
     return new Response(

@@ -920,12 +920,15 @@ ${contact.city ? `- **Miasto:** ${contact.city}` : ''}
     await supabase.from("contacts").update(contactUpdate).eq("id", contact_id);
 
     // Log AI profile generation activity
-    await supabase.from("contact_activity_log").insert({
+    await supabase.from("audit_log").insert({
       tenant_id: tenantId,
-      contact_id: contact_id,
-      activity_type: 'ai_profile_generated',
-      description: 'Wygenerowano profil AI',
-      metadata: { 
+      entity_type: 'contact',
+      entity_id: contact_id,
+      actor_id: null,
+      action: 'ai_profile_generated',
+      diff: {},
+      metadata: {
+        description: 'Wygenerowano profil AI',
         model: 'google/gemini-3-flash-preview',
         has_website_data: hasWebsiteData,
         company_website: companyWebsite,

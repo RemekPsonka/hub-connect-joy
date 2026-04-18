@@ -85,7 +85,6 @@ serve(async (req) => {
       { table: 'offers', column: 'contact_id' },
       { table: 'task_contacts', column: 'contact_id' },
       { table: 'consultations', column: 'contact_id' },
-      { table: 'contact_activity_log', column: 'contact_id' },
     ];
 
     for (const { table, column } of transferTables) {
@@ -97,6 +96,16 @@ serve(async (req) => {
       if (error) {
         console.error(`Error transferring ${table}:`, error);
       }
+    }
+
+    // Transfer audit_log entries (entity_type=contact)
+    const { error: auditTransferError } = await supabase
+      .from('audit_log')
+      .update({ entity_id: primaryContactId })
+      .eq('entity_type', 'contact')
+      .eq('entity_id', secondaryContactId);
+    if (auditTransferError) {
+      console.error('Error transferring audit_log:', auditTransferError);
     }
 
     // 3. Also transfer consultation_guests, consultation_meetings, consultation_recommendations, consultation_thanks
@@ -140,21 +149,30 @@ serve(async (req) => {
 
     if (deleteError) throw deleteError;
 
-    // 6. Log merge in contact_merge_history
-    await supabase.from('contact_merge_history').insert({
+    // 6. Log merge in audit_log
+    await supabase.from('audit_log').insert({
       tenant_id: tenantId,
-      primary_contact_id: primaryContactId,
-      merged_contact_data: { secondary_contact_id: secondaryContactId, merged_fields: sanitizedFields },
-      merge_source: 'bulk_merge',
+      entity_type: 'contact',
+      entity_id: primaryContactId,
+      actor_id: null,
+      action: 'merge',
+      diff: {},
+      metadata: {
+        merged_contact_data: { secondary_contact_id: secondaryContactId, merged_fields: sanitizedFields },
+        merge_source: 'bulk_merge',
+      },
     });
 
-    // 7. Log activity
-    await supabase.from('contact_activity_log').insert({
+    // 7. Log activity (bulk_merged)
+    await supabase.from('audit_log').insert({
       tenant_id: tenantId,
-      contact_id: primaryContactId,
-      activity_type: 'bulk_merged',
-      description: `Kontakt scalony z: ${secondaryName}. Powiązane rekordy przeniesione.`,
+      entity_type: 'contact',
+      entity_id: primaryContactId,
+      actor_id: null,
+      action: 'bulk_merged',
+      diff: {},
       metadata: {
+        description: `Kontakt scalony z: ${secondaryName}. Powiązane rekordy przeniesione.`,
         secondary_contact_id: secondaryContactId,
         secondary_contact_name: secondaryName,
         fields_updated: Object.keys(sanitizedFields).filter(k => k !== 'updated_at'),

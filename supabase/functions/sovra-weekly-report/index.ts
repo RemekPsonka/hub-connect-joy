@@ -155,9 +155,10 @@ async function collectStats(
         .eq("tenant_id", tenantId)
         .gte("created_at", periodStart),
       supabase
-        .from("contact_activity_log")
+        .from("audit_log")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
+        .eq("entity_type", "contact")
         .gte("created_at", periodStart),
     ]);
     stats.contacts_added = addedRes.count ?? 0;
