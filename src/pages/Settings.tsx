@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { SynonymsDictionary } from '@/components/settings/SynonymsDictionary';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { GroupManagementModal } from '@/components/settings/GroupManagementModal';
 import { DefaultPositionsManager } from '@/components/settings/DefaultPositionsManager';
@@ -384,9 +383,6 @@ export default function Settings() {
 
           {/* Polityka odświeżania kontaktów */}
           <GroupRefreshPolicyEditor />
-
-          {/* Synonyms Dictionary */}
-          <SynonymsDictionary />
         </TabsContent>
 
         {/* Security Tab */}

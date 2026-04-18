@@ -352,11 +352,7 @@ export function useFillBIFromNote() {
       if (!data.success) throw new Error(data.error || 'AI fill failed');
 
       // Log what was updated in main DB
-      if (data.mainDbUpdates) {
-        const { contact, company } = data.mainDbUpdates;
-        if (contact?.length > 0) console.log('[BI Fill] Updated contact fields:', contact);
-        if (company?.length > 0) console.log('[BI Fill] Updated company fields:', company);
-      }
+      // mainDbUpdates is processed server-side; no client logging needed.
 
       return data.data as Record<string, any>;
     },

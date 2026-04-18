@@ -13,9 +13,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { Navigate } from "react-router-dom";
-
-const DealsRedirect = () => <Navigate to="/deals-team" replace />;
 
 // Static imports (login page - fast loading)
 import Login from "./pages/Login";
@@ -30,14 +27,12 @@ const ConsultationDetail = lazy(() => import("./pages/ConsultationDetail"));
 const Meetings = lazy(() => import("./pages/Meetings"));
 const MeetingDetail = lazy(() => import("./pages/MeetingDetail"));
 const Matches = lazy(() => import("./pages/Matches"));
-const Tasks = lazy(() => import("./pages/Tasks"));
 const AIChat = lazy(() => import("./pages/AIChat"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Search = lazy(() => import("./pages/Search"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Owner = lazy(() => import("./pages/Owner"));
-const Superadmin = lazy(() => import("./pages/Superadmin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const CompanyDetail = lazy(() => import("./pages/CompanyDetail"));
 const BugReports = lazy(() => import("./pages/BugReports"));
@@ -46,15 +41,10 @@ const PolicyPipeline = lazy(() => import("./pages/PolicyPipeline"));
 const Network = lazy(() => import("./pages/Network"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
-const Deals = lazy(() => import("./pages/Deals")); // kept for /deals/:id
-const DealDetail = lazy(() => import("./pages/DealDetail"));
 const DealsTeamDashboard = lazy(() => import("./pages/DealsTeamDashboard"));
-const MyDay = lazy(() => import("./pages/MyDay"));
-const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Sovra = lazy(() => import("./pages/Sovra"));
 const WantedContacts = lazy(() => import("./pages/WantedContacts"));
-const Resources = lazy(() => import("./pages/Resources"));
 const TaskAnalytics = lazy(() => import("./pages/TaskAnalytics"));
 const TeamProductivityReport = lazy(() => import("./pages/TeamProductivityReport"));
 const Workspace = lazy(() => import("./pages/Workspace"));
@@ -102,7 +92,6 @@ const App = () => (
                 <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
                   {/* Director-only routes */}
                   <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
-                  <Route path="/my-day" element={<DirectorGuard><MyDay /></DirectorGuard>} />
                   <Route path="/calendar" element={<DirectorGuard><Calendar /></DirectorGuard>} />
                   <Route path="/workspace" element={<DirectorGuard><Workspace /></DirectorGuard>} />
                   <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
@@ -122,18 +111,13 @@ const App = () => (
                       </AdminGuard>
                     } 
                   />
-                  <Route path="/tasks" element={<DirectorGuard><Tasks /></DirectorGuard>} />
                   <Route path="/tasks/analytics" element={<DirectorGuard><TaskAnalytics /></DirectorGuard>} />
                   <Route path="/tasks/team-report" element={<DirectorGuard><TeamProductivityReport /></DirectorGuard>} />
-                  <Route path="/my-tasks" element={<DirectorGuard><MyTasks /></DirectorGuard>} />
                   <Route path="/pipeline" element={<AdminGuard><PolicyPipeline /></AdminGuard>} />
                   <Route path="/projects" element={<DirectorGuard><Projects /></DirectorGuard>} />
                   <Route path="/projects/:id" element={<DirectorGuard><ProjectDetail /></DirectorGuard>} />
-                  <Route path="/deals" element={<DirectorGuard><DealsRedirect /></DirectorGuard>} />
-                  <Route path="/deals/:id" element={<DirectorGuard><DealDetail /></DirectorGuard>} />
                   <Route path="/deals-team" element={<DirectorGuard><DealsTeamDashboard /></DirectorGuard>} />
                   <Route path="/wanted" element={<DirectorGuard><WantedContacts /></DirectorGuard>} />
-                  <Route path="/resources" element={<DirectorGuard><Resources /></DirectorGuard>} />
                   <Route path="/bug-reports" element={<DirectorGuard><BugReports /></DirectorGuard>} />
                   <Route path="/representatives" element={<DirectorGuard><Representatives /></DirectorGuard>} />
                   <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
@@ -142,7 +126,6 @@ const App = () => (
                   <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
                   <Route path="/sovra" element={<DirectorGuard><Sovra /></DirectorGuard>} />
                   <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
-                  <Route path="/superadmin" element={<DirectorGuard><Superadmin /></DirectorGuard>} />
                   
                   {/* Routes accessible by both directors and assistants */}
                   <Route path="/contacts" element={<Contacts />} />

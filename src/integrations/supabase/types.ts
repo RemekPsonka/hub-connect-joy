@@ -72,64 +72,6 @@ export type Database = {
           },
         ]
       }
-      ai_recommendation_actions: {
-        Row: {
-          action_taken: string
-          contact_ids: string[] | null
-          created_at: string | null
-          id: string
-          recommendation_hash: string
-          recommendation_title: string
-          recommendation_type: string
-          related_task_id: string | null
-          tenant_id: string
-        }
-        Insert: {
-          action_taken: string
-          contact_ids?: string[] | null
-          created_at?: string | null
-          id?: string
-          recommendation_hash: string
-          recommendation_title: string
-          recommendation_type: string
-          related_task_id?: string | null
-          tenant_id: string
-        }
-        Update: {
-          action_taken?: string
-          contact_ids?: string[] | null
-          created_at?: string | null
-          id?: string
-          recommendation_hash?: string
-          recommendation_title?: string
-          recommendation_type?: string
-          related_task_id?: string | null
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_recommendation_actions_related_task_id_fkey"
-            columns: ["related_task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_recommendation_actions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "ai_recommendation_actions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       assistant_group_access: {
         Row: {
           assistant_id: string
@@ -4692,97 +4634,6 @@ export type Database = {
           },
         ]
       }
-      nela_reminders: {
-        Row: {
-          channel: string
-          director_id: string
-          id: string
-          message: string
-          reference_id: string | null
-          reference_type: string | null
-          scheduled_at: string | null
-          sent_at: string | null
-          tenant_id: string
-          type: string
-        }
-        Insert: {
-          channel?: string
-          director_id: string
-          id?: string
-          message: string
-          reference_id?: string | null
-          reference_type?: string | null
-          scheduled_at?: string | null
-          sent_at?: string | null
-          tenant_id: string
-          type: string
-        }
-        Update: {
-          channel?: string
-          director_id?: string
-          id?: string
-          message?: string
-          reference_id?: string | null
-          reference_type?: string | null
-          scheduled_at?: string | null
-          sent_at?: string | null
-          tenant_id?: string
-          type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "nela_reminders_director_id_fkey"
-            columns: ["director_id"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      nela_sessions: {
-        Row: {
-          content: Json | null
-          director_id: string
-          ended_at: string | null
-          id: string
-          notes_created: number | null
-          started_at: string
-          tasks_created: number | null
-          tenant_id: string
-          type: string
-        }
-        Insert: {
-          content?: Json | null
-          director_id: string
-          ended_at?: string | null
-          id?: string
-          notes_created?: number | null
-          started_at?: string
-          tasks_created?: number | null
-          tenant_id: string
-          type: string
-        }
-        Update: {
-          content?: Json | null
-          director_id?: string
-          ended_at?: string | null
-          id?: string
-          notes_created?: number | null
-          started_at?: string
-          tasks_created?: number | null
-          tenant_id?: string
-          type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "nela_sessions_director_id_fkey"
-            columns: ["director_id"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       notification_preferences: {
         Row: {
           consultation_reminders: boolean | null
@@ -6508,33 +6359,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      search_synonyms: {
-        Row: {
-          category: string | null
-          created_at: string | null
-          id: string
-          synonyms: string[]
-          term: string
-          updated_at: string | null
-        }
-        Insert: {
-          category?: string | null
-          created_at?: string | null
-          id?: string
-          synonyms: string[]
-          term: string
-          updated_at?: string | null
-        }
-        Update: {
-          category?: string | null
-          created_at?: string | null
-          id?: string
-          synonyms?: string[]
-          term?: string
-          updated_at?: string | null
-        }
-        Relationships: []
       }
       sovra_reminders: {
         Row: {
@@ -8455,10 +8279,6 @@ export type Database = {
       }
     }
     Functions: {
-      add_synonym: {
-        Args: { p_category?: string; p_synonyms: string[]; p_term: string }
-        Returns: string
-      }
       assistant_can_access_contact: {
         Args: { p_assistant_id: string; p_contact_id: string }
         Returns: boolean
@@ -8472,8 +8292,6 @@ export type Database = {
         Args: { p_wanted_id: string }
         Returns: boolean
       }
-      delete_synonym: { Args: { p_id: string }; Returns: boolean }
-      expand_search_query: { Args: { p_query: string }; Returns: string[] }
       find_connection_path: {
         Args: {
           p_end_contact: string
@@ -8526,16 +8344,6 @@ export type Database = {
           match_offer_id: string
           match_offer_title: string
           similarity: number
-        }[]
-      }
-      get_all_synonyms: {
-        Args: never
-        Returns: {
-          category: string
-          created_at: string
-          id: string
-          synonyms: string[]
-          term: string
         }[]
       }
       get_assistant_group_ids: { Args: { _user_id: string }; Returns: string[] }
@@ -8729,7 +8537,6 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      test_expand_query: { Args: { p_query: string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }
       unaccent: { Args: { "": string }; Returns: string }
     }
