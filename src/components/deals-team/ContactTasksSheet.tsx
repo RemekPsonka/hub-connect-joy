@@ -11,6 +11,7 @@ import { NextActionDialog } from './NextActionDialog';
 import { SnoozeDialog } from './SnoozeDialog';
 import { ConvertToClientDialog } from './ConvertToClientDialog';
 import { ContactActionButtons } from './ContactActionButtons';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -180,15 +181,18 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                   </div>
                 </SheetDescription>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                onClick={() => setShowRemoveConfirm(true)}
-                title="Usuń z lejka"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex items-center gap-1 shrink-0">
+                <SovraOpenButton scopeType="contact" scopeId={contact.contact_id} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={() => setShowRemoveConfirm(true)}
+                  title="Usuń z lejka"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           </SheetHeader>
 

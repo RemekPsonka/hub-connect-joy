@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useCreateTask } from '@/hooks/useTasks';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 import { toast } from 'sonner';
 
 interface MeetingScheduledDialogProps {
@@ -84,10 +85,15 @@ export function MeetingScheduledDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Spotkanie umówione</DialogTitle>
-          <DialogDescription>
-            Podaj datę spotkania z {contactName}. System automatycznie utworzy zadanie na ten dzień.
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1.5">
+              <DialogTitle>Spotkanie umówione</DialogTitle>
+              <DialogDescription>
+                Podaj datę spotkania z {contactName}. System automatycznie utworzy zadanie na ten dzień.
+              </DialogDescription>
+            </div>
+            <SovraOpenButton scopeType="contact" scopeId={contactId} />
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

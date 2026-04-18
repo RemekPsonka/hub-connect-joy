@@ -21,6 +21,7 @@ import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 type ActionType =
   | 'schedule_meeting'
@@ -252,10 +253,15 @@ export function NextActionDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Dalsze działania</DialogTitle>
-          <DialogDescription>
-            Zadanie „{existingTaskTitle}" zakończone. Co dalej z {contactName}?
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1.5">
+              <DialogTitle>Dalsze działania</DialogTitle>
+              <DialogDescription>
+                Zadanie „{existingTaskTitle}" zakończone. Co dalej z {contactName}?
+              </DialogDescription>
+            </div>
+            <SovraOpenButton scopeType="contact" scopeId={contactId} />
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
