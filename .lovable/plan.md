@@ -1,62 +1,94 @@
 
 
-# Sprint 08 — Companies 2.0 (zaadaptowany)
+# Sprint 09 — Audit log unification (zaadaptowany)
 
 ## Korekty względem sprint MD
 
-**Realia bazy (52 kolumn, 1738 firm):**
-- Faktyczne nazwy: `source_data_status/_date` (nie `source_data_api_status`), `financial_data_status/_date` (nie `financial_data_3y_status`), `company_analysis_status/_date` (nie `ai_analysis_status`).
-- `ai_analysis` (jsonb) jest **mocno używane** w 23 plikach (FE + edge functions). Rename = wybuch enrichmentu.
-- Dane do migracji: external=11, source_data_api=549, www=10, financial=11, ai_analysis=31. `is_group=0`, `group_companies` puste.
+**Realne schematy 7 tabel ≠ sprint MD:**
+| Tabela | Wierszy | Faktyczne kolumny vs sprint MD |
+|---|---|---|
+| `task_activity_log` | 122 | brak `diff` — jest `old_value/new_value/metadata` |
+| `task_workflow_history` | 0 | brak `from_status/to_status/changed_by/action` — jest `step_id/completed_by/completed_at/notes` |
+| `deal_team_activity_log` | 90 | brak `diff/metadata/deal_team_id` — jest `team_id/team_contact_id/prospect_id/old_value/new_value/note` |
+| `deal_history` | 7 | brak `changes` — jest `field_name/old_value/new_value/old_stage_id/new_stage_id` |
+| `contact_activity_log` | 2810 | brak `actor_id/action/diff` — jest `activity_type/description/metadata` |
+| `contact_merge_history` | 244 | brak `target_contact_id/source_contact_ids/merged_by` — jest `primary_contact_id/merged_contact_data/ai_integrated_fields/merge_source` |
+| `role_audit_log` | 5 | brak `user_id/role/previous_role/actor_id` — jest `target_user_id/changed_by_user_id/old_role/new_role/details` |
 
-**Decyzja architektoniczna — split na dwie fazy:**
-1. **TERAZ (ten sprint):** backend-only — nowa tabela `company_data_sources` + backfill + UNIQUE indexes + nowy hook. **NIE deprecate** kolumn (zachowuje kompatybilność z 23 plikami enrichment). Kolumny zostają jako "legacy mirror" do osobnego sprintu czyszczenia po pełnym przepięciu enrichment edge functions.
-2. **PÓŹNIEJ (Sprint 19+):** rename → deprecated_* kolumn po przepięciu wszystkich edge functions na `company_data_sources`.
+Backfill **przepisuję od nowa** do realnych kolumn. Łącznie ~3278 wierszy do migracji.
 
-UI redesign **pomijam** — sprint MD wymaga briefu Remka "co nie pasuje w widoku Firm" (warunek startu). Dotykam tylko nowy tab "Dane zewnętrzne" w istniejącym `CompanyDetail`.
+**Edge functions piszą do tych tabel** (4 fn): `generate-contact-profile`, `merge-contacts`, `initialize-contact-agent`, `bulk-merge-contacts`, `sovra-weekly-report` (read), `delete-tenant` (cleanup), + komponent FE `NextActionDialog` insertuje do `task_activity_log`. **Wszystkie muszą zostać przepięte na nowy `audit_log` w tej samej migracji**, inaczej deploy fn padnie.
 
-## A. Migracja SQL `supabase/migrations/<ts>_sprint08_companies2.sql`
+**Brak triggerów logujących** w DB — sprint MD pkt 5 ("zastąp triggery generic triggerem") nieaktualny, pomijam.
 
-1. Archiwizacja: `archive.companies_backup_20260418` (1738 wierszy).
-2. `CREATE TABLE public.company_data_sources` (id, tenant_id FK, company_id FK, source_type CHECK IN ('external_api','www','financial_3y','ai_analysis','source_data_api','other'), data jsonb, status, fetched_at, created_at). Indeksy: `(company_id, source_type)`, `(tenant_id)`. RLS po `tenant_id = get_current_tenant_id()` (SELECT/INSERT/UPDATE/DELETE).
-3. Backfill 5 INSERT-ów z nie-pustych kolumn (~612 wierszy razem).
-4. UNIQUE indexes: `uniq_companies_tenant_nip` i `uniq_companies_tenant_krs` (partial WHERE NOT NULL AND <> '').
-5. **Pomijam** rename kolumn na `deprecated_*` (osobny sprint po przepięciu enrichment).
-6. `-- ROLLBACK:` skrypt: DROP `company_data_sources` + DROP unique indexes.
+## A. Migracja SQL `supabase/migrations/<ts>_sprint09_audit_log.sql`
+
+1. `archive.<7 tabel>_backup_20260418` (CREATE TABLE AS).
+2. `RAISE NOTICE` z liczbą wierszy każdej.
+3. `CREATE TABLE public.audit_log (id uuid, tenant_id, entity_type, entity_id, actor_id, action, diff jsonb, metadata jsonb, created_at, PRIMARY KEY(id, created_at)) PARTITION BY RANGE (created_at)`.
+4. 13 partycji: `pre_2026` + `2026_01..2026_12`.
+5. Indeksy: `(tenant_id, entity_type, entity_id, created_at DESC)`, `(actor_id, created_at DESC)`.
+6. RLS: SELECT/INSERT po `tenant_id = get_current_tenant_id()`.
+7. **Backfill (przepisany na realne kolumny):**
+   - `task_activity_log` → entity_type='task', diff=`jsonb_build_object('old', old_value, 'new', new_value)`, metadata=metadata.
+   - `task_workflow_history` → 0 wierszy, INSERT pominięty (lub trywialny WHERE).
+   - `deal_team_activity_log` → entity_type='deal_team', entity_id=`COALESCE(team_contact_id, team_id)`, diff=`jsonb_build_object('old', old_value, 'new', new_value)`, metadata=`jsonb_build_object('team_id', team_id, 'team_contact_id', team_contact_id, 'prospect_id', prospect_id, 'note', note)`.
+   - `deal_history` → entity_type='deal', actor_id=changed_by, action='update', diff=`jsonb_build_object('field', field_name, 'old', old_value, 'new', new_value)`, metadata=`jsonb_build_object('old_stage_id', old_stage_id, 'new_stage_id', new_stage_id)`.
+   - `contact_activity_log` → entity_type='contact', actor_id=NULL (brak w schemie), action=activity_type, diff='{}'::jsonb, metadata=`metadata || jsonb_build_object('description', description)`.
+   - `contact_merge_history` → entity_type='contact', entity_id=primary_contact_id, actor_id=NULL, action='merge', metadata=`jsonb_build_object('merged_contact_data', merged_contact_data, 'ai_integrated_fields', ai_integrated_fields, 'merge_source', merge_source)`.
+   - `role_audit_log` → entity_type='role', entity_id=target_user_id, actor_id=changed_by_user_id, action=action, metadata=`jsonb_build_object('old_role', old_role, 'new_role', new_role, 'details', details)`.
+8. `CREATE FUNCTION public.log_entity_change(p_entity_type, p_entity_id, p_actor_id, p_action, p_diff, p_metadata) RETURNS uuid` (SECURITY INVOKER, search_path=public).
+9. **DROP CASCADE 7 tabel**.
+10. `RAISE NOTICE` z `COUNT(*) FROM audit_log`.
+11. Komentarz `-- ROLLBACK:` z restore z archive.
 
 ## B. Frontend
 
-- **Nowe `src/hooks/useCompanyDataSources.ts`** — `useCompanyDataSources(companyId)`: SELECT z `company_data_sources` zwraca `Record<source_type, DataSource>` (grupowane).
-- **Nowy `src/components/companies/CompanyExternalDataTab.tsx`** — render 5 sekcji (External API, KRS/CEIDG, WWW, Financial 3Y, AI Analysis) z JSON viewer + status badge + fetched_at. Fallback "brak danych" jeśli source_type nieobecny.
-- **Edycja `src/components/company/CompanyFlatTabs.tsx`** — dodaję tab "Dane zewnętrzne" → `<CompanyExternalDataTab companyId={company.id} />`.
-- `useCompanies.ts` **nie ruszam** — kolumny istnieją, FE działa.
+**Nowy `src/hooks/useAuditLog.ts`:**
+- `useAuditLog({ entityType, entityId, limit = 50 })` → SELECT z `audit_log`, ORDER BY created_at DESC.
+- `useAuditLogByActor(actorId)` (opcjonalne — dla RoleAuditLog widget).
 
-## C. Edge functions
+**Edycje (przepięcie czytników):**
+- `src/components/contacts/ContactHistoryTab.tsx` → `useContactActivityLog` → `useAuditLog({entityType:'contact', entityId})`. Adapter mapujący nowe pola na stary render UI (description z metadata).
+- `src/hooks/useContacts.ts` → `useContactActivityLog` przepisać na `audit_log` (zachować nazwę dla kompatybilności z `ContactHistoryTab`).
+- `src/hooks/useContactActivityLog.ts` (czyta `deal_team_activity_log`!) → przepisać na `audit_log` z `entity_type='deal_team'`.
+- `src/hooks/useTaskActivityLog.ts` → przepisać na `audit_log` (entity_type='task'), zachować named export.
+- `src/hooks/useRoleAuditLog.ts` → przepisać na `audit_log` (entity_type='role'), join do directors po actor_id.
+- `src/hooks/useMyDayData.ts` → `contact_activity_log` → `audit_log` WHERE entity_type='contact'.
+- `src/hooks/useDuplicateCheck.ts` → INSERT do `contact_merge_history` zamienić na `log_entity_change('contact', primaryId, NULL, 'merge', '{}', metadata)`. Update `contact_activity_log` przy transferze → `audit_log` (zostawić bez zmian jeśli tylko przeniesienie contact_id — ale tabela nie istnieje, więc zmienić na UPDATE audit_log SET entity_id=primary WHERE entity_type='contact' AND entity_id=dup).
+- `src/components/deals-team/NextActionDialog.tsx` → INSERT `task_activity_log` → `log_entity_change('task', taskId, actorId, 'recycled', ...)`.
+- `src/hooks/useDealsTeamContacts.ts` → INSERT `deal_team_activity_log` → `log_entity_change('deal_team', team_contact_id, actor, action, ...)`.
 
-**Bez zmian.** Enrichment functions nadal piszą do legacy kolumn `companies.*_data`. Synchronizacja do `company_data_sources` wprowadzimy w Sprincie 19 (refactor enrichment).
+## C. Edge Functions (przepięcie)
 
-**Opcjonalnie (decyzja Remka):** trigger `AFTER UPDATE ON companies` który mirroruje zmiany `external_data/www_data/financial_data_3y/ai_analysis/source_data_api` do `company_data_sources` (UPSERT po `(company_id, source_type)`). Daje to żywe dane w nowej tabeli bez ruszania edge fn. **Domyślnie: TAK** — to czysty zysk, pojedyncza migracja.
+- `supabase/functions/generate-contact-profile/index.ts` → `contact_activity_log` insert → `log_entity_change` RPC lub bezpośredni INSERT do `audit_log` (z `tenant_id`).
+- `supabase/functions/merge-contacts/index.ts` → 2 inserty (`contact_merge_history` + `contact_activity_log`) → `audit_log`.
+- `supabase/functions/initialize-contact-agent/index.ts` → `contact_activity_log` insert → `audit_log`.
+- `supabase/functions/bulk-merge-contacts/index.ts` → `contact_activity_log` UPDATE w pętli przepiąć na `audit_log`; insert do `contact_merge_history` → `audit_log`.
+- `supabase/functions/sovra-weekly-report/index.ts` → SELECT z `contact_activity_log` → `audit_log WHERE entity_type='contact'`.
+- `supabase/functions/delete-tenant/index.ts` → tablica cleanup table list: usunąć `contact_merge_history`, dodać `audit_log`.
 
 ## D. Kolejność wykonania
 
-1. SQL migracja (archive + table + RLS + backfill + UNIQUE + trigger sync).
-2. `useCompanyDataSources.ts` (read hook).
-3. `CompanyExternalDataTab.tsx` + dopisanie taba w `CompanyFlatTabs.tsx`.
-4. Build + smoke (lista firm działa, CompanyDetail tab "Dane zewnętrzne" pokazuje dane).
+1. SQL migracja (archive → table+RLS+partycje → backfill → log_entity_change → DROP).
+2. `useAuditLog.ts` + przepisanie 4 hooków FE (zachowane sygnatury exportów).
+3. Przepięcie 6 edge functions + redeploy.
+4. Przepięcie 2 komponentów FE (`NextActionDialog`, `useDealsTeamContacts`).
+5. Sanity SQL: `SELECT entity_type, COUNT(*) FROM audit_log GROUP BY 1`.
 
 ## E. DoD
-
-- [ ] `archive.companies_backup_20260418` istnieje (1738 wierszy).
-- [ ] `public.company_data_sources` z RLS i ~612 wierszami po backfill.
-- [ ] UNIQUE(tenant_id, nip) i UNIQUE(tenant_id, krs) — partial.
-- [ ] Trigger sync utrzymuje `company_data_sources` przy UPDATE `companies`.
-- [ ] CompanyDetail ma nowy tab "Dane zewnętrzne" z 5 sekcjami source_type.
-- [ ] Brak regresji: enrichment flow (analyze-company-external, verify-company-source, fetch-company-financials, update-company-revenue) działa bez zmian.
+- [ ] 7 tabel nie istnieje w `public`, są w `archive.*_backup_20260418`.
+- [ ] `audit_log` z 13 partycjami + RLS.
+- [ ] `COUNT(audit_log) ≈ 3278` (122+0+90+7+2810+244+5).
+- [ ] `useAuditLog` zwraca dane dla contact/task/deal/deal_team/role.
+- [ ] `ContactHistoryTab` renderuje listę.
+- [ ] 6 edge fn deployed bez błędów (referencje do starych tabel zniknęły).
+- [ ] `NextActionDialog` recycle → wpis w `audit_log` entity_type='task'.
 
 ## F. Ryzyka
-
-- **R1: UNIQUE conflict.** W `companies` mogą istnieć duplikaty NIP w obrębie tenant_id. Migracja padnie. **Mitigacja:** przed CREATE UNIQUE — `SELECT tenant_id, nip, COUNT(*) FROM companies WHERE nip <> '' GROUP BY 1,2 HAVING COUNT(*)>1`. Jeśli są — `RAISE NOTICE` listę i abort. Naprawa duplikatów = osobna migracja.
-- **R2: Trigger overhead.** Sync trigger na każdym UPDATE companies. ~1738 wierszy, niski ruch — ok.
-- **R3: UI pominięte.** Sprint MD wymagał redesignu listy + 5 tabów. Czekamy na brief Remka. Dostarczamy tylko backend + 1 tab.
-- **R4: Schema mismatch.** Sprint MD odwołuje się do nieistniejących kolumn (`source_data_api_status`, `financial_data_3y_status`, `ai_analysis_status`). Backfill dostosowany do realiów (`source_data_status`, `financial_data_status`, `company_analysis_status`).
+- **R1**: `contact_activity_log` nie ma `actor_id` → wszystkie 2810 historycznych wpisów mają actor=NULL. Akceptowalne (audit log to historia, nie do zmiany).
+- **R2**: `deal_team_activity_log.entity_id` — wybieram `team_contact_id` jako primary, `team_id` w metadata. Jeśli oba NULL → SKIP (WHERE clause).
+- **R3**: Edge fn redeploy w trakcie migracji — krótkie okno gdzie stare tabele już zniknęły a fn jeszcze ze starym kodem. Mitigacja: deploy fn ZARAZ po migracji w tej samej iteracji.
+- **R4**: `bulk-merge-contacts` używa `contact_activity_log` w cleanup list (FK transfer). Trzeba zamienić na `audit_log` UPDATE z entity_type filter.
+- **R5**: Partycja `pre_2026` przyjmie historyczne 2810+ wierszy (większość pewnie z 2025). PRIMARY KEY (id, created_at) wymaga created_at IS NOT NULL — dodam `WHERE created_at IS NOT NULL` w backfillu.
 
