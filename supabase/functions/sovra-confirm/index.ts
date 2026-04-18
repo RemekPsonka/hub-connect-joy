@@ -4,6 +4,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from '../_shared/auth.ts';
+import { captureException } from '../_shared/sentry.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -289,6 +290,12 @@ ${consultationText}`;
     }
   } catch (e) {
     execError = (e as Error).message;
+    captureException(e, {
+      function_name: 'sovra-confirm',
+      user_id: auth.user.id,
+      tenant_id: auth.tenantId,
+      extra: { tool: pa.tool, pending_action_id: pa.id },
+    });
   }
 
   const finalStatus = execError ? 'failed' : 'confirmed';

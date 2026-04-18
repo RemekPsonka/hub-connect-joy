@@ -46,6 +46,7 @@ const WantedContacts = lazy(() => import("./pages/WantedContacts"));
 const TaskAnalytics = lazy(() => import("./pages/TaskAnalytics"));
 const TeamProductivityReport = lazy(() => import("./pages/TeamProductivityReport"));
 const Workspace = lazy(() => import("./pages/Workspace"));
+const AICosts = lazy(() => import("./pages/owner/AICosts"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -122,6 +123,7 @@ const App = () => (
                   <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
                   <Route path="/sovra" element={<DirectorGuard><Sovra /></DirectorGuard>} />
                   <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
+                  <Route path="/owner/ai-costs" element={<AdminGuard><AICosts /></AdminGuard>} />
                   
                   {/* Routes accessible by both directors and assistants */}
                   <Route path="/contacts" element={<Contacts />} />

@@ -1,11 +1,12 @@
 // LLM Provider — Sprint 04 (Lovable AI Gateway only, fallback w S05)
-// Inline cost calculation (do ai_usage_log w S10)
+// Sprint 10: persist usage to public.ai_usage_log via service_role client.
+
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const LOVABLE_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const DEFAULT_MODEL = 'google/gemini-3-flash-preview';
 
-// TODO(S10): pricing → ai_usage_log + tabela cenników
-// Ceny w centach USD per 1k tokens (przybliżone, Gemini Flash preview)
+// Pricing in USD cents per 1k tokens (approx, Gemini Flash preview)
 const PRICING: Record<string, { in: number; out: number }> = {
   'google/gemini-3-flash-preview': { in: 0.0125, out: 0.05 },
   'google/gemini-2.5-flash': { in: 0.0125, out: 0.05 },
@@ -21,6 +22,13 @@ export interface LLMMessage {
   name?: string;
 }
 
+export interface LLMCallContext {
+  function_name: string;
+  persona?: string;
+  actor_id?: string;
+  tenant_id?: string;
+}
+
 export interface CallLLMOptions {
   messages: LLMMessage[];
   model_hint?: string;
@@ -28,16 +36,13 @@ export interface CallLLMOptions {
   request_id?: string;
   tools?: unknown[];
   tool_choice?: 'auto' | 'none' | 'required';
+  context?: LLMCallContext;
 }
 
 export interface LLMResult {
-  /** Stream body (SSE) — present when stream=true */
   stream?: ReadableStream<Uint8Array>;
-  /** Status from gateway */
   status: number;
-  /** Model that was used */
   model: string;
-  /** For non-stream calls only */
   text?: string;
   tokens_in?: number;
   tokens_out?: number;
@@ -58,9 +63,60 @@ export function logUsage(payload: {
   latency_ms: number;
   request_id?: string;
   error?: string;
+  context?: LLMCallContext;
 }) {
-  // Strukturalny log JSON (later picked up by ai_usage_log w S10)
+  // Strukturalny log JSON (debugowy)
   console.log(JSON.stringify({ kind: 'ai_usage', ...payload }));
+
+  // Sprint 10: persist do ai_usage_log (best-effort, nie blokuje)
+  persistUsage(payload).catch((e) => {
+    console.error('[ai_usage_log] persist failed:', e);
+  });
+}
+
+let _adminClient: ReturnType<typeof createClient> | null = null;
+function getAdminClient() {
+  if (_adminClient) return _adminClient;
+  const url = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !serviceKey) return null;
+  _adminClient = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _adminClient;
+}
+
+async function persistUsage(payload: {
+  provider: string;
+  model: string;
+  tokens_in?: number;
+  tokens_out?: number;
+  cost_cents?: number;
+  latency_ms: number;
+  request_id?: string;
+  error?: string;
+  context?: LLMCallContext;
+}) {
+  const client = getAdminClient();
+  if (!client) return;
+  const ctx = payload.context;
+  if (!ctx?.function_name) return; // bez kontekstu nie logujemy
+
+  await client.from('ai_usage_log').insert({
+    function_name: ctx.function_name,
+    persona: ctx.persona ?? null,
+    provider: payload.provider,
+    model: payload.model,
+    tokens_in: payload.tokens_in ?? 0,
+    tokens_out: payload.tokens_out ?? 0,
+    cost_cents: payload.cost_cents ?? 0,
+    latency_ms: payload.latency_ms,
+    request_id: payload.request_id ?? null,
+    actor_id: ctx.actor_id ?? null,
+    tenant_id: ctx.tenant_id ?? null,
+    error: payload.error ?? null,
+    metadata: {},
+  });
 }
 
 /**
@@ -101,13 +157,12 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
       latency_ms: Date.now() - t0,
       request_id: requestId,
       error: `${response.status}: ${body.slice(0, 200)}`,
+      context: opts.context,
     });
     return { status: response.status, model };
   }
 
   if (stream) {
-    // Stream do bezpośredniego forwardingu klientowi.
-    // Cost calc zrobi handler na podstawie zliczonych tokenów po stronie usage delta lub fallback estymaty.
     return {
       status: response.status,
       model,
@@ -115,7 +170,6 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
     };
   }
 
-  // Non-stream: pełna odpowiedź
   const data = await response.json();
   const text = data?.choices?.[0]?.message?.content ?? '';
   const tokens_in = data?.usage?.prompt_tokens ?? 0;
@@ -130,6 +184,7 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
     cost_cents,
     latency_ms: Date.now() - t0,
     request_id: requestId,
+    context: opts.context,
   });
 
   return { status: 200, model, text, tokens_in, tokens_out, cost_cents };
