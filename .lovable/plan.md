@@ -1,31 +1,50 @@
 
 
-# Dodanie wizualnego wskaznika lejka nad Kanbanem
+# Stałe przyciski akcji w bocznym panelu kontaktu
 
 ## Cel
-Dodanie nad widokiem Kanban zadaniowego wizualnego paska pokazujacego glowne etapy lejka sprzedazy (HOT, TOP, OFERTOWANIE, AUDYT, KLIENT, PRZEGRANE) z informacja ile zadab jest na kazdym etapie. Uzytkownik widzi od razu, na ktorym etapie lejka znajduja sie zadania.
+Przyciski z dialogu "Dalsze działania" (Umów spotkanie, Spotkanie umówione, Audyt, Wyślij ofertę, Zadzwoń, Wyślij mail, Odłóż, Klient, Utracony) mają być **na stałe widoczne** w panelu bocznym kontaktu (`ContactTasksSheet`) — niezależnie od tego, czy kontakt ma aktywne zadanie.
 
-## Uklad wizualny
+## Problem
+Obecnie te akcje są dostępne tylko w dialogu `NextActionDialog`, który otwiera się **dopiero po ukończeniu zadania**. Kontakty bez zadań (np. Marek Świątkowski) nie mają jak zmienić statusu / dodać akcji.
+
+## Rozwiązanie
+
+### Plik: `src/components/deals-team/ContactTasksSheet.tsx`
+
+Dodać sekcję **"Akcje"** na górze zakładki "Przegląd" (zawsze widoczna), zawierającą siatkę 3×3 przycisków identycznych jak w `NextActionDialog`:
 
 ```text
-🔥 HOT (2)  →  ⭐ TOP (1)  →  📝 OFERTOWANIE (4)  →  📋 AUDYT (0)  →  ✅ KLIENT (0)  →  ✖️ PRZEGRANE (0)
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-[Zaplanować spotkanie] [Spotkanie umówione] [Spotkanie odbyte] [Handshake] [Pełnomocnictwo] [Przygotowanie] ...
+┌─ Akcje ──────────────────────────────────────┐
+│ [📅 Umów spotkanie] [🤝 Umówione] [📋 Audyt]  │
+│ [📄 Wyślij ofertę] [📞 Zadzwoń]   [✉️ Mail]   │
+│ [🌙 Odłóż]         [👤 Klient]    [✖ Utracony]│
+└──────────────────────────────────────────────┘
 ```
 
-Pasek wyglada jak stepper/breadcrumb z kolorowymi badge'ami. Etapy z zadaniami sa podswietlone (pelny kolor), puste sa przygaszone. Klikniecie na etap moze filtrowac kanban do danej kategorii.
+**Logika każdego przycisku:**
+- Reuse handlerów z `NextActionDialog` — wyekstrahować je do hooka `useContactActions(contactId)` lub wywołać dialog programowo
+- **Umów / Umówione / Audyt / Oferta / Zadzwoń / Mail** → tworzą / aktualizują zadanie + zmieniają kategorię/etap kontaktu
+- **Klient** → otwiera `ConvertToClientDialog` (dane finansowe)
+- **Audyt** → otwiera mini-prompt na datę + osobę (constraint: `next_meeting_date`, `next_meeting_with`)
+- **Odłóż** → otwiera `SnoozeDialog`
+- **Utracony** → bezpośredni update kategorii na `lost`
 
-## Plan techniczny
+**Stan wizualny:**
+- Aktualna kategoria/etap kontaktu — przycisk podświetlony (np. ring + bg)
+- Pozostałe — neutralne
 
 ### Plik: `src/components/deals-team/MyTeamTasksView.tsx`
 
-1. Dodac blok `useMemo` obliczajacy ile zadan jest w kazdej kategorii glownej (`contact_category`) na podstawie `filtered`
-2. Dodac komponent paska lejka (inline lub wydzielony) renderowany **tylko w trybie kanban** (`viewMode === 'kanban'`), tuz przed `<DndContext>`
-3. Pasek uzywa `CATEGORY_OPTIONS` z `pipelineStages.ts` do wyswietlenia etapow w kolejnosci
-4. Kazdy etap pokazuje: ikone, nazwe, liczbe zadan w nawiasie
-5. Etapy z zadaniami maja pelny kolor tla, puste sa `opacity-50`
-6. Etapy polaczone strzalkami (`→` lub chevron) tworzac wizualny lejek
-7. Opcjonalnie: klikniecie na etap filtruje widok kanban do kolumn nalezacych do tej kategorii
+W handlerze drop Kanban: jeśli `targetColumn === 'client'` → otwórz `ConvertToClientDialog` zamiast bezpośredniego update (zapobiega obejściu walidacji finansowej).
 
-### Szacunkowe zmiany
-- **1 plik**: `src/components/deals-team/MyTeamTasksView.tsx` -- dodanie ~30 linii kodu paska lejka nad sekcja kanban (linie 553-556)
+## Pliki do modyfikacji
+1. **`src/components/deals-team/ContactTasksSheet.tsx`** — nowa sekcja "Akcje" z siatką 9 przycisków
+2. **`src/components/deals-team/NextActionDialog.tsx`** — wyekstrahować logikę akcji do współdzielonego hooka / utility
+3. **`src/components/deals-team/MyTeamTasksView.tsx`** — przechwycenie drop na `client`
+
+## Reuse
+- `ConvertToClientDialog` — bez zmian
+- `SnoozeDialog` — bez zmian
+- Logika z `NextActionDialog` — wyekstrahowana do hooka, dialog dalej używa tego samego kodu
+
