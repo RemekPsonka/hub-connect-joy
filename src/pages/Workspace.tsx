@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useWorkspaceSchedule } from '@/hooks/useWorkspace';
 import { useProjects } from '@/hooks/useProjects';
 import { WorkspaceDayCard } from '@/components/workspace/WorkspaceDayCard';
 import { WorkspaceDayDashboard } from '@/components/workspace/WorkspaceDayDashboard';
+import { WidgetGrid } from '@/components/workspace/widgets/WidgetGrid';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { startOfWeek, addWeeks, addDays, format, isToday, isSameWeek } from 'date-fns';
