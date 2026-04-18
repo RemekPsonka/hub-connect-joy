@@ -1,58 +1,38 @@
 
 
-# Konwersja na klienta — wszystkie grupy produktów w jednym oknie
+# Wyszukiwanie kontaktów w "Dodaj kontakt do zespołu" — naprawa
 
 ## Problem
-Obecny `ConvertToClientDialog` pozwala wybrać tylko **jedną** grupę produktów i podać dla niej wartość składki + prowizję. Klient często ma kilka produktów (np. Majątek + Finansowe + Komunikacja) — trzeba móc je wszystkie wprowadzić od razu.
+User dodał Krzysztofa Kentlę do bazy kontaktów, ale w dialogu "Dodaj kontakt do zespołu" (Deals Team) wyszukiwarka nie znajduje go po wpisaniu "kentla".
 
-## Rozwiązanie
+## Hipotezy do sprawdzenia
+1. Query filtruje po `is_active = true` — może kontakt został dodany z `is_active = false` lub kolumna ma inną wartość
+2. Wyszukiwanie idzie tylko po `full_name`/`company` przez `ilike` — jeśli `full_name` nie jest wypełnione (a tylko `first_name`/`last_name`), nie znajdzie
+3. Filtr `tenant_id` — kontakt mógł być dodany do innego tenanta
+4. Kontakt może już być w zespole i jest filtrowany jako "już dodany"
 
-Przebudowa `ConvertToClientDialog.tsx` — zamiast pojedynczego selecta + 2 inputów, lista **wszystkich grup produktów zespołu** z polami inline:
+## Plan działania
 
-```text
-┌─ Konwertuj na klienta ─────────────────────────┐
-│ Rajmund Mucha                                   │
-│                                                 │
-│ ┌─────────────────────────────────────────────┐ │
-│ │ ● Komunikacja                                │ │
-│ │   Składka: [_______] PLN  Prowizja: [__] %  │ │
-│ │   = 0 PLN                                    │ │
-│ ├─────────────────────────────────────────────┤ │
-│ │ ● Majątek                                    │ │
-│ │   Składka: [50000_] PLN  Prowizja: [15] %   │ │
-│ │   = 7 500 PLN                                │ │
-│ ├─────────────────────────────────────────────┤ │
-│ │ ● Finansowe                                  │ │
-│ │   Składka: [30000_] PLN  Prowizja: [18] %   │ │
-│ │   = 5 400 PLN                                │ │
-│ ├─────────────────────────────────────────────┤ │
-│ │ ● Grupowe na życie                           │ │
-│ │   Składka: [_______] PLN  Prowizja: [__] %  │ │
-│ └─────────────────────────────────────────────┘ │
-│                                                 │
-│ SUMA: 80 000 PLN składki, 12 900 PLN prowizji  │
-│                                                 │
-│            [Anuluj]  [✅ Konwertuj]              │
-└────────────────────────────────────────────────┘
+### Krok 1: Diagnostyka (przed planem zmian)
+Sprawdzić bazę:
+```sql
+SELECT id, first_name, last_name, full_name, is_active, tenant_id, created_at 
+FROM contacts 
+WHERE last_name ILIKE '%kentla%' OR first_name ILIKE '%krzysztof%kentla%';
 ```
 
-## Logika
+Sprawdzić plik dialogu "Dodaj kontakt do zespołu" (prawdopodobnie `AddContactToTeamDialog.tsx` lub podobny) — jak konstruuje query.
 
-- Stan: `Record<categoryId, { dealValue, commissionPercent }>`
-- Pola startowo puste; prowizja auto-fill z `default_commission_percent` kategorii przy pierwszej zmianie składki
-- Walidacja: **co najmniej jedna** grupa musi mieć `dealValue > 0`
-- Zapis: pętla po kategoriach z wypełnioną składką → `addProduct.mutateAsync(...)` dla każdej (sekwencyjnie), potem jeden `convertToClient.mutateAsync(...)`
-- Suma składek + suma prowizji wyświetlana na dole dialogu
+### Krok 2: Naprawa
+Najpewniej trzeba rozszerzyć query o `first_name` i `last_name`:
+```ts
+.or(`full_name.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%`)
+```
+Oraz upewnić się, że `full_name` jest auto-generowane przy dodawaniu kontaktu (trigger lub computed w insert).
 
-## Zmiany
+## Pliki do zmiany (wstępnie)
+1. `src/components/deals-team/AddContactToTeamDialog.tsx` (lub podobny) — rozszerzenie wyszukiwania o `first_name`/`last_name`
+2. Ewentualnie migracja bazy: backfill `full_name` dla kontaktów gdzie jest puste
 
-### `src/components/deals-team/ConvertToClientDialog.tsx`
-- Usunięcie `Select` pojedynczej kategorii
-- Dodanie listy wszystkich kategorii z dwoma inputami per wiersz
-- Nowy stan `productInputs: Record<string, { value: string; commission: string }>`
-- Nowa logika `handleSubmit`: filtruje wypełnione, zapisuje wszystkie produkty
-- Wyświetlanie sumy na dole
-
-### Pozostałe pliki
-Bez zmian — dialog jest wywoływany w tych samych miejscach (kanban drop, przyciski akcji), API wywołującego się nie zmienia.
+Zacznę od diagnostyki kodu i bazy, żeby wskazać dokładny powód i minimalną poprawkę.
 
