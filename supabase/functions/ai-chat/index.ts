@@ -2,8 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
-// Rate limiting temporarily disabled due to bundle issues
-// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +53,11 @@ serve(async (req) => {
     const tenantId = authResult.tenantId;
     console.log(`[ai-chat] Authorized user: ${authResult.user.id}, tenant: ${tenantId}`);
 
-    // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
+    // Sprint 01 — rate limit 30/min
+    const rl = await checkRateLimit(authResult.user.id, "ai-chat", 30, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
+
+    // ============= RATE LIMITING (legacy block, replaced above) =============
     // const rateLimit = await checkRateLimit(
     //   `ai-chat:${authResult.user.id}`,
     //   { max: 100, window: 3600 }  // 100 messages per hour

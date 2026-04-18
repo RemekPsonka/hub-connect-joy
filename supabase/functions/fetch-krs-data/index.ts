@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,6 +70,14 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAuthClient = createClient(supabaseUrl, supabaseKey);
+
+    // Sprint 01 — wymagaj JWT
+    const auth = await verifyAuth(req, supabaseAuthClient);
+    if (isAuthError(auth)) return unauthorizedResponse(auth, corsHeaders);
+
     const { krs, companyId, ownerContactId } = await req.json();
 
     if (!krs) {

@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +15,12 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Sprint 01 — auth + rate-limit (10/h)
+  const auth = await verifyAuth(req, supabase);
+  if (isAuthError(auth)) return unauthorizedResponse(auth, corsHeaders);
+  const rl = await checkRateLimit(auth.user.id, "batch-krs-sync", 10, 3600);
+  if (!rl.ok) return rateLimitedResponse(corsHeaders);
 
   let body: any = {};
   try {

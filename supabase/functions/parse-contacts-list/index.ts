@@ -2,8 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
-// Rate limiting temporarily disabled due to bundle timeout
-// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,7 +56,11 @@ serve(async (req) => {
 
     console.log(`[parse-contacts-list] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
 
-    // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
+    // Sprint 01 — rate limit 5/min (ciężki upload)
+    const rl = await checkRateLimit(authResult.user.id, "parse-contacts-list", 5, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
+
+    // ============= RATE LIMITING (legacy block, replaced above) =============
     // const rateLimit = await checkRateLimit(
     //   `parse-contacts:${authResult.user.id}`,
     //   { max: 10, window: 3600 }  // 10 imports per hour

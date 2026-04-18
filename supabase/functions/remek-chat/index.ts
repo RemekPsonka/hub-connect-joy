@@ -1,8 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
-// Rate limiting temporarily disabled due to bundle issues
-// import { checkRateLimit, rateLimitResponse } from "../_shared/rateLimit.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -151,6 +150,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const { tenantId, directorId, assistantId } = authResult;
+
+    // Sprint 01 — rate limit 30/min
+    const rl = await checkRateLimit(authResult.user.id, "remek-chat", 30, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
 
     // ============= RATE LIMITING (TEMPORARILY DISABLED) =============
     // const rateLimit = await checkRateLimit(

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { checkRateLimit, rateLimitedResponse } from "../_shared/rateLimit-upstash-rest.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,6 +26,10 @@ serve(async (req) => {
     }
 
     console.log(`[ocr-business-card] Authorized user: ${authResult.user.id}, tenant: ${authResult.tenantId}`);
+
+    // Sprint 01 — rate limit 10/min
+    const rl = await checkRateLimit(authResult.user.id, "ocr-business-card", 10, 60);
+    if (!rl.ok) return rateLimitedResponse(corsHeaders);
 
     const { image } = await req.json();
     

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,13 +43,18 @@ Deno.serve(async (req) => {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // Sprint 01 — wymagaj JWT, podmień tenant_id z body na tenant z auth
+  const auth = await verifyAuth(req, supabase);
+  if (isAuthError(auth)) return unauthorizedResponse(auth, corsHeaders);
+
   try {
     const body = await req.json().catch(() => ({}));
-    const { job_id, tenant_id, batch_size = 50 } = body;
+    const { job_id, batch_size = 50 } = body;
+    const tenant_id = auth.tenantId;
 
-    if (!job_id || !tenant_id) {
+    if (!job_id) {
       return new Response(
-        JSON.stringify({ error: 'job_id and tenant_id required' }),
+        JSON.stringify({ error: 'job_id required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
