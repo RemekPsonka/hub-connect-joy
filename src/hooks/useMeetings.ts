@@ -248,12 +248,12 @@ export function useMeetingParticipants(meetingId: string | undefined) {
         .select(`
           *,
           contact:contacts!meeting_participants_contact_id_fkey(id, full_name, company, email, primary_group_id),
-          prospect:meeting_prospects!meeting_participants_prospect_id_fkey(id, full_name, company, position, industry)
+          prospect:prospects!meeting_participants_prospect_id_fkey(id, full_name, company, position, industry)
         `)
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return data as (MeetingParticipant & { prospect_id?: string | null })[];
+      return data as unknown as (MeetingParticipant & { prospect_id?: string | null })[];
     },
     enabled: !!meetingId,
   });

@@ -307,10 +307,10 @@ export function ProspectingConvertDialog({
       }
 
       // Mark prospect as converted
-      await (supabase as any)
-        .from('meeting_prospects')
+      await supabase
+        .from('prospects')
         .update({
-          prospecting_status: 'converted',
+          status: 'converted',
           converted_to_contact_id: contactId,
           converted_to_team_contact_id: teamContactId,
           converted_at: new Date().toISOString(),

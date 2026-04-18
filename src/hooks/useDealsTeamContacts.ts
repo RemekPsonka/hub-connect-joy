@@ -495,11 +495,13 @@ export function useRevertToProspecting() {
       if (cErr || !contact) throw new Error('Nie znaleziono kontaktu');
 
       // 2. Create prospect
-      const { error: insertErr } = await (supabase as any)
-        .from('meeting_prospects')
+      const { error: insertErr } = await supabase
+        .from('prospects')
         .insert({
-          team_id: teamId,
           tenant_id: tenantId,
+          source_type: 'meeting',
+          source_id: teamId,
+          team_id: teamId,
           full_name: contact.full_name,
           company: contact.company,
           position: contact.position,
@@ -509,7 +511,7 @@ export function useRevertToProspecting() {
           linkedin_url: contact.linkedin_url,
           imported_by: userId,
           is_prospecting: true,
-          prospecting_status: 'new',
+          status: 'new',
           source_event: 'Cofnięto z Kanban',
         });
 

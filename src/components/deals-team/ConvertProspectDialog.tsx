@@ -100,7 +100,7 @@ export function ConvertProspectDialog({
 
       // Also update converted_to_contact_id
       await supabase
-        .from('deal_team_prospects')
+        .from('prospects')
         .update({ converted_to_contact_id: contactId })
         .eq('id', prospect.id);
 

@@ -101,14 +101,40 @@ export function MeetingParticipantsTab({ meetingId, meetingName, meetingDate }: 
   const handleOpenConvertDialog = async (prospectId: string) => {
     setLoadingConvertId(prospectId);
     try {
-      const { data, error } = await (supabase as any)
-        .from('meeting_prospects')
+      const { data, error } = await supabase
+        .from('prospects')
         .select('*')
         .eq('id', prospectId)
         .single();
 
       if (error) throw error;
-      setConvertProspect({ prospectId, prospect: data as MeetingProspect });
+      const row = data as unknown as {
+        id: string; tenant_id: string; team_id: string | null; full_name: string;
+        company: string | null; position: string | null; industry: string | null;
+        email: string | null; phone: string | null; linkedin_url: string | null;
+        source_event: string | null; source_file_name: string | null;
+        imported_at: string | null; imported_by: string | null; is_prospecting: boolean | null;
+        notes: string | null; status: string;
+        converted_to_contact_id: string | null; converted_to_team_contact_id: string | null;
+        converted_at: string | null; priority: string | null;
+        ai_brief: { text?: string; generated_at?: string } | null; ai_brief_generated_at: string | null;
+        created_at: string; updated_at: string; meeting_id: string | null;
+      };
+      const prospect: MeetingProspect = {
+        id: row.id, team_id: row.team_id || '', tenant_id: row.tenant_id,
+        full_name: row.full_name, company: row.company, position: row.position, industry: row.industry,
+        email: row.email, phone: row.phone, linkedin_url: row.linkedin_url,
+        source_event: row.source_event, source_file_name: row.source_file_name,
+        imported_at: row.imported_at || row.created_at, imported_by: row.imported_by || '',
+        is_prospecting: row.is_prospecting ?? true, prospecting_notes: row.notes,
+        prospecting_status: (row.status || 'new') as MeetingProspect['prospecting_status'],
+        converted_to_contact_id: row.converted_to_contact_id,
+        converted_to_team_contact_id: row.converted_to_team_contact_id,
+        converted_at: row.converted_at, priority: row.priority,
+        ai_brief: row.ai_brief?.text ?? null, ai_brief_generated_at: row.ai_brief_generated_at,
+        created_at: row.created_at, updated_at: row.updated_at, meeting_id: row.meeting_id,
+      };
+      setConvertProspect({ prospectId, prospect });
     } catch {
       toast.error('Nie udało się pobrać danych prospekta');
     } finally {

@@ -139,10 +139,10 @@ export function useDeletePipelineStage() {
   });
 }
 
+// Sprint 03: pipeline_transitions zarchiwizowane — mutacje są no-op zachowane dla kompatybilności API.
 export function useUpsertTransition() {
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (transition: {
+    mutationFn: async (_transition: {
       team_id: string;
       tenant_id: string;
       from_stage_id: string;
@@ -150,30 +150,17 @@ export function useUpsertTransition() {
       kanban_type: string;
       label?: string;
     }) => {
-      const { data, error } = await supabase
-        .from('pipeline_transitions')
-        .upsert(transition, { onConflict: 'team_id,from_stage_id,to_stage_id' })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['pipeline-transitions', vars.team_id] });
+      toast.info('Konfiguracja przejść jest tymczasowo niedostępna');
+      return null;
     },
   });
 }
 
 export function useDeleteTransition() {
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, teamId }: { id: string; teamId: string }) => {
-      const { error } = await supabase.from('pipeline_transitions').delete().eq('id', id);
-      if (error) throw error;
-      return teamId;
-    },
-    onSuccess: (teamId) => {
-      qc.invalidateQueries({ queryKey: ['pipeline-transitions', teamId] });
+    mutationFn: async (_args: { id: string; teamId: string }) => {
+      toast.info('Konfiguracja przejść jest tymczasowo niedostępna');
+      return _args.teamId;
     },
   });
 }
