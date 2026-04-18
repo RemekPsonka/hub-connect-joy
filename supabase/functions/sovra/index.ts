@@ -387,3 +387,93 @@ async function directLLMCall(
     return { ok: false };
   }
 }
+
+// Sprint 06: rich scope context (label + summary) for system prompt
+// Awaria fetcha = wracamy do { scope_type, scope_id } bez label/summary.
+async function buildScopeContext(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  scopeType: string,
+  scopeId: string | null,
+): Promise<ScopeContext> {
+  const base: ScopeContext = { scope_type: scopeType, scope_id: scopeId };
+  if (!scopeId || scopeType === 'global') return base;
+
+  try {
+    if (scopeType === 'contact') {
+      const { data: c } = await supabase
+        .from('contacts')
+        .select('full_name, position, email, phone, company, profile_summary, companies(name)')
+        .eq('id', scopeId)
+        .maybeSingle();
+      if (!c) return base;
+      const lines: string[] = [];
+      if (c.position) lines.push(`Stanowisko: ${c.position}`);
+      const companyName = c.companies?.name || c.company;
+      if (companyName) lines.push(`Firma: ${companyName}`);
+      if (c.email) lines.push(`E-mail: ${c.email}`);
+      if (c.phone) lines.push(`Telefon: ${c.phone}`);
+      if (c.profile_summary) lines.push(`Profil: ${c.profile_summary}`);
+      // BI summary (jeśli istnieje)
+      const { data: bi } = await supabase
+        .from('contact_bi_data')
+        .select('bi_profile, completeness_score')
+        .eq('contact_id', scopeId)
+        .maybeSingle();
+      if (bi?.bi_profile) {
+        const summary = (bi.bi_profile as { summary?: string }).summary;
+        if (summary) lines.push(`BI summary: ${summary}`);
+      }
+      return {
+        ...base,
+        scope_label: c.full_name,
+        scope_summary: lines.join('\n') || null,
+      };
+    }
+    if (scopeType === 'project') {
+      const { data: p } = await supabase
+        .from('projects')
+        .select('name, description, status, due_date')
+        .eq('id', scopeId)
+        .maybeSingle();
+      if (!p) return base;
+      const lines: string[] = [];
+      if (p.status) lines.push(`Status: ${p.status}`);
+      if (p.due_date) lines.push(`Termin: ${p.due_date}`);
+      if (p.description) lines.push(p.description);
+      return { ...base, scope_label: p.name, scope_summary: lines.join('\n') || null };
+    }
+    if (scopeType === 'deal') {
+      const { data: d } = await supabase
+        .from('deal_team_contacts')
+        .select('category, status, value_amount, contacts(full_name), deal_teams(name)')
+        .eq('id', scopeId)
+        .maybeSingle();
+      if (!d) return base;
+      const lines: string[] = [];
+      if (d.deal_teams?.name) lines.push(`Zespół: ${d.deal_teams.name}`);
+      if (d.category) lines.push(`Etap: ${d.category}`);
+      if (d.status) lines.push(`Status: ${d.status}`);
+      if (d.value_amount) lines.push(`Wartość: ${d.value_amount}`);
+      const label = d.contacts?.full_name ? `Szansa: ${d.contacts.full_name}` : 'Szansa sprzedaży';
+      return { ...base, scope_label: label, scope_summary: lines.join('\n') || null };
+    }
+    if (scopeType === 'meeting') {
+      const { data: m } = await supabase
+        .from('consultations')
+        .select('scheduled_at, status, agenda, contacts(full_name)')
+        .eq('id', scopeId)
+        .maybeSingle();
+      if (!m) return base;
+      const lines: string[] = [];
+      if (m.scheduled_at) lines.push(`Termin: ${m.scheduled_at}`);
+      if (m.status) lines.push(`Status: ${m.status}`);
+      if (m.agenda) lines.push(`Agenda: ${m.agenda}`);
+      const label = m.contacts?.full_name ? `Spotkanie z: ${m.contacts.full_name}` : 'Spotkanie';
+      return { ...base, scope_label: label, scope_summary: lines.join('\n') || null };
+    }
+  } catch (e) {
+    console.error('buildScopeContext error:', e);
+  }
+  return base;
+}
