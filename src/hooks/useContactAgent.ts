@@ -102,30 +102,13 @@ export function useContactAgentMemory(contactId: string | undefined) {
   });
 }
 
-export function useAgentConversationHistory(contactId: string | undefined, sessionId: string | undefined) {
+// Sprint 04: tabela `agent_conversations` zarchiwizowana i usunięta.
+// Historia konwersacji per kontakt nieobsługiwana w S04 (do odbudowy w S06 z ai_messages).
+export function useAgentConversationHistory(_contactId: string | undefined, _sessionId: string | undefined) {
   return useQuery({
-    queryKey: ['agent-conversation', contactId, sessionId],
-    queryFn: async () => {
-      if (!contactId || !sessionId) return [];
-      
-      const { data, error } = await supabase
-        .from('agent_conversations')
-        .select('*')
-        .eq('contact_id', contactId)
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
-      
-      if (error) throw error;
-      
-      return (data || []).map(msg => ({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        timestamp: new Date(msg.created_at),
-        proposed_actions: (msg.extracted_data as any)?.proposed_actions || []
-      })) as ConversationMessage[];
-    },
-    enabled: !!contactId && !!sessionId
+    queryKey: ['agent-conversation-disabled'],
+    queryFn: async () => [] as ConversationMessage[],
+    enabled: false,
   });
 }
 

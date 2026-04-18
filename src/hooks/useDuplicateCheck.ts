@@ -506,8 +506,7 @@ export function useMergeMultipleContacts() {
           supabase.from('connections').update({ contact_b_id: primaryContactId }).eq('contact_b_id', dupId),
           // Transfer consultations
           supabase.from('consultations').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
-          // Transfer agent_conversations
-          supabase.from('agent_conversations').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // (Sprint 04: agent_conversations usunięte z bazy)
           // Transfer consultation_guests
           supabase.from('consultation_guests').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
           // Transfer consultation_meetings

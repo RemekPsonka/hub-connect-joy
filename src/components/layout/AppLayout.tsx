@@ -4,7 +4,6 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { HeaderBar } from './HeaderBar';
 import { ReportBugButton } from '@/components/bugs/ReportBugButton';
-import { RemekChatWidget } from '@/components/remek/RemekChatWidget';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SovraReminderAutoTrigger } from '@/components/sovra/SovraReminderAutoTrigger';
 import { clearExpiredLogos } from '@/lib/logoCache';
@@ -30,7 +29,6 @@ export function AppLayout() {
         </div>
       </div>
       
-      <RemekChatWidget />
       <ReportBugButton />
       <SovraReminderAutoTrigger />
     </SidebarProvider>

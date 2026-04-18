@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { RemekWidgetProvider } from "@/contexts/RemekWidgetContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
@@ -27,7 +26,6 @@ const ConsultationDetail = lazy(() => import("./pages/ConsultationDetail"));
 const Meetings = lazy(() => import("./pages/Meetings"));
 const MeetingDetail = lazy(() => import("./pages/MeetingDetail"));
 const Matches = lazy(() => import("./pages/Matches"));
-const AIChat = lazy(() => import("./pages/AIChat"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Search = lazy(() => import("./pages/Search"));
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -80,7 +78,6 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <RemekWidgetProvider>
               <Suspense fallback={<PageLoadingFallback />}>
                 <Routes>
                 {/* Public routes */}
@@ -123,7 +120,6 @@ const App = () => (
                   <Route path="/search" element={<DirectorGuard><Search /></DirectorGuard>} />
                   <Route path="/notifications" element={<DirectorGuard><Notifications /></DirectorGuard>} />
                   <Route path="/analytics" element={<DirectorGuard><Analytics /></DirectorGuard>} />
-                  <Route path="/ai" element={<DirectorGuard><AIChat /></DirectorGuard>} />
                   <Route path="/sovra" element={<DirectorGuard><Sovra /></DirectorGuard>} />
                   <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
                   
@@ -138,7 +134,6 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </Suspense>
-            </RemekWidgetProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
