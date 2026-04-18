@@ -1,38 +1,55 @@
 
+# Naprawa wyszukiwania „kentla krzysztof”
 
-# Wyszukiwanie kontaktów w "Dodaj kontakt do zespołu" — naprawa
+## Diagnoza
+Problem nie jest już w samej obecności kontaktu w bazie ani w prostym wyszukiwaniu po `last_name`. Obecny kod w `AddContactDialog` i `AddClientDialog` szuka całej frazy jako jednego ciągu:
+- `full_name ilike %kentla krzysztof%`
+- `first_name ilike %kentla krzysztof%`
+- `last_name ilike %kentla krzysztof%`
 
-## Problem
-User dodał Krzysztofa Kentlę do bazy kontaktów, ale w dialogu "Dodaj kontakt do zespołu" (Deals Team) wyszukiwarka nie znajduje go po wpisaniu "kentla".
+To działa dla `krzysztof kentla`, ale nie dla odwróconej kolejności `kentla krzysztof`, bo żadne pojedyncze pole nie zawiera takiej frazy.
 
-## Hipotezy do sprawdzenia
-1. Query filtruje po `is_active = true` — może kontakt został dodany z `is_active = false` lub kolumna ma inną wartość
-2. Wyszukiwanie idzie tylko po `full_name`/`company` przez `ilike` — jeśli `full_name` nie jest wypełnione (a tylko `first_name`/`last_name`), nie znajdzie
-3. Filtr `tenant_id` — kontakt mógł być dodany do innego tenanta
-4. Kontakt może już być w zespole i jest filtrowany jako "już dodany"
+## Co zmienię
+### 1. Uodpornię wyszukiwanie na kolejność słów
+W obu dialogach:
+- rozbiję wpisaną frazę na tokeny, np. `kentla krzysztof` → `["kentla", "krzysztof"]`
+- zrobię szersze pobranie po jednym tokenie serwerowo
+- następnie odfiltruję wyniki po stronie klienta tak, aby **każdy token** musiał wystąpić w złączonym tekście kontaktu:
+  - `full_name`
+  - `first_name`
+  - `last_name`
+  - `company`
+  - `email`
 
-## Plan działania
+Dzięki temu zadziała:
+- `krzysztof kentla`
+- `kentla krzysztof`
+- `krzysztof`
+- `kentla`
 
-### Krok 1: Diagnostyka (przed planem zmian)
-Sprawdzić bazę:
-```sql
-SELECT id, first_name, last_name, full_name, is_active, tenant_id, created_at 
-FROM contacts 
-WHERE last_name ILIKE '%kentla%' OR first_name ILIKE '%krzysztof%kentla%';
+### 2. Ujednolicę logikę w obu miejscach
+Poprawka trafi do:
+- `src/components/deals-team/AddContactDialog.tsx`
+- `src/components/deals-team/AddClientDialog.tsx`
+
+Żeby oba modale działały identycznie.
+
+## Technicznie
+Podejście:
+1. `trim()`
+2. `split(/\s+/)`
+3. `tokens = [...].filter(Boolean)`
+4. pobranie kontaktów po najbardziej zawężającym tokenie
+5. lokalny filtr:
+```text
+haystack = [full_name, first_name, last_name, company, email].join(' ').toLowerCase()
+wynik przechodzi tylko jeśli każdy token jest w haystack
 ```
 
-Sprawdzić plik dialogu "Dodaj kontakt do zespołu" (prawdopodobnie `AddContactToTeamDialog.tsx` lub podobny) — jak konstruuje query.
+To jest bezpieczniejsze niż próba budowania bardzo złożonego filtra SQL/PostgREST dla wielu słów i różnych kolejności.
 
-### Krok 2: Naprawa
-Najpewniej trzeba rozszerzyć query o `first_name` i `last_name`:
-```ts
-.or(`full_name.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%`)
-```
-Oraz upewnić się, że `full_name` jest auto-generowane przy dodawaniu kontaktu (trigger lub computed w insert).
+## Efekt
+Po wdrożeniu kontakt „Krzysztof Kentla” będzie znajdowany także po wpisaniu:
+- `kentla krzysztof`
 
-## Pliki do zmiany (wstępnie)
-1. `src/components/deals-team/AddContactToTeamDialog.tsx` (lub podobny) — rozszerzenie wyszukiwania o `first_name`/`last_name`
-2. Ewentualnie migracja bazy: backfill `full_name` dla kontaktów gdzie jest puste
-
-Zacznę od diagnostyki kodu i bazy, żeby wskazać dokładny powód i minimalną poprawkę.
-
+bez zmiany działania dla dotychczasowych przypadków.
