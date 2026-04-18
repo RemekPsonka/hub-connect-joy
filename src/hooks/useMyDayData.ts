@@ -127,8 +127,9 @@ export function useMyDayData() {
     queryFn: async () => {
       try {
         const { data, error } = await supabase
-          .from('contact_activity_log')
-          .select('*, contacts:contact_id(id, full_name)')
+          .from('audit_log' as never)
+          .select('*')
+          .eq('entity_type', 'contact')
           .eq('tenant_id', tenantId!)
           .order('created_at', { ascending: false })
           .limit(8);
@@ -137,7 +138,40 @@ export function useMyDayData() {
           console.warn('Activity log query failed:', error.message);
           return [] as ActivityLogEntry[];
         }
-        return (data || []) as ActivityLogEntry[];
+
+        const rows = (data || []) as unknown as Array<{
+          id: string;
+          tenant_id: string;
+          entity_id: string | null;
+          action: string;
+          metadata: Record<string, unknown> | null;
+          created_at: string;
+        }>;
+
+        // Fetch contact names for entity_ids
+        const contactIds = Array.from(new Set(rows.map((r) => r.entity_id).filter((x): x is string => !!x)));
+        const contactMap = new Map<string, { id: string; full_name: string }>();
+        if (contactIds.length > 0) {
+          const { data: contacts } = await supabase
+            .from('contacts')
+            .select('id, full_name')
+            .in('id', contactIds);
+          contacts?.forEach((c) => contactMap.set(c.id, c));
+        }
+
+        return rows.map((r) => {
+          const meta = (r.metadata || {}) as { description?: string | null };
+          return {
+            id: r.id,
+            tenant_id: r.tenant_id,
+            contact_id: r.entity_id || '',
+            activity_type: r.action,
+            description: meta.description ?? null,
+            metadata: r.metadata,
+            created_at: r.created_at,
+            contacts: r.entity_id ? contactMap.get(r.entity_id) ?? null : null,
+          } as unknown as ActivityLogEntry;
+        });
       } catch {
         return [] as ActivityLogEntry[];
       }

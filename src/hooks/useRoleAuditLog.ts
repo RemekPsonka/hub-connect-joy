@@ -22,6 +22,16 @@ export interface RoleAuditEntry {
   };
 }
 
+interface AuditRow {
+  id: string;
+  tenant_id: string;
+  entity_id: string | null;
+  actor_id: string | null;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export function useRoleAuditLog(limit = 50) {
   const { tenantId, isAdmin } = useOwnerPanel();
 
@@ -30,10 +40,10 @@ export function useRoleAuditLog(limit = 50) {
     queryFn: async () => {
       if (!tenantId) return [];
 
-      // Fetch audit log entries
       const { data: entries, error } = await supabase
-        .from('role_audit_log')
+        .from('audit_log' as never)
         .select('*')
+        .eq('entity_type', 'role')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -43,13 +53,13 @@ export function useRoleAuditLog(limit = 50) {
         throw error;
       }
 
-      if (!entries || entries.length === 0) return [];
+      const rows = (entries || []) as unknown as AuditRow[];
+      if (rows.length === 0) return [];
 
-      // Fetch director info for target users and changed_by users
       const userIds = new Set<string>();
-      entries.forEach((e) => {
-        userIds.add(e.target_user_id);
-        userIds.add(e.changed_by_user_id);
+      rows.forEach((e) => {
+        if (e.entity_id) userIds.add(e.entity_id);
+        if (e.actor_id) userIds.add(e.actor_id);
       });
 
       const { data: directors } = await supabase
@@ -62,22 +72,26 @@ export function useRoleAuditLog(limit = 50) {
         directorMap.set(d.user_id, { full_name: d.full_name, email: d.email });
       });
 
-      // Combine data
-      const enrichedEntries: RoleAuditEntry[] = entries.map((entry) => ({
-        id: entry.id,
-        tenant_id: entry.tenant_id,
-        target_user_id: entry.target_user_id,
-        changed_by_user_id: entry.changed_by_user_id,
-        action: entry.action as RoleAuditEntry['action'],
-        old_role: entry.old_role as AppRole | null,
-        new_role: entry.new_role as AppRole | null,
-        details: entry.details as Record<string, unknown> | null,
-        created_at: entry.created_at ?? new Date().toISOString(),
-        target_user: directorMap.get(entry.target_user_id),
-        changed_by_user: directorMap.get(entry.changed_by_user_id),
-      }));
-
-      return enrichedEntries;
+      return rows.map<RoleAuditEntry>((entry) => {
+        const meta = (entry.metadata || {}) as {
+          old_role?: AppRole | null;
+          new_role?: AppRole | null;
+          details?: Record<string, unknown> | null;
+        };
+        return {
+          id: entry.id,
+          tenant_id: entry.tenant_id,
+          target_user_id: entry.entity_id || '',
+          changed_by_user_id: entry.actor_id || '',
+          action: entry.action as RoleAuditEntry['action'],
+          old_role: meta.old_role ?? null,
+          new_role: meta.new_role ?? null,
+          details: meta.details ?? null,
+          created_at: entry.created_at,
+          target_user: entry.entity_id ? directorMap.get(entry.entity_id) : undefined,
+          changed_by_user: entry.actor_id ? directorMap.get(entry.actor_id) : undefined,
+        };
+      });
     },
     enabled: !!tenantId && isAdmin === true,
   });

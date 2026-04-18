@@ -528,8 +528,12 @@ export function useMergeMultipleContacts() {
               await supabase.from('contact_bi').delete().eq('contact_id', dupId);
             }
           }),
-          // Transfer contact_activity_log
-          supabase.from('contact_activity_log').update({ contact_id: primaryContactId }).eq('contact_id', dupId),
+          // Transfer audit_log entries (entity_type=contact)
+          supabase
+            .from('audit_log' as never)
+            .update({ entity_id: primaryContactId } as never)
+            .eq('entity_type', 'contact')
+            .eq('entity_id', dupId),
         ]);
 
         // Transfer agent memory: if primary doesn't have it, move it; else delete dup's
@@ -566,17 +570,20 @@ export function useMergeMultipleContacts() {
 
       if (deactivateError) throw deactivateError;
 
-      // 6. Record merge history
+      // 6. Record merge in audit_log
       for (const dup of duplicates) {
-        await supabase
-          .from('contact_merge_history')
-          .insert([{
-            tenant_id: tenantId,
-            primary_contact_id: primaryContactId,
+        await supabase.rpc('log_entity_change' as never, {
+          p_entity_type: 'contact',
+          p_entity_id: primaryContactId,
+          p_actor_id: null,
+          p_action: 'merge',
+          p_diff: {},
+          p_metadata: {
             merged_contact_data: JSON.parse(JSON.stringify(dup)),
             merge_source: 'manual_duplicate_merge',
             ai_integrated_fields: Object.keys(mergedData),
-          }]);
+          },
+        } as never);
       }
 
       return { primaryContactId, mergedCount: duplicateIds.length };

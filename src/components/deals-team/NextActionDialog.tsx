@@ -201,14 +201,23 @@ export function NextActionDialog({
 
       // Log the recycle action
       try {
-        await supabase.from('task_activity_log' as any).insert({
-          task_id: existingTaskId,
-          action: 'recycled',
-          old_value: existingTaskTitle,
-          new_value: closeTask ? `[zamknięte: ${selected}]` : newTitle,
-          tenant_id: (await supabase.from('tasks').select('tenant_id').eq('id', existingTaskId).single()).data?.tenant_id,
-          actor_id: (await supabase.from('directors').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || '').single()).data?.id,
-        });
+        const { data: userResp } = await supabase.auth.getUser();
+        const { data: directorRow } = await supabase
+          .from('directors')
+          .select('id')
+          .eq('user_id', userResp.user?.id || '')
+          .maybeSingle();
+        await supabase.rpc('log_entity_change' as never, {
+          p_entity_type: 'task',
+          p_entity_id: existingTaskId,
+          p_actor_id: directorRow?.id ?? null,
+          p_action: 'recycled',
+          p_diff: {
+            old: existingTaskTitle,
+            new: closeTask ? `[zamknięte: ${selected}]` : newTitle,
+          },
+          p_metadata: {},
+        } as never);
       } catch {
         // Non-critical, ignore logging errors
       }

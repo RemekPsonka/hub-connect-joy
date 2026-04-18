@@ -589,6 +589,15 @@ export interface ContactActivityLog {
   created_at: string;
 }
 
+interface AuditRowContact {
+  id: string;
+  tenant_id: string;
+  entity_id: string | null;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export function useContactActivityLog(contactId: string | undefined) {
   const { director, assistant } = useAuth();
   const tenantId = director?.tenant_id || assistant?.tenant_id;
@@ -596,19 +605,33 @@ export function useContactActivityLog(contactId: string | undefined) {
   return useQuery({
     queryKey: ['contact_activity_log', contactId],
     queryFn: async () => {
-      if (!contactId || !tenantId) return [];
+      if (!contactId || !tenantId) return [] as ContactActivityLog[];
 
       const { data, error } = await supabase
-        .from('contact_activity_log')
+        .from('audit_log' as never)
         .select('*')
-        .eq('contact_id', contactId)
+        .eq('entity_type', 'contact')
+        .eq('entity_id', contactId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      const rows = (data || []) as unknown as AuditRowContact[];
 
-      return data as ContactActivityLog[];
+      return rows.map<ContactActivityLog>((r) => {
+        const meta = (r.metadata || {}) as { description?: string | null };
+        const { description, ...rest } = meta;
+        return {
+          id: r.id,
+          tenant_id: r.tenant_id,
+          contact_id: r.entity_id || contactId,
+          activity_type: r.action,
+          description: description ?? null,
+          metadata: rest as Record<string, unknown>,
+          created_at: r.created_at,
+        };
+      });
     },
     enabled: !!contactId && !!tenantId,
-    staleTime: 30 * 1000, // 30 sekund
+    staleTime: 30 * 1000,
   });
 }

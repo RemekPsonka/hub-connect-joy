@@ -280,6 +280,510 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_01: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_02: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_03: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_04: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_05: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_06: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_07: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_08: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_09: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_10: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_11: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2026_12: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_pre_2026: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       bug_reports: {
         Row: {
           context_data: Json | null
@@ -1147,58 +1651,6 @@ export type Database = {
           },
         ]
       }
-      contact_activity_log: {
-        Row: {
-          activity_type: string
-          contact_id: string
-          created_at: string
-          description: string | null
-          id: string
-          metadata: Json | null
-          tenant_id: string
-        }
-        Insert: {
-          activity_type: string
-          contact_id: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          metadata?: Json | null
-          tenant_id: string
-        }
-        Update: {
-          activity_type?: string
-          contact_id?: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          metadata?: Json | null
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contact_activity_log_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contact_activity_log_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "contact_activity_log_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       contact_agent_memory: {
         Row: {
           agent_persona: string | null
@@ -1437,58 +1889,6 @@ export type Database = {
           },
           {
             foreignKeyName: "contact_groups_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contact_merge_history: {
-        Row: {
-          ai_integrated_fields: string[] | null
-          created_at: string | null
-          id: string
-          merge_source: string | null
-          merged_contact_data: Json
-          primary_contact_id: string | null
-          tenant_id: string
-        }
-        Insert: {
-          ai_integrated_fields?: string[] | null
-          created_at?: string | null
-          id?: string
-          merge_source?: string | null
-          merged_contact_data: Json
-          primary_contact_id?: string | null
-          tenant_id: string
-        }
-        Update: {
-          ai_integrated_fields?: string[] | null
-          created_at?: string | null
-          id?: string
-          merge_source?: string | null
-          merged_contact_data?: Json
-          primary_contact_id?: string | null
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contact_merge_history_primary_contact_id_fkey"
-            columns: ["primary_contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contact_merge_history_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "contact_merge_history_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1962,102 +2362,6 @@ export type Database = {
           },
         ]
       }
-      deal_history: {
-        Row: {
-          changed_by: string
-          created_at: string | null
-          deal_id: string
-          field_name: string
-          id: string
-          new_stage_id: string | null
-          new_value: string | null
-          old_stage_id: string | null
-          old_value: string | null
-          tenant_id: string
-        }
-        Insert: {
-          changed_by: string
-          created_at?: string | null
-          deal_id: string
-          field_name: string
-          id?: string
-          new_stage_id?: string | null
-          new_value?: string | null
-          old_stage_id?: string | null
-          old_value?: string | null
-          tenant_id: string
-        }
-        Update: {
-          changed_by?: string
-          created_at?: string | null
-          deal_id?: string
-          field_name?: string
-          id?: string
-          new_stage_id?: string | null
-          new_value?: string | null
-          old_stage_id?: string | null
-          old_value?: string | null
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "deal_history_changed_by_fkey"
-            columns: ["changed_by"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "deal_history_deal_id_fkey"
-            columns: ["deal_id"]
-            isOneToOne: false
-            referencedRelation: "deals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "deal_history_new_stage_id_fkey"
-            columns: ["new_stage_id"]
-            isOneToOne: false
-            referencedRelation: "deal_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "deal_history_new_stage_id_fkey"
-            columns: ["new_stage_id"]
-            isOneToOne: false
-            referencedRelation: "mv_deal_pipeline_stats"
-            referencedColumns: ["stage_id"]
-          },
-          {
-            foreignKeyName: "deal_history_old_stage_id_fkey"
-            columns: ["old_stage_id"]
-            isOneToOne: false
-            referencedRelation: "deal_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "deal_history_old_stage_id_fkey"
-            columns: ["old_stage_id"]
-            isOneToOne: false
-            referencedRelation: "mv_deal_pipeline_stats"
-            referencedColumns: ["stage_id"]
-          },
-          {
-            foreignKeyName: "deal_history_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "deal_history_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       deal_products: {
         Row: {
           created_at: string
@@ -2161,48 +2465,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      deal_team_activity_log: {
-        Row: {
-          action: string
-          actor_id: string
-          created_at: string | null
-          id: string
-          new_value: Json | null
-          note: string | null
-          old_value: Json | null
-          prospect_id: string | null
-          team_contact_id: string | null
-          team_id: string
-          tenant_id: string
-        }
-        Insert: {
-          action: string
-          actor_id: string
-          created_at?: string | null
-          id?: string
-          new_value?: Json | null
-          note?: string | null
-          old_value?: Json | null
-          prospect_id?: string | null
-          team_contact_id?: string | null
-          team_id: string
-          tenant_id: string
-        }
-        Update: {
-          action?: string
-          actor_id?: string
-          created_at?: string | null
-          id?: string
-          new_value?: Json | null
-          note?: string | null
-          old_value?: Json | null
-          prospect_id?: string | null
-          team_contact_id?: string | null
-          team_id?: string
-          tenant_id?: string
-        }
-        Relationships: []
       }
       deal_team_actual_commissions: {
         Row: {
@@ -5843,57 +6105,6 @@ export type Database = {
           },
         ]
       }
-      role_audit_log: {
-        Row: {
-          action: string
-          changed_by_user_id: string
-          created_at: string | null
-          details: Json | null
-          id: string
-          new_role: Database["public"]["Enums"]["app_role"] | null
-          old_role: Database["public"]["Enums"]["app_role"] | null
-          target_user_id: string
-          tenant_id: string
-        }
-        Insert: {
-          action: string
-          changed_by_user_id: string
-          created_at?: string | null
-          details?: Json | null
-          id?: string
-          new_role?: Database["public"]["Enums"]["app_role"] | null
-          old_role?: Database["public"]["Enums"]["app_role"] | null
-          target_user_id: string
-          tenant_id: string
-        }
-        Update: {
-          action?: string
-          changed_by_user_id?: string
-          created_at?: string | null
-          details?: Json | null
-          id?: string
-          new_role?: Database["public"]["Enums"]["app_role"] | null
-          old_role?: Database["public"]["Enums"]["app_role"] | null
-          target_user_id?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "role_audit_log_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "role_audit_log_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sales_representatives: {
         Row: {
           created_at: string | null
@@ -6296,71 +6507,6 @@ export type Database = {
           },
           {
             foreignKeyName: "sync_jobs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      task_activity_log: {
-        Row: {
-          action: string
-          actor_id: string | null
-          created_at: string
-          id: string
-          metadata: Json | null
-          new_value: string | null
-          old_value: string | null
-          task_id: string
-          tenant_id: string
-        }
-        Insert: {
-          action: string
-          actor_id?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json | null
-          new_value?: string | null
-          old_value?: string | null
-          task_id: string
-          tenant_id: string
-        }
-        Update: {
-          action?: string
-          actor_id?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json | null
-          new_value?: string | null
-          old_value?: string | null
-          task_id?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "task_activity_log_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_activity_log_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_activity_log_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "task_activity_log_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -7056,65 +7202,6 @@ export type Database = {
           },
           {
             foreignKeyName: "task_time_entries_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      task_workflow_history: {
-        Row: {
-          completed_at: string | null
-          completed_by: string | null
-          id: string
-          notes: string | null
-          step_id: string
-          task_id: string
-          tenant_id: string
-        }
-        Insert: {
-          completed_at?: string | null
-          completed_by?: string | null
-          id?: string
-          notes?: string | null
-          step_id: string
-          task_id: string
-          tenant_id: string
-        }
-        Update: {
-          completed_at?: string | null
-          completed_by?: string | null
-          id?: string
-          notes?: string | null
-          step_id?: string
-          task_id?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "task_workflow_history_completed_by_fkey"
-            columns: ["completed_by"]
-            isOneToOne: false
-            referencedRelation: "directors"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_workflow_history_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_workflow_history_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_dashboard_stats"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "task_workflow_history_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -7934,6 +8021,17 @@ export type Database = {
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
+      }
+      log_entity_change: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_diff?: Json
+          p_entity_id: string
+          p_entity_type: string
+          p_metadata?: Json
+        }
+        Returns: string
       }
       match_contacts_by_project: {
         Args: {
