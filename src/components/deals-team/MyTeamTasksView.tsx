@@ -256,6 +256,20 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       return;
     }
 
+    // Special case: dropping on KLIENT requires financial data via ConvertToClientDialog
+    if (colId === 'client') {
+      const tc = teamContacts.find(c => c.id === task.deal_team_contact_id);
+      setWorkflowTask(task);
+      setWorkflowContact({
+        contactName: tc?.contact?.full_name || task.contact_name || '',
+        contactId: tc?.contact_id || task.contact_id || '',
+        teamContactId: task.deal_team_contact_id,
+        category: tc?.category || task.contact_category || '',
+      });
+      setShowConvert(true);
+      return;
+    }
+
     const { category, offeringStage } = reverseMapColumn(colId, task.contact_category ?? null);
 
     updateTeamContact.mutate({
@@ -270,7 +284,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       teamContactId: task.deal_team_contact_id,
       title: targetCol.label,
     });
-  }, [filtered, teamId, updateTeamContact, updateAssignment]);
+  }, [filtered, teamId, teamContacts, updateTeamContact, updateAssignment, wfPipelineStages, wfPipelineTransitions]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { contactName: string; company: string | null; teamContactId: string; tasks: DealTeamAssignment[] }>();
