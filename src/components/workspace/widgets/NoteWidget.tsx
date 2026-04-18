@@ -53,7 +53,7 @@ export function NoteWidget({ widgetId, noteId }: Props) {
   useEffect(() => {
     if (!editor || !note) return;
     if (!initialized.current) {
-      editor.commands.setContent(note.blocks ?? { type: 'doc', content: [] }, false);
+      editor.commands.setContent(note.blocks ?? { type: 'doc', content: [] });
       setTitle(note.title ?? '');
       initialized.current = true;
     }

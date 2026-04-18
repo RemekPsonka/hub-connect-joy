@@ -1,4 +1,6 @@
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
+import RGL from 'react-grid-layout';
+const { Responsive, WidthProvider } = RGL as any;
+type Layout = { i: string; x: number; y: number; w: number; h: number };
 import { useWorkspaceWidgets, useUpdateWidgetLayout } from '@/hooks/useWorkspaceWidgets';
 import { KPIWidget } from './KPIWidget';
 import { NoteWidget } from './NoteWidget';
