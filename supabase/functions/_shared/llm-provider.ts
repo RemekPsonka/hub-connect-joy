@@ -26,6 +26,8 @@ export interface CallLLMOptions {
   model_hint?: string;
   stream?: boolean;
   request_id?: string;
+  tools?: unknown[];
+  tool_choice?: 'auto' | 'none' | 'required';
 }
 
 export interface LLMResult {
@@ -86,6 +88,8 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
       model,
       messages: opts.messages,
       stream,
+      ...(opts.tools && opts.tools.length > 0 ? { tools: opts.tools } : {}),
+      ...(opts.tool_choice ? { tool_choice: opts.tool_choice } : {}),
     }),
   });
 
