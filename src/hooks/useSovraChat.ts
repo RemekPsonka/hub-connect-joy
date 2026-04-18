@@ -216,7 +216,12 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
         console.error('Sovra chat error:', e);
-        toast.error('Nie udało się połączyć z Sovrą.');
+        // TypeError z fetch = network unavailable
+        if (e instanceof TypeError) {
+          setLastError('unavailable');
+        } else {
+          toast.error('Nie udało się połączyć z Sovrą.');
+        }
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant' && !last.content) return prev.slice(0, -1);
@@ -229,6 +234,15 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     },
     [isStreaming, sessionId, options.contextType, options.contextId, queryClient],
   );
+
+  const clearError = useCallback(() => setLastError(null), []);
+
+  const retryLast = useCallback(() => {
+    const last = lastSentRef.current;
+    if (!last) return;
+    setLastError(null);
+    void sendMessage(last.text, last.ctxType, last.ctxId);
+  }, [sendMessage]);
 
   const confirmAction = useCallback(
     async (pendingActionId: string, decision: 'confirm' | 'cancel') => {
@@ -314,6 +328,9 @@ export function useSovraChat(options: UseSovraChatOptions = {}) {
     messages,
     isStreaming,
     sessionId,
+    lastError,
+    clearError,
+    retryLast,
     sendMessage,
     confirmAction,
     loadSession,
