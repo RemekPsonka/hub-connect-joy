@@ -30,6 +30,7 @@ import {
   Receipt,
   Moon,
   PieChart,
+  DollarSign,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
