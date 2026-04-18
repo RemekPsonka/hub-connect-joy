@@ -10,6 +10,7 @@ import {
 import { NextActionDialog } from './NextActionDialog';
 import { SnoozeDialog } from './SnoozeDialog';
 import { ConvertToClientDialog } from './ConvertToClientDialog';
+import { ContactActionButtons } from './ContactActionButtons';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
