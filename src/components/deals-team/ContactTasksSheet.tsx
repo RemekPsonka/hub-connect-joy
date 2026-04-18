@@ -217,6 +217,19 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
             <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
                 <div className="px-6 py-4 space-y-5">
+                  {/* Akcje — zawsze widoczne, niezależnie od zadań */}
+                  <section>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <Target className="h-3.5 w-3.5" /> Akcje
+                    </h4>
+                    <ContactActionButtons
+                      contact={contact}
+                      teamId={teamId}
+                      onSnooze={() => setShowSnooze(true)}
+                      onConvertToClient={() => setShowConvert(true)}
+                    />
+                  </section>
+
                   {/* Osoba */}
                   <section>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
