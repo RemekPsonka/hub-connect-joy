@@ -62,12 +62,15 @@ export function AddContactDialog({
     queryFn: async () => {
       if (!tenantId || searchQuery.length < 2) return [];
 
+      const q = searchQuery.trim();
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, company, email')
+        .select('id, full_name, company, email, first_name, last_name')
         .eq('tenant_id', tenantId)
-        .ilike('full_name', `%${searchQuery}%`)
-        .limit(10);
+        .or(
+          `full_name.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%,email.ilike.%${q}%`
+        )
+        .limit(20);
 
       if (error) throw error;
       return data as Contact[];
