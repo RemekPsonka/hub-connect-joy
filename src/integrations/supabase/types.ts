@@ -8303,6 +8303,53 @@ export type Database = {
           },
         ]
       }
+      workspace_notes: {
+        Row: {
+          actor_id: string
+          blocks: Json
+          created_at: string
+          id: string
+          parent_note_id: string | null
+          pinned: boolean
+          position: number
+          tenant_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          actor_id: string
+          blocks?: Json
+          created_at?: string
+          id?: string
+          parent_note_id?: string | null
+          pinned?: boolean
+          position?: number
+          tenant_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actor_id?: string
+          blocks?: Json
+          created_at?: string
+          id?: string
+          parent_note_id?: string | null
+          pinned?: boolean
+          position?: number
+          tenant_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_notes_parent_note_id_fkey"
+            columns: ["parent_note_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_schedule: {
         Row: {
           created_at: string
@@ -8426,6 +8473,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      workspace_widgets: {
+        Row: {
+          actor_id: string
+          config: Json
+          created_at: string
+          grid_h: number
+          grid_w: number
+          grid_x: number
+          grid_y: number
+          id: string
+          size: string
+          tenant_id: string
+          widget_type: string
+        }
+        Insert: {
+          actor_id: string
+          config?: Json
+          created_at?: string
+          grid_h?: number
+          grid_w?: number
+          grid_x?: number
+          grid_y?: number
+          id?: string
+          size?: string
+          tenant_id: string
+          widget_type: string
+        }
+        Update: {
+          actor_id?: string
+          config?: Json
+          created_at?: string
+          grid_h?: number
+          grid_w?: number
+          grid_x?: number
+          grid_y?: number
+          id?: string
+          size?: string
+          tenant_id?: string
+          widget_type?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -8683,6 +8772,10 @@ export type Database = {
       }
       rpc_team_report: {
         Args: { p_team_id?: string; p_week_start: string }
+        Returns: Json
+      }
+      rpc_workspace_kpi: {
+        Args: { p_metric: string; p_range?: string }
         Returns: Json
       }
       search_all_fts: {
