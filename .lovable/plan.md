@@ -1,92 +1,176 @@
 
 
-# Sprint 02 — Dead code & UI cleanup (finalna wersja)
+# Sprint 03 — Lejek + scalenie prospects (zaadaptowany)
 
 ## Decyzje (potwierdzone)
-- K3 `institutions` — pomijamy (nie istnieje)
-- K4 — dorzucamy `src/hooks/useResources.ts` + `src/components/resources/`
-- K5 `use-toast` — usuwamy `src/components/ui/use-toast.ts`, zostawiamy `src/hooks/use-toast.ts`, importy → `@/hooks/use-toast`
-- K6 `src/types/dealTeam.ts` — NIE ruszamy
-- `DealDetail.tsx` — kasujemy (używa `useDeals`)
-- P1 `linkedin_network_contacts` — ZOSTAJE
-- P2 `default_positions` — ZOSTAJE
+- D1: `pipeline_stages` ZOSTAJE (39 wierszy, w użyciu). Kasujemy tylko `pipeline_transitions` (0) i `pipeline_kpi_targets` (1, migracja do JSONB).
+- D2: Nowa `prospects` używa `full_name` (nie first/last), spójnie z istniejącymi danymi.
+- D3: Stare hooki zachowują pełne API — wewnętrznie czytają z nowej `prospects`, ale nie zmieniam 23 wywołań.
+
+## Stan w bazie (zweryfikowany)
+- `pipeline_stages`: **39 wierszy** → zostawiam
+- `pipeline_transitions`: **0** → DROP
+- `pipeline_kpi_targets`: **1** → migracja → DROP
+- `meeting_prospects`: **123 wiersze**, schema: `team_id`, `full_name`, `company`, `position`, `prospecting_status`, `ai_brief TEXT`, `meeting_id`, etc.
+- `deal_team_prospects`: **0**, schema: `team_id`, `prospect_name`, `prospect_company`, `prospect_position`, `status`
 
 ## Zakres
 
-### A. Strony FE + trasy
-Usuwam pliki:
-- `src/pages/Index.tsx`, `MyDay.tsx`, `Resources.tsx`, `Superadmin.tsx`, `Tasks.tsx`, `MyTasks.tsx`, `Deals.tsx`, `DealDetail.tsx`
-- Cały `src/components/deals/`
-- Cały `src/components/resources/`
-- `src/hooks/useDeals.ts`, `src/hooks/useDealProducts.ts`, `src/hooks/useResources.ts`
-
-W `src/App.tsx`:
-- Usuwam `lazy()` dla skasowanych stron + ich `<Route>`: `/my-day`, `/resources`, `/superadmin`, `/tasks`, `/tasks/analytics`, `/tasks/team-report`, `/my-tasks`, `/deals`, `/deals/:id`
-- Usuwam `DealsRedirect` (już niepotrzebny)
-- Sprawdzam, czy `/` (Dashboard) ma sensowny fallback — jeśli `Index.tsx` był używany jako fallback, dopinam Dashboard / przekierowanie
-
-W sidebarze (AppSidebar / nav configs): usuwam linki do skasowanych stron.
-
-### B. Edge Functions
-- Kasuję foldery `supabase/functions/learn-contact-agent/`, `supabase/functions/sync-contact-agents/`
-- Usuwam ewentualne wpisy w `supabase/config.toml`
-- Wywołuję `supabase--delete_edge_functions` dla obu
-
-### C. Tabele DB — migracja z archiwizacją
-Plik: `supabase/migrations/<ts>_sprint02_dead_tables.sql`
+### A. Migracja SQL `supabase/migrations/<ts>_sprint03_prospects_consolidation.sql`
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS archive;
 
-CREATE TABLE archive.nela_sessions_backup_20260418 AS SELECT * FROM public.nela_sessions;
-CREATE TABLE archive.nela_reminders_backup_20260418 AS SELECT * FROM public.nela_reminders;
-CREATE TABLE archive.ai_recommendation_actions_backup_20260418 AS SELECT * FROM public.ai_recommendation_actions;
-CREATE TABLE archive.search_synonyms_backup_20260418 AS SELECT * FROM public.search_synonyms;
+-- 1. ARCHIWIZACJA wszystkich 5 tabel (data preservation)
+CREATE TABLE archive.pipeline_stages_backup_20260418 AS SELECT * FROM public.pipeline_stages;
+CREATE TABLE archive.pipeline_transitions_backup_20260418 AS SELECT * FROM public.pipeline_transitions;
+CREATE TABLE archive.pipeline_kpi_targets_backup_20260418 AS SELECT * FROM public.pipeline_kpi_targets;
+CREATE TABLE archive.meeting_prospects_backup_20260418 AS SELECT * FROM public.meeting_prospects;
+CREATE TABLE archive.deal_team_prospects_backup_20260418 AS SELECT * FROM public.deal_team_prospects;
 
-DROP FUNCTION IF EXISTS public.expand_search_query(text) CASCADE;
-DROP FUNCTION IF EXISTS public.add_synonym(text, text) CASCADE;
-DROP FUNCTION IF EXISTS public.delete_synonym(uuid) CASCADE;
-DROP FUNCTION IF EXISTS public.get_all_synonyms() CASCADE;
+-- 2. deal_teams.kpi_targets JSONB + migracja z pipeline_kpi_targets
+ALTER TABLE public.deal_teams ADD COLUMN IF NOT EXISTS kpi_targets jsonb DEFAULT '{}'::jsonb;
+-- (UPDATE wg realnej struktury pipeline_kpi_targets — sprawdzę kolumny w runtime)
 
-DROP TABLE IF EXISTS public.nela_reminders CASCADE;
-DROP TABLE IF EXISTS public.nela_sessions CASCADE;
-DROP TABLE IF EXISTS public.ai_recommendation_actions CASCADE;
-DROP TABLE IF EXISTS public.search_synonyms CASCADE;
+-- 3. DROP pipeline_transitions + pipeline_kpi_targets (pipeline_stages ZOSTAJE — D1)
+DROP TABLE IF EXISTS public.pipeline_transitions CASCADE;
+DROP TABLE IF EXISTS public.pipeline_kpi_targets CASCADE;
+
+-- 4. Nowa public.prospects ze schematem opartym o realne dane (D2)
+CREATE TABLE public.prospects (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  source_type text NOT NULL CHECK (source_type IN ('meeting','team','wanted','import')),
+  source_id uuid,                          -- team_id (meeting/team) lub null (wanted/import)
+  team_id uuid REFERENCES public.deal_teams(id) ON DELETE CASCADE,
+  meeting_id uuid,                         -- z meeting_prospects.meeting_id
+  full_name text NOT NULL,
+  company text,
+  company_id uuid REFERENCES public.companies(id),
+  position text,
+  industry text,
+  phone text,
+  email text,
+  linkedin_url text,
+  source_event text,
+  source_file_name text,
+  status text NOT NULL DEFAULT 'new',      -- mapuje prospecting_status
+  priority text,
+  is_prospecting boolean DEFAULT true,
+  notes text,                              -- prospecting_notes / prospect_notes
+  ai_brief jsonb,                          -- {text, generated_at} — TEXT z meeting_prospects opakowany
+  ai_brief_generated_at timestamptz,
+  converted_to_contact_id uuid REFERENCES public.contacts(id),
+  converted_to_team_contact_id uuid,
+  converted_at timestamptz,
+  imported_by uuid,
+  imported_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_prospects_tenant_source ON public.prospects(tenant_id, source_type, source_id);
+CREATE INDEX idx_prospects_team ON public.prospects(team_id);
+CREATE INDEX idx_prospects_converted ON public.prospects(converted_to_contact_id);
+
+ALTER TABLE public.prospects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY prospects_select ON public.prospects FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+CREATE POLICY prospects_insert ON public.prospects FOR INSERT WITH CHECK (tenant_id = public.get_current_tenant_id());
+CREATE POLICY prospects_update ON public.prospects FOR UPDATE USING (tenant_id = public.get_current_tenant_id());
+CREATE POLICY prospects_delete ON public.prospects FOR DELETE USING (tenant_id = public.get_current_tenant_id());
+
+-- 5. Backfill z meeting_prospects (123 wiersze, real schema)
+INSERT INTO public.prospects (
+  id, tenant_id, source_type, source_id, team_id, meeting_id,
+  full_name, company, position, industry, email, phone, linkedin_url,
+  source_event, source_file_name, status, priority, is_prospecting, notes,
+  ai_brief, ai_brief_generated_at,
+  converted_to_contact_id, converted_to_team_contact_id, converted_at,
+  imported_by, imported_at, created_at, updated_at
+)
+SELECT
+  id, tenant_id, 'meeting', team_id, team_id, meeting_id,
+  full_name, company, position, industry, email, phone, linkedin_url,
+  source_event, source_file_name, COALESCE(prospecting_status,'new'), priority, is_prospecting, prospecting_notes,
+  CASE WHEN ai_brief IS NOT NULL THEN jsonb_build_object('text', ai_brief, 'generated_at', ai_brief_generated_at) END,
+  ai_brief_generated_at,
+  converted_to_contact_id, converted_to_team_contact_id, converted_at,
+  imported_by, imported_at, created_at, updated_at
+FROM public.meeting_prospects;
+
+-- 6. Backfill z deal_team_prospects (0 wierszy, ale dla bezpieczeństwa)
+INSERT INTO public.prospects (
+  id, tenant_id, source_type, source_id, team_id,
+  full_name, company, position, email, phone, linkedin_url,
+  status, priority, notes, converted_to_contact_id, company_id, created_at, updated_at
+)
+SELECT
+  id, tenant_id, 'team', team_id, team_id,
+  prospect_name, prospect_company, prospect_position, prospect_email, prospect_phone, prospect_linkedin,
+  COALESCE(status,'new'), priority, prospect_notes, converted_to_contact_id, company_id, created_at, updated_at
+FROM public.deal_team_prospects;
+
+-- 7. Deprecation (rename, DROP osobną migracją za 30 dni)
+ALTER TABLE public.meeting_prospects RENAME TO deprecated_meeting_prospects_20260418;
+ALTER TABLE public.deal_team_prospects RENAME TO deprecated_deal_team_prospects_20260418;
+
+-- 8. Weryfikacja count
+DO $$ DECLARE old_c int; new_c int;
+BEGIN
+  SELECT (SELECT COUNT(*) FROM archive.meeting_prospects_backup_20260418)
+       + (SELECT COUNT(*) FROM archive.deal_team_prospects_backup_20260418) INTO old_c;
+  SELECT COUNT(*) FROM public.prospects INTO new_c;
+  IF old_c <> new_c THEN RAISE EXCEPTION 'COUNT MISMATCH: old=% new=%', old_c, new_c; END IF;
+  RAISE NOTICE 'OK: prospects migrated %=%', old_c, new_c;
+END $$;
 
 -- ROLLBACK:
--- CREATE TABLE public.nela_sessions AS SELECT * FROM archive.nela_sessions_backup_20260418;
--- CREATE TABLE public.nela_reminders AS SELECT * FROM archive.nela_reminders_backup_20260418;
--- CREATE TABLE public.ai_recommendation_actions AS SELECT * FROM archive.ai_recommendation_actions_backup_20260418;
--- CREATE TABLE public.search_synonyms AS SELECT * FROM archive.search_synonyms_backup_20260418;
+-- DROP TABLE public.prospects;
+-- ALTER TABLE public.deprecated_meeting_prospects_20260418 RENAME TO meeting_prospects;
+-- ALTER TABLE public.deprecated_deal_team_prospects_20260418 RENAME TO deal_team_prospects;
+-- CREATE TABLE public.pipeline_transitions AS SELECT * FROM archive.pipeline_transitions_backup_20260418;
+-- CREATE TABLE public.pipeline_kpi_targets AS SELECT * FROM archive.pipeline_kpi_targets_backup_20260418;
+-- ALTER TABLE public.deal_teams DROP COLUMN kpi_targets;
 ```
 
-Pomijam: `institutions`, `linkedin_network_contacts`, `default_positions`.
+### B. Nowy hook `src/hooks/useProspects.ts`
+- Sygnatura: `useProspects({ sourceType, sourceId?, teamId? })`
+- CRUD przez `public.prospects`, mapowanie z RLS po `tenant_id`
+- Eksportuje: `useProspects`, `useCreateProspect`, `useUpdateProspect`, `useDeleteProspect`
 
-### D. Hooki / duplikaty / drobiazgi
-- Scalenie `useContactGroups` — jeśli jest re-export w `useContacts`, kierujemy importy na `@/hooks/useContactGroups`
-- Usuwam `src/components/ui/use-toast.ts` (re-export)
-- Wszystkie importy `@/components/ui/use-toast` → `@/hooks/use-toast` (search & replace)
-- `WantedContacts.tsx:1` — usuwam `// rebuild`
-- `useBusinessInterview.ts` — usuwam `console.log("[BI Fill]")`
-- `NotFound.tsx` — usuwam/wyciszam `console.error`
-- NIE ruszam `src/types/dealTeam.ts`
+### C. Re-export w starych hookach (D3 — zachowane API)
+- `src/hooks/useMeetingProspects.ts`:
+  - Pełne API zostaje (`useMeetingProspects`, `useImportMeetingProspects`, `useUpdateMeetingProspect`, `useDeleteMeetingProspect`, `useGenerateProspectBrief`, `useMeetingProspectsByEvent`, typy `MeetingProspect`/`ParsedPerson`)
+  - Wewnątrz: zamiana `.from('meeting_prospects')` → `.from('prospects').eq('source_type','meeting')`
+  - Mapper: `prospects.row` → `MeetingProspect` (status ↔ prospecting_status, ai_brief jsonb → string z `.text`)
+- `src/hooks/useDealsTeamProspects.ts`: analogicznie, source_type='team'
+- 23 pliki używające starych hooków — **zero zmian**
 
-### E. Dokumentacja w repo
-Kasuję z root: wszystkie `TRYB_*.md`, `PEŁNA STRUKTURA PLIKÓW PROJEKTU (1).md`, `PEŁNY SYSTEM ZARZĄDZANIA STANEM (1).md`, `INSTRUKCJA_GLOWNA (3).md` (jeśli istnieją w repo).
+### D. Edge function `prospect-ai-brief`
+- Body: `{ prospectId }`  
+- SELECT z `public.prospects WHERE id=prospectId` (RLS)
+- UPDATE `prospects.ai_brief = jsonb_build_object('text', brief, 'generated_at', now())`
+
+### E. Pliki bezpośrednio używające `meeting_prospects`/`deal_team_prospects` przez `supabase.from()`
+Refactor (poza hookami):
+- `src/components/meetings/MeetingParticipantsTab.tsx` (linia 105)
+- `src/components/deals-team/ConvertProspectDialog.tsx` (linia 103)
+- `src/components/deals-team/ProspectingConvertDialog.tsx` (linia 311)
+- `src/hooks/useMeetings.ts` (linia 251 — JOIN po `meeting_prospects`)
+
+Zamiana na `prospects` z odpowiednim filtrem source_type.
 
 ## Kolejność wykonania
-1. Migracja SQL (archiwizacja + DROP)
-2. Usunięcie edge functions (kod + `delete_edge_functions`)
-3. Usunięcie stron + folderów FE + hooków
-4. Aktualizacja `App.tsx` (trasy, lazy, DealsRedirect)
-5. Aktualizacja sidebara (linki nav)
-6. Toast: usunięcie re-exportu + przepięcie importów
-7. Drobne: komentarze, console.*, scalenie `useContactGroups`
-8. Kasacja MD-ków z roota
-9. Lint pass + sanity check buildu
+1. Migracja SQL (archiwizacja → kpi → prospects → backfill → rename → weryfikacja)
+2. `useProspects.ts` (nowy)
+3. `useMeetingProspects.ts` + `useDealsTeamProspects.ts` (przepisanie wewnętrzne, API zostaje)
+4. Refactor 4 plików z bezpośrednim `.from('meeting_prospects'/'deal_team_prospects')`
+5. `prospect-ai-brief/index.ts` — update na `prospects` + JSONB
+6. Build + smoke test `/deals-team` (Dashboard, Kanban, Prospecting, Klienci, Ofertowanie, Zadania, Prowizje, Odłożone)
 
 ## Ryzyka
-- Sidebar / linki w innych miejscach niż AppSidebar — przeszukam globalnie po routach
-- `DealsRedirect` — usuwany razem z `/deals*`
-- Importy toast — szeroki search/replace, weryfikuję że nikt nie używał `useToast` z `components/ui/use-toast` ze ścieżką inną niż re-export
+- Mapowanie `ai_brief` TEXT→JSONB: hook musi czytać `.text` z jsonb, mutacja musi pakować z powrotem. Zero zmian dla UI.
+- `meeting_id` z `meeting_prospects` — dodaję jako pełnoprawną kolumnę w nowej `prospects` (potrzebne dla MeetingParticipantsTab join).
+- Backfill 123 wierszy + RLS: tenant_id zachowany 1:1.
+- `pipeline_stages` zostaje — Kanban nieruszany (kolejny sprint).
 
