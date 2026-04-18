@@ -19,6 +19,7 @@ import {
   Scale
 } from 'lucide-react';
 import { SourcesTabContent } from './SourcesTabContent';
+import { CompanyExternalDataTab } from '@/components/companies/CompanyExternalDataTab';
 import { BasicInfoSection } from './sections/BasicInfoSection';
 import { FinancialDashboard } from './sections/FinancialDashboard';
 import { ProductsServicesSection } from './sections/ProductsServicesSection';
@@ -68,6 +69,7 @@ export function CompanyFlatTabs({
   // Show ALL tabs when analysis is complete - individual sections handle empty states
   const tabs = [
     { id: 'sources', label: 'Źródła', icon: Database, always: true },
+    { id: 'external-data', label: 'Dane zewnętrzne', icon: Database, always: true },
     { id: 'structure', label: 'Struktura', icon: GitBranch, always: true },
     { id: 'insurance', label: 'Ubezpieczenia', icon: Shield, always: true },
     { id: 'exposure', label: 'Ekspozycja', icon: MapPinned, always: true },
@@ -125,6 +127,10 @@ export function CompanyFlatTabs({
           contactEmail={contactEmail}
           pipeline={pipeline}
         />
+      </TabsContent>
+
+      <TabsContent value="external-data" className="mt-0">
+        <CompanyExternalDataTab companyId={company.id} />
       </TabsContent>
 
       <TabsContent value="structure" className="mt-0">
