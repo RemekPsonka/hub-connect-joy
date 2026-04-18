@@ -45,6 +45,7 @@ import { ProjectMilestones } from '@/components/projects/ProjectMilestones';
 import { AutomationRulesPanel } from '@/components/tasks/AutomationRulesPanel';
 import { ProjectReportExport } from '@/components/projects/ProjectReportExport';
 import { ProjectTemplateManager } from '@/components/projects/ProjectTemplateManager';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -159,6 +160,7 @@ export default function ProjectDetail() {
         </div>
 
         {/* Actions */}
+        <SovraOpenButton scopeType="project" scopeId={project.id} />
         <ProjectReportExport project={project} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -24,6 +24,7 @@ import { pl } from 'date-fns/locale';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
 import { CompanyModal } from '@/components/contacts/CompanyModal';
 import { ShareContactDialog } from '@/components/contacts/ShareContactDialog';
+import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 
 interface ContactDetailHeaderProps {
@@ -171,6 +172,7 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2">
             <ShareContactDialog contactId={contact.id} contactName={contact.full_name} />
+            <SovraOpenButton scopeType="contact" scopeId={contact.id} />
             <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
               <CalendarPlus className="h-4 w-4 mr-1.5" />
               Konsultacja
