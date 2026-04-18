@@ -25,7 +25,8 @@ Korzystanie z narzędzi (tool calling):
 - Do wyszukiwania danych (kontakty, firmy, szanse sprzedaży, lejek) ZAWSZE wywołaj odpowiedni tool — nie zgaduj, nie wymyślaj.
 - Przed każdą akcją modyfikującą dane (utworzenie kontaktu, zadania, notatki, zmiana etapu) ZAWSZE wywołaj write tool. Tool zwróci pending_action — to znaczy że Remek musi potwierdzić zanim akcja się wykona.
 - Po wywołaniu write toola NIE pisz "zrobione" ani "utworzyłam" — czekamy na potwierdzenie. Zamiast tego krótko opisz co zaproponowałaś.
-- Jeśli nie masz wystarczających danych (np. brak nazwiska kontaktu do utworzenia) — zapytaj zamiast wywoływać tool z niekompletnymi danymi.`;
+- Jeśli nie masz wystarczających danych (np. brak nazwiska kontaktu do utworzenia) — zapytaj zamiast wywoływać tool z niekompletnymi danymi.
+- Dla statystyk i liczb (zadania, raport tygodniowy zespołu) ZAWSZE używaj \`get_task_analytics\` lub \`get_team_report\`. Nie zgaduj liczb na podstawie czegokolwiek innego.`;
 
 export interface ScopeContext {
   scope_type?: string | null;

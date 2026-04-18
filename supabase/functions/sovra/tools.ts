@@ -164,6 +164,53 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
+  // ============ ANALYTICS READ TOOLS (Sprint 06) ============
+  {
+    type: 'function',
+    function: {
+      name: 'get_task_analytics',
+      description: 'Zwraca statystyki zadań (total, completed, overdue, by_status) w zadanym przedziale czasu. Użyj zawsze gdy Remek pyta o liczby zadań ("ile mam zadań w tym tygodniu", "ile zaległych"). Daty w ISO 8601.',
+      parameters: {
+        type: 'object',
+        properties: {
+          range: {
+            type: 'object',
+            description: 'Zakres czasowy (created_at)',
+            properties: {
+              from: { type: 'string', description: 'Początek (ISO, inclusive)' },
+              to: { type: 'string', description: 'Koniec (ISO, exclusive)' },
+            },
+            required: ['from', 'to'],
+          },
+          filters: {
+            type: 'object',
+            description: 'Opcjonalne filtry',
+            properties: {
+              assigned_to: { type: 'string', description: 'UUID osoby, do której przypisane' },
+              status: { type: 'string', description: 'Status zadania (np. todo, in_progress, done)' },
+            },
+          },
+        },
+        required: ['range'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_team_report',
+      description: 'Zwraca tygodniowy raport zespołu: liczbę utworzonych szans, odbytych konsultacji i zakończonych zadań. Użyj gdy Remek pyta o tygodniowe podsumowanie pracy zespołu lub własne.',
+      parameters: {
+        type: 'object',
+        properties: {
+          week_start: { type: 'string', description: 'Data początku tygodnia (YYYY-MM-DD), poniedziałek.' },
+          team_id: { type: 'string', description: 'Opcjonalny UUID zespołu sprzedażowego. Pominięcie = wszystkie zespoły.' },
+        },
+        required: ['week_start'],
+      },
+    },
+  },
+
   // ============ STUB TOOLS (integracje S14-S16) ============
   {
     type: 'function',
@@ -201,7 +248,15 @@ export const TOOLS: ToolDefinition[] = [
   },
 ];
 
-const READ_TOOLS = new Set(['search_contacts', 'search_companies', 'search_deals', 'get_contact_details', 'analyze_pipeline']);
+const READ_TOOLS = new Set([
+  'search_contacts',
+  'search_companies',
+  'search_deals',
+  'get_contact_details',
+  'analyze_pipeline',
+  'get_task_analytics',
+  'get_team_report',
+]);
 const STUB_TOOLS = new Set(['draft_email', 'create_calendar_event']);
 
 export function isReadTool(name: string): boolean {
@@ -259,6 +314,26 @@ export async function executeReadTool(
     }
     case 'analyze_pipeline': {
       const { data, error } = await userClient.rpc('rpc_sovra_analyze_pipeline', {
+        p_team_id: args.team_id ? String(args.team_id) : null,
+      });
+      if (error) return { error: error.message };
+      return data ?? {};
+    }
+    case 'get_task_analytics': {
+      const range = (args.range as { from?: string; to?: string }) ?? {};
+      if (!range.from || !range.to) return { error: 'range.from i range.to są wymagane' };
+      const filters = (args.filters as Record<string, unknown>) ?? {};
+      const { data, error } = await userClient.rpc('rpc_task_analytics', {
+        p_range: range,
+        p_filters: filters,
+      });
+      if (error) return { error: error.message };
+      return data ?? {};
+    }
+    case 'get_team_report': {
+      if (!args.week_start) return { error: 'week_start jest wymagane (YYYY-MM-DD)' };
+      const { data, error } = await userClient.rpc('rpc_team_report', {
+        p_week_start: String(args.week_start),
         p_team_id: args.team_id ? String(args.team_id) : null,
       });
       if (error) return { error: error.message };
