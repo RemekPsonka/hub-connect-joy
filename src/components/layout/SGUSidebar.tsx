@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  ListTodo,
   Users,
   TrendingUp,
   PieChart,
@@ -47,6 +48,7 @@ interface NavItemDef {
 
 const overviewItems: NavItemDef[] = [
   { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
+  { title: 'Dziennik', url: '/sgu/tasks', icon: ListTodo },
   { title: 'Mój zespół', url: '/sgu/team', icon: Users },
 ];
 

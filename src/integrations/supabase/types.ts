@@ -8435,6 +8435,7 @@ export type Database = {
         Row: {
           actual_hours: number | null
           assigned_to: string | null
+          assigned_to_user_id: string | null
           category_id: string | null
           consultation_id: string | null
           created_at: string | null
@@ -8465,6 +8466,7 @@ export type Database = {
         Insert: {
           actual_hours?: number | null
           assigned_to?: string | null
+          assigned_to_user_id?: string | null
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
@@ -8495,6 +8497,7 @@ export type Database = {
         Update: {
           actual_hours?: number | null
           assigned_to?: string | null
+          assigned_to_user_id?: string | null
           category_id?: string | null
           consultation_id?: string | null
           created_at?: string | null
@@ -9208,6 +9211,20 @@ export type Database = {
           },
         ]
       }
+      mv_sgu_weekly_kpi: {
+        Row: {
+          booked_premium_gr: number | null
+          collected_premium_gr: number | null
+          commission_earned_gr: number | null
+          new_policies_count: number | null
+          overdue_tasks_count: number | null
+          refreshed_at: string | null
+          team_id: string | null
+          tenant_id: string | null
+          week_start: string | null
+        }
+        Relationships: []
+      }
       unified_meetings: {
         Row: {
           contact_id_main: string | null
@@ -9444,6 +9461,11 @@ export type Database = {
         Args: { p_contact_id: string }
         Returns: Json
       }
+      rpc_sgu_team_performance: {
+        Args: { p_week_offset?: number }
+        Returns: Json
+      }
+      rpc_sgu_weekly_kpi: { Args: { p_week_offset?: number }; Returns: Json }
       rpc_sovra_analyze_pipeline: {
         Args: { p_team_id?: string }
         Returns: Json
