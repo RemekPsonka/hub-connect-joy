@@ -9,6 +9,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { SGUAccessGuard } from "@/components/auth/SGUAccessGuard";
+import { CRMOnlyGuard } from "@/components/auth/CRMOnlyGuard";
 import { PostLoginRedirect } from "@/components/auth/PostLoginRedirect";
 import { LayoutModeProvider } from "@/store/layoutMode";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -141,10 +142,10 @@ const App = () => (
                   <Route path="/owner" element={<DirectorGuard><Owner /></DirectorGuard>} />
                   <Route path="/owner/ai-costs" element={<AdminGuard><AICosts /></AdminGuard>} />
                   
-                  {/* Routes accessible by both directors and assistants */}
-                  <Route path="/contacts" element={<Contacts />} />
-                  <Route path="/contacts/:id" element={<ContactDetail />} />
-                  <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
+                  {/* Routes accessible by both directors and assistants — but blocked for SGU-only users */}
+                  <Route path="/contacts" element={<CRMOnlyGuard><Contacts /></CRMOnlyGuard>} />
+                  <Route path="/contacts/:id" element={<CRMOnlyGuard><ContactDetail /></CRMOnlyGuard>} />
+                  <Route path="/companies/:id" element={<CRMOnlyGuard><DirectorGuard><CompanyDetail /></DirectorGuard></CRMOnlyGuard>} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
 

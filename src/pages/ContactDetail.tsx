@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, User, Building, Sparkles, Target } from 'lucide-react';
+import { Loader2, User, Building, Sparkles, Target, Share2 } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,6 +36,8 @@ import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
 import { ContactEmailsTab } from '@/components/contacts/ContactEmailsTab';
 import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
+import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 
 // List of public email domains that should not enable company view
 const PUBLIC_EMAIL_DOMAINS = [
@@ -59,8 +61,11 @@ export default function ContactDetail() {
   const { isAdmin } = useOwnerPanel();
   const { data: contact, isLoading, error } = useContact(id);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPushSGUOpen, setIsPushSGUOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
   const generateContactProfile = useGenerateContactProfile();
+  const { sguTeamId } = useSGUTeamId();
+  const canPushToSGU = director !== null && !!sguTeamId;
 
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
@@ -123,6 +128,15 @@ export default function ContactDetail() {
         onEdit={() => setIsEditModalOpen(true)}
         viewMode={viewMode}
       />
+
+      {canPushToSGU && (
+        <div className="flex justify-end -mt-2">
+          <Button variant="outline" size="sm" onClick={() => setIsPushSGUOpen(true)} className="gap-2">
+            <Share2 className="h-4 w-4" />
+            Przekaż do SGU
+          </Button>
+        </div>
+      )}
 
       {!isAssistant && <ContactDealsPanel contactId={contact.id} />}
 
@@ -309,6 +323,15 @@ export default function ContactDetail() {
         onClose={() => setIsEditModalOpen(false)}
         contact={contact}
       />
+
+      {canPushToSGU && (
+        <PushToSGUDialog
+          contactId={contact.id}
+          contactName={contact.full_name}
+          open={isPushSGUOpen}
+          onOpenChange={setIsPushSGUOpen}
+        />
+      )}
     </div>
   );
 }

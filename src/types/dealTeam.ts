@@ -64,6 +64,8 @@ export interface DealTeamContact {
   id: string;
   team_id: string;
   contact_id: string;
+  source_contact_id: string | null;
+  expected_annual_premium_gr: number | null;
   tenant_id: string;
   category: DealCategory;
   status: DealContactStatus;
