@@ -1,53 +1,46 @@
 
-Sprint 19a — 3 sekcje. Sprawdzę stan kodu, potem plan.
+Sprint 19b — 4 sekcje. Plan poniżej.
 
-**A. RLS ai_usage_log** — migracja jak w spec. Bezpieczna.
+## A. Sidebar cleanup
+W `AppSidebar.tsx` `aiItems` ma już TYLKO `Sovra` (sprawdziłem aktualny stan w kontekście — linia ~99). Brak `MessageSquare`/`Search` w imporcie lucide. **Sekcja A: nic do roboty, raportuję jako "already done".**
 
-**B. BI dead code** — sprawdzę co istnieje i kto importuje.
+## B. unified_meetings COMMENT
+Migracja `20260419102000_sprint19b_unified_meetings_comment.sql`:
+```sql
+COMMENT ON VIEW public.unified_meetings IS
+  'Unia consultations + group_meetings. DECYZJA Sprint 19b: one_on_one_meetings CELOWO POMINIĘTE — one-on-one jest podtypem group_meeting i jest widoczne w detalu grupowego. Nie dodawać do UNION bez warsztatu z Remkiem.';
+```
 
-**C. Triple LLM fallback** — rozbudowa `_shared/llm-provider.ts`. ANTHROPIC_API_KEY/OPENAI_API_KEY będę musiał potwierdzić przez add_secret jeśli brak — ale spec mówi "fail-silent gdy brak klucza", więc kod ma działać bez nich. Dopytanie nie jest blokerem.
+## C. Kasacja edge functions — protokół
+Krok 1: `code--exec` listing `supabase/functions/` (które z 20 fn faktycznie są w repo).
+Krok 2: jeden `grep -rn` w `src/` po wszystkich 20 nazwach + dodatkowe na `useContactAgent`/`ContactAgentSection` żeby zobaczyć co woła.
+Krok 3: `supabase--read_query` na `cron.job` dla wszystkich potencjalnych cron-fn (`sovra-morning-session`, `sovra-debrief`, `sovra-weekly-report`, `sovra-suggest-contacts`, `sovra-reminder-trigger`, `sovra-generate-embeddings`).
 
-## Plan
+Decyzje na bazie wyników:
+- grep=0 i cron=0 → kasuję folder + sekcję `[functions.<n>]` w `config.toml` + wywołuję `supabase--delete_edge_functions`.
+- grep>0 (poza ContactAgent path) → ZOSTAW + raport.
+- ContactAgent (`query-contact-agent`, `initialize-contact-agent`, ewentualnie `turbo-agent-query`) → ZOSTAW jeśli grep pokazuje użycie w `useContactAgent.ts`/`ContactAgentSection.tsx`.
+- Cron znaleziony → migracja `20260419103000_sprint19b_drop_dead_crons.sql` z `cron.unschedule(jobid) ...` PRZED kasacją funkcji. Jeśli żaden cron nie istnieje — migracja niepotrzebna, pomijam.
 
-### A. Migracja RLS — `supabase/migrations/<ts>_sprint19a_ai_usage_log_rls.sql`
-Snapshot policy → DROP wszystkich INSERT policy → CREATE 2 nowe (`ai_usage_log_insert_auth` dla `authenticated` z gate `tenant_id = get_current_tenant_id()`, `ai_usage_log_insert_service` dla `service_role` z `(true)`). `ENABLE RLS` na końcu.
+`config.toml`: usuwam tylko sekcje aktywne dla skasowanych fn (obecnie widzę `sovra-reminder-trigger` i `sovra-weekly-report` w `[functions.*]` z `verify_jwt = false` — jeśli zostaną skasowane to też leci sekcja).
 
-### B. Kasacja BI 1.0 dead code
-Sprawdzę:
-- listing `src/hooks/useBusinessInterview.ts`, `useBIInterview.ts`, `src/components/bi/`, `src/components/agents/BI*.tsx`
-- grep wszystkich importów tych symboli
-- co `src/components/bi/types.ts` eksportuje vs co używa `ContactBI.tsx` + `useContactBI.ts`
+## D. Migracja archive prospects
+Migracja `20260419104000_sprint19b_move_deprecated_prospects_to_archive.sql` — dokładnie jak w spec (snapshot policy + counts + `ALTER TABLE ... SET SCHEMA archive` + weryfikacja).
 
-Kasuję pliki listowane w spec. Folder `sections/` cały. Zostawiam tylko `ContactBI.tsx`, `useContactBI.ts`, `index.ts` (po czyszczeniu eksportów), `types.ts` (po przefiltrowaniu — tylko `BIAnswers` używane w ContactBI; ale ContactBI importuje z `@/lib/bi/questions.v2` więc `types.ts` może być w pełni do skasowania jeśli nikt go nie używa).
+Najpierw `supabase--read_query` żeby potwierdzić że obie tabele istnieją w `public` (sanity check przed migracją).
 
-Naprawiam broken imports w pozostałych plikach (ContactDetail, ewentualne inne strony). Raportuję osobnym bulletem co było używane w routingu.
+## Kolejność wykonania
+1. `code--exec ls supabase/functions/` + grep wszystkich 20 nazw w `src/` (równolegle).
+2. `supabase--read_query` na `cron.job` (filtr po nazwach fn) + na `information_schema.tables` dla `deprecated_*_20260418` (równolegle).
+3. Sekcja B: napisz migrację COMMENT (mały plik).
+4. Sekcja C: dla każdej fn z grep=0 → `code--exec rm -rf supabase/functions/<n>` + edycja `config.toml` (jeden `code--line_replace` dla wielu sekcji). Następnie `supabase--delete_edge_functions` z listą.
+5. Jeśli cron znaleziony — migracja crons (opcjonalna).
+6. Sekcja D: migracja prospects.
+7. `npm run lint` w tle.
+8. Raport końcowy: 3 listy (usunięte / zostawione z powodem / wymagające decyzji Remka) + status migracji + nota o A "already done".
 
-### C. Triple LLM fallback w `supabase/functions/_shared/llm-provider.ts`
+Bez zmian w `useContactAgent.ts`/`ContactAgentSection.tsx`. Bez DROP tabel (tylko SET SCHEMA). Bez zmian w `unified_meetings` definicji (tylko COMMENT).
 
-Rozbudowa:
-1. **`logUsage`** — dodaj parametr `metadata?: Record<string, unknown>`, przekaż do `persistUsage` → `metadata` JSONB w insert.
-2. **`callAnthropic(opts, model)`** — fetch `https://api.anthropic.com/v1/messages`, header `x-api-key` + `anthropic-version: 2023-06-01`. Mapowanie messages: rola `system` → top-level `system: string`, reszta → `messages[]`. Model map: `*flash*` → `claude-3-5-haiku-latest`, `*pro*` → `claude-3-5-sonnet-latest`. Tokens z `usage.input_tokens` / `usage.output_tokens`. Pricing dopisz dla claude.
-3. **`callOpenAI(opts, model)`** — POST `https://api.openai.com/v1/chat/completions`, Bearer. Map: `*flash*` → `gpt-4o-mini`, `*pro*` → `gpt-4o`. Format messages identyczny z Lovable Gateway.
-4. **`callLLM`** rebuild:
-   - try Lovable Gateway (jak dziś)
-   - jeśli `stream: true` i fail → log + return `{status: 503, model}`. TODO comment dla streaming fallback.
-   - jeśli `stream: false`:
-     - status w `{429, 500, 502, 503, 504}` lub `!ok` lub throw → fallback chain
-     - try Anthropic (jeśli klucz; brak → log `error: missing_api_key_anthropic` + skip)
-     - try OpenAI (jeśli klucz; brak → log + skip)
-     - wszystkie failed → log `error: all_providers_failed` + return `{status: 503, model: 'none'}`
-   - każda próba (sukces+fail) → `logUsage` z `metadata: { fallback_reason, attempt }`
-
-### Pytanie/uwaga
-
-ANTHROPIC_API_KEY i OPENAI_API_KEY mogą nie być ustawione w secrets. Spec mówi fail-silent — kod nie crashuje, tylko loguje skip. Po wdrożeniu powiem userowi że jeśli chce mieć działający fallback, musi dorzucić te 2 klucze przez Lovable Cloud secrets (osobny krok, nie blokuje sprintu).
-
-### Kolejność wykonania
-1. `code--exec` — listing BI plików + grep importów (potrzebne do sekcji B)
-2. Migracja A (write file)
-3. Kasacja B (delete files + fix imports)
-4. Refaktor C (`llm-provider.ts`)
-5. `npm run lint` + `tsc --noEmit` w jednym tle
-6. Raport końcowy z bulletem o ContactDetail/routingu
-
-Brak zmian w `ContactBI.tsx`/`useContactBI.ts`. Brak DROP tabel. Brak zmian w streaming code path Sovry.
+## Pytania / uwagi
+- Jeśli grep dla `turbo-agent-query` pokaże użycie w ContactAgent → ZOSTAJE (zgodnie z spec).
+- Jeśli okaże się że któryś `sovra-*` cron jest aktywny ale Remek go używa (np. weekly-report) — zatrzymuję kasację i raportuję. Spec mówi "stare Sovra podfunkcje przed S04 konsolidacją", ale `sovra-weekly-report` ma sekcję w `config.toml` (verify_jwt=false) — może być nadal aktywny. Sprawdzę cron + grep i zdecyduję per-case w raporcie.
