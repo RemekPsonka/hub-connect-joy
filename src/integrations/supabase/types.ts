@@ -1378,6 +1378,76 @@ export type Database = {
         }
         Relationships: []
       }
+      background_jobs: {
+        Row: {
+          actor_id: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          payload: Json
+          progress: number
+          result: Json | null
+          started_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          payload?: Json
+          progress?: number
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          payload?: Json
+          progress?: number
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "background_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bug_reports: {
         Row: {
           context_data: Json | null
