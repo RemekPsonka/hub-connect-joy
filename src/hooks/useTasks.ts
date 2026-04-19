@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { calculateCrossTaskStatus, calculateCrossTaskProgress } from '@/utils/crossTaskStatus';
@@ -572,13 +573,17 @@ export function useUpdateTask() {
         .update(updates)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) throw new Error('Brak uprawnień do edycji tego zadania lub nie istnieje');
       return data;
     },
     onSuccess: () => {
       invalidateAllTaskQueries(queryClient);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
     },
   });
 }

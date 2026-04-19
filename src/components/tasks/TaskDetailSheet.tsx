@@ -486,7 +486,11 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   };
 
   const handleSubtaskToggle = async (subtaskId: string, completed: boolean) => {
-    await updateTask.mutateAsync({ id: subtaskId, status: completed ? 'completed' : 'todo' });
+    try {
+      await updateTask.mutateAsync({ id: subtaskId, status: completed ? 'completed' : 'todo' });
+    } catch {
+      toast.error('Nie udało się zapisać zmiany');
+    }
   };
 
   const handleDiscussedChange = async (field: 'discussed_with_a' | 'discussed_with_b', value: boolean) => {
@@ -569,7 +573,12 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   const handleTitleSave = async () => {
     setEditingTitle(false);
     if (titleValue.trim() && titleValue.trim() !== task.title) {
-      await updateTask.mutateAsync({ id: task.id, title: titleValue.trim() });
+      try {
+        await updateTask.mutateAsync({ id: task.id, title: titleValue.trim() });
+      } catch {
+        toast.error('Nie udało się zapisać zmiany');
+        setTitleValue(task.title);
+      }
     } else {
       setTitleValue(task.title);
     }
@@ -578,7 +587,12 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
   const handleDescriptionSave = async () => {
     setEditingDescription(false);
     if (descriptionValue !== (task.description || '')) {
-      await updateTask.mutateAsync({ id: task.id, description: descriptionValue });
+      try {
+        await updateTask.mutateAsync({ id: task.id, description: descriptionValue });
+      } catch {
+        toast.error('Nie udało się zapisać zmiany');
+        setDescriptionValue(task.description || '');
+      }
     }
   };
 
@@ -588,18 +602,26 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
       setNextActionOpen(true);
       return;
     }
-    await updateTask.mutateAsync({ id: task.id, status: newStatus });
-    if (newStatus === 'completed') {
-      if ((task as any).recurrence_rule) {
-        await handleRecurringNextTask();
-      } else {
-        onOpenChange(false);
+    try {
+      await updateTask.mutateAsync({ id: task.id, status: newStatus });
+      if (newStatus === 'completed') {
+        if ((task as any).recurrence_rule) {
+          await handleRecurringNextTask();
+        } else {
+          onOpenChange(false);
+        }
       }
+    } catch {
+      toast.error('Nie udało się zapisać zmiany');
     }
   };
 
   const handlePriorityChange = async (newPriority: string) => {
-    await updateTask.mutateAsync({ id: task.id, priority: newPriority });
+    try {
+      await updateTask.mutateAsync({ id: task.id, priority: newPriority });
+    } catch {
+      toast.error('Nie udało się zapisać zmiany');
+    }
   };
 
   const isLoading = updateCrossStatus.isPending || updateTask.isPending;
