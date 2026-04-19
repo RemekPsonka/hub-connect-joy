@@ -112,7 +112,23 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
-  // ============ WRITE TOOLS (wymagają potwierdzenia) ============
+  {
+    type: 'function',
+    function: {
+      name: 'find_intro_path',
+      description: 'Znajduje ścieżkę przedstawień (intro) między dwoma kontaktami w sieci — kogo poprosić o intro, by dotrzeć do osoby docelowej. Read-only, bez potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from_contact_id: { type: 'string', description: 'UUID kontaktu początkowego (zwykle Remek lub bliska osoba).' },
+          target_name: { type: 'string', description: 'Imię i nazwisko (lub fragment) osoby docelowej — fuzzy match po contacts.full_name.' },
+          max_hops: { type: 'number', description: 'Maks. liczba przeskoków (domyślnie 3, max 4).' },
+        },
+        required: ['from_contact_id', 'target_name'],
+      },
+    },
+  },
+
   {
     type: 'function',
     function: {
