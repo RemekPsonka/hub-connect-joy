@@ -71,7 +71,7 @@ export function useProspectingCandidates(filters: CandidatesFilters = {}) {
     mutationFn: async ({ candidateId, reason }: { candidateId: string; reason?: string }) => {
       const { error } = await supabase.rpc('rpc_sgu_reject_prospecting_candidate', {
         p_candidate_id: candidateId,
-        p_reason: reason ?? null,
+        p_reason: reason ?? undefined,
       });
       if (error) throw error;
     },
