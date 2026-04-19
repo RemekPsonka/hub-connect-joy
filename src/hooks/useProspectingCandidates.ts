@@ -30,6 +30,7 @@ export interface ProspectingCandidate {
 export interface CandidatesFilters {
   jobId?: string | null;
   status?: ProspectingCandidate['status'];
+  source?: string;
 }
 
 export function useProspectingCandidates(filters: CandidatesFilters = {}) {
@@ -46,6 +47,7 @@ export function useProspectingCandidates(filters: CandidatesFilters = {}) {
 
       if (filters.jobId) q = q.eq('source_job_id', filters.jobId);
       if (filters.status) q = q.eq('status', filters.status);
+      if (filters.source) q = q.eq('source', filters.source);
 
       const { data, error } = await q;
       if (error) throw error;

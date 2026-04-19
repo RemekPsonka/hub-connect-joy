@@ -49,6 +49,7 @@ import {
 
 interface Props {
   jobId?: string | null;
+  source?: string;
 }
 
 const REJECT_REASONS = [
@@ -72,7 +73,7 @@ function ScoreBadge({ score }: { score: number | null }) {
   );
 }
 
-export function ProspectingCandidatesList({ jobId }: Props) {
+export function ProspectingCandidatesList({ jobId, source }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('poor_fit');
@@ -80,7 +81,7 @@ export function ProspectingCandidatesList({ jobId }: Props) {
   const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
 
   const { data: candidates = [], isLoading, acceptMutation, rejectMutation, acceptBulk, rejectBulk } =
-    useProspectingCandidates({ jobId, status: 'pending_review' });
+    useProspectingCandidates({ jobId, source, status: 'pending_review' });
 
   const allChecked = candidates.length > 0 && candidates.every((c) => selected.has(c.id));
   const selectedIds = useMemo(() => Array.from(selected), [selected]);

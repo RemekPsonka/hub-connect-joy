@@ -60,6 +60,7 @@ const SGUTeam = lazy(() => import("./pages/sgu/SGUTeam"));
 const SGUReports = lazy(() => import("./pages/sgu/SGUReports"));
 const SGUAdmin = lazy(() => import("./pages/sgu/SGUAdmin"));
 const SGUSettings = lazy(() => import("./pages/sgu/SGUSettings"));
+const SGUCaseD = lazy(() => import("./pages/sgu/SGUCaseD"));
 const SGUPipelineRoute = lazy(() => import("./pages/sgu/SGUPipelineRoute"));
 const SGUTasks = lazy(() => import("./pages/sgu/SGUTasks"));
 
@@ -159,6 +160,7 @@ const App = () => (
                   <Route path="/sgu/reports" element={<SGUReports />} />
                   <Route path="/sgu/reports/:period" element={<SGUReports />} />
                   <Route path="/sgu/admin" element={<SGUAdmin />} />
+                  <Route path="/sgu/admin/commissions/case-d" element={<SGUCaseD />} />
                   <Route path="/sgu/admin/:section" element={<SGUAdmin />} />
                   <Route path="/sgu/settings" element={<SGUSettings />} />
                 </Route>

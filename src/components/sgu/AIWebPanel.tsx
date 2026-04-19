@@ -12,7 +12,7 @@ export function AIWebPanel() {
       <WebSourcesTable />
       <div className="space-y-2">
         <h4 className="text-sm font-semibold text-muted-foreground">Kandydaci z web</h4>
-        <ProspectingCandidatesList />
+        <ProspectingCandidatesList source="web" />
       </div>
     </div>
   );
