@@ -8963,6 +8963,23 @@ export type Database = {
           },
         ]
       }
+      unified_meetings: {
+        Row: {
+          contact_id_main: string | null
+          created_at: string | null
+          duration: number | null
+          id: string | null
+          location: string | null
+          notes: string | null
+          scheduled_at: string | null
+          source_table: string | null
+          status: string | null
+          tenant_id: string | null
+          type: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       assistant_can_access_contact: {
