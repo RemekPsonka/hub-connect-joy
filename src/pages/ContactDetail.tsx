@@ -34,6 +34,7 @@ import { AIProfileRenderer } from '@/components/contacts/AIProfileRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
+import { ContactEmailsTab } from '@/components/contacts/ContactEmailsTab';
 import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
 
 // List of public email domains that should not enable company view
@@ -161,9 +162,10 @@ export default function ContactDetail() {
 
               {/* TABY z resztą treści */}
               <Tabs defaultValue={getDefaultTab()} className="w-full">
-                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-5">
+                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-6">
                   <TabsTrigger value="meetings">Spotkania</TabsTrigger>
                   <TabsTrigger value="needs-offers">Potrzeby</TabsTrigger>
+                  <TabsTrigger value="emails">Emaile</TabsTrigger>
                   <TabsTrigger value="wanted" className="gap-1"><Target className="h-3 w-3" />Poszukiwani</TabsTrigger>
                   <TabsTrigger value="profile-ai">Profil AI</TabsTrigger>
                   <TabsTrigger value="more">Więcej</TabsTrigger>
@@ -179,7 +181,11 @@ export default function ContactDetail() {
                   <ContactNeedsOffersTab contactId={contact.id} />
                 </TabsContent>
 
-                {/* Tab: Poszukiwani */}
+                {/* Tab: Emaile */}
+                <TabsContent value="emails" className="mt-6">
+                  <ContactEmailsTab contactId={contact.id} />
+                </TabsContent>
+
                 <TabsContent value="wanted" className="mt-6">
                   <ContactWantedTab contactId={contact.id} />
                 </TabsContent>

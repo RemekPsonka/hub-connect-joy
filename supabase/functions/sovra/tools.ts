@@ -94,6 +94,24 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'search_emails',
+      description: 'Wyszukuje wiadomości w skrzynce Gmail (zsynchronizowane). Użyj gdy Remek pyta o e-maile od/do osoby, na temat, ostatnie wiadomości. Read-only, bez potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Tekst do wyszukania (temat, treść, nadawca). Może być pusty jeśli filtrujesz po contact_id/from.' },
+          contact_id: { type: 'string', description: 'Opcjonalny UUID kontaktu — zawęża do wątków powiązanych z tym kontaktem.' },
+          from: { type: 'string', description: 'Opcjonalny fragment adresu nadawcy.' },
+          since_days: { type: 'number', description: 'Ile dni wstecz (domyślnie 30).' },
+          limit: { type: 'number', description: 'Max liczba wyników (domyślnie 10, max 50).' },
+        },
+      },
+    },
+  },
+
   // ============ WRITE TOOLS (wymagają potwierdzenia) ============
   {
     type: 'function',
@@ -290,6 +308,7 @@ const READ_TOOLS = new Set([
   'analyze_pipeline',
   'get_task_analytics',
   'get_team_report',
+  'search_emails',
 ]);
 // Sprint 14/15: wszystkie integracje są realne.
 const STUB_TOOLS = new Set<string>();
@@ -374,8 +393,38 @@ export async function executeReadTool(
       if (error) return { error: error.message };
       return data ?? {};
     }
-    default:
-      return { error: `Unknown read tool: ${name}` };
+    case 'search_emails': {
+      const query = String(args.query ?? '').trim();
+      const sinceDays = Math.max(1, Math.min(365, Number(args.since_days ?? 30)));
+      const limit = Math.max(1, Math.min(50, Number(args.limit ?? 10)));
+      const sinceIso = new Date(Date.now() - sinceDays * 86400_000).toISOString();
+
+      let q = userClient
+        .from('gmail_messages')
+        .select('id, gmail_message_id, thread_id, "from", "to", subject, body_plain, date, gmail_threads!inner(contact_id, gmail_thread_id)')
+        .gte('date', sinceIso)
+        .order('date', { ascending: false })
+        .limit(limit);
+
+      if (query) q = q.textSearch('fts', query, { type: 'plain', config: 'simple' });
+      if (args.contact_id) q = q.eq('gmail_threads.contact_id', String(args.contact_id));
+      if (args.from) q = q.ilike('from', `%${String(args.from)}%`);
+
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      const results = (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id,
+        thread_id: r.thread_id,
+        gmail_message_id: r.gmail_message_id,
+        from: r.from,
+        to: r.to,
+        subject: r.subject,
+        date: r.date,
+        snippet: typeof r.body_plain === 'string' ? r.body_plain.slice(0, 200) : null,
+        contact_id: (r.gmail_threads as { contact_id?: string } | null)?.contact_id ?? null,
+      }));
+      return { results };
+    }
   }
 }
 

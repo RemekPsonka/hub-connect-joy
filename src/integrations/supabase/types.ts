@@ -4539,6 +4539,8 @@ export type Database = {
           deprecated_refresh_token_20260419: string | null
           director_id: string
           expires_at: string
+          gmail_history_id: string | null
+          gmail_initial_synced_at: string | null
           id: string
           refresh_token_encrypted: string | null
           refresh_token_iv: string | null
@@ -4554,6 +4556,8 @@ export type Database = {
           deprecated_refresh_token_20260419?: string | null
           director_id: string
           expires_at: string
+          gmail_history_id?: string | null
+          gmail_initial_synced_at?: string | null
           id?: string
           refresh_token_encrypted?: string | null
           refresh_token_iv?: string | null
@@ -4569,6 +4573,8 @@ export type Database = {
           deprecated_refresh_token_20260419?: string | null
           director_id?: string
           expires_at?: string
+          gmail_history_id?: string | null
+          gmail_initial_synced_at?: string | null
           id?: string
           refresh_token_encrypted?: string | null
           refresh_token_iv?: string | null
@@ -4597,6 +4603,125 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gmail_labels: {
+        Row: {
+          color: Json | null
+          created_at: string
+          director_id: string
+          gmail_label_id: string
+          id: string
+          name: string
+          tenant_id: string
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: Json | null
+          created_at?: string
+          director_id: string
+          gmail_label_id: string
+          id?: string
+          name: string
+          tenant_id: string
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: Json | null
+          created_at?: string
+          director_id?: string
+          gmail_label_id?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_labels_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gmail_messages: {
+        Row: {
+          bcc: string | null
+          body_html: string | null
+          body_plain: string | null
+          cc: string | null
+          created_at: string
+          date: string | null
+          director_id: string
+          from: string | null
+          fts: unknown
+          gmail_message_id: string
+          id: string
+          labels: string[] | null
+          raw_headers: Json | null
+          subject: string | null
+          tenant_id: string
+          thread_id: string
+          to: string | null
+        }
+        Insert: {
+          bcc?: string | null
+          body_html?: string | null
+          body_plain?: string | null
+          cc?: string | null
+          created_at?: string
+          date?: string | null
+          director_id: string
+          from?: string | null
+          fts?: unknown
+          gmail_message_id: string
+          id?: string
+          labels?: string[] | null
+          raw_headers?: Json | null
+          subject?: string | null
+          tenant_id: string
+          thread_id: string
+          to?: string | null
+        }
+        Update: {
+          bcc?: string | null
+          body_html?: string | null
+          body_plain?: string | null
+          cc?: string | null
+          created_at?: string
+          date?: string | null
+          director_id?: string
+          from?: string | null
+          fts?: unknown
+          gmail_message_id?: string
+          id?: string
+          labels?: string[] | null
+          raw_headers?: Json | null
+          subject?: string | null
+          tenant_id?: string
+          thread_id?: string
+          to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_messages_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmail_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "gmail_threads"
             referencedColumns: ["id"]
           },
         ]
@@ -4686,6 +4811,72 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gmail_threads: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          director_id: string
+          gmail_thread_id: string
+          history_id: string | null
+          id: string
+          is_unread: boolean
+          label_ids: string[] | null
+          last_message_at: string | null
+          message_count: number
+          snippet: string | null
+          subject: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          director_id: string
+          gmail_thread_id: string
+          history_id?: string | null
+          id?: string
+          is_unread?: boolean
+          label_ids?: string[] | null
+          last_message_at?: string | null
+          message_count?: number
+          snippet?: string | null
+          subject?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          director_id?: string
+          gmail_thread_id?: string
+          history_id?: string | null
+          id?: string
+          is_unread?: boolean
+          label_ids?: string[] | null
+          last_message_at?: string | null
+          message_count?: number
+          snippet?: string | null
+          subject?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_threads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmail_threads_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
             referencedColumns: ["id"]
           },
         ]
