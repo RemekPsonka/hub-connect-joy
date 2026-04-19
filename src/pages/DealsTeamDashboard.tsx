@@ -20,6 +20,8 @@ import {
   SalesFunnelDashboard,
 } from '@/components/deals-team';
 import { CommissionsTable } from '@/components/sgu/CommissionsTable';
+import { SGUClientsView } from '@/components/sgu/SGUClientsView';
+import { useLayoutMode } from '@/store/layoutMode';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
