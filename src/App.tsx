@@ -47,6 +47,7 @@ const TaskAnalytics = lazy(() => import("./pages/TaskAnalytics"));
 const TeamProductivityReport = lazy(() => import("./pages/TeamProductivityReport"));
 const Workspace = lazy(() => import("./pages/Workspace"));
 const AICosts = lazy(() => import("./pages/owner/AICosts"));
+const Inbox = lazy(() => import("./pages/Inbox"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
