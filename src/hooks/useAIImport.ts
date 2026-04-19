@@ -498,21 +498,30 @@ export function useAIImport(): UseAIImportReturn {
 
       setProgress({ current: 0, total: 1, stage: 'Analizowanie wizytówek przez AI...' });
 
-      // Call batch OCR function
-      const { data, error } = await supabase.functions.invoke('ocr-business-cards-batch', {
-        body: { images }
+      // Call unified OCR function (handles batch under the hood)
+      const { data, error } = await supabase.functions.invoke('ocr-business-cards', {
+        body: { items: images.map((img: string) => ({ image_base64: img })) }
       });
 
       if (error) {
         throw new Error(error.message || 'Błąd podczas skanowania wizytówek');
       }
 
-      if (!data.success || !data.contacts) {
-        throw new Error(data.error || 'Nie udało się przeanalizować wizytówek');
+      // ocr-business-cards (orchestrator) handles batch internally and returns
+      // either { results: [{data}, ...] } or { raw: { contacts, errors } }. Normalize.
+      const raw = (data?.raw ?? data) as Record<string, unknown>;
+      const rawContacts = Array.isArray((raw as any)?.contacts)
+        ? (raw as any).contacts
+        : Array.isArray(data?.results)
+          ? data.results.flatMap((r: any) => r?.data ? [r.data] : [])
+          : [];
+
+      if (!rawContacts.length) {
+        const errMsg = (raw as any)?.error || data?.error || 'Nie udało się przeanalizować wizytówek';
+        throw new Error(errMsg);
       }
 
       // Convert to extended contact format, keeping track of source image index
-      const rawContacts = data.contacts;
       let contacts: ParsedContact[] = rawContacts.map((c: any) => toExtendedContact({
         first_name: c.first_name,
         last_name: c.last_name,
@@ -587,12 +596,13 @@ export function useAIImport(): UseAIImportReturn {
         sourceFormat: 'business_cards_batch',
         detectedColumns: ['first_name', 'last_name', 'company', 'position', 'email', 'phone'],
         totalParsed: contacts.length,
-        warnings: data.errors || []
+        warnings: (raw as any)?.errors || []
       });
 
       if (contacts.length === 0) {
-        if (data.errors && data.errors.length > 0) {
-          setErrors(data.errors);
+        const errs = (raw as any)?.errors;
+        if (Array.isArray(errs) && errs.length > 0) {
+          setErrors(errs);
         } else {
           setErrors(['Nie udało się wyodrębnić żadnych kontaktów ze zdjęć wizytówek.']);
         }
@@ -694,8 +704,9 @@ export function useAIImport(): UseAIImportReturn {
     updateParsedContact(index, { status: 'enriching_person' });
 
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
-        body: { 
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: {
+          steps: ['data'],
           first_name: contact.first_name,
           last_name: contact.last_name,
           company: contact.company,
@@ -706,15 +717,17 @@ export function useAIImport(): UseAIImportReturn {
 
       if (error) throw error;
 
-      const enrichedData = data?.data || data;
-      
+      // enrich-person (new shape) returns { results: { data: <payload> } }; legacy returns payload directly
+      const payload = data?.results?.data ?? data;
+      const enrichedData = payload?.data || payload;
+
       updateParsedContact(index, {
         status: contact.duplicate_contact_id ? 'duplicate' : 'ready',
         ai_person_info: enrichedData?.profile_summary || null,
         ai_person_position: enrichedData?.suggested_position || null,
         position: contact.position || enrichedData?.suggested_position || null,
       });
-      
+
       toast.success('Sprawdzono osobę', { description: `${contact.first_name} ${contact.last_name}` });
     } catch (err) {
       console.error('Error enriching person:', err);

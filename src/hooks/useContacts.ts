@@ -354,7 +354,7 @@ export function useBulkMergeContacts() {
       secondaryContactId: string;
       mergedFields: Record<string, unknown>;
     }) => {
-      const { data, error } = await supabase.functions.invoke('bulk-merge-contacts', {
+      const { data, error } = await supabase.functions.invoke('merge-contacts', {
         body: { primaryContactId, secondaryContactId, mergedFields },
       });
 

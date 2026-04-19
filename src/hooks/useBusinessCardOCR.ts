@@ -110,8 +110,8 @@ export function useBusinessCardOCR() {
   const scanBusinessCard = async (imageBase64: string): Promise<ExtractedContactData> => {
     setIsScanning(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ocr-business-card', {
-        body: { image: imageBase64 }
+      const { data, error } = await supabase.functions.invoke('ocr-business-cards', {
+        body: { items: [{ image_base64: imageBase64 }] }
       });
 
       if (error) {
@@ -119,11 +119,12 @@ export function useBusinessCardOCR() {
         throw new Error(error.message || 'Błąd podczas skanowania wizytówki');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Nie udało się przeanalizować wizytówki');
+      const first = Array.isArray(data?.results) ? data.results[0] : null;
+      if (!first?.success) {
+        throw new Error(first?.error || data?.error || 'Nie udało się przeanalizować wizytówki');
       }
 
-      return data.data as ExtractedContactData;
+      return first.data as ExtractedContactData;
     } finally {
       setIsScanning(false);
     }
@@ -267,8 +268,9 @@ export function useBusinessCardOCR() {
   ): Promise<EnrichedPersonData> => {
     setIsEnrichingPerson(true);
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
-        body: { 
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: {
+          steps: ['data'],
           first_name: firstName,
           last_name: lastName,
           company: company || undefined,
@@ -282,11 +284,14 @@ export function useBusinessCardOCR() {
         throw new Error(error.message || 'Błąd podczas wzbogacania danych osoby');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Nie udało się wzbogacić danych osoby');
+      // enrich-person (orchestrator) returns { results: { data: <payload> } }
+      // legacy fallback: payload directly
+      const payload = data?.results?.data ?? data;
+      if (payload?.success === false) {
+        throw new Error(payload?.error || data?.error || 'Nie udało się wzbogacić danych osoby');
       }
 
-      return data.data as EnrichedPersonData;
+      return (payload?.data ?? payload) as EnrichedPersonData;
     } finally {
       setIsEnrichingPerson(false);
     }

@@ -9,14 +9,36 @@ const corsHeaders = {
 /**
  * Unified person enrichment orchestrator.
  *
- * Modes:
- *  - 'full' (default): Perplexity/web research → enrich-person-data.
- *  - 'profile': AI profile synthesis from notes/data → generate-contact-profile.
- *  - 'linkedin': LinkedIn URL deep analysis → analyze-linkedin-profile.
+ * NEW shape (preferred):
+ *   { contact_id?, steps?: Array<'linkedin' | 'profile' | 'data'>, ...stepArgs }
+ *   - default steps: ['data'] (back-compat z poprzednim 'full')
+ *   - zwraca { results: { linkedin?, profile?, data? }, errors? }
  *
- * Body shape is forwarded transparently to the underlying function (auth header
- * is also forwarded so existing per-tenant authorization keeps working).
+ * LEGACY shape (back-compat):
+ *   { mode: 'full' | 'profile' | 'linkedin', ...args }
+ *   - mapowane: full→data, profile→profile, linkedin→linkedin
+ *   - zwraca payload pojedynczego wywołania (jak wcześniej, transparentnie)
+ *
+ * Internal targets (NIE wołać bezpośrednio z FE):
+ *   - 'data'     → enrich-person-data
+ *   - 'profile'  → generate-contact-profile
+ *   - 'linkedin' → analyze-linkedin-profile
  */
+
+type Step = 'linkedin' | 'profile' | 'data';
+
+const STEP_TO_FN: Record<Step, string> = {
+  data: 'enrich-person-data',
+  profile: 'generate-contact-profile',
+  linkedin: 'analyze-linkedin-profile',
+};
+
+const LEGACY_MODE_TO_STEP: Record<string, Step> = {
+  full: 'data',
+  profile: 'profile',
+  linkedin: 'linkedin',
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -31,22 +53,6 @@ serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const mode = (body?.mode ?? 'full') as 'full' | 'profile' | 'linkedin';
-
-    const targetMap: Record<string, string> = {
-      full: 'enrich-person-data',
-      profile: 'generate-contact-profile',
-      linkedin: 'analyze-linkedin-profile',
-    };
-    const target = targetMap[mode];
-    if (!target) {
-      return new Response(JSON.stringify({ error: `Unknown mode: ${mode}` }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Strip mode before forwarding
-    const { mode: _ignored, ...forwardBody } = body;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -54,20 +60,57 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    console.log(`[enrich-person] mode=${mode} → ${target}`);
-
-    const { data, error } = await client.functions.invoke(target, { body: forwardBody });
-
-    if (error) {
-      console.error(`[enrich-person] ${target} error`, error);
-      return new Response(JSON.stringify({ error: error.message ?? String(error) }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // ---------- LEGACY shape: { mode } ----------
+    if (body?.mode && LEGACY_MODE_TO_STEP[body.mode]) {
+      const step = LEGACY_MODE_TO_STEP[body.mode];
+      const target = STEP_TO_FN[step];
+      const { mode: _ignored, ...forwardBody } = body;
+      console.log(`[enrich-person] legacy mode=${body.mode} → ${target}`);
+      const { data, error } = await client.functions.invoke(target, { body: forwardBody });
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message ?? String(error) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify(data ?? {}), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    return new Response(JSON.stringify(data ?? {}), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // ---------- NEW shape: { contact_id, steps?, ... } ----------
+    const requested: Step[] = Array.isArray(body?.steps) && body.steps.length > 0
+      ? body.steps.filter((s: string): s is Step => s in STEP_TO_FN)
+      : ['data'];
+
+    if (requested.length === 0) {
+      return new Response(JSON.stringify({ error: 'No valid steps provided. Allowed: linkedin, profile, data' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { steps: _ignored, ...forwardBody } = body;
+
+    const results: Record<string, unknown> = {};
+    const errors: Record<string, string> = {};
+
+    for (const step of requested) {
+      const target = STEP_TO_FN[step];
+      console.log(`[enrich-person] step=${step} → ${target}`);
+      const { data, error } = await client.functions.invoke(target, { body: forwardBody });
+      if (error) {
+        console.error(`[enrich-person] ${target} error`, error);
+        errors[step] = error.message ?? String(error);
+      } else {
+        results[step] = data ?? { ok: true };
+      }
+    }
+
+    return new Response(JSON.stringify({
+      success: Object.keys(errors).length === 0,
+      results,
+      ...(Object.keys(errors).length > 0 ? { errors } : {}),
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
   } catch (err) {
     console.error('[enrich-person] fatal', err);
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), {

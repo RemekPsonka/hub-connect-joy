@@ -1,3 +1,5 @@
+// INTERNAL — wywoływane tylko przez `enrich-person/` (orchestrator). Nie wołać bezpośrednio z FE.
+// Step alias: 'profile'.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
