@@ -214,6 +214,15 @@ export default function Dashboard() {
           />
         </div>
       </section>
+
+      {openTask && (
+        <TaskDetailSheet
+          open={!!openTaskId}
+          onOpenChange={(o) => { if (!o) setOpenTaskId(null); }}
+          task={openTask}
+          onEdit={() => {}}
+        />
+      )}
     </div>
   );
 }
