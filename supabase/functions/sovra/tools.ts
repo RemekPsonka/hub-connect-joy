@@ -225,20 +225,40 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
-  // ============ STUB TOOLS (integracje S14-S16) ============
+  // ============ INTEGRATION TOOLS ============
   {
     type: 'function',
     function: {
       name: 'draft_email',
-      description: 'Proponuje przygotowanie szkicu e-maila (integracja Gmail planowana na później). Wymaga potwierdzenia, ale jeszcze nie wysyła.',
+      description: 'Tworzy szkic e-maila w Gmailu (Sprint 15). Wymaga potwierdzenia. Wymagane: to, subject, body.',
       parameters: {
         type: 'object',
         properties: {
-          contact_id: { type: 'string' },
+          to: { type: 'string', description: 'Adres odbiorcy' },
           subject: { type: 'string' },
           body: { type: 'string' },
+          cc: { type: 'string' },
+          contact_id: { type: 'string', description: 'UUID powiązanego kontaktu (opcjonalne)' },
         },
-        required: ['subject', 'body'],
+        required: ['to', 'subject', 'body'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_email',
+      description: 'Wysyła e-mail przez Gmail (Sprint 15). Wymaga potwierdzenia. Wymagane: to, subject, body.',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: 'Adres odbiorcy' },
+          subject: { type: 'string' },
+          body: { type: 'string' },
+          cc: { type: 'string' },
+          contact_id: { type: 'string', description: 'UUID powiązanego kontaktu (opcjonalne)' },
+        },
+        required: ['to', 'subject', 'body'],
       },
     },
   },
@@ -271,8 +291,8 @@ const READ_TOOLS = new Set([
   'get_task_analytics',
   'get_team_report',
 ]);
-// Sprint 14: create_calendar_event jest realnie zintegrowany (gcal-push-event).
-const STUB_TOOLS = new Set(['draft_email']);
+// Sprint 14/15: wszystkie integracje są realne.
+const STUB_TOOLS = new Set<string>();
 
 export function isReadTool(name: string): boolean {
   return READ_TOOLS.has(name);
@@ -371,8 +391,14 @@ export function humanSummary(name: string, args: Record<string, unknown>): strin
       return `Zmienię etap szansy sprzedaży na: ${args.new_category ?? '?'}${args.reason ? ` (${args.reason})` : ''}.`;
     case 'fill_bi_from_notes':
       return `Wypełnię ankietę BI kontaktu (id: ${args.contact_id ?? '?'}) na podstawie notatek i konsultacji. Potwierdzasz?`;
-    case 'draft_email':
-      return `Przygotuję szkic e-maila: "${args.subject ?? '?'}" (integracja Gmail jeszcze nieaktywna).`;
+    case 'draft_email': {
+      const preview = String(args.body ?? '').slice(0, 100);
+      return `Zapiszę szkic e-maila do ${args.to ?? '?'}: "${args.subject ?? '?'}"${preview ? ` — "${preview}${String(args.body ?? '').length > 100 ? '...' : ''}"` : ''}.`;
+    }
+    case 'send_email': {
+      const preview = String(args.body ?? '').slice(0, 100);
+      return `Wyślę e-mail do ${args.to ?? '?'}: "${args.subject ?? '?'}"${preview ? ` — "${preview}${String(args.body ?? '').length > 100 ? '...' : ''}"` : ''}.`;
+    }
     case 'create_calendar_event':
       return `Utworzę wydarzenie w Google Calendar: "${args.title ?? '?'}"${args.start ? ` o ${args.start}` : ''}.`;
     default:
