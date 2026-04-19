@@ -244,7 +244,7 @@ export function SGUSidebar() {
           <SGULogo className="h-8 w-8 shrink-0" />
           {!isCollapsed && (
             <span className="font-bold text-sidebar-foreground text-sm whitespace-nowrap tracking-tight">
-              Sieć Generacji Ubezpieczeń
+              CRM SGU Brokers
             </span>
           )}
         </div>
