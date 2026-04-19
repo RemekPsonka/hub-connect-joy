@@ -59,13 +59,19 @@ export default function Dashboard() {
   });
 
   myDay?.tasks_overdue?.forEach((t) => {
+    const contactPart = t.contact_name
+      ? t.company_name
+        ? `${t.contact_name} · ${t.company_name}`
+        : t.contact_name
+      : null;
+    const datePart = t.due_date
+      ? `Termin: ${format(new Date(t.due_date), 'd MMM', { locale: pl })}`
+      : 'Zaległe';
     briefItems.push({
       key: `task-${t.id}`,
       kind: 'overdue',
       title: t.title,
-      subtitle: t.due_date
-        ? `Termin: ${format(new Date(t.due_date), 'd MMM', { locale: pl })}`
-        : 'Zaległe',
+      subtitle: contactPart ? `${contactPart} • ${datePart}` : datePart,
       onClick: () => setOpenTaskId(t.id),
     });
   });

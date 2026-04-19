@@ -7,6 +7,9 @@ export interface MyDayTaskOverdue {
   title: string;
   due_date: string;
   priority: string | null;
+  contact_id: string | null;
+  contact_name: string | null;
+  company_name: string | null;
 }
 
 export interface MyDayConsultation {
