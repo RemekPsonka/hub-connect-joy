@@ -129,6 +129,7 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
+  // ============ WRITE TOOLS (wymagają potwierdzenia) ============
   {
     type: 'function',
     function: {
@@ -325,6 +326,7 @@ const READ_TOOLS = new Set([
   'get_task_analytics',
   'get_team_report',
   'search_emails',
+  'find_intro_path',
 ]);
 // Sprint 14/15: wszystkie integracje są realne.
 const STUB_TOOLS = new Set<string>();
