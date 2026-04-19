@@ -8518,6 +8518,19 @@ export type Database = {
       }
     }
     Views: {
+      cron_job_health: {
+        Row: {
+          active: boolean | null
+          end_time: string | null
+          jobname: string | null
+          return_message: string | null
+          runid: number | null
+          schedule: string | null
+          start_time: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
       mv_dashboard_stats: {
         Row: {
           active_needs: number | null
@@ -8688,6 +8701,7 @@ export type Database = {
         Returns: boolean
       }
       immutable_unaccent: { Args: { "": string }; Returns: string }
+      is_admin_anywhere: { Args: { _user_id: string }; Returns: boolean }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
       is_contact_in_my_deal_team: {
         Args: { _contact_id: string }
@@ -8777,6 +8791,15 @@ export type Database = {
       rpc_workspace_kpi: {
         Args: { p_metric: string; p_range?: string }
         Returns: Json
+      }
+      schedule_edge_function: {
+        Args: {
+          p_body?: Json
+          p_cron: string
+          p_function_path: string
+          p_job_name: string
+        }
+        Returns: number
       }
       search_all_fts: {
         Args: {
