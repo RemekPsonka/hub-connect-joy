@@ -19,12 +19,13 @@ import {
   OfferingTab,
   SalesFunnelDashboard,
 } from '@/components/deals-team';
+import { CommissionsTable } from '@/components/sgu/CommissionsTable';
 import { Button } from '@/components/ui/button';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'entries' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
 
 const STORAGE_KEY = 'deals-team-selected';
-const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
+const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'entries', 'tasks', 'snoozed', 'offering', 'dashboard'];
 
 interface DealsTeamDashboardProps {
   /** When set, locks the dashboard to this team and hides team-management UI (used by SGU pipeline route). */
@@ -151,6 +152,7 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'commissions' && <CommissionsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'entries' && <CommissionsTable teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'snoozed' && <SnoozedTeamView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
 

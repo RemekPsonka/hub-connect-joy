@@ -1682,6 +1682,118 @@ export type Database = {
           },
         ]
       }
+      commission_entries: {
+        Row: {
+          algorithm_version: string
+          amount_gr: number
+          base_commission_gr: number
+          calculation_log: Json
+          created_at: string | null
+          deal_team_contact_id: string | null
+          id: string
+          insurance_policy_id: string
+          modifiers_applied: Json
+          paid_out: boolean
+          paid_out_at: string | null
+          paid_out_by_user_id: string | null
+          payment_schedule_id: string | null
+          recipient_label: string
+          recipient_type: string
+          recipient_user_id: string | null
+          role_key: string | null
+          share_pct: number
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          algorithm_version?: string
+          amount_gr: number
+          base_commission_gr: number
+          calculation_log?: Json
+          created_at?: string | null
+          deal_team_contact_id?: string | null
+          id?: string
+          insurance_policy_id: string
+          modifiers_applied?: Json
+          paid_out?: boolean
+          paid_out_at?: string | null
+          paid_out_by_user_id?: string | null
+          payment_schedule_id?: string | null
+          recipient_label: string
+          recipient_type: string
+          recipient_user_id?: string | null
+          role_key?: string | null
+          share_pct: number
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          algorithm_version?: string
+          amount_gr?: number
+          base_commission_gr?: number
+          calculation_log?: Json
+          created_at?: string | null
+          deal_team_contact_id?: string | null
+          id?: string
+          insurance_policy_id?: string
+          modifiers_applied?: Json
+          paid_out?: boolean
+          paid_out_at?: string | null
+          paid_out_by_user_id?: string | null
+          payment_schedule_id?: string | null
+          recipient_label?: string
+          recipient_type?: string
+          recipient_user_id?: string | null
+          role_key?: string | null
+          share_pct?: number
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_entries_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_entries_insurance_policy_id_fkey"
+            columns: ["insurance_policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_entries_payment_schedule_id_fkey"
+            columns: ["payment_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_payment_schedule"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_entries_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "commission_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
@@ -9315,6 +9427,10 @@ export type Database = {
         }[]
       }
       rpc_dashboard_myday: { Args: never; Returns: Json }
+      rpc_mark_commission_paid_out: {
+        Args: { p_entry_ids: string[] }
+        Returns: number
+      }
       rpc_network_paths: {
         Args: { p_from: string; p_max_hops?: number; p_to: string }
         Returns: {
