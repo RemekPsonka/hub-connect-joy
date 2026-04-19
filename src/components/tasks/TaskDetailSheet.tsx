@@ -660,13 +660,14 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 mr-10">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title="Edytuj">
               <Edit2 className="h-3.5 w-3.5" />
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDuplicate} disabled={duplicateTask.isPending} title="Duplikuj">
               {duplicateTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
+            <div className="mx-1 h-5 w-px bg-border" aria-hidden />
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Usuń">
