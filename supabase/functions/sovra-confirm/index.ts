@@ -5,6 +5,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyAuth, isAuthError, unauthorizedResponse } from '../_shared/auth.ts';
 import { captureException } from '../_shared/sentry.ts';
+import { sendGmailMessage, createGmailDraft } from '../_shared/gmail.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -317,6 +318,36 @@ ${consultationText}`;
             throw new Error(pushData.message || pushData.error);
           }
           result = { event_id: pushData.event_id, html_link: pushData.html_link, summary: pushData.summary };
+          break;
+        }
+        case 'send_email': {
+          if (!args.to || !args.subject || !args.body) {
+            throw new Error('to, subject i body są wymagane');
+          }
+          const r = await sendGmailMessage(supabase, pa.tenant_id, pa.actor_id, {
+            to: String(args.to),
+            subject: String(args.subject),
+            body: String(args.body),
+            cc: args.cc ? String(args.cc) : undefined,
+            contactId: args.contact_id ? String(args.contact_id) : null,
+          });
+          if (!r.ok) throw new Error(r.error);
+          result = { outbox_id: r.outbox_id, gmail_message_id: r.gmail_message_id };
+          break;
+        }
+        case 'draft_email': {
+          if (!args.to || !args.subject || !args.body) {
+            throw new Error('to, subject i body są wymagane');
+          }
+          const r = await createGmailDraft(supabase, pa.tenant_id, pa.actor_id, {
+            to: String(args.to),
+            subject: String(args.subject),
+            body: String(args.body),
+            cc: args.cc ? String(args.cc) : undefined,
+            contactId: args.contact_id ? String(args.contact_id) : null,
+          });
+          if (!r.ok) throw new Error(r.error);
+          result = { outbox_id: r.outbox_id, gmail_draft_id: r.gmail_draft_id };
           break;
         }
         default:

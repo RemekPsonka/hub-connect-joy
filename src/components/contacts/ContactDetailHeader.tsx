@@ -25,6 +25,7 @@ import { ConsultationModal } from '@/components/consultations/ConsultationModal'
 import { CompanyModal } from '@/components/contacts/CompanyModal';
 import { ShareContactDialog } from '@/components/contacts/ShareContactDialog';
 import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
+import { ComposeEmailModal } from '@/components/email/ComposeEmailModal';
 
 
 interface ContactDetailHeaderProps {
@@ -39,6 +40,7 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
   const toggleOwnerStatus = useToggleOwnerStatus();
   const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+  const [isComposeEmailOpen, setIsComposeEmailOpen] = useState(false);
 
   const isOwner = (contact as any).is_owner || false;
   const company = contact.companies;
@@ -173,6 +175,16 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
           <div className="flex flex-wrap items-center gap-2">
             <ShareContactDialog contactId={contact.id} contactName={contact.full_name} />
             <SovraOpenButton scopeType="contact" scopeId={contact.id} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsComposeEmailOpen(true)}
+              disabled={!contact.email}
+              title={!contact.email ? 'Brak adresu e-mail' : undefined}
+            >
+              <Mail className="h-4 w-4 mr-1.5" />
+              Wyślij email
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setIsConsultationModalOpen(true)}>
               <CalendarPlus className="h-4 w-4 mr-1.5" />
               Konsultacja
@@ -286,6 +298,13 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
         isOpen={isConsultationModalOpen}
         onClose={() => setIsConsultationModalOpen(false)}
         prefilledContactId={contact.id}
+      />
+
+      <ComposeEmailModal
+        open={isComposeEmailOpen}
+        onClose={() => setIsComposeEmailOpen(false)}
+        initialTo={contact.email ?? undefined}
+        contactId={contact.id}
       />
 
       {company && (

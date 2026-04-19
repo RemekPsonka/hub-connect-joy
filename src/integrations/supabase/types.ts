@@ -4601,6 +4601,95 @@ export type Database = {
           },
         ]
       }
+      gmail_outbox: {
+        Row: {
+          bcc: string | null
+          body_html: string | null
+          body_plain: string
+          cc: string | null
+          contact_id: string | null
+          created_at: string
+          director_id: string
+          error: string | null
+          gmail_draft_id: string | null
+          gmail_message_id: string | null
+          gmail_thread_id: string | null
+          id: string
+          sent_at: string | null
+          status: string
+          subject: string
+          tenant_id: string
+          to: string
+        }
+        Insert: {
+          bcc?: string | null
+          body_html?: string | null
+          body_plain: string
+          cc?: string | null
+          contact_id?: string | null
+          created_at?: string
+          director_id: string
+          error?: string | null
+          gmail_draft_id?: string | null
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          id?: string
+          sent_at?: string | null
+          status?: string
+          subject: string
+          tenant_id: string
+          to: string
+        }
+        Update: {
+          bcc?: string | null
+          body_html?: string | null
+          body_plain?: string
+          cc?: string | null
+          contact_id?: string | null
+          created_at?: string
+          director_id?: string
+          error?: string | null
+          gmail_draft_id?: string | null
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          id?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+          tenant_id?: string
+          to?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_outbox_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmail_outbox_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmail_outbox_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "gmail_outbox_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_meetings: {
         Row: {
           actual_participant_count: number | null
