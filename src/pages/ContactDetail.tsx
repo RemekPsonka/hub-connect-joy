@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, User, Building, Sparkles, Target } from 'lucide-react';
+import { Loader2, User, Building, Sparkles, Target, Share2 } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,6 +36,8 @@ import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
 import { ContactEmailsTab } from '@/components/contacts/ContactEmailsTab';
 import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
+import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 
 // List of public email domains that should not enable company view
 const PUBLIC_EMAIL_DOMAINS = [
