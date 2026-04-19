@@ -94,6 +94,24 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'search_emails',
+      description: 'Wyszukuje wiadomości w skrzynce Gmail (zsynchronizowane). Użyj gdy Remek pyta o e-maile od/do osoby, na temat, ostatnie wiadomości. Read-only, bez potwierdzenia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Tekst do wyszukania (temat, treść, nadawca). Może być pusty jeśli filtrujesz po contact_id/from.' },
+          contact_id: { type: 'string', description: 'Opcjonalny UUID kontaktu — zawęża do wątków powiązanych z tym kontaktem.' },
+          from: { type: 'string', description: 'Opcjonalny fragment adresu nadawcy.' },
+          since_days: { type: 'number', description: 'Ile dni wstecz (domyślnie 30).' },
+          limit: { type: 'number', description: 'Max liczba wyników (domyślnie 10, max 50).' },
+        },
+      },
+    },
+  },
+
   // ============ WRITE TOOLS (wymagają potwierdzenia) ============
   {
     type: 'function',
