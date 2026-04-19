@@ -1,41 +1,93 @@
 
-## Diagnoza — dlaczego Remigiusz nie ma dostępu do SGU
+## Plan: Restrukturyzacja SGU Sidebar + konsolidacja Prowizji + landing partner
 
-**Stan użytkownika `remek@ideecom.pl` (Remigiusz Psonka, `bec7a137...`):**
-- ✅ Ma rolę `owner` w `user_roles`
-- ✅ Jest dyrektorem (`directors.user_id` = jego id, tenant `dd293205...`)
-- ✅ Jest członkiem zespołu SGU (`deal_team_members.team_id = 9842c3d4...` = `sgu_team_id`)
-- ❌ **Brak roli `sgu` w `user_roles`** — `is_sgu_partner()` wymaga BOTH: rola `sgu` AND `deal_team_members.role = 'partner'`
-- ❌ **Ma `role = 'member'` zamiast `'partner'`** w deal_team_members
+### 1. `src/components/layout/SGUSidebar.tsx` — pełna przebudowa
 
-**Dlaczego linki nie działają:** `SGUAccessGuard` woła `useSGUAccess` → `is_sgu_partner` zwraca `false` (brak roli `sgu` + role `member` zamiast `partner`) i `is_sgu_representative` też `false` (nie ma assignmentów). Mimo że `useOwnerPanel().isAdmin = true` powinno to przepuścić — ale po dodaniu przycisku „Przejdź do SGU" w sidebarze nie pomoże jeśli klikniesz w linki wewnątrz SGU (np. /sgu/admin/representatives), bo każdy guard sprawdza te same warunki. **Dodatkowo `enable_sgu_layout=true` więc tenant ma SGU włączone — wszystko gotowe poza rolą.**
+**Nowa struktura grup** (z localStorage per grupa, klucz `sgu-sidebar-group-<label>`):
 
-## Co zrobić
+```ts
+const salesItems = [
+  { title: 'Kanban', url: '/sgu/pipeline?view=kanban', icon: LayoutGrid },
+  { title: 'Klienci', url: '/sgu/pipeline?view=clients', icon: UserCheck },
+  { title: 'Prospecting', url: '/sgu/pipeline?view=prospecting', icon: Search },
+  { title: 'Ofertowanie', url: '/sgu/pipeline?view=offering', icon: Briefcase },
+  { title: 'Zadania', url: '/sgu/pipeline?view=tasks', icon: ClipboardList },
+  { title: 'Prowizje', url: '/sgu/pipeline?view=commissions', icon: Receipt },
+  { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
+];
 
-**Migracja danych (insert/update):**
-```sql
--- 1. Dodaj rolę 'sgu' do Remigiusza (przy owner — kumulatywnie)
-INSERT INTO public.user_roles (user_id, role, tenant_id)
-VALUES ('bec7a137-ec33-4cb6-b13c-3a47d9e53972', 'sgu', 'dd293205-6dc1-438e-ad8e-4fd7cdf8f6e5')
-ON CONFLICT DO NOTHING;
+const analyticsItems = [
+  { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
+  { title: 'Tabela', url: '/sgu/pipeline?view=table', icon: List },
+  { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 },
+];
 
--- 2. Promuj go na 'partner' w zespole SGU (team 9842c3d4...)
-UPDATE public.deal_team_members
-SET role = 'partner'
-WHERE director_id = '98a271e8-d923-49cb-a6aa-45f3ac0064d8'
-  AND team_id = '9842c3d4-c2a4-4d2b-9e35-afa7fb8d6a57';
+const adminItems = [
+  { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
+  { title: 'Przedstawiciele', url: '/sgu/admin/representatives', icon: UserCog },
+  { title: 'Przypisania', url: '/sgu/admin/assignments', icon: UserPlus },
+  { title: 'Produkty', url: '/sgu/admin/products', icon: Package },
+  { title: 'Konfiguracja prowizji', url: '/sgu/admin/commissions', icon: DollarSign },
+  { title: 'Case D', url: '/sgu/admin/case-d', icon: Calculator },
+];
+
+const systemItems = [
+  { title: 'Ustawienia', url: '/sgu/settings', icon: Settings },
+];
 ```
 
-Po tym `is_sgu_partner()` zwróci `true` → wszystkie guardy SGU przepuszczą + `useSGUAccess` zwróci `isPartner=true` → przycisk „Przejdź do SGU" w sidebarze CRM też się pojawi (już jest dla `isAdmin`, ale teraz dodatkowo jako partner).
+**Co usuwam:**
+- Cała sekcja `overviewItems` (Dashboard/Dziennik/Mój zespół) i `reportItems` (osobna grupa).
+- Komponent `FunnelCollapsible` + tablica `funnelSubItems` — pozycje renderowane płasko w grupie Sprzedaż.
+- Stara grupa Admin (`/sgu/admin/commissions/case-d` → zmiana ścieżki na `/sgu/admin/case-d` zgodnie z wymaganiem).
 
-## Weryfikacja
-1. Po insercie: `SELECT public.is_sgu_partner();` z sesją Remigiusza powinno zwrócić `true`.
-2. UI: refresh + klik „Przejdź do SGU" → `/sgu/dashboard` ładuje się bez redirectu.
-3. Linki `/sgu/admin/representatives`, `/sgu/admin/assignments`, `/sgu/reports` — wszystkie otwierają się.
+**Default open state** (zapisywany w localStorage):
+- Sprzedaż: `true`
+- Analityka: `true`
+- Admin: `false` (collapsed)
+- System: `true`
 
-## Pliki
-Brak zmian w kodzie — to **tylko data fix** (2 SQL: 1 INSERT + 1 UPDATE) na istniejących tabelach `user_roles` + `deal_team_members`. Bez migracji schema.
+`useState` z lazy init czytającym `localStorage.getItem('sgu-sidebar-group-<label>')`, fallback do defaultu. `toggleGroup` zapisuje do localStorage.
 
-## Ryzyka
-- `user_roles` może mieć unique constraint na `(user_id, role, tenant_id)` — `ON CONFLICT DO NOTHING` to obsłuży.
-- Promocja na `partner` daje Remigiuszowi pełne uprawnienia partnerskie SGU (widzi wszystkich repów, może zapraszać, dezaktywować). Zgodnie z intencją (Remigiusz jako właściciel/dyrektor = partner).
+**Widoczność Admin:** `showAdmin = isPartner || isAdmin || isSuperadmin` (bez zmian względem obecnego — odpowiada wymaganiu „is_sgu_partner || director || superadmin"; `isAdmin` z `useOwnerPanel` to owner/director).
+
+**Aktywność linków:** zachowuję obecną logikę z `NavItem` (porównanie pathname + query params).
+
+**Footer:** zostawiam przycisk „Wróć do CRM" bez zmian.
+
+**Nagłówek:** zostawiam „CRM SGU Brokers" (poprzednia poprawka).
+
+### 2. `src/components/auth/PostLoginRedirect.tsx`
+
+Zmiana targetów:
+- `isRep && !isPartner` → `/sgu/pipeline?view=tasks` (było `/sgu/tasks`)
+- `isPartner` → `/sgu/pipeline?view=kanban` (było `/sgu/dashboard`)
+- Director (bez SGU role) → bez zmian (zostaje na `/`).
+
+`navigate(..., { replace: true })` z pełnym query stringiem.
+
+### 3. `src/pages/DealsTeamDashboard.tsx` — Tabs „Cele/Wpisy" w trybie SGU
+
+Gdy `forcedTeamId` jest ustawione (tryb SGU) **i** `viewMode === 'commissions'`:
+- Lokalny stan `commissionsTab: 'entries' | 'goals'`, default `'entries'`, persist w localStorage `sgu-commissions-tab`.
+- Renderuję `<Tabs>` z shadcn z dwiema zakładkami:
+  - „Wpisy" → `<CommissionsTable teamId={selectedTeamId} />` (obecny widok `entries`)
+  - „Cele" → `<CommissionsTab teamId={selectedTeamId} />` (obecny widok `commissions`)
+- Usuwam (w trybie SGU) osobny rendering dla `viewMode === 'entries'` — w SGU sidebarze nie ma już tej pozycji, ale dla bezpieczeństwa zostawiam handler dla nie-SGU (forcedTeamId === undefined).
+
+Logika non-SGU (`!forcedTeamId`) pozostaje bez zmian — użytkownicy CRM Deals Team nadal mają dwie osobne pozycje, jeśli ich sidebar je ma.
+
+### 4. Build + raport
+- `npm run build`
+- Lista zmodyfikowanych plików.
+
+### Pliki
+- `src/components/layout/SGUSidebar.tsx` — przebudowa.
+- `src/components/auth/PostLoginRedirect.tsx` — zmiana targetów.
+- `src/pages/DealsTeamDashboard.tsx` — Tabs Cele/Wpisy w SGU.
+
+### Ryzyka
+- Trasa `/sgu/admin/case-d` — wcześniej była `/sgu/admin/commissions/case-d`. Sidebar wskazuje nową ścieżkę zgodnie z wymaganiem; jeśli routing nie ma jej zarejestrowanej, link da 404. Nie zmieniam routingu (poza zakresem „zero zmian backend/DB", ale to FE — zostawiam zgodnie z wymaganiem klienta; ewentualną korektę routingu zrobię osobno, jeśli okaże się że route nie istnieje).
+- Trasy `/sgu/admin/team`, `/sgu/settings`, `/sgu/admin/products` — zakładam że istnieją (były w obecnym sidebarze).
+- localStorage SSR-safe: sprawdzam `typeof window !== 'undefined'` przy lazy init.
+- `PostLoginRedirect` używa `navigate('/sgu/pipeline?view=kanban', { replace: true })` — react-router 6 obsługuje query w stringu, OK.
