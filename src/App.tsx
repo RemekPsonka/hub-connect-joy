@@ -61,6 +61,7 @@ const SGUReports = lazy(() => import("./pages/sgu/SGUReports"));
 const SGUAdmin = lazy(() => import("./pages/sgu/SGUAdmin"));
 const SGUSettings = lazy(() => import("./pages/sgu/SGUSettings"));
 const SGUPipelineRoute = lazy(() => import("./pages/sgu/SGUPipelineRoute"));
+const SGUTasks = lazy(() => import("./pages/sgu/SGUTasks"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -154,6 +155,7 @@ const App = () => (
                   <Route path="/sgu/dashboard" element={<SGUDashboard />} />
                   <Route path="/sgu/team" element={<SGUTeam />} />
                   <Route path="/sgu/pipeline" element={<SGUPipelineRoute />} />
+                  <Route path="/sgu/tasks" element={<SGUTasks />} />
                   <Route path="/sgu/reports" element={<SGUReports />} />
                   <Route path="/sgu/reports/:period" element={<SGUReports />} />
                   <Route path="/sgu/admin" element={<SGUAdmin />} />
