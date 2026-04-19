@@ -50,17 +50,23 @@ export function useSGUWebSources() {
       if (!tenantId) throw new Error('Brak tenant_id');
       const { data: userRes } = await supabase.auth.getUser();
 
-      const { data, error } = await supabase.from('sgu_web_sources').insert({
-        tenant_id: tenantId,
+      const insertRow = {
+        tenant_id: tenantId as string,
         name: input.name,
         url: input.url,
         source_type: input.source_type,
         search_keywords: input.search_keywords,
-        parser_config: input.parser_config ?? {},
+        parser_config: (input.parser_config ?? {}) as never,
         active: input.active ?? true,
         scrape_interval_hours: input.scrape_interval_hours ?? 6,
         created_by_user_id: userRes.user?.id ?? null,
-      }).select().single();
+      };
+      const { data, error } = await supabase
+        .from('sgu_web_sources')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(insertRow as any)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
@@ -73,7 +79,11 @@ export function useSGUWebSources() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...patch }: Partial<WebSourceInput> & { id: string }) => {
-      const { error } = await supabase.from('sgu_web_sources').update(patch).eq('id', id);
+      const { error } = await supabase
+        .from('sgu_web_sources')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update(patch as any)
+        .eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
