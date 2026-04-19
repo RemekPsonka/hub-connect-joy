@@ -1,5 +1,6 @@
+import { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Share2 } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -8,17 +9,53 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { useCompany } from '@/hooks/useCompanies';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCompany, useCompanyContacts } from '@/hooks/useCompanies';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { CompanyProfileHeader } from '@/components/companies/CompanyProfileHeader';
 import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
 import { CompanyRegistryCard } from '@/components/companies/CompanyRegistryCard';
 import { CompanyContactsMini } from '@/components/companies/CompanyContactsMini';
 import { CompanyQuickStats } from '@/components/companies/CompanyQuickStats';
 import { CompanyNotesPanel } from '@/components/companies/CompanyNotesPanel';
+import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
+import {
+  PushCompanyContactDialog,
+  type CompanyContactOption,
+} from '@/components/sgu/PushCompanyContactDialog';
 
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: company, isLoading, error } = useCompany(id);
+  const { director } = useAuth();
+  const { sguTeamId } = useSGUTeamId();
+  const { data: companyContacts = [] } = useCompanyContacts(id);
+
+  const [isPushSingleOpen, setIsPushSingleOpen] = useState(false);
+  const [isPushMultiOpen, setIsPushMultiOpen] = useState(false);
+
+  const canPushToSGU = director !== null && !!sguTeamId;
+
+  const contactOptions: CompanyContactOption[] = useMemo(
+    () =>
+      (companyContacts ?? []).map((c) => ({
+        id: c.id,
+        full_name: c.full_name,
+        position: c.position,
+        email: c.email,
+      })),
+    [companyContacts]
+  );
+
+  const handlePushClick = () => {
+    if (contactOptions.length === 1) {
+      setIsPushSingleOpen(true);
+    } else if (contactOptions.length > 1) {
+      setIsPushMultiOpen(true);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -38,6 +75,20 @@ export default function CompanyDetail() {
       </div>
     );
   }
+
+  const pushButtonDisabled = contactOptions.length === 0;
+  const pushButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handlePushClick}
+      disabled={pushButtonDisabled}
+      className="gap-2"
+    >
+      <Share2 className="h-4 w-4" />
+      Przekaż do SGU
+    </Button>
+  );
 
   return (
     <div className="container max-w-7xl py-6 space-y-6">
@@ -59,6 +110,23 @@ export default function CompanyDetail() {
 
       <CompanyProfileHeader company={company} />
 
+      {canPushToSGU && (
+        <div className="flex justify-end -mt-2">
+          {pushButtonDisabled ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>{pushButton}</span>
+                </TooltipTrigger>
+                <TooltipContent>Firma nie ma kontaktów do przekazania</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            pushButton
+          )}
+        </div>
+      )}
+
       {/* SPLIT VIEW */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* LEFT COLUMN — tabs with all content */}
@@ -74,6 +142,24 @@ export default function CompanyDetail() {
           <CompanyNotesPanel company={company} />
         </aside>
       </div>
+
+      {canPushToSGU && contactOptions.length === 1 && (
+        <PushToSGUDialog
+          contactId={contactOptions[0].id}
+          contactName={contactOptions[0].full_name}
+          open={isPushSingleOpen}
+          onOpenChange={setIsPushSingleOpen}
+        />
+      )}
+
+      {canPushToSGU && contactOptions.length > 1 && (
+        <PushCompanyContactDialog
+          companyName={company.name}
+          contacts={contactOptions}
+          open={isPushMultiOpen}
+          onOpenChange={setIsPushMultiOpen}
+        />
+      )}
     </div>
   );
 }
