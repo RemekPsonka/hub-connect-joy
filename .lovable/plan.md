@@ -1,108 +1,107 @@
 
-## Sprint SGU-04 — Dashboard + dzienny check-in + MyKanban
+## Sprint SGU-05 — Prospecting manual + CSV import
 
 ### Recon (READ-ONLY, równolegle przed implementacją)
 
 **Tool calls round 1:**
-1. `supabase--read_query` × 5 (równolegle):
-   - `pg_matviews` dla `mv_dashboard_stats` (czy pokrywa SGU)
-   - kolumny `tasks` (sprawdzenie czy `assigned_to_user_id` już istnieje, types `assigned_to`, `due_date`, `status`)
-   - rozkład `deal_team_contacts.category` w SGU teamie (kluczowe dla MyKanban — które wartości mapować na 4 kolumny)
-   - czy każdy rep z `deal_team_representative_assignments` ma row w `directors`/`assistants` (decyduje czy `assigned_to_user_id` jest jedyną drogą)
-   - `cron.job` lista (czy `sgu_refresh_weekly_kpi` już nie istnieje, jakie inne SGU jobs są)
-2. `code--view src/components/auth/PostLoginRedirect.tsx` — punkt zmiany rep redirect.
-3. `code--view src/pages/sgu/SGUDashboard.tsx` — placeholder z SGU-01 do zastąpienia.
-4. `code--view src/components/layout/SGUSidebar.tsx` — gdzie dodać link „Dziennik".
-5. `code--view src/App.tsx` (sekcja SGU routes) — gdzie wpiąć `/sgu/tasks`.
-6. `code--search_files` — `category` w `deal_team_contacts` (typy/enumy/walidacje), aby zmapować 4 kolumny MyKanban poprawnie.
-7. `code--list_dir src/components/sgu` (po SGU-03 wiem że istnieje — sprawdzam co już mam).
+1. `supabase--read_query` × 4 (równolegle):
+   - `contacts` NOT NULL pola (co musi być w minimalnym INSERT z edge fn).
+   - `deal_team_contacts.contact_id` is_nullable (potwierdzenie wariantu A).
+   - rozkład `category` + `status` w SGU teamie (już częściowo z SGU-04 reconu — re-fetch dla pewności).
+   - `contacts.source` distinct values (free-text czy enum).
+2. `code--exec` lub `code--view package.json` — `papaparse` w deps?
+3. `code--view src/pages/DealsTeamDashboard.tsx` (bieżący stan po SGU-04) — gdzie wpiąć CTA bar warunkowo `mode==='sgu' && view==='prospecting'`.
+4. `code--search_files` — `ProspectingTab|view=prospecting|prospecting` w `src/components/deals-team/` — czy jest dedykowany komponent (`ProspectingTab.tsx` z importu w SGU-01) czy renderowany inline.
+5. `code--view src/components/deals-team/ProspectingTab.tsx` (jeśli istnieje) — gdzie dodać CTA bar + akcje wierszowe (Oznacz jako klient / Archiwizuj).
+6. `code--view supabase/functions/sgu-push-contact/index.ts` (z SGU-02) — reuse patternu auth + cors + tenant guard.
+7. `code--view src/components/sgu/PushToSGUDialog.tsx` (z SGU-02) — reuse patternu RHF+Zod+invoke+toast.
+8. `code--list_dir src/components/sgu` — sprawdzenie istniejących komponentów po SGU-04.
 
-Wypisuję 7-pkt status (OK/BRAK + cytaty).
+Wypisuję 8-pkt status (OK/BRAK + cytaty).
 
 ### Implementacja (po reconie, 1 batch)
 
-**A. Migracja SQL** `supabase/migrations/<ts>_sgu_04_dashboard.sql`
-1. `ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;`
-2. `CREATE INDEX IF NOT EXISTS idx_tasks_assigned_user_active ON public.tasks(assigned_to_user_id) WHERE assigned_to_user_id IS NOT NULL AND status != 'completed';`
-3. `CREATE POLICY tasks_sgu_rep_select ON public.tasks FOR SELECT USING (assigned_to_user_id = auth.uid() AND public.is_sgu_representative());` (tylko ADD; nie ruszam istniejących policies)
-4. `CREATE MATERIALIZED VIEW public.mv_sgu_weekly_kpi AS ...` — agregat z 7-dniowego okna: `meetings_count`, `policies_issued_count`, `commission_earned_gr` (sum z `commission_entries`), `premium_collected_gr` (sum z `deal_team_payment_schedule WHERE is_paid AND paid_at >= now() - 7d`). Per `team_id` + `week_start`. + `CREATE UNIQUE INDEX` na `(team_id, week_start)` dla CONCURRENTLY refresh.
-5. `CREATE OR REPLACE FUNCTION public.rpc_sgu_weekly_kpi(p_week_offset int DEFAULT 0)` SECURITY DEFINER + `GRANT EXECUTE ... TO authenticated;` — zwraca jeden wiersz dla SGU teamu z porównaniem do poprzedniego tygodnia (delta).
-6. `CREATE OR REPLACE FUNCTION public.rpc_sgu_team_performance(p_week_offset int DEFAULT 0)` SECURITY DEFINER + GRANT — zwraca listę per `recipient_user_id` z `commission_entries`: `policies_count`, `booked_premium_gr`, `collected_premium_gr`, `commission_earned_gr`. Tylko director/partner widzą wszystkich; rep widzi tylko siebie (warunek wewnątrz funkcji).
-7. `cron.schedule('sgu_refresh_weekly_kpi', '*/10 * * * *', $$ REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_sgu_weekly_kpi; $$);` — wstawiane przez **insert tool** (nie migration, bo zawiera URL/anon-key style; faktycznie tylko REFRESH bez net.http_post → może iść w migracji, ale dla spójności z project-knowledge daję przez insert tool).
-8. Pierwszy `REFRESH MATERIALIZED VIEW public.mv_sgu_weekly_kpi;` (bez CONCURRENTLY, pusta) na końcu migracji.
-9. ROLLBACK comment: DROP cron job, DROP RPC×2, DROP MV, DROP POLICY, DROP INDEX, ALTER DROP COLUMN.
+**A. Migracja SQL** `supabase/migrations/<ts>_sgu_05_prospecting.sql` (dokładnie wg specu):
+- Archive snapshot `archive.deal_team_contacts_backup_20260419_sgu05`.
+- `CREATE TABLE sgu_csv_import_presets` z `UNIQUE (tenant_id, name)`.
+- Index `(tenant_id, last_used_at DESC NULLS LAST)`.
+- RLS enable + 4 policies (select/insert/update/delete) — partner/director/superadmin.
+- Trigger `tg_sgu_csv_presets_touch_updated_at` na BEFORE UPDATE.
+- DO $$ verification block + komentarz `-- ROLLBACK:`.
+- **Wariant A**: NIE ruszamy `deal_team_contacts.contact_id` constraintu — edge fn tworzy minimalny `contacts` row.
 
-**B. Hooki** (`src/hooks/`)
-- `useSGUWeeklyKPI.ts` — `supabase.rpc('rpc_sgu_weekly_kpi', { p_week_offset })`, staleTime 5 min, queryKey `['sgu-weekly-kpi', weekOffset]`.
-- `useSGUTeamPerformance.ts` — `rpc_sgu_team_performance`, staleTime 5 min.
-- `useSGUTasks.ts` — `filter: 'today' | 'overdue' | 'my_clients'`. Direct query `tasks` z RLS (rep widzi tylko swoje przez nową policy). Joiny: `contacts`, `deal_team_contacts`.
-- `useSGUAlerts.ts` — 3 query Promise.all:
-  - polisy kończące się w ≤14d (`insurance_policies WHERE valid_to BETWEEN now() AND now()+14d AND deal_team_id = sgu`)
-  - raty overdue (`deal_team_payment_schedule WHERE is_paid=false AND scheduled_date < now() AND team_id = sgu`)
-  - klienci bez kontaktu >30d (`deal_team_contacts WHERE last_contact_at < now()-30d AND team_id = sgu`) — jeśli kolumny brak (recon zweryfikuje), fallback na `updated_at`.
+**B. Edge function** `supabase/functions/sgu-add-lead/index.ts`:
+- CORS + `verifyAuth` (reuse `_shared/auth.ts`).
+- RPC: `has_sgu_access`, `get_current_director_id`, `get_sgu_team_id`, `get_current_tenant_id`.
+- Walidacja inline (full_name min 2, phone PL regex, email basic, premium ≥0).
+- Dedup query po `(team_id, contacts.phone OR contacts.email)` → 200 z `duplicate:true` (nie 409).
+- INSERT `contacts` (minimalny: tenant_id, full_name, phone, email, source=`sgu_<src>`, created_by_user_id).
+- INSERT `deal_team_contacts` (tenant_id, team_id, contact_id, source_contact_id=NULL, category='lead', status='new', expected_annual_premium_gr=PLN×100, notes).
+- Response: `{ deal_team_contact_id, contact_id, created, duplicate }`.
 
-**C. Komponenty** (`src/components/sgu/`)
-- `KPICard.tsx` — atom `{ label, value, delta?, icon, variant: 'default'|'success'|'warning' }` (reuse `StatCard` pattern z `src/components/ui/stat-card.tsx`, ale dedykowany SGU wariant z deltą tygodniową).
-- `MyKanban.tsx` — 4 kolumny z `dnd-kit` (Lead → Hot → Klient → Stracony, dokładny mapping z reconu #6). Drag end → `UPDATE deal_team_contacts SET category = X WHERE id = Y`. Optymistyczny update React Query.
-- `AlertsPanel.tsx` — shadcn `<Accordion>` z 3 sekcjami; każda lista alertów z linkiem do encji (`/sgu/pipeline?view=clients&highlight=...`).
-- `TeamPerformanceTable.tsx` — `<Table>` shadcn: kolumny `Osoba | Polisy | Booked PLN | Collected PLN | Commission PLN | Target progress`. Progress bar = `commission_earned_gr / weekly_target_gr` (target hardcode MVP: 50000 gr/tydzień, później z `commission_base_split`).
-- `TaskRow.tsx` — wiersz z `Checkbox` (mark done), button „+1 dzień" (UPDATE `due_date`), inline `<Textarea>` notatka (UPDATE `tasks.notes`), call link `<a href="tel:...">`.
+**C. Edge function** `supabase/functions/sgu-import-leads/index.ts`:
+- Body: `{ leads: [], source, preset_name? }`. Limit 500/request.
+- Pre-fetch dedup: 1 query do `deal_team_contacts JOIN contacts` w SGU teamie → Set<phone>+Set<email>.
+- Pętla: filter dedup → batch INSERT contacts (z `RETURNING id`) → batch INSERT deal_team_contacts.
+- Jeśli `preset_name` → UPSERT do `sgu_csv_import_presets` (touch usage_count + last_used_at).
+- Response: `{ inserted, skipped_duplicates, errors: [{row, message}] }`.
 
-**D. Strony**
-- `src/pages/sgu/SGUDashboard.tsx` — REPLACE placeholder. 5 sekcji:
-  1. Heading „Dashboard SGU — tydzień <data>"
-  2. KPI grid (4× `<KPICard>`) z `useSGUWeeklyKPI`
-  3. `<TeamPerformanceTable>` (tylko partner/director widzi wszystkich)
-  4. `<AlertsPanel>` (3 kategorie)
-  5. CTA „Zobacz wszystkie zadania" → `/sgu/tasks`
-- `src/pages/sgu/SGUTasks.tsx` — NEW. Tabs: „Lista" (3 accordion sekcje: Dziś / Zaległe / Moi klienci) + „Tablica" (`<MyKanban>`).
+**D. Hooki** (`src/hooks/`)
+- `useSGUProspects.ts` — query `deal_team_contacts` z `team_id=sguTeamId AND category IN ('lead','prospect')` + JOIN `contacts`. Filtry: source, status, assignee, search. Reference-only dla `source_contact_id IS NOT NULL` (reuse `useCRMContactBasic` z SGU-02 — albo indykuje że dane mają być pobrane per wiersz przez `<SGUContactName>` jeśli istnieje).
+- `useCSVImportPresets.ts` — list + upsert + touch (mutations). QueryKey `['sgu-csv-presets', tenantId]`.
 
-**E. Modyfikacje**
-- `src/App.tsx` — `<Route path="/sgu/tasks" element={<SGUTasks/>} />` w bloku SGU routes (lazy import).
-- `src/components/layout/SGUSidebar.tsx` — link „Dziennik" (ikona `ListTodo`) → `/sgu/tasks` w grupie OVERVIEW.
-- `src/components/auth/PostLoginRedirect.tsx` — zmiana docelowej trasy rep z `/sgu/pipeline?view=tasks` na `/sgu/tasks`.
+**E. Komponenty** (`src/components/sgu/`)
+- `AddLeadDialog.tsx` — RHF + Zod schema (wg specu); `supabase.functions.invoke('sgu-add-lead')`. Duplicate handling → AlertDialog z linkiem `?highlight=<id>`. Toast + invalidate `['sgu-prospects']`.
+- `ImportLeadsDialog.tsx` — 4-step wizard z stanem `step`:
+  - **upload**: shadcn dropzone + `papaparse.parse(file, { header: true, preview: 5, skipEmptyLines: true })`.
+  - **mapping**: `<CSVMappingStep>` + dropdown „Załaduj preset" + input „Nazwa presetu".
+  - **preview**: pełny parse + apply mapping + dedup pre-check (RPC `rpc_sgu_check_duplicates(jsonb)` — **dodam do migracji** jako helper, albo prościej: inline check w edge fn `sgu-import-leads` z dry_run flagą; **decyzja**: dry_run flag w `sgu-import-leads` (`{ leads, source, dry_run: true }` zwraca tylko `{ would_insert, would_skip }` bez INSERTów). Mniej kodu SQL, jeden edge fn.
+  - **progress**: split na batch 50, sequential invoke, progress bar, summary card.
+- `CSVMappingStep.tsx` — controlled component z auto-suggest (regex po headerze).
 
-**F. Walidacja**
-- Po migracji types.ts auto-regenerowany (nowa kolumna + 2 RPC).
+**F. Modyfikacje**
+- `src/components/deals-team/ProspectingTab.tsx` (lub inline w `DealsTeamDashboard` wg recon #4): warunkowo render CTA bar gdy `mode==='sgu' && (isPartner || directorId)`. 3 buttony: „Dodaj lead", „Importuj CSV", „Odśwież". Dialogi mountowane w tym samym komponencie.
+- Akcje per wiersz tabeli (`ProspectingTab` row actions): „Oznacz jako klient" (AlertDialog confirm → UPDATE `category='client', status='active'`), „Archiwizuj" (UPDATE `status='inactive'`), „Przypisz do rep" (disabled MVP — placeholder z tooltip „Po SGU-09").
+- Badge `SGU-native` dla `source_contact_id IS NULL` + reuse `Z CRM` z SGU-02.
+- Filtr „Pokaż zarchiwizowane" (default false).
+
+**G. package.json** — jeśli recon #2 pokaże brak `papaparse` → dodaj `papaparse` + `@types/papaparse` przez `<lov-add-dependency>`.
+
+**H. Walidacja**
+- Po migracji types.ts auto-regenerowany (nowa tabela widoczna w `Database['public']`).
+- Deploy 2 edge functions.
 - `npm run build` + `npm run lint`.
-- Smoke test: query `mv_sgu_weekly_kpi` (sprawdzenie czy ma wiersze), `cron.job` (czy job aktywny).
+- Smoke test sequence (4 scenariusze z DoD).
 
 ### Pliki
 
-**Nowe (10):**
-- `supabase/migrations/<ts>_sgu_04_dashboard.sql`
-- `src/hooks/useSGUWeeklyKPI.ts`
-- `src/hooks/useSGUTeamPerformance.ts`
-- `src/hooks/useSGUTasks.ts`
-- `src/hooks/useSGUAlerts.ts`
-- `src/components/sgu/KPICard.tsx`
-- `src/components/sgu/MyKanban.tsx`
-- `src/components/sgu/AlertsPanel.tsx`
-- `src/components/sgu/TeamPerformanceTable.tsx`
-- `src/components/sgu/TaskRow.tsx`
-- `src/pages/sgu/SGUTasks.tsx`
+**Nowe (7):**
+- `supabase/migrations/<ts>_sgu_05_prospecting.sql`
+- `supabase/functions/sgu-add-lead/index.ts`
+- `supabase/functions/sgu-import-leads/index.ts`
+- `src/hooks/useSGUProspects.ts`
+- `src/hooks/useCSVImportPresets.ts`
+- `src/components/sgu/AddLeadDialog.tsx`
+- `src/components/sgu/ImportLeadsDialog.tsx`
+- `src/components/sgu/CSVMappingStep.tsx`
 
-**Modyfikowane (4):**
-- `src/pages/sgu/SGUDashboard.tsx` (zastąpienie placeholdera)
-- `src/App.tsx` (route)
-- `src/components/layout/SGUSidebar.tsx` (link „Dziennik")
-- `src/components/auth/PostLoginRedirect.tsx` (rep target)
+**Modyfikowane (1–2):**
+- `src/components/deals-team/ProspectingTab.tsx` (CTA bar warunkowy + row actions) — albo `DealsTeamDashboard.tsx` jeśli recon pokaże inny punkt rozszerzenia.
+- `package.json` (jeśli papaparse brak).
 
 ### Ryzyka / decyzje
-- **`mv_dashboard_stats` reuse vs nowy MV**: jeśli recon #1 pokaże że istniejący MV nie ma `team_id` ani SGU-specific danych → tworzę dedykowany `mv_sgu_weekly_kpi`. Decyzja default: **nowy MV** (izolacja modułu, nie ryzykuję regression na CRM dashboardzie).
-- **Mapping `category` na MyKanban**: zależnie od recon #3. Jeśli wartości to `lead/hot/client/lost` → 4 kolumny direct. Jeśli inne (`prospect/active/won/snoozed`) → mapuję semantycznie i dokumentuję w komentarzu komponentu. **Nie zmieniam danych w bazie**.
-- **`tasks.assigned_to_user_id` + RLS**: nowa policy tylko **dodatkowa** (RLS w PG = OR), więc rep widzi swoje zadania bez zmiany istniejącego dostępu director/admin. Director nadal widzi wszystkie przez istniejące policies.
-- **Rep w `directors`/`assistants`**: jeśli recon #4 pokaże że żaden rep nie ma row w directors/assistants → uzasadnienie nowej kolumny `assigned_to_user_id` jest pełne (`tasks.assigned_to` FK do `directors` jest ślepe dla repów).
-- **pg_cron job**: insert przez **insert tool** (project-knowledge: REFRESH MV w cronie OK, ale dla spójności z `<schedule-jobs-supabase-edge-functions>` używam insert tool). Schedule `*/10 * * * *`.
-- **Target tygodniowy w `TeamPerformanceTable`**: MVP hardcode `WEEKLY_TARGET_PLN = 500` (komentarz TODO: w SGU-08 przeniesienie do `commission_base_split.weekly_target_gr` albo nowej tabeli `sgu_targets`).
+- **Wariant A (NOT NULL contact_id)**: edge fn tworzy minimalny `contacts` row. Konsekwencja: każdy SGU lead = 1 row w `contacts` z `source LIKE 'sgu_%'`. **Dobre**: izolacja od CRM Knowledge/BI (RLS contacts już maskuje pola wrażliwe dla SGU userów). **Ryzyko**: jeśli `contacts` ma trigger który automatycznie tworzy `contact_bi`/embeddings → niepotrzebny narzut. Recon #1 zweryfikuje NOT NULL pola; jeśli widoczne triggery (np. `tg_contact_create_bi`), dodam `INSERT ... ON CONFLICT DO NOTHING` lub pominę problematyczne pola. **Decyzja default**: idziemy z minimalnym INSERT, w razie problemu w smoke test → dopisuję IF.
+- **Dry-run dedup w preview**: zamiast osobnego RPC dodaję flagę `dry_run` do `sgu-import-leads`. Jedno źródło prawdy dla logiki dedup, mniej kodu SQL.
+- **CTA visibility**: tylko `is_sgu_partner() || directorId`. Rep widzi tabelę read-only (zgodnie ze specem).
+- **Archiwizacja**: `status='inactive'`, NIE DELETE (zgodnie z project-knowledge: zero DROP/DELETE bez archive).
+- **Konwersja lead→client**: tylko UPDATE `category` + `status='active'` (zgodne z mem://features/deals-team/conversion-financial-data-flow — pełny flow konwersji z BI/financial data odkładamy; tu tylko zmiana flagi w SGU prospecting).
 
 ### Raport końcowy
 1. Lista nowych + modyfikowanych plików (absolute paths).
-2. Status migracji + insert pg_cron job.
-3. Wyniki 5-pkt reconu.
-4. `SELECT jobname, schedule, active FROM cron.job WHERE jobname='sgu_refresh_weekly_kpi';`
-5. Smoke test query: `SELECT count(*) FROM mv_sgu_weekly_kpi;`, `SELECT * FROM rpc_sgu_weekly_kpi(0);`.
-6. `npm run build` + `npm run lint` output.
-7. Manualny check — Remek loguje się → `/sgu/dashboard` widzi KPI + tabelę + alerty; rep → po loginie redirect na `/sgu/tasks`.
+2. Status migracji + 2 deploye edge functions.
+3. Wyniki 8-pkt reconu.
+4. Smoke test 4 scenariusze (add/duplicate/import/preset+convert+archive).
+5. `npm run build` + `npm run lint`.
+6. SQL check ostatnich 10 SGU-native wpisów (`source_contact_id IS NULL`, `contacts.source LIKE 'sgu_%'`).
 
-Po Twojej akceptacji: recon (7 calls równolegle) → implementacja (1 batch) → migracja + insert pg_cron → smoke test → raport.
+Po Twojej akceptacji: recon (8 calls równolegle) → implementacja (1 batch) → migracja → deploy edge fns → smoke test → raport.
