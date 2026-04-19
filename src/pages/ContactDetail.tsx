@@ -34,6 +34,7 @@ import { AIProfileRenderer } from '@/components/contacts/AIProfileRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
+import { ContactEmailsTab } from '@/components/contacts/ContactEmailsTab';
 import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
 
 // List of public email domains that should not enable company view
