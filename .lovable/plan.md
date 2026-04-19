@@ -1,47 +1,44 @@
 
-## Plan: Przeprojektowanie widoku Klienci w SGU
+## Plan: Wymuś landing SGU dla użytkowników bez dostępu do CRM
 
-### Recon najpierw
-Muszę zweryfikować strukturę kilku tabel/relacji zanim zacznę. Po zatwierdzeniu wykonam:
-1. `useSGUClientsPortfolio` — query do `deal_team_contacts` (category='client', team_id=SGU) + LEFT JOIN do `contacts`/`companies` + agregaty z `insurance_policies`, `deal_team_payment_schedule`, `commission_entries`. Wstępnie 1 query + równoległe doagregowania w hooku (Promise.all), wynik zmemoizowany. Filtr widoczności: jeśli rep — dodatkowy IN-filter na `representative_user_id` z `deal_team_representative_assignments.active=true`.
-2. `ClientsKPI` — 5 kart hero z trendami MoM tam gdzie wymagane (portfel, prowizja). Liczone z dataset hooka + osobne mini-zapytania MoM.
-3. Tabs: domyślny `portfolio`, persist w localStorage `sgu-clients-tab`.
-4. `ClientPortfolioTab` — Table z reuse `PremiumProgress` (SGU-03) w wariancie `compact`. Sortowanie po przypisie DESC, action popover.
-5. `ClientPaymentsTab` — segmented filter (overdue/this_month/upcoming_30d/all), kolor wierszy, mutation „Oznacz paid" (gated rolą).
-6. `ClientRenewalsTab` — grupowanie 30/60/90d po `end_date`, action „Przygotuj odnowienie" → INSERT do `tasks` z `due_date = end_date - 14d`, link do kontaktu.
-7. `ClientCrossSellTab` — 3 sekcje (1 polisa, brak życia, brak majątku), quick action create task.
-8. `SGUClientsView` — orchestruje KPI + Tabs.
-9. `DealsTeamDashboard` — branch: jeśli `useLayoutMode().mode === 'sgu'` i `viewMode === 'clients'` → `<SGUClientsView teamId={selectedTeamId} />`, inaczej obecny `<ClientsTab />`. Stats hero CRM (`<TeamStats />`) wyłączam dla SGU clients (KPI zastępuje).
+### Problem
+Obecny `PostLoginRedirect` przekierowuje do SGU tylko jeśli użytkownik ląduje na `/` lub `/login`. Dla SGU-only userów (Paweł, Adam — bez `directors`/`assistants`) — `/` jest chronione `DirectorGuard`, więc dostają redirect do `/login` albo pusty ekran. Dodatkowo redirect odpala się tylko raz per session (flag `sgu.post-login-redirect-done`), więc po wylogowaniu/odświeżeniu może nie zadziałać poprawnie.
+
+### Rozwiązanie
+
+**1. `src/components/auth/PostLoginRedirect.tsx`**
+- Zmień warunek: zamiast „tylko z `/` lub `/login`" → przekieruj zawsze gdy SGU-only user trafi na trasę CRM (`/`, `/contacts*`, `/meetings*`, `/calendar` itd. — czyli cokolwiek poza `/sgu/*`, `/login`, `/forgot-password`, `/setup-sgu`).
+- Dla SGU-only (rep/partner bez `director`/`isAssistant`/`isAdmin`/`isSuperadmin`) — twardy redirect na ich landing (rep → `?view=tasks`, partner → `?view=kanban`).
+- Dla mieszanych (np. director + sgu) — zostaje obecna logika one-shot z `/` lub `/login`.
+- Czyść flag `sgu.post-login-redirect-done` przy logout (dorzucę w `AuthContext.signOut` lub przy zmianie `user` na `null`).
+
+**2. `src/components/auth/AuthGuard.tsx`** (sprawdzę najpierw — może wystarczy sam PostLoginRedirect)
+- Jeśli `AuthGuard` po sukcesie sesji zostawia usera na trasie CRM, dorzucę tam fallback redirect dla SGU-only.
+
+**3. `DirectorGuard` / `CRMOnlyGuard`** — sprawdzę co dziś robią dla SGU-only na `/`. Jeśli pokazują „brak dostępu" zamiast redirectu — zmienię na `<Navigate to="/sgu/...">`.
 
 ### Pliki
-**Nowe:**
-- `src/components/sgu/SGUClientsView.tsx`
-- `src/components/sgu/clients/ClientsKPI.tsx`
-- `src/components/sgu/clients/ClientPortfolioTab.tsx`
-- `src/components/sgu/clients/ClientPaymentsTab.tsx`
-- `src/components/sgu/clients/ClientRenewalsTab.tsx`
-- `src/components/sgu/clients/ClientCrossSellTab.tsx`
-- `src/hooks/useSGUClientsPortfolio.ts`
+- `src/components/auth/PostLoginRedirect.tsx` (główna zmiana — usunięcie one-shot dla SGU-only, redirect z dowolnej CRM trasy)
+- `src/contexts/AuthContext.tsx` (czyszczenie flag przy logout — do potwierdzenia po recon)
+- ewentualnie `src/components/auth/DirectorGuard.tsx` (fallback redirect zamiast pustego stanu)
 
-**Modyfikowany:**
-- `src/pages/DealsTeamDashboard.tsx` — gating SGU vs CRM dla `view=clients` + skip `<TeamStats />` w SGU clients (KPI zastępuje stats).
+### Logika finalna
+```
+isSGUOnly = (isRep || isPartner) && !director && !isAssistant && !isAdmin && !isSuperadmin
 
-### Założenia/ryzyka
-- Pole `is_our_policy` na `insurance_policies` — zweryfikuję, jeśli nie ma użyję samego `team_id`/`deal_team_contact_id`.
-- `commission_entries` — używam YTD per `recipient_user_id` (rep) lub team-wide (partner) zależnie od roli. Trend MoM = current month vs prev month sum.
-- Typy polis na badge — z `insurance_policies.policy_type` (enum/text). Mapowanie majątek/życie/OC/AC zrobię w utilu lokalnym.
-- Rep filter: użyję `useSGUAccess` (`isRep`, `isPartner`) + tabela `deal_team_representative_assignments`.
-- Reuse `PremiumProgress` z `src/components/sgu/PremiumProgress.tsx` (compact) — KPI per wiersz w Portfel.
-- `useSGUClientsPortfolio` shared cache: jeden queryKey, wszystkie taby konsumują, staleTime 60_000.
-- Mutacja „Oznacz paid" → invalidate `sgu-clients-portfolio` + `sgu-premium-progress`.
-- Brak zmian DB/backend — używam istniejących tabel/RLS.
+if (isSGUOnly && !pathname.startsWith('/sgu') && pathname !== '/login') {
+  navigate(isPartner ? '/sgu/pipeline?view=kanban' : '/sgu/pipeline?view=tasks', { replace: true })
+}
+```
+Bez one-shot flagi dla SGU-only — zawsze egzekwuj. Dla mieszanych zostaje obecny one-shot z `/` lub `/login`.
 
-### Smoke test (po build)
-1. Login partner → `/sgu/pipeline?view=clients` → 5 KPI + Tab Portfel z listą.
-2. Tab Raty → filtr „Zaległe" → action „Oznacz paid".
-3. Tab Odnowienia → grupa 30d → „Przygotuj odnowienie" → task w workspace.
-4. Tab Cross-sell → 3 sekcje, quick action.
-5. CRM (`mode='crm'`) → ten sam route (gdyby ktoś trafił) renderuje stary `ClientsTab` bez zmian.
+### Recon przed wdrożeniem
+Przed kodem przeczytam: `AuthContext.tsx`, `AuthGuard.tsx`, `DirectorGuard.tsx`, obecny `PostLoginRedirect.tsx`, `useSGUAccess.ts` — żeby potwierdzić źródła `isPartner`/`isRep` i flagi mieszanych ról.
 
-### Build
-- `npm run build` + lista zmodyfikowanych plików.
+### Smoke test
+1. Login Paweł (sgu-only rep) → trafia na `/sgu/pipeline?view=tasks` niezależnie skąd próbuje wejść.
+2. Login Adam (sgu-only partner) → `/sgu/pipeline?view=kanban`.
+3. Login Remek (director + sgu) → zostaje na `/` (CRM landing), toggle do SGU działa ręcznie.
+4. SGU-only user wpisuje ręcznie `/contacts` → redirect na swój landing SGU.
+
+### Brak zmian DB. Build + lista plików po wdrożeniu.
