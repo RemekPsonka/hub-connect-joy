@@ -268,8 +268,9 @@ export function useBusinessCardOCR() {
   ): Promise<EnrichedPersonData> => {
     setIsEnrichingPerson(true);
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
-        body: { 
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: {
+          steps: ['data'],
           first_name: firstName,
           last_name: lastName,
           company: company || undefined,

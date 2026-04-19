@@ -522,7 +522,6 @@ export function useAIImport(): UseAIImportReturn {
       }
 
       // Convert to extended contact format, keeping track of source image index
-      const rawContacts = data.contacts;
       let contacts: ParsedContact[] = rawContacts.map((c: any) => toExtendedContact({
         first_name: c.first_name,
         last_name: c.last_name,
@@ -705,8 +704,9 @@ export function useAIImport(): UseAIImportReturn {
     updateParsedContact(index, { status: 'enriching_person' });
 
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
-        body: { 
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: {
+          steps: ['data'],
           first_name: contact.first_name,
           last_name: contact.last_name,
           company: contact.company,
@@ -717,15 +717,17 @@ export function useAIImport(): UseAIImportReturn {
 
       if (error) throw error;
 
-      const enrichedData = data?.data || data;
-      
+      // enrich-person (new shape) returns { results: { data: <payload> } }; legacy returns payload directly
+      const payload = data?.results?.data ?? data;
+      const enrichedData = payload?.data || payload;
+
       updateParsedContact(index, {
         status: contact.duplicate_contact_id ? 'duplicate' : 'ready',
         ai_person_info: enrichedData?.profile_summary || null,
         ai_person_position: enrichedData?.suggested_position || null,
         position: contact.position || enrichedData?.suggested_position || null,
       });
-      
+
       toast.success('Sprawdzono osobę', { description: `${contact.first_name} ${contact.last_name}` });
     } catch (err) {
       console.error('Error enriching person:', err);
