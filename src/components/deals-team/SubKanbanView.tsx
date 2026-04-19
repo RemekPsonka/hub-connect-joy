@@ -137,17 +137,19 @@ export function SubKanbanView({
         >
           Moje
         </Button>
-        {teamMembers.map((m) => (
-          <Button
-            key={m.director_id}
-            size="sm"
-            variant={localFilterMember === m.director_id ? 'default' : 'outline'}
-            className="h-6 text-[11px] px-2"
-            onClick={() => setLocalFilterMember(m.director_id)}
-          >
-            {m.director?.full_name?.split(' ')[0] || 'Członek'}
-          </Button>
-        ))}
+        {teamMembers
+          .filter((m) => m.director_id !== currentDirectorId)
+          .map((m) => (
+            <Button
+              key={m.director_id}
+              size="sm"
+              variant={localFilterMember === m.director_id ? 'default' : 'outline'}
+              className="h-6 text-[11px] px-2"
+              onClick={() => setLocalFilterMember(m.director_id)}
+            >
+              {m.director?.full_name?.split(' ')[0] || 'Członek'}
+            </Button>
+          ))}
         <Button
           size="sm"
           variant={localFilterMember === 'unassigned' ? 'default' : 'outline'}

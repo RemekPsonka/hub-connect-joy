@@ -395,17 +395,19 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
         >
           Moje
         </Button>
-        {members.map((m) => (
-          <Button
-            key={m.director_id}
-            size="sm"
-            variant={filterMember === m.director_id ? 'default' : 'outline'}
-            className="h-6 text-[11px] px-2"
-            onClick={() => setFilterMember(m.director_id)}
-          >
-            {m.director?.full_name?.split(' ')[0] || 'Członek'}
-          </Button>
-        ))}
+        {members
+          .filter((m) => m.director_id !== currentDirector?.id)
+          .map((m) => (
+            <Button
+              key={m.director_id}
+              size="sm"
+              variant={filterMember === m.director_id ? 'default' : 'outline'}
+              className="h-6 text-[11px] px-2"
+              onClick={() => setFilterMember(m.director_id)}
+            >
+              {m.director?.full_name?.split(' ')[0] || 'Członek'}
+            </Button>
+          ))}
         <Button
           size="sm"
           variant={filterMember === 'unassigned' ? 'default' : 'outline'}
