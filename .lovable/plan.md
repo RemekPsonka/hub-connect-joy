@@ -1,103 +1,99 @@
 
 
-## Sprint 14 — GCal: write + sync + szyfrowanie (zaadaptowany)
+## Sprint 15 — Gmail wysyłka (zaadaptowany)
 
-### Co już jest (NIE duplikujemy)
-- `gcal_tokens` (refresh_token plain) + `gcal-auth` (init/callback/disconnect) + `gcal-events` (read live z Google API).
-- UI: Settings → Integrations tab z connect/disconnect (per `useGoogleCalendar.ts`).
-- CalendarWidget + `useGCalEvents` (live fetch z Google, bez cache w DB).
+### Co już mamy (NIE duplikujemy)
+- OAuth Google + szyfrowane refresh_tokens (Sprint 14, `gcal_tokens` + `_shared/gcal.ts`).
+- Wzorzec confirmation w `sovra-confirm` (Sprint 5).
+- Stuby `draft_email` w `sovra/tools.ts` (gotowe do real-implement).
 
 ### Korekty względem MD
-1. **Nie tworzę `google_integrations`** — używam istniejącego `gcal_tokens`. Dodaję kolumny: `refresh_token_encrypted bytea`, `refresh_token_nonce bytea`. Migracja zaszyfruje istniejące, potem `RENAME refresh_token → deprecated_refresh_token_20260419` (per project rules: nie DROP, tylko rename).
-2. **Tworzę `gcal_events`** (cache) — nie `google_events`. Konwencja `gcal_*` zgodna z istniejącą.
-3. **OAuth flow zostaje** — `gcal-auth` już go ma. Nie tworzę `gcal-oauth-init/callback`.
-4. **Sync cron** — używam helpera `schedule_edge_function` ze Sprint pg_cron. Co 15 min wywołuje nowy `gcal-sync-events`.
-5. **Push/write** — nowa fn `gcal-push-event`. Wymaga rozszerzenia scope o `calendar.events` (write). User będzie musiał reconnect po deploy.
-6. **Sovra tool** — `create_calendar_event` w `_shared/sovra-tools.ts` + handler w `sovra-confirm` (Sprint 5 confirmation pattern).
-7. **Pgsodium** — używam `vault` (już mamy z pg_cron). Helper `encrypt_gcal_token(text)` / `decrypt_gcal_token(bytea, bytea)` SECURITY DEFINER.
-8. **Meeting form checkbox** — sprawdzę istniejący `MeetingForm`/`ConsultationForm` przed implementacją.
+1. **Nie tworzę `gmail_integrations`** — rozszerzam istniejący `gcal_tokens` (te same Google credentials, ten sam refresh_token, dodatkowe scopes). Zmiana nazwy logicznej: traktuję `gcal_tokens` jako „google_tokens". Alternatywnie — jeśli Google wyda osobny refresh dla nowych scopes — to i tak zostanie nadpisany przy reconnect. **Decyzja: jeden token, więcej scopes.**
+2. **`gmail_outbox`** — tworzę zgodnie z MD (z `actor_id` → `directors.id`, RLS own-only).
+3. **OAuth scopes** — dodaję do `gcal-auth/index.ts` SCOPES: `gmail.send`, `gmail.compose`, `gmail.readonly`. User musi reconnect po deploy (tak samo jak po S14).
+4. **Gmail send** — używam `getValidAccessToken` z `_shared/gcal.ts` (już działa, zwraca access_token z dowolnymi scopes które user przyznał).
+5. **`send_email` tool** — nowy w `sovra/tools.ts` + handler w `sovra-confirm`. `draft_email` przestaje być stub.
+6. **Audit log** — INSERT do `audit_log` (entity_type='contact', action='email_sent').
+7. **ContactDetailHeader** — dodam przycisk „Wyślij email" (już jest tam toolbar z Edit). Modal compose.
 
-### A. Migracja `<ts>_sprint14_gcal_write_sync.sql`
-- `CREATE EXTENSION IF NOT EXISTS pgsodium;`
-- Snapshot: `archive.gcal_tokens_backup_20260419 AS SELECT * FROM gcal_tokens;`
-- ALTER `gcal_tokens` ADD `refresh_token_encrypted bytea`, `refresh_token_nonce bytea`, `scopes text[]`.
-- Backfill: zaszyfruj istniejące refresh_token → encrypted/nonce (kluczem z `vault.secrets`).
-- ALTER `gcal_tokens` RENAME `refresh_token` TO `deprecated_refresh_token_20260419`, RENAME `access_token` TO `deprecated_access_token_20260419` (access tokens i tak są krótkożyjące — zawsze refresh on-demand).
-- CREATE TABLE `public.gcal_events` (id, tenant_id, director_id, gcal_event_id, calendar_id, summary, description, location, start_at, end_at, attendees jsonb, html_link, synced_at, UNIQUE(director_id, gcal_event_id)).
-- RLS: own-only via `get_current_director_id()`.
-- Indeks `(director_id, start_at)`.
-- Functions: `private.encrypt_gcal_token(text)` / `private.decrypt_gcal_token(bytea, bytea)` — SECURITY DEFINER, klucz z `vault.decrypted_secrets WHERE name='gcal_token_key'`.
-- Cron: `SELECT schedule_edge_function('gcal_sync_events_15min', '*/15 * * * *', '/functions/v1/gcal-sync-events', '{}');`
+### A. Migracja `<ts>_sprint15_gmail_send.sql`
+- `archive.gcal_tokens_scopes_snapshot_20260419` — snapshot scopes.
+- CREATE TABLE `public.gmail_outbox` (id, tenant_id, director_id, contact_id?, gmail_message_id?, gmail_draft_id?, to, cc?, bcc?, subject, body_plain, body_html?, status CHECK in (draft|sending|sent|failed), error?, created_at, sent_at?).
+- 2 indeksy (director_id+created_at desc, contact_id+created_at desc).
+- RLS: own-only via `get_current_director_id()` + `get_current_tenant_id()`.
 - ROLLBACK skomentowany.
 
-### B. Vault secret
-- Wymagane: `gcal_token_key` (32-byte random) w Vault. Migracja sprawdza istnienie; jeśli brak — INSERT z `pgsodium.crypto_secretbox_keygen()`.
-
-### C. Edge functions
+### B. Edge functions
 
 **Modyfikacja `gcal-auth/index.ts`**:
-- SCOPES: dodaj `https://www.googleapis.com/auth/calendar.events` (write).
-- Zapis refresh_token: wywołaj `private.encrypt_gcal_token` przed UPSERT, zapisz do nowych kolumn.
-- Helper `getValidAccessToken(directorId)` (też w `_shared/gcal.ts`): decrypt → POST do Google token endpoint → return access_token.
+- SCOPES: dodać `gmail.send`, `gmail.compose`, `gmail.readonly`. Reszta bez zmian (refresh_token storage + scopes column już działa).
 
-**Nowy `_shared/gcal.ts`**:
-- `getValidAccessToken(serviceClient, directorId)` — wspólny helper dla sync/push/events.
+**Nowy `_shared/gmail.ts`**:
+- `buildRfc2822({from, to, cc?, subject, body, inReplyTo?})` → string.
+- `base64UrlEncode(s)` → URL-safe base64 dla Gmail API.
 
-**Nowy `gcal-sync-events/index.ts`**:
-- Wywoływane przez cron (service role auth). Iteruje `gcal_tokens`, dla każdego: getAccessToken → events.list (timeMin = now - 7d, timeMax = now + 30d, każdy `selected_calendars`) → UPSERT do `gcal_events`.
-- Logging do `audit_log`.
+**Nowy `gmail-send/index.ts`**:
+- Zod: `{to, subject, body, cc?, bcc?, in_reply_to?, contact_id?}`.
+- `requireAuth` (director only).
+- `getValidAccessToken(serviceClient, directorId)` → access_token.
+- INSERT `gmail_outbox` status='sending'.
+- POST `https://gmail.googleapis.com/gmail/v1/users/me/messages/send` z `{raw: base64url(rfc2822)}`.
+- UPDATE `gmail_outbox` status='sent', gmail_message_id, sent_at.
+- INSERT `audit_log` (entity_type='contact', entity_id=contact_id, action='email_sent', metadata={to,subject}).
+- Error path: status='failed', error=message.
 
-**Nowy `gcal-push-event/index.ts`**:
-- POST `{calendar_id, summary, description?, start, end, attendees?[], location?}`. Zod validation.
-- `requireAuth` + `getValidAccessToken(director.id)`.
-- POST do Google `calendars/{cal}/events`.
-- INSERT do `gcal_events` z otrzymanym `id` z Google.
-- Zwraca event + html_link.
+**Nowy `gmail-create-draft/index.ts`**:
+- Analogicznie, POST do `gmail/v1/users/me/drafts` z `{message:{raw}}`.
+- INSERT `gmail_outbox` status='draft', gmail_draft_id.
 
-**Modyfikacja `gcal-events/index.ts`**:
-- Read-path: jeśli świeży cache w `gcal_events` (synced_at < 15min) → zwróć z DB, inaczej fallback live API. (Drop-in performance boost.)
+### C. Sovra integration
+**`sovra/tools.ts`**:
+- Usunąć `draft_email` ze STUB_TOOLS.
+- Dodać tool `send_email` z params: `to, subject, body, contact_id?, cc?`. Marked confirmation-required.
+- Update `human_summary` dla obu: pokazuje to/subject/preview body (pierwsze 100 znaków).
 
-### D. Sovra tool
-**Modyfikacja `_shared/sovra-tools.ts`**:
-- Nowy tool `create_calendar_event` z params: `summary`, `start_iso`, `end_iso`, `attendees_emails?`, `description?`. Marked `requires_confirmation: true`.
+**`sovra-confirm/index.ts`** — dodać 2 case'y:
+- `case 'draft_email'`: invoke `gmail-create-draft`.
+- `case 'send_email'`: invoke `gmail-send`.
+- Oba fetch z `service_role` — uwaga: `requireAuth` w gmail-send blokuje service_role bez user kontekstu, więc handler woła bezpośrednio logikę albo invoke z auth headerem usera. **Decyzja:** wyciągnę logikę send do `_shared/gmail.ts` (`sendGmailMessage(serviceClient, directorId, params)`) i wołam ją zarówno z `gmail-send` jak i `sovra-confirm` — bez pętli HTTP.
 
-**Modyfikacja `sovra-confirm/index.ts`**:
-- Handler `create_calendar_event` → invoke `gcal-push-event` z primary calendar ID (z `gcal_tokens.selected_calendars[0]` lub `'primary'`).
+### D. Frontend
 
-### E. Frontend
+**Nowy `src/components/email/ComposeEmailModal.tsx`**:
+- Props: `{open, onClose, initialTo?, initialSubject?, initialBody?, contactId?}`.
+- React Hook Form + Zod: to (email), cc?, subject, body (Textarea, future tiptap).
+- 2 przyciski: „Zapisz jako szkic" / „Wyślij" → `supabase.functions.invoke('gmail-send'|'gmail-create-draft', {body})`.
+- Toast success + invalidate `['gmail-outbox', contactId]`.
 
-**Modyfikacja `src/hooks/useGoogleCalendar.ts`**:
-- Nowy mutation `useGCalPushEvent({calendar_id, summary, start, end, ...})` wywołujący `gcal-push-event`.
+**Nowy hook `src/hooks/useGmail.ts`**:
+- `useSendEmail()`, `useCreateDraft()`, `useGmailOutbox(contactId)`.
 
-**Modyfikacja meeting form** (sprawdzę: `src/components/meetings/MeetingForm.tsx` lub `ConsultationForm.tsx`):
-- Checkbox „Zapisz w Google Calendar" (default checked jeśli `isConnected`).
-- Po submit meeting → jeśli zaznaczony → `useGCalPushEvent`.
+**Modyfikacja `src/components/contacts/ContactDetailHeader.tsx`**:
+- Przycisk „Wyślij email" obok „Edit" (Mail icon, disabled jeśli `!contact.email`).
+- Otwiera ComposeEmailModal z `initialTo=contact.email, contactId=contact.id`.
 
-**Settings UI** — zostaje istniejące (`/settings?tab=integrations`). Dodam tylko info „Wymagane uprawnienia: kalendarz (zapis)". Po deploy MD scope-update → user zobaczy „Reconnect required" jeśli `scopes` w DB nie zawiera `calendar.events`.
+**Settings UI** — info „Wymagane uprawnienia: Gmail (wysyłka, szkice, odczyt)". Banner jeśli `scopes` nie zawierają `gmail.send` → „Połącz ponownie".
 
-### F. Kolejność
-1. Migracja SQL (pgsodium + encrypted columns + gcal_events + cron + vault key).
-2. `_shared/gcal.ts` helper.
-3. Modyfikacja `gcal-auth` (write scope + encrypted store).
-4. `gcal-sync-events` + `gcal-push-event`.
-5. Modyfikacja `gcal-events` (cache-first).
-6. Sovra tool + confirm handler.
-7. `useGCalPushEvent` + checkbox w meeting form.
-8. Update memory `mem://features/calendar-module`.
+### E. Kolejność
+1. Migracja SQL (gmail_outbox + snapshot).
+2. `_shared/gmail.ts` (RFC2822 + sendGmailMessage helper).
+3. `gcal-auth` — dodać Gmail scopes.
+4. `gmail-send` + `gmail-create-draft`.
+5. Sovra: real `send_email`/`draft_email` tools + handlers.
+6. Frontend: hook + ComposeEmailModal + przycisk w ContactDetailHeader.
+7. Update memory.
 
-### G. DoD
-- [ ] `gcal_tokens.refresh_token` zaszyfrowany; stara kolumna `deprecated_*`.
-- [ ] `gcal_events` tabela z RLS + indeksem.
-- [ ] Cron `gcal_sync_events_15min` zaplanowany.
-- [ ] Reconnect z nowym scope `calendar.events` działa.
-- [ ] Tworzenie meeting z checkbox → event w Google Calendar.
-- [ ] Sovra `create_calendar_event` → confirmation → realny event.
-- [ ] CalendarWidget szybciej (cache-first).
+### F. DoD
+- [ ] `gmail_outbox` z RLS + indeksami.
+- [ ] OAuth z Gmail scopes (reconnect required).
+- [ ] ContactDetail → „Wyślij email" → mail dociera, outbox status='sent', audit_log wpis.
+- [ ] Sovra „Wyślij maila do Jana" → confirmation → realna wysyłka.
+- [ ] Szkic zapisuje się w Gmail (widoczny w „Wersje robocze").
 
-### H. Ryzyka
-- **R1** Pgsodium może wymagać superuser do `CREATE EXTENSION` — w Lovable Cloud powinno działać. Fallback: użyć `vault` jako prymitywnego key store + AES-GCM w aplikacji.
-- **R2** Backfill istniejących refresh_token: jeśli `vault.crypto_aead_det_encrypt` zawiedzie → zostawiamy plain w `deprecated_refresh_token_20260419` i nowi userzy reconnectują.
-- **R3** Sync co 15 min × N directorów × M kalendarzy = potencjalnie wiele requestów do Google. Mitygacja: limit `selected_calendars` per user; rate-limit per director.
-- **R4** Reconnect required po scope-update — user musi sam kliknąć „Połącz ponownie". Dodam banner w Settings: „Brak uprawnień zapisu — połącz ponownie".
-- **R5** Sovra `create_calendar_event` wymaga że primary calendar jest w `selected_calendars` lub fallback `'primary'`. Użyję `'primary'` jeśli brak.
+### G. Ryzyka
+- **R1** Reconnect wymagany — banner w Settings (mam już infrastrukturę z S14).
+- **R2** Limit Gmail API: 250 quota units/sec/user, send=100 units → ~2.5 mail/sec. Dla 1 directora wystarczy.
+- **R3** RFC2822 quoting (UTF-8 subject, attachments) — w MVP tylko plain text. Załączniki w przyszłości.
+- **R4** `actor_id` vs `director_id` — w MD `actor_id`, w istniejących tabelach mix. Sprawdzę i ujednolicę z istniejącą konwencją (`director_id`).
+- **R5** Gmail w `audit_log` — sprawdzę czy `audit_log.action` ma whitelistę (CHECK constraint). Jeśli tak — ALTER w migracji.
 
