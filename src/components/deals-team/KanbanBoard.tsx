@@ -99,11 +99,8 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
       return searchFilteredContacts.filter(c => !activeTaskMap?.get(c.id));
     }
     const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
-    return searchFilteredContacts.filter(c => {
-      const info = activeTaskMap?.get(c.id);
-      if (!info) return filterMember === 'mine'; // shared contacts visible in "mine"
-      return info.assignedTo === targetId;
-    });
+    if (!targetId) return [];
+    return searchFilteredContacts.filter(c => activeTaskMap?.get(c.id)?.assignedTo === targetId);
   }, [searchFilteredContacts, filterMember, activeTaskMap, currentDirector]);
 
   const hotContacts = useMemo(
