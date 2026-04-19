@@ -7296,6 +7296,39 @@ export type Database = {
           },
         ]
       }
+      role_audit_log: {
+        Row: {
+          action: string
+          changed_by_user_id: string
+          created_at: string
+          id: string
+          new_role: string | null
+          old_role: string | null
+          target_user_id: string
+          tenant_id: string | null
+        }
+        Insert: {
+          action: string
+          changed_by_user_id: string
+          created_at?: string
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          target_user_id: string
+          tenant_id?: string | null
+        }
+        Update: {
+          action?: string
+          changed_by_user_id?: string
+          created_at?: string
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          target_user_id?: string
+          tenant_id?: string | null
+        }
+        Relationships: []
+      }
       sales_representatives: {
         Row: {
           created_at: string | null
