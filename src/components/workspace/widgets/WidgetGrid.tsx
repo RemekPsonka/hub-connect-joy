@@ -82,8 +82,7 @@ export function WidgetGrid() {
         rowHeight={60}
         margin={[12, 12]}
         width={width}
-        onLayoutChange={handleChange}
-        draggableCancel=".no-drag, input, textarea, button, [contenteditable]"
+        onLayoutChange={handleChange as any}
       >
         {widgets.map((w) => (
           <div key={w.id}>{renderWidget(w)}</div>
