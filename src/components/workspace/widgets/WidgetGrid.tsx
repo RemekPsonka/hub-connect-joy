@@ -1,6 +1,5 @@
-import RGL from 'react-grid-layout';
-const { Responsive, WidthProvider } = RGL as any;
-type Layout = { i: string; x: number; y: number; w: number; h: number };
+import { useRef, useEffect, useState } from 'react';
+import { Responsive as ResponsiveGridLayout, type Layout } from 'react-grid-layout';
 import { useWorkspaceWidgets, useUpdateWidgetLayout } from '@/hooks/useWorkspaceWidgets';
 import { KPIWidget } from './KPIWidget';
 import { NoteWidget } from './NoteWidget';
@@ -11,11 +10,25 @@ import { AddWidgetMenu } from './AddWidgetMenu';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
-const ResponsiveGrid = WidthProvider(Responsive);
+function useContainerWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(1200);
+  useEffect(() => {
+    if (!ref.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setWidth(entry.contentRect.width);
+    });
+    ro.observe(ref.current);
+    setWidth(ref.current.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, width };
+}
 
 export function WidgetGrid() {
   const { data: widgets = [], isLoading } = useWorkspaceWidgets();
   const updateLayout = useUpdateWidgetLayout();
+  const { ref, width } = useContainerWidth();
 
   if (isLoading) {
     return (
@@ -56,24 +69,25 @@ export function WidgetGrid() {
   };
 
   return (
-    <div>
+    <div ref={ref}>
       <div className="flex justify-end mb-3">
         <AddWidgetMenu />
       </div>
-      <ResponsiveGrid
+      <ResponsiveGridLayout
         className="layout"
         layouts={layouts}
         breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
         cols={{ lg: 12, md: 10, sm: 6, xs: 4 }}
         rowHeight={60}
         margin={[12, 12]}
+        width={width}
         onLayoutChange={handleChange}
         draggableCancel=".no-drag, input, textarea, button, [contenteditable]"
       >
         {widgets.map((w) => (
           <div key={w.id}>{renderWidget(w)}</div>
         ))}
-      </ResponsiveGrid>
+      </ResponsiveGridLayout>
     </div>
   );
 }
