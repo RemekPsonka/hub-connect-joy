@@ -273,6 +273,27 @@ export function SGUSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border px-2 py-3">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Wróć do CRM" size="lg">
+              <NavLink
+                to="/"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 text-sidebar-foreground transition-colors duration-150 border border-primary/20"
+              >
+                <ArrowRightLeft className="h-4 w-4 shrink-0 text-sidebar-primary" />
+                {!isCollapsed && (
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-medium leading-tight">Wróć do CRM</span>
+                    <span className="text-[10px] text-sidebar-foreground/50 leading-tight">Network Assistant</span>
+                  </div>
+                )}
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
