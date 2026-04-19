@@ -19,9 +19,6 @@ verify_jwt = false
 [functions.sovra-reminder-trigger]
 verify_jwt = false
 
-[functions.sovra-weekly-report]
-verify_jwt = false
-
 # Sprint 04: Sovra 2.0 + ai-stream walidują JWT w kodzie (verifyAuth z _shared/auth.ts).
 [functions.sovra]
 verify_jwt = false
