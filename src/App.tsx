@@ -92,6 +92,7 @@ const App = () => (
                   {/* Director-only routes */}
                   <Route path="/" element={<DirectorGuard><Dashboard /></DirectorGuard>} />
                   <Route path="/calendar" element={<DirectorGuard><Calendar /></DirectorGuard>} />
+                  <Route path="/inbox" element={<DirectorGuard><Inbox /></DirectorGuard>} />
                   <Route path="/workspace" element={<DirectorGuard><Workspace /></DirectorGuard>} />
                   <Route path="/consultations" element={<DirectorGuard><Consultations /></DirectorGuard>} />
                   <Route path="/consultations/:id" element={<DirectorGuard><ConsultationDetail /></DirectorGuard>} />
