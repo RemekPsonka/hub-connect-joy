@@ -1,70 +1,103 @@
 
-User wrzucił sprint-13 MD bez treści wiadomości. Reading more of the file to plan properly.
 
-Plik widziałem do linii 55 (z 135). Główne wymagania jasne: redesign `/` jako „My Day" brief + RPC `rpc_dashboard_myday` + 3 sekcje + 4 KPI widgets.
+## Sprint 14 — GCal: write + sync + szyfrowanie (zaadaptowany)
 
-## Sprint 13 — Dashboard „My Day" (zaadaptowany)
+### Co już jest (NIE duplikujemy)
+- `gcal_tokens` (refresh_token plain) + `gcal-auth` (init/callback/disconnect) + `gcal-events` (read live z Google API).
+- UI: Settings → Integrations tab z connect/disconnect (per `useGoogleCalendar.ts`).
+- CalendarWidget + `useGCalEvents` (live fetch z Google, bez cache w DB).
 
 ### Korekty względem MD
-1. **Strona `/`** — sprawdziłem `App.tsx` wcześniej; istnieje już `Dashboard.tsx` lub `Index.tsx`. Custom instructions: `/my-day` ma wylecieć — czyli logikę „My Day" przenosimy do `/`. Stary widok dashboardu archiwizuję jako `Dashboard.legacy.tsx` (commit history wystarczy, nie kopiuję pliku — git keeps history).
-2. **RPC vs hooki** — MD chce `rpc_dashboard_myday()` zwracający jeden JSONB. Robię tak: jedna RPC = jeden roundtrip, łatwy cache w React Query. RLS przez `get_current_director_id()` w środku funkcji.
-3. **Pogoda** — wttr.in bez auth, fetch z FE z fallbackiem (jeśli error → bez pogody, bez błędu w UI). Cache 30 min w `localStorage` (custom instructions zabraniają localStorage dla **danych biznesowych** — pogoda to nie dane biznesowe, OK).
-4. **„Wiadomości"** — Gmail (S16) nie zrobiony → placeholder „0 nowych". Deal changes z `deal_team_audit_log` (mamy już audit logging dla deali per memory) WHERE `created_at > last_login`. `last_login` z `directors.last_sign_in_at` lub `auth.users.last_sign_in_at`.
-5. **KPI widgets reuse** — Sprint 11 zrobił widgety w `src/components/workspace/widgets/`. Reuse: `ContactsActiveWidget`, `TasksTodayWidget`, `ProspectsNewWidget`, `DealsActiveWidget` (lub odpowiedniki). Sprawdzę dokładne nazwy w trakcie.
+1. **Nie tworzę `google_integrations`** — używam istniejącego `gcal_tokens`. Dodaję kolumny: `refresh_token_encrypted bytea`, `refresh_token_nonce bytea`. Migracja zaszyfruje istniejące, potem `RENAME refresh_token → deprecated_refresh_token_20260419` (per project rules: nie DROP, tylko rename).
+2. **Tworzę `gcal_events`** (cache) — nie `google_events`. Konwencja `gcal_*` zgodna z istniejącą.
+3. **OAuth flow zostaje** — `gcal-auth` już go ma. Nie tworzę `gcal-oauth-init/callback`.
+4. **Sync cron** — używam helpera `schedule_edge_function` ze Sprint pg_cron. Co 15 min wywołuje nowy `gcal-sync-events`.
+5. **Push/write** — nowa fn `gcal-push-event`. Wymaga rozszerzenia scope o `calendar.events` (write). User będzie musiał reconnect po deploy.
+6. **Sovra tool** — `create_calendar_event` w `_shared/sovra-tools.ts` + handler w `sovra-confirm` (Sprint 5 confirmation pattern).
+7. **Pgsodium** — używam `vault` (już mamy z pg_cron). Helper `encrypt_gcal_token(text)` / `decrypt_gcal_token(bytea, bytea)` SECURITY DEFINER.
+8. **Meeting form checkbox** — sprawdzę istniejący `MeetingForm`/`ConsultationForm` przed implementacją.
 
-### A. Migracja SQL `<ts>_sprint13_dashboard_myday.sql`
-- `CREATE OR REPLACE FUNCTION public.rpc_dashboard_myday() RETURNS jsonb` `LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public`.
-- W środku:
-  - `v_actor := get_current_director_id()`, `v_tenant := get_current_tenant_id()`.
-  - `tasks_overdue`: SELECT id, title, due_date, priority FROM tasks WHERE owner_id=v_actor AND status='todo' AND due_date < current_date LIMIT 5.
-  - `meetings_today`: SELECT id, title, start_at FROM meetings WHERE owner_id=v_actor AND start_at::date = current_date ORDER BY start_at LIMIT 5.
-  - `top_ai_recs`: SELECT id, title, content FROM ai_recommendations WHERE actor_id=v_actor AND status='active' ORDER BY created_at DESC LIMIT 3.
-  - `deals_recent_changes`: SELECT entity_id, action, created_at FROM deal_team_audit_log WHERE actor_id=v_actor AND created_at > now() - interval '24 hours' LIMIT 10. (Zamiast `last_login` — proste 24h okno; uproszczenie vs MD bo last_login wymaga osobnej tabeli lub hack przez auth.users który wymaga elevated access.)
-- Returns `jsonb_build_object(...)`.
-- GRANT EXECUTE TO authenticated.
-- `-- ROLLBACK: DROP FUNCTION public.rpc_dashboard_myday;`
+### A. Migracja `<ts>_sprint14_gcal_write_sync.sql`
+- `CREATE EXTENSION IF NOT EXISTS pgsodium;`
+- Snapshot: `archive.gcal_tokens_backup_20260419 AS SELECT * FROM gcal_tokens;`
+- ALTER `gcal_tokens` ADD `refresh_token_encrypted bytea`, `refresh_token_nonce bytea`, `scopes text[]`.
+- Backfill: zaszyfruj istniejące refresh_token → encrypted/nonce (kluczem z `vault.secrets`).
+- ALTER `gcal_tokens` RENAME `refresh_token` TO `deprecated_refresh_token_20260419`, RENAME `access_token` TO `deprecated_access_token_20260419` (access tokens i tak są krótkożyjące — zawsze refresh on-demand).
+- CREATE TABLE `public.gcal_events` (id, tenant_id, director_id, gcal_event_id, calendar_id, summary, description, location, start_at, end_at, attendees jsonb, html_link, synced_at, UNIQUE(director_id, gcal_event_id)).
+- RLS: own-only via `get_current_director_id()`.
+- Indeks `(director_id, start_at)`.
+- Functions: `private.encrypt_gcal_token(text)` / `private.decrypt_gcal_token(bytea, bytea)` — SECURITY DEFINER, klucz z `vault.decrypted_secrets WHERE name='gcal_token_key'`.
+- Cron: `SELECT schedule_edge_function('gcal_sync_events_15min', '*/15 * * * *', '/functions/v1/gcal-sync-events', '{}');`
+- ROLLBACK skomentowany.
 
-### B. Frontend
+### B. Vault secret
+- Wymagane: `gcal_token_key` (32-byte random) w Vault. Migracja sprawdza istnienie; jeśli brak — INSERT z `pgsodium.crypto_secretbox_keygen()`.
 
-**Hook nowy** `src/hooks/useDashboardMyDay.ts`:
-- React Query, key `['dashboard-myday', directorId]`, staleTime 2 min.
-- `supabase.rpc('rpc_dashboard_myday')` → typed return.
+### C. Edge functions
 
-**Hook nowy** `src/hooks/useWeather.ts`:
-- Fetch `https://wttr.in/Warsaw?format=j1` z 30-min cache w localStorage (klucz `weather_warsaw_v1` + timestamp).
-- Fallback: `null` przy błędzie/timeout 3s.
+**Modyfikacja `gcal-auth/index.ts`**:
+- SCOPES: dodaj `https://www.googleapis.com/auth/calendar.events` (write).
+- Zapis refresh_token: wywołaj `private.encrypt_gcal_token` przed UPSERT, zapisz do nowych kolumn.
+- Helper `getValidAccessToken(directorId)` (też w `_shared/gcal.ts`): decrypt → POST do Google token endpoint → return access_token.
 
-**Edycja `src/pages/Dashboard.tsx`** (lub `Index.tsx` — sprawdzę):
-- Nowy layout:
-  - **Header**: „Dzień dobry Remek, {dayName}, {DD MMMM YYYY}." + opcjonalnie „Pogoda: {temp}°C, {desc}".
-  - **Sekcja „Dzisiaj"** (Card, max 5): merged list `tasks_overdue` (badge „Zaległe", red) + `meetings_today` (badge „Spotkanie", blue) + `top_ai_recs` (badge „Sovra", purple). Każdy klikalny → routing.
-  - **Sekcja „Wiadomości"** (Card, 2 cols): „📧 0 nowych emaili" (placeholder) + „💼 {N} zmian w dealach (24h)" → klik rozwija listę z `deals_recent_changes`.
-  - **Sekcja „Szybki start"** (3 duże tiles z gradientem, h-32): „➕ Dodaj kontakt" → `/contacts?new=1`, „💬 Rozmowa z Sovrą" → `/sovra`, „📅 Nowe spotkanie" → `/meetings?new=1`.
-  - **KPI grid** (4 cols, reuse z workspace widgets) — bez drag&drop, statyczny grid.
+**Nowy `_shared/gcal.ts`**:
+- `getValidAccessToken(serviceClient, directorId)` — wspólny helper dla sync/push/events.
 
-### C. Czystka (custom instructions)
-- `/my-day` route w `App.tsx` → usuwam (z archiwizacją: redirect na `/` przez `<Navigate to="/" replace />`).
-- Stary Dashboard content nadpisuję — git history = archiwum.
+**Nowy `gcal-sync-events/index.ts`**:
+- Wywoływane przez cron (service role auth). Iteruje `gcal_tokens`, dla każdego: getAccessToken → events.list (timeMin = now - 7d, timeMax = now + 30d, każdy `selected_calendars`) → UPSERT do `gcal_events`.
+- Logging do `audit_log`.
 
-### D. Kolejność
-1. Migracja RPC.
-2. Hook `useDashboardMyDay` + `useWeather`.
-3. Przebudowa `Dashboard.tsx`.
-4. Redirect `/my-day` → `/` w `App.tsx`.
-5. Smoke test.
+**Nowy `gcal-push-event/index.ts`**:
+- POST `{calendar_id, summary, description?, start, end, attendees?[], location?}`. Zod validation.
+- `requireAuth` + `getValidAccessToken(director.id)`.
+- POST do Google `calendars/{cal}/events`.
+- INSERT do `gcal_events` z otrzymanym `id` z Google.
+- Zwraca event + html_link.
 
-### E. DoD
-- [ ] RPC `rpc_dashboard_myday` zwraca 4 sekcje.
-- [ ] Strona `/` ma header z datą + opcjonalną pogodą.
-- [ ] Sekcja „Dzisiaj" merguje overdue/meetings/recs (max 5).
-- [ ] Sekcja „Wiadomości" pokazuje placeholder + deal changes.
-- [ ] 3 quick-start tiles routują poprawnie.
-- [ ] 4 KPI widgets renderują dane.
-- [ ] `/my-day` redirectuje na `/`.
+**Modyfikacja `gcal-events/index.ts`**:
+- Read-path: jeśli świeży cache w `gcal_events` (synced_at < 15min) → zwróć z DB, inaczej fallback live API. (Drop-in performance boost.)
 
-### F. Ryzyka
-- **R1** `meetings.owner_id` może nie istnieć (czasem `created_by`). Sprawdzę w migracji; jeśli inny — użyję faktycznej kolumny.
-- **R2** `deal_team_audit_log` schema — sprawdzę kolumny (`actor_id` vs `director_id`). Adjust query.
-- **R3** Pogoda wttr.in może być wolna/down → 3s timeout + fallback bez pogody, brak blokowania renderu.
-- **R4** KPI widgets z workspace mogą wymagać kontekstu (props specyficznego dla workspace) — jeśli tak, wyciągnę logikę do `KpiCard` reusable component.
-- **R5** Reszta MD (linie 56-135) niewidoczna — jeśli zawierają sprzeczne wymagania, zaadaptuję lub wskażę odchylenia po implementacji.
+### D. Sovra tool
+**Modyfikacja `_shared/sovra-tools.ts`**:
+- Nowy tool `create_calendar_event` z params: `summary`, `start_iso`, `end_iso`, `attendees_emails?`, `description?`. Marked `requires_confirmation: true`.
+
+**Modyfikacja `sovra-confirm/index.ts`**:
+- Handler `create_calendar_event` → invoke `gcal-push-event` z primary calendar ID (z `gcal_tokens.selected_calendars[0]` lub `'primary'`).
+
+### E. Frontend
+
+**Modyfikacja `src/hooks/useGoogleCalendar.ts`**:
+- Nowy mutation `useGCalPushEvent({calendar_id, summary, start, end, ...})` wywołujący `gcal-push-event`.
+
+**Modyfikacja meeting form** (sprawdzę: `src/components/meetings/MeetingForm.tsx` lub `ConsultationForm.tsx`):
+- Checkbox „Zapisz w Google Calendar" (default checked jeśli `isConnected`).
+- Po submit meeting → jeśli zaznaczony → `useGCalPushEvent`.
+
+**Settings UI** — zostaje istniejące (`/settings?tab=integrations`). Dodam tylko info „Wymagane uprawnienia: kalendarz (zapis)". Po deploy MD scope-update → user zobaczy „Reconnect required" jeśli `scopes` w DB nie zawiera `calendar.events`.
+
+### F. Kolejność
+1. Migracja SQL (pgsodium + encrypted columns + gcal_events + cron + vault key).
+2. `_shared/gcal.ts` helper.
+3. Modyfikacja `gcal-auth` (write scope + encrypted store).
+4. `gcal-sync-events` + `gcal-push-event`.
+5. Modyfikacja `gcal-events` (cache-first).
+6. Sovra tool + confirm handler.
+7. `useGCalPushEvent` + checkbox w meeting form.
+8. Update memory `mem://features/calendar-module`.
+
+### G. DoD
+- [ ] `gcal_tokens.refresh_token` zaszyfrowany; stara kolumna `deprecated_*`.
+- [ ] `gcal_events` tabela z RLS + indeksem.
+- [ ] Cron `gcal_sync_events_15min` zaplanowany.
+- [ ] Reconnect z nowym scope `calendar.events` działa.
+- [ ] Tworzenie meeting z checkbox → event w Google Calendar.
+- [ ] Sovra `create_calendar_event` → confirmation → realny event.
+- [ ] CalendarWidget szybciej (cache-first).
+
+### H. Ryzyka
+- **R1** Pgsodium może wymagać superuser do `CREATE EXTENSION` — w Lovable Cloud powinno działać. Fallback: użyć `vault` jako prymitywnego key store + AES-GCM w aplikacji.
+- **R2** Backfill istniejących refresh_token: jeśli `vault.crypto_aead_det_encrypt` zawiedzie → zostawiamy plain w `deprecated_refresh_token_20260419` i nowi userzy reconnectują.
+- **R3** Sync co 15 min × N directorów × M kalendarzy = potencjalnie wiele requestów do Google. Mitygacja: limit `selected_calendars` per user; rate-limit per director.
+- **R4** Reconnect required po scope-update — user musi sam kliknąć „Połącz ponownie". Dodam banner w Settings: „Brak uprawnień zapisu — połącz ponownie".
+- **R5** Sovra `create_calendar_event` wymaga że primary calendar jest w `selected_calendars` lub fallback `'primary'`. Użyję `'primary'` jeśli brak.
+
