@@ -1,107 +1,123 @@
 
-## Sprint SGU-05 — Prospecting manual + CSV import
+## Sprint SGU-06 — Prospecting AI KRS
 
 ### Recon (READ-ONLY, równolegle przed implementacją)
 
-**Tool calls round 1:**
-1. `supabase--read_query` × 4 (równolegle):
-   - `contacts` NOT NULL pola (co musi być w minimalnym INSERT z edge fn).
-   - `deal_team_contacts.contact_id` is_nullable (potwierdzenie wariantu A).
-   - rozkład `category` + `status` w SGU teamie (już częściowo z SGU-04 reconu — re-fetch dla pewności).
-   - `contacts.source` distinct values (free-text czy enum).
-2. `code--exec` lub `code--view package.json` — `papaparse` w deps?
-3. `code--view src/pages/DealsTeamDashboard.tsx` (bieżący stan po SGU-04) — gdzie wpiąć CTA bar warunkowo `mode==='sgu' && view==='prospecting'`.
-4. `code--search_files` — `ProspectingTab|view=prospecting|prospecting` w `src/components/deals-team/` — czy jest dedykowany komponent (`ProspectingTab.tsx` z importu w SGU-01) czy renderowany inline.
-5. `code--view src/components/deals-team/ProspectingTab.tsx` (jeśli istnieje) — gdzie dodać CTA bar + akcje wierszowe (Oznacz jako klient / Archiwizuj).
-6. `code--view supabase/functions/sgu-push-contact/index.ts` (z SGU-02) — reuse patternu auth + cors + tenant guard.
-7. `code--view src/components/sgu/PushToSGUDialog.tsx` (z SGU-02) — reuse patternu RHF+Zod+invoke+toast.
-8. `code--list_dir src/components/sgu` — sprawdzenie istniejących komponentów po SGU-04.
+**Round 1 — 9 calls równolegle:**
+1. `supabase--read_query` × 6:
+   - `background_jobs` kolumny + constraints (KLUCZOWE: czy `actor_id` NOT NULL → decyzja o ALTER DROP NOT NULL).
+   - Paweł/Adam: czy mają row w `directors` (decyduje wariant a/b dla actor_id).
+   - Distinct `job_type` w `background_jobs` (kolizja z `'sgu_krs_prospecting'`?).
+   - Czy `pkd_codes`/`pkd_codes_seed` już istnieje.
+   - `cron.job` lista (czy `sgu_prospecting_krs_worker_tick` nie istnieje).
+   - `pg_proc` dla `schedule_edge_function` helper (z SGU-04 — potwierdzenie reuse).
+2. `code--exec ls supabase/functions/ | grep krs` — istniejące edge fns KRS.
+3. `code--view supabase/functions/_shared/llm-provider.ts` (head 50 linii) — interfejs `callLLM` (signature, response shape).
+4. `code--exec grep -r CRON_SECRET supabase/functions/ | head -5` — pattern z SGU-04.
 
-Wypisuję 8-pkt status (OK/BRAK + cytaty).
+**Round 2 (po round 1, jeśli potrzebne):**
+- `code--view supabase/functions/fetch-krs-data/index.ts` — czy KRS list endpoint czy single-NIP only (decyduje czy worker musi zaimplementować list).
+- `code--view src/pages/sgu/SGUProspecting.tsx` (z SGU-05) — punkt rozszerzenia o tab „AI KRS".
+- `code--view supabase/functions/sgu-add-lead/index.ts` (SGU-05) — reuse pattern dla RPC accept (chociaż my robimy przez RPC SQL, nie edge fn).
+
+Wypisuję 9-pkt status (OK/BRAK + cytaty + decyzja: wariant (a) directors-insert vs (b) DROP NOT NULL).
 
 ### Implementacja (po reconie, 1 batch)
 
-**A. Migracja SQL** `supabase/migrations/<ts>_sgu_05_prospecting.sql` (dokładnie wg specu):
-- Archive snapshot `archive.deal_team_contacts_backup_20260419_sgu05`.
-- `CREATE TABLE sgu_csv_import_presets` z `UNIQUE (tenant_id, name)`.
-- Index `(tenant_id, last_used_at DESC NULLS LAST)`.
-- RLS enable + 4 policies (select/insert/update/delete) — partner/director/superadmin.
-- Trigger `tg_sgu_csv_presets_touch_updated_at` na BEFORE UPDATE.
-- DO $$ verification block + komentarz `-- ROLLBACK:`.
-- **Wariant A**: NIE ruszamy `deal_team_contacts.contact_id` constraintu — edge fn tworzy minimalny `contacts` row.
+**A. Migracja SQL** `supabase/migrations/<ts>_sgu_06_prospecting_krs.sql` — dokładnie wg specu:
+1. Archive snapshot `background_jobs`.
+2. ALTER TABLE `background_jobs` ADD COLUMN `actor_user_id uuid REFERENCES auth.users(id)` + DROP NOT NULL na `actor_id` (jeśli recon potwierdzi NOT NULL).
+3. CREATE TABLE `sgu_prospecting_candidates` + 3 indexy + 2 unique (per tenant: nip, krs_number).
+4. RLS enable + 2 policies (SELECT/UPDATE — partner+director+superadmin; INSERT tylko via SECURITY DEFINER RPC / service_role).
+5. RPC `rpc_sgu_accept_prospecting_candidate(uuid)` SECURITY DEFINER + dedup check (po nazwie/phone w SGU teamie) + INSERT contacts + INSERT deal_team_contacts (`source_contact_id=NULL`, `category='lead'`, `status='new'`, notes z AI score).
+6. RPC `rpc_sgu_reject_prospecting_candidate(uuid, text)` SECURITY DEFINER.
+7. CREATE TABLE `pkd_codes_seed` + GIN index na `search_tsv` + INSERT 50 PKD (z specu, sektory: ubezpieczenia/transport/nieruchomości/budownictwo/IT/zdrowie/usługi).
+8. **pg_cron** przez **insert tool** (NIE migracja — zawiera URL/secrets pattern) — `cron.schedule('sgu_prospecting_krs_worker_tick', '*/1 * * * *', $$SELECT public.schedule_edge_function('sgu-prospecting-krs-worker', '{}'::jsonb);$$);`
+9. RPC pomocniczy `sgu_next_prospecting_job()` SECURITY DEFINER — zwraca 1 pending job z `FOR UPDATE SKIP LOCKED` (worker reuse, advisory locking).
+10. DO $$ verification block + komentarz `-- ROLLBACK:`.
 
-**B. Edge function** `supabase/functions/sgu-add-lead/index.ts`:
-- CORS + `verifyAuth` (reuse `_shared/auth.ts`).
-- RPC: `has_sgu_access`, `get_current_director_id`, `get_sgu_team_id`, `get_current_tenant_id`.
-- Walidacja inline (full_name min 2, phone PL regex, email basic, premium ≥0).
-- Dedup query po `(team_id, contacts.phone OR contacts.email)` → 200 z `duplicate:true` (nie 409).
-- INSERT `contacts` (minimalny: tenant_id, full_name, phone, email, source=`sgu_<src>`, created_by_user_id).
-- INSERT `deal_team_contacts` (tenant_id, team_id, contact_id, source_contact_id=NULL, category='lead', status='new', expected_annual_premium_gr=PLN×100, notes).
-- Response: `{ deal_team_contact_id, contact_id, created, duplicate }`.
+**B. Edge function** `supabase/functions/sgu-prospecting-krs/index.ts` (enqueue):
+- CORS + `verifyAuth`.
+- RPC: `is_sgu_partner`, `get_current_director_id`, `get_current_tenant_id`.
+- Walidacja: min 1 filter (PKD/woj), `max_results ≤ 500`.
+- Daily quota: max 5 jobów/user/24h (count na `background_jobs WHERE actor_user_id=auth.uid() AND job_type='sgu_krs_prospecting'`).
+- INSERT `background_jobs` (actor_id=NULL, actor_user_id=auth.uid(), job_type, payload, status='pending', progress=0).
+- Response: `{ job_id, estimated_minutes }`.
 
-**C. Edge function** `supabase/functions/sgu-import-leads/index.ts`:
-- Body: `{ leads: [], source, preset_name? }`. Limit 500/request.
-- Pre-fetch dedup: 1 query do `deal_team_contacts JOIN contacts` w SGU teamie → Set<phone>+Set<email>.
-- Pętla: filter dedup → batch INSERT contacts (z `RETURNING id`) → batch INSERT deal_team_contacts.
-- Jeśli `preset_name` → UPSERT do `sgu_csv_import_presets` (touch usage_count + last_used_at).
-- Response: `{ inserted, skipped_duplicates, errors: [{row, message}] }`.
+**C. Edge function** `supabase/functions/sgu-prospecting-krs-worker/index.ts` (cron-driven):
+- Header `x-cron-secret` check (reuse SGU-04 pattern).
+- RPC `sgu_next_prospecting_job` — pobiera 1 job, status→'processing'.
+- Parse criteria + cursor (`offset` z `result.next_offset`).
+- **KRS API call**: jeśli `fetch-krs-data` ma list endpoint → reuse via `supabase.functions.invoke`. Inaczej fallback: implementacja `fetchKRSList(criteria)` inline z paginacją do `api.ekrs.ms.gov.pl`.
+- Pętla max 60 firm/tick:
+  - Enrichment per firma (single-NIP `fetch-krs-data` invoke).
+  - AI scoring przez `_shared/llm-provider.ts` z prompt PL (zwraca `{score, reasoning}` jako structured output / tool call).
+  - INSERT `sgu_prospecting_candidates` (z ai_score, ai_reasoning, ai_model).
+  - `await sleep(1000)` po każdej firmie.
+  - Co 10 firm: UPDATE `background_jobs.progress`.
+- Finalize: jeśli batch < 60 → `status='completed'`, `result.candidates_added`. Inaczej `result.next_offset` dla kontynuacji.
+- try/catch — failure → `status='failed', error=msg`, dotychczas zapisani kandydaci zostają.
 
-**D. Hooki** (`src/hooks/`)
-- `useSGUProspects.ts` — query `deal_team_contacts` z `team_id=sguTeamId AND category IN ('lead','prospect')` + JOIN `contacts`. Filtry: source, status, assignee, search. Reference-only dla `source_contact_id IS NOT NULL` (reuse `useCRMContactBasic` z SGU-02 — albo indykuje że dane mają być pobrane per wiersz przez `<SGUContactName>` jeśli istnieje).
-- `useCSVImportPresets.ts` — list + upsert + touch (mutations). QueryKey `['sgu-csv-presets', tenantId]`.
+**D. Hooki** (`src/hooks/`):
+- `useStartKRSProspecting.ts` — mutation `invoke('sgu-prospecting-krs')` + toast „Job #X uruchomiony, ~Y min" + invalidate `['background-jobs']`.
+- `useProspectingCandidates.ts` — query `sgu_prospecting_candidates` (filtry: jobId, status, sort by ai_score DESC) + `acceptMutation` (RPC) + `rejectMutation` (RPC) + bulk variants.
+- `useProspectingJobStatus.ts` — query `background_jobs` po jobId, `refetchInterval: status IN ('pending','processing') ? 5000 : false`.
+- `usePKDCodes.ts` — query `pkd_codes_seed` z `search_tsv @@ plainto_tsquery('simple', input)` LIMIT 20.
 
-**E. Komponenty** (`src/components/sgu/`)
-- `AddLeadDialog.tsx` — RHF + Zod schema (wg specu); `supabase.functions.invoke('sgu-add-lead')`. Duplicate handling → AlertDialog z linkiem `?highlight=<id>`. Toast + invalidate `['sgu-prospects']`.
-- `ImportLeadsDialog.tsx` — 4-step wizard z stanem `step`:
-  - **upload**: shadcn dropzone + `papaparse.parse(file, { header: true, preview: 5, skipEmptyLines: true })`.
-  - **mapping**: `<CSVMappingStep>` + dropdown „Załaduj preset" + input „Nazwa presetu".
-  - **preview**: pełny parse + apply mapping + dedup pre-check (RPC `rpc_sgu_check_duplicates(jsonb)` — **dodam do migracji** jako helper, albo prościej: inline check w edge fn `sgu-import-leads` z dry_run flagą; **decyzja**: dry_run flag w `sgu-import-leads` (`{ leads, source, dry_run: true }` zwraca tylko `{ would_insert, would_skip }` bez INSERTów). Mniej kodu SQL, jeden edge fn.
-  - **progress**: split na batch 50, sequential invoke, progress bar, summary card.
-- `CSVMappingStep.tsx` — controlled component z auto-suggest (regex po headerze).
+**E. Komponenty** (`src/components/sgu/`):
+- `KRSProspectingForm.tsx` — RHF + Zod (PKD multi, województwo select 16 hardcoded, miasto input, promień slider, employees min/max, forma_prawna multi, max_results 1-500). Submit → `useStartKRSProspecting`.
+- `PKDAutocomplete.tsx` — shadcn Combobox (cmdk) z multi-select; query do `pkd_codes_seed` (tsv search).
+- `ProspectingCandidatesList.tsx` — `<Table>` z checkbox column, AI score badge (>=70 zielony / 40-69 żółty / <40 szary), popover ai_reasoning. Bulk actions: Zaakceptuj zaznaczone / Odrzuć / Auto-accept top 10 (>=70) / Auto-reject (<50). Row expand: pełny ai_reasoning + link `https://rejestr.io/krs/<numer>`.
+- `ProspectingJobProgress.tsx` — `<Progress>` + status badge + button „Pokaż kandydatów" (po completed).
 
-**F. Modyfikacje**
-- `src/components/deals-team/ProspectingTab.tsx` (lub inline w `DealsTeamDashboard` wg recon #4): warunkowo render CTA bar gdy `mode==='sgu' && (isPartner || directorId)`. 3 buttony: „Dodaj lead", „Importuj CSV", „Odśwież". Dialogi mountowane w tym samym komponencie.
-- Akcje per wiersz tabeli (`ProspectingTab` row actions): „Oznacz jako klient" (AlertDialog confirm → UPDATE `category='client', status='active'`), „Archiwizuj" (UPDATE `status='inactive'`), „Przypisz do rep" (disabled MVP — placeholder z tooltip „Po SGU-09").
-- Badge `SGU-native` dla `source_contact_id IS NULL` + reuse `Z CRM` z SGU-02.
-- Filtr „Pokaż zarchiwizowane" (default false).
+**F. Modyfikacje**:
+- `src/pages/sgu/SGUProspecting.tsx` (lub `ProspectingTab.tsx` z SGU-05 — recon zdecyduje punkt) — dodaj zakładki nad tabelą: „Wszystkie" / „Ręczne" / „CSV" / **„AI KRS"**. Tab „AI KRS" zawiera:
+  - Sekcja 1: `<KRSProspectingForm>` (collapsible, default open).
+  - Sekcja 2: lista jobów (ostatnie 10) z `<ProspectingJobProgress>` per job.
+  - Sekcja 3: `<ProspectingCandidatesList jobId={selectedJobId}>`.
+- Tab „AI KRS" widoczny TYLKO dla `is_sgu_partner() || directorId` (rep nie widzi).
 
-**G. package.json** — jeśli recon #2 pokaże brak `papaparse` → dodaj `papaparse` + `@types/papaparse` przez `<lov-add-dependency>`.
-
-**H. Walidacja**
-- Po migracji types.ts auto-regenerowany (nowa tabela widoczna w `Database['public']`).
-- Deploy 2 edge functions.
+**G. Walidacja**:
+- types.ts auto-regenerowany (nowe tabele + RPC + kolumna).
+- Deploy 2 edge fns przez `supabase--deploy_edge_functions`.
 - `npm run build` + `npm run lint`.
-- Smoke test sequence (4 scenariusze z DoD).
+- Smoke test (4 scenariusze z DoD).
 
 ### Pliki
 
-**Nowe (7):**
-- `supabase/migrations/<ts>_sgu_05_prospecting.sql`
-- `supabase/functions/sgu-add-lead/index.ts`
-- `supabase/functions/sgu-import-leads/index.ts`
-- `src/hooks/useSGUProspects.ts`
-- `src/hooks/useCSVImportPresets.ts`
-- `src/components/sgu/AddLeadDialog.tsx`
-- `src/components/sgu/ImportLeadsDialog.tsx`
-- `src/components/sgu/CSVMappingStep.tsx`
+**Nowe (10):**
+- `supabase/migrations/<ts>_sgu_06_prospecting_krs.sql`
+- `supabase/functions/sgu-prospecting-krs/index.ts`
+- `supabase/functions/sgu-prospecting-krs-worker/index.ts`
+- `src/hooks/useStartKRSProspecting.ts`
+- `src/hooks/useProspectingCandidates.ts`
+- `src/hooks/useProspectingJobStatus.ts`
+- `src/hooks/usePKDCodes.ts`
+- `src/components/sgu/KRSProspectingForm.tsx`
+- `src/components/sgu/PKDAutocomplete.tsx`
+- `src/components/sgu/ProspectingCandidatesList.tsx`
+- `src/components/sgu/ProspectingJobProgress.tsx`
 
-**Modyfikowane (1–2):**
-- `src/components/deals-team/ProspectingTab.tsx` (CTA bar warunkowy + row actions) — albo `DealsTeamDashboard.tsx` jeśli recon pokaże inny punkt rozszerzenia.
-- `package.json` (jeśli papaparse brak).
+**Modyfikowane (1):**
+- `src/components/deals-team/ProspectingTab.tsx` (lub `src/pages/sgu/SGUProspecting.tsx` zależnie od recon) — dodanie taba „AI KRS".
 
 ### Ryzyka / decyzje
-- **Wariant A (NOT NULL contact_id)**: edge fn tworzy minimalny `contacts` row. Konsekwencja: każdy SGU lead = 1 row w `contacts` z `source LIKE 'sgu_%'`. **Dobre**: izolacja od CRM Knowledge/BI (RLS contacts już maskuje pola wrażliwe dla SGU userów). **Ryzyko**: jeśli `contacts` ma trigger który automatycznie tworzy `contact_bi`/embeddings → niepotrzebny narzut. Recon #1 zweryfikuje NOT NULL pola; jeśli widoczne triggery (np. `tg_contact_create_bi`), dodam `INSERT ... ON CONFLICT DO NOTHING` lub pominę problematyczne pola. **Decyzja default**: idziemy z minimalnym INSERT, w razie problemu w smoke test → dopisuję IF.
-- **Dry-run dedup w preview**: zamiast osobnego RPC dodaję flagę `dry_run` do `sgu-import-leads`. Jedno źródło prawdy dla logiki dedup, mniej kodu SQL.
-- **CTA visibility**: tylko `is_sgu_partner() || directorId`. Rep widzi tabelę read-only (zgodnie ze specem).
-- **Archiwizacja**: `status='inactive'`, NIE DELETE (zgodnie z project-knowledge: zero DROP/DELETE bez archive).
-- **Konwersja lead→client**: tylko UPDATE `category` + `status='active'` (zgodne z mem://features/deals-team/conversion-financial-data-flow — pełny flow konwersji z BI/financial data odkładamy; tu tylko zmiana flagi w SGU prospecting).
+
+- **`background_jobs.actor_id NOT NULL`**: Decyzja domyślna **wariant (b)** — DROP NOT NULL (bezpieczne, CRM nadal wypełnia, SGU może dać NULL). Archiwizacja przed ALTER. Jeśli recon pokaże że istnieje trigger/RLS wymagający NOT NULL → fallback do wariantu (a): insert Pawła/Adama do `directors` jako minimalny rekord (decyzja w trakcie implementacji).
+- **KRS API list endpoint**: jeśli `fetch-krs-data` to single-NIP enrichment (bez list/search), worker musi zaimplementować `fetchKRSList(criteria)` inline (call do `api.ekrs.ms.gov.pl/api/krs/OdpisAktualny` z paginacją, bez API key). Recon ustali. **Plan B**: jeśli publiczny endpoint nie wspiera listing po PKD → MVP używa `companies` table (już istniejące dane CRM, filter po `pkd_codes` i `address_city`) jako źródło kandydatów; KRS API tylko do enrichment per firma. To realistyczniejsze MVP, mniej zewnętrznych zależności. **Decyzja**: w specu jest „KRS API search" — preferujemy implementację z `api.ekrs.ms.gov.pl`, ale z fallbackiem na `companies` table jeśli endpoint listy niedostępny.
+- **AI scoring koszt**: 100 firm × 1 LLM call = 100 calls per job. Daily quota 5 jobów = 500 calls/day. Reuse `_shared/llm-provider.ts` (Gemini default — tani). OK dla MVP.
+- **Deno timeout 2 min**: limit 60 firm/tick + sleep 1s = ~60s + LLM 0.5s = ~90s, mieści się. 500 firm = 9 ticków = 9 min total.
+- **pg_cron worker self-call**: `schedule_edge_function` z SGU-04 musi istnieć. Recon #6 zweryfikuje. Jeśli brak → fallback do bezpośredniego `net.http_post` w cron job (z URL + Bearer SUPABASE_ANON_KEY).
+- **CRON_SECRET**: secret musi być ustawiony w Vault (z SGU-04). Worker bez tego = 401. Recon #9 zweryfikuje.
+- **Dedup w accept RPC**: sprawdza po `name` ILIKE + `phone` w SGU teamie. Jeśli match → status='duplicate' (nie INSERT). Inaczej INSERT contacts+deal_team_contacts.
+- **PKD seed (50)**: pełna lista GUS ma ~600 kodów. MVP top-50 dla branż SGU. Rozszerzenie = follow-up sprint (np. import z pliku CSV GUS).
 
 ### Raport końcowy
 1. Lista nowych + modyfikowanych plików (absolute paths).
-2. Status migracji + 2 deploye edge functions.
-3. Wyniki 8-pkt reconu.
-4. Smoke test 4 scenariusze (add/duplicate/import/preset+convert+archive).
-5. `npm run build` + `npm run lint`.
-6. SQL check ostatnich 10 SGU-native wpisów (`source_contact_id IS NULL`, `contacts.source LIKE 'sgu_%'`).
+2. Status migracji + insert pg_cron job + 2 edge fns deploy.
+3. Wyniki 9-pkt reconu + decyzja (wariant a/b dla actor_id, czy fetch-krs-data ma list endpoint, czy schedule_edge_function istnieje).
+4. `SELECT jobname, schedule, active FROM cron.job WHERE jobname='sgu_prospecting_krs_worker_tick';`
+5. Smoke test: (a) Paweł submit form → job_id; (b) wait 2-3 min → kandydaci w `sgu_prospecting_candidates` z AI score; (c) accept top 3 → 3 nowe `deal_team_contacts` z source_contact_id=NULL i source w notes; (d) rep login → tab „AI KRS" niewidoczny.
+6. `npm run build` + `npm run lint`.
 
-Po Twojej akceptacji: recon (8 calls równolegle) → implementacja (1 batch) → migracja → deploy edge fns → smoke test → raport.
+Po Twojej akceptacji: recon (9 calls) → implementacja (1 batch) → migracja + insert pg_cron + deploy 2 edge fns → smoke test → raport.
