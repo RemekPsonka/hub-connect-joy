@@ -29,7 +29,7 @@ export function useRepAssignmentsBoard(teamId: string | null | undefined) {
 
       const { data: dtcRows, error: contactsErr } = await supabase
         .from('deal_team_contacts')
-        .select('id, status, contact_id, contacts(full_name, company)')
+        .select('id, status, contact_id, contacts!deal_team_contacts_contact_id_fkey(full_name, company)')
         .eq('team_id', teamId!);
       if (contactsErr) throw contactsErr;
 
@@ -53,7 +53,7 @@ export function useRepAssignmentsBoard(teamId: string | null | undefined) {
       const repIndex = new Map(repColumns.map((r) => [r.user_id, r] as const));
       const unassigned: UnassignedContact[] = [];
 
-      for (const row of (dtcRows ?? []) as Array<{
+      for (const row of (dtcRows ?? []) as unknown as Array<{
         id: string;
         status: string | null;
         contacts: { full_name: string | null; company: string | null } | null;

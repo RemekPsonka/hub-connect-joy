@@ -66,7 +66,7 @@ export default function SGURepresentatives() {
                 ) : (
                   reps!.map((rep) => (
                     <RepCard
-                      key={rep.id}
+                      key={rep.user_id}
                       rep={rep}
                       onOpen={setSelected}
                       onDeactivate={setSelected}

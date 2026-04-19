@@ -13,7 +13,7 @@ interface RepCardProps {
 }
 
 export function RepCard({ rep, onOpen, onDeactivate, onReactivate }: RepCardProps) {
-  const initials = `${rep.first_name[0] ?? ''}${rep.last_name[0] ?? ''}`.toUpperCase();
+  const initials = `${rep.first_name?.[0] ?? ''}${rep.last_name?.[0] ?? ''}`.toUpperCase();
   const isOnboarded = !!rep.onboarded_at;
 
   return (
