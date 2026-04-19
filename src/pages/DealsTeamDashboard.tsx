@@ -21,6 +21,7 @@ import {
 } from '@/components/deals-team';
 import { CommissionsTable } from '@/components/sgu/CommissionsTable';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'entries' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
 
@@ -49,6 +50,10 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [commissionsTab, setCommissionsTab] = useState<'entries' | 'goals'>(() => {
+    if (typeof window === 'undefined') return 'entries';
+    return (window.localStorage.getItem('sgu-commissions-tab') as 'entries' | 'goals') || 'entries';
+  });
 
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
 
@@ -151,7 +156,30 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'commissions' && <CommissionsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'commissions' && forcedTeamId && (
+        <Tabs
+          value={commissionsTab}
+          onValueChange={(v) => {
+            const next = v as 'entries' | 'goals';
+            setCommissionsTab(next);
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('sgu-commissions-tab', next);
+            }
+          }}
+        >
+          <TabsList>
+            <TabsTrigger value="entries">Wpisy</TabsTrigger>
+            <TabsTrigger value="goals">Cele</TabsTrigger>
+          </TabsList>
+          <TabsContent value="entries" className="mt-4">
+            <CommissionsTable teamId={selectedTeamId} />
+          </TabsContent>
+          <TabsContent value="goals" className="mt-4">
+            <CommissionsTab teamId={selectedTeamId} />
+          </TabsContent>
+        </Tabs>
+      )}
+      {selectedTeamId && viewMode === 'commissions' && !forcedTeamId && <CommissionsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'entries' && <CommissionsTable teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'snoozed' && <SnoozedTeamView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
