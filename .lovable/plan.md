@@ -1,66 +1,75 @@
 
-Sprint SGU-00 — Foundation + RLS. Migracja schematu (4 nowe tabele + 3 ALTER + 4 helper functions + RLS na 6 tabelach + RPC + seedy) bez UI.
+Sprint SGU-01: layout + brand + routing dla modułu SGU. Reuse istniejącego CRM (zero zmian w `AppLayout`/`AppSidebar`/`HeaderBar`), nowe równoległe drzewo `/sgu/*`.
 
-User nie wkleił treści sekcji "Migracja SQL" — w prompcie jest "z PEŁNĄ zawartością sekcji 'Migracja SQL' poniżej (poniżej promptu)", ale po prompcie nic nie ma. Muszę zaprojektować migrację samodzielnie na podstawie wymagań rozsianych w punktach 1, 3, 4, 5.
+## Recon (przed implementacją)
 
-## Recon (konieczny przed pisaniem migracji)
+Tool calls round 1 (równolegle):
+1. `supabase--read_query` — sprawdzić `sgu_settings` (kolumny `sgu_team_id`, `enable_sgu_layout`) + istnienie 4 RPC (`has_sgu_access`, `is_sgu_partner`, `is_sgu_representative`, `get_sgu_team_id`).
+2. `code--view src/components/layout/AppSidebar.tsx` — pobrać `funnelSubItems` (9 linków + ikony do reuse).
+3. `code--view package.json` — potwierdzić brak `zustand`.
+4. `code--search_files` — `useOwnerPanel`, `useSuperadmin`, `PageLoadingFallback`, `NavLink` (potwierdzić ścieżki importów).
+5. `code--view src/contexts/AuthContext.tsx` — gdzie wpiąć `PostLoginRedirect`.
 
-Wymagania niejasne bez schematu istniejącej bazy:
-1. **`deal_teams` schema** — czy ma `tenant_id`? Jak nazywają się role w `deal_team_members`/`deal_teams`?
-2. **`deal_team_contacts` schema** — kolumny do dodania w punkcie 3 (ALTER TABLE 3 istniejących tabel)? Brak listy.
-3. **`insurance_policies` schema** — j.w.
-4. **`contacts` schema** — wymagane w RPC `rpc_sgu_get_crm_contact_basic`.
-5. **`app_role` enum** — potwierdzić że `'sgu'` istnieje (prompt to twierdzi).
-6. **`insurance_products` schema** — kolumny `has_handling`, `requires_pesel` istnieją czy trzeba dodać?
-7. **Istniejące RLS na 6 tabelach** — żeby nie wywalić istniejących polityk SGU.
-8. **`directors`/`tenants`** — model multi-tenant (`tenant_id` vs `director_id`).
-9. **Czy istnieje rola/team SGU** — query z punktu 5.
-10. **`deal_team_members`** — jak rozpoznać `partner` (prompt mówi "Paweł, member team SGU z role='partner'").
+ViewMode w `DealsTeamDashboard.tsx` już potwierdzony z `<files>`: 9 wartości jak w spec'u ✅.
 
-## Pytania do usera (krytyczne — bez nich migracja jest zgadywaniem)
+## Implementacja (po recon, jeden batch)
 
-Dwa scenariusze:
+### A. Migracja SQL
+- `supabase/migrations/<ts>_sgu_01_enable_layout.sql` — UPDATE flagi + ROLLBACK comment.
 
-**A. User zapomniał wkleić sekcję "Migracja SQL"** — najbardziej prawdopodobne. Prompt explicite mówi „z PEŁNĄ zawartością sekcji 'Migracja SQL' poniżej". Ja nie mam tej treści.
+### B. Hooks (nowe)
+- `src/hooks/useSGUAccess.ts` — 3 RPC w `Promise.all`, React Query, 5min stale.
+- `src/hooks/useSGUTeamId.ts` — select z `sgu_settings`, infinity stale.
 
-**B. User chce, żebym zaprojektował migrację od zera** — wtedy potrzebuję:
-- Listy 4 nowych tabel + ich kolumn (`sgu_settings`, `commission_base_split`, + 2 inne — które?)
-- Listy 3 ALTER TABLE (które tabele, jakie kolumny)
-- Sygnatur 4 helper functions (`get_sgu_team_id`, `is_sgu_partner` znam z walidacji, ale 2 kolejne?)
-- Logiki RLS dla 6 tabel (które tabele? Z punktu 4 wynika: `deal_team_contacts`, `insurance_policies`, `contacts` + 3 nowe?)
-- Sygnatury RPC `rpc_sgu_get_crm_contact_basic` (parametry, zwracane pola)
+### C. Store
+- `src/store/layoutMode.tsx` — Context + localStorage `sgu.layoutMode`, hook `useLayoutMode`. Wpięcie w `App.tsx` wewnątrz `<AuthProvider>`.
 
-Bez tych informacji każda migracja, którą napiszę, będzie zgadywaniem ~400 linii SQL — ryzyko że trzeba będzie wszystko cofać.
+### D. Brand
+- `src/lib/sgu/brand.ts` — `SGU_COLORS` + `SGULogo` (SVG inline).
+- `src/index.css` — blok `[data-sgu-theme="true"] { --primary, --accent, --sidebar-* }` w HSL.
 
-## Plan
+### E. Layout
+- `src/components/layout/SGULayout.tsx` — kopia `AppLayout` + `data-sgu-theme="true"`, `<SGUSidebar/>`, `<SGUHeader/>`.
+- `src/components/layout/SGUSidebar.tsx` — grupy OVERVIEW/LEJEK/RAPORTY/ADMIN/SYSTEM. Reuse ikony z `funnelSubItems` (z reconu). ADMIN conditional na `isPartner || isAdmin || isSuperadmin`. Zero linków do CRM (`/contacts`, `/companies`, `/workspace`, `/projects`, `/meetings`, `/deals-team`, `/sovra`, `/search`).
+- `src/components/layout/SGUHeader.tsx` — kopia `HeaderBar` + `<LayoutModeToggle/>` (shadcn Tabs CRM/SGU, widoczny dla admin/superadmin, navigate na `/` lub `/sgu/dashboard`).
 
-1. **Krok 0 — recon DB i schema** (mogę zrobić read-only przez `supabase--read_query`):
-   - `app_role` enum values
-   - `deal_teams`, `deal_team_members`, `deal_team_contacts`, `insurance_policies`, `contacts`, `insurance_products`, `directors` — kolumny i FK
-   - Istniejące funkcje: `get_sgu_team_id`, `is_sgu_partner` (mogą już istnieć z poprzednich sprintów)
-   - Istniejące tabele: `sgu_settings`, `commission_base_split` (mogą już istnieć)
-   - Istniejące RLS na 6 tabelach
-   - Wynik query z punktu 5 (zespoły SGU)
+### F. Guards
+- `src/components/auth/SGUAccessGuard.tsx` — wg spec'u (loading → fallback, !enabled → `/`, !access && !admin → `/`).
+- `src/components/auth/PostLoginRedirect.tsx` — `useEffect` na `user` + `useSGUAccess`, `sessionStorage['sgu.post-login-redirect-done']` anti-loop. Wpięcie w `AppLayout` lub `AuthGuard` (po reconie zdecyduję — preferuję `AppLayout` żeby nie ruszać `AuthGuard`/`AppLayout` zgodnie z constraint... ale spec mówi: „lub `AuthGuard.tsx`". Zrobię osobny komponent renderowany jako sibling w drzewie po `AuthGuard` — wstawię go w `App.tsx` wewnątrz `<AuthProvider>` jako floating component, bez modyfikacji guardów).
 
-2. **Krok 1 — zapytać usera** (questions--ask_questions):
-   - Q1 (text, max 4000): wklej pełną treść sekcji "Migracja SQL" — bez tego nie wykonam sprintu.
-   - LUB Q2 (choice): czy mam zaprojektować migrację samodzielnie na podstawie reconu, czy przerywam i czekasz aż wkleisz spec?
+### G. Routing
+- `src/App.tsx`:
+  - lazy import 5 placeholderów + `SGUPipelineRoute`.
+  - Wewnątrz `<AuthProvider>` dodać `<LayoutModeProvider>` + `<PostLoginRedirect/>`.
+  - Drzewo `<Route element={<AuthGuard><SGUAccessGuard><SGULayout/></SGUAccessGuard></AuthGuard>}>` z trasami: `/sgu/dashboard`, `/sgu/team`, `/sgu/pipeline`, `/sgu/reports`, `/sgu/admin`, `/sgu/settings` (+ ewentualne sub-paths z `:section`/`:period`).
 
-3. **Krok 2** — po dostaniu odpowiedzi:
-   - Jeśli wkleił spec → migracja 1:1, regeneracja types, plik `src/lib/sgu/constants.ts`, walidacja przez `supabase--read_query`, raport.
-   - Jeśli każe projektować → projektuję na podstawie reconu, prezentuję jeszcze jeden plan z konkretnym schematem do akceptacji, dopiero potem implementacja.
+### H. SGUPipelineRoute
+- `src/pages/sgu/SGUPipelineRoute.tsx` — `useSGUTeamId()` → loading/null guard → `<DealsTeamDashboard forcedTeamId={sguTeamId}/>`.
 
-## Co robię TERAZ (READ-ONLY)
+### I. DealsTeamDashboard
+- Dodać `interface DealsTeamDashboardProps { forcedTeamId?: string }`.
+- Jeśli `forcedTeamId`: `selectedTeamId = forcedTeamId`, pominąć localStorage init i auto-select effect, ukryć `<TeamSelector/>` + `<CreateTeamDialog/>` button. `useTeamContactStats` dalej działa.
+- Backward compat: brak propu = stara logika 1:1.
 
-1. `supabase--read_query` — pełen recon schematu (enum, 8 tabel, istniejące funkcje, polityki, zespoły SGU). Wszystko w jednym dużym query lub kilku równoległych.
-2. `code--search_files` — sprawdzić czy w repo są już migracje `sgu_*` lub helper `get_sgu_team_id` (mogę o tym nie wiedzieć).
-3. Po wynikach reconu → questions--ask_questions z wynikiem reconu w treści pytania, żeby user widział kontekst i mógł zdecydować świadomie.
+### J. Placeholdery
+- `src/pages/sgu/SGUDashboard.tsx`, `SGUTeam.tsx`, `SGUReports.tsx`, `SGUAdmin.tsx`, `SGUSettings.tsx` — każdy z `<Card>` + tytuł + „Implementacja: Sprint SGU-XX".
 
-## Czego NIE robię w tym planie
+### K. Walidacja
+- `npm run build` + `npm run lint` (oczekiwane zielone).
+- `grep -E "/contacts|/companies|/workspace|/projects|/meetings|/deals-team|/sovra|/search" src/components/layout/SGUSidebar.tsx` → 0.
 
-- Nie piszę migracji "na ślepo" bez treści sekcji "Migracja SQL" lub świadomej zgody usera na projekt od zera.
-- Nie regeneruję `types.ts` (auto, po migracji).
-- Nie tworzę `src/lib/sgu/constants.ts` przed potwierdzeniem że `'sgu'` jest w enum (po reconie — prawie pewne, ale potwierdzam).
-- Nie wykonuję walidacji ani smoke testów RLS — to po migracji.
+### L. Raport końcowy
+1. Modified files (`App.tsx`, `index.css`, `DealsTeamDashboard.tsx`, ew. `AppLayout` jeśli wpinam tam Provider — ale wolę `App.tsx` żeby nie ruszać layoutu).
+2. New files (~13 plików: 2 hooks, 1 store, 2 brand/css, 3 layout, 2 guard, 1 routewrap, 5 placeholder, 1 migracja).
+3. Migration status.
+4. Build/lint output.
+5. Grep wynik na zakazane linki w SGUSidebar (= 0).
 
-Po Twojej akceptacji: recon → pytanie z wynikiem reconu → migracja → walidacja → raport.
+## Ryzyka / decyzje
+- **PostLoginRedirect** — spec dopuszcza modyfikację `AuthContext` LUB `AuthGuard`, ale constraint mówi „nie ruszaj AppLayout". Wpinam jako sibling komponent w `App.tsx` (zero zmian guardów/layoutu). Czyta `useAuth()` + `useSGUAccess()`, robi `navigate` raz per session.
+- **`<TabsTrigger>` CRM/SGU navigate** — używam `useNavigate` z `react-router-dom`, w handler setMode + navigate.
+- **SGULayout** musi być wewnątrz `<LayoutModeProvider>` ale Provider obejmuje całość — OK.
+- **Konflikt Provider order**: `<AuthProvider>` → `<LayoutModeProvider>` → `<PostLoginRedirect/>` (nullable render) + `<Suspense><Routes>...`.
+- **Ikony SGUSidebar** — wezmę z lucide-react (BarChart3, Users, Target, FileText, Settings itd.) na bazie `funnelSubItems` z `AppSidebar`.
+
+Po Twojej akceptacji: recon (5 tool calls równolegle) → implementacja (batch ~15 plików) → migracja → build/lint → raport.
