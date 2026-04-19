@@ -7716,6 +7716,60 @@ export type Database = {
           },
         ]
       }
+      sgu_web_source_runs: {
+        Row: {
+          candidates_added: number
+          error: string | null
+          finished_at: string | null
+          id: string
+          items_found: number
+          job_id: string | null
+          source_id: string
+          started_at: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          candidates_added?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          items_found?: number
+          job_id?: string | null
+          source_id: string
+          started_at?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          candidates_added?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          items_found?: number
+          job_id?: string | null
+          source_id?: string
+          started_at?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_web_source_runs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_web_source_runs_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sgu_web_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sgu_web_sources: {
         Row: {
           active: boolean
@@ -7727,11 +7781,13 @@ export type Database = {
           last_result_count: number | null
           last_scraped_at: string | null
           name: string
+          parser_config: Json
           product_hint_filter: string[] | null
           scrape_interval_hours: number
           search_keywords: string[] | null
           source_type: string
           tenant_id: string
+          updated_at: string
           url: string
         }
         Insert: {
@@ -7744,11 +7800,13 @@ export type Database = {
           last_result_count?: number | null
           last_scraped_at?: string | null
           name: string
+          parser_config?: Json
           product_hint_filter?: string[] | null
           scrape_interval_hours?: number
           search_keywords?: string[] | null
           source_type: string
           tenant_id: string
+          updated_at?: string
           url: string
         }
         Update: {
@@ -7761,11 +7819,13 @@ export type Database = {
           last_result_count?: number | null
           last_scraped_at?: string | null
           name?: string
+          parser_config?: Json
           product_hint_filter?: string[] | null
           scrape_interval_hours?: number
           search_keywords?: string[] | null
           source_type?: string
           tenant_id?: string
+          updated_at?: string
           url?: string
         }
         Relationships: [
@@ -9974,18 +10034,31 @@ export type Database = {
         Args: { p_team_id: string; p_tenant_id: string }
         Returns: undefined
       }
-      sgu_next_prospecting_job: {
-        Args: never
-        Returns: {
-          actor_user_id: string
-          id: string
-          payload: Json
-          progress: number
-          result: Json
-          status: string
-          tenant_id: string
-        }[]
-      }
+      sgu_next_prospecting_job:
+        | {
+            Args: never
+            Returns: {
+              actor_user_id: string
+              id: string
+              payload: Json
+              progress: number
+              result: Json
+              status: string
+              tenant_id: string
+            }[]
+          }
+        | {
+            Args: { p_job_type?: string }
+            Returns: {
+              actor_user_id: string
+              id: string
+              payload: Json
+              progress: number
+              result: Json
+              status: string
+              tenant_id: string
+            }[]
+          }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }
