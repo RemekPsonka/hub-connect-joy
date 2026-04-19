@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import { Responsive as ResponsiveGridLayout, type Layout } from 'react-grid-layout';
+import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+type LayoutItem = { i: string; x: number; y: number; w: number; h: number };
 import { useWorkspaceWidgets, useUpdateWidgetLayout } from '@/hooks/useWorkspaceWidgets';
 import { KPIWidget } from './KPIWidget';
 import { NoteWidget } from './NoteWidget';
