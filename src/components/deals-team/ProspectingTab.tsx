@@ -32,12 +32,8 @@ import { useSGUProspects, type SGUProspect } from '@/hooks/useSGUProspects';
 import { AddLeadDialog } from '@/components/sgu/AddLeadDialog';
 import { ImportLeadsDialog } from '@/components/sgu/ImportLeadsDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Sparkles } from 'lucide-react';
-import { KRSProspectingForm } from '@/components/sgu/KRSProspectingForm';
-import { ProspectingJobProgress } from '@/components/sgu/ProspectingJobProgress';
-import { ProspectingCandidatesList } from '@/components/sgu/ProspectingCandidatesList';
-import { useProspectingJobs } from '@/hooks/useProspectingJobStatus';
+import { Sparkles } from 'lucide-react';
+import { AIKRSPanel } from '@/components/sgu/AIKRSPanel';
 
 interface Props {
   teamId: string;
@@ -230,7 +226,8 @@ function SGUProspectingSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
