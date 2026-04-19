@@ -1,17 +1,26 @@
-// LLM Provider — Sprint 04 (Lovable AI Gateway only, fallback w S05)
-// Sprint 10: persist usage to public.ai_usage_log via service_role client.
+// LLM Provider — Sprint 19a (triple fallback: Lovable Gateway → Anthropic → OpenAI)
+// Streaming: tylko Lovable Gateway. Fallback chain działa wyłącznie dla stream:false.
+// TODO(streaming-fallback): w osobnym sprincie dodać SSE-bridge dla Anthropic/OpenAI.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const LOVABLE_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'google/gemini-3-flash-preview';
 
-// Pricing in USD cents per 1k tokens (approx, Gemini Flash preview)
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+// Pricing in USD cents per 1k tokens (approx)
 const PRICING: Record<string, { in: number; out: number }> = {
   'google/gemini-3-flash-preview': { in: 0.0125, out: 0.05 },
   'google/gemini-2.5-flash': { in: 0.0125, out: 0.05 },
   'google/gemini-2.5-flash-lite': { in: 0.005, out: 0.02 },
   'google/gemini-2.5-pro': { in: 0.125, out: 0.5 },
+  'claude-3-5-haiku-latest': { in: 0.08, out: 0.4 },
+  'claude-3-5-sonnet-latest': { in: 0.3, out: 1.5 },
+  'gpt-4o-mini': { in: 0.015, out: 0.06 },
+  'gpt-4o': { in: 0.25, out: 1.0 },
 };
 
 export interface LLMMessage {
@@ -47,6 +56,7 @@ export interface LLMResult {
   tokens_in?: number;
   tokens_out?: number;
   cost_cents?: number;
+  provider?: string;
 }
 
 export function calcCostCents(model: string, tokensIn: number, tokensOut: number): number {
@@ -64,11 +74,9 @@ export function logUsage(payload: {
   request_id?: string;
   error?: string;
   context?: LLMCallContext;
+  metadata?: Record<string, unknown>;
 }) {
-  // Strukturalny log JSON (debugowy)
   console.log(JSON.stringify({ kind: 'ai_usage', ...payload }));
-
-  // Sprint 10: persist do ai_usage_log (best-effort, nie blokuje)
   persistUsage(payload).catch((e) => {
     console.error('[ai_usage_log] persist failed:', e);
   });
@@ -96,11 +104,12 @@ async function persistUsage(payload: {
   request_id?: string;
   error?: string;
   context?: LLMCallContext;
+  metadata?: Record<string, unknown>;
 }) {
   const client = getAdminClient();
   if (!client) return;
   const ctx = payload.context;
-  if (!ctx?.function_name) return; // bez kontekstu nie logujemy
+  if (!ctx?.function_name) return;
 
   await client.from('ai_usage_log').insert({
     function_name: ctx.function_name,
@@ -115,14 +124,229 @@ async function persistUsage(payload: {
     actor_id: ctx.actor_id ?? null,
     tenant_id: ctx.tenant_id ?? null,
     error: payload.error ?? null,
-    metadata: {},
+    metadata: payload.metadata ?? {},
   });
 }
 
-/**
- * Wywołanie Lovable AI Gateway. Zwraca surowy stream SSE (gdy stream=true)
- * lub pełną odpowiedź tekstową (gdy stream=false).
- */
+// ──────────────────────────────────────────────────────────────────────
+// Model mapping helpers
+// ──────────────────────────────────────────────────────────────────────
+
+function mapToAnthropic(geminiModel: string): string {
+  if (geminiModel.includes('pro')) return 'claude-3-5-sonnet-latest';
+  return 'claude-3-5-haiku-latest';
+}
+
+function mapToOpenAI(geminiModel: string): string {
+  if (geminiModel.includes('pro')) return 'gpt-4o';
+  return 'gpt-4o-mini';
+}
+
+function splitSystemAndMessages(messages: LLMMessage[]): {
+  system: string;
+  rest: { role: 'user' | 'assistant'; content: string }[];
+} {
+  const systemParts: string[] = [];
+  const rest: { role: 'user' | 'assistant'; content: string }[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') {
+      systemParts.push(m.content);
+    } else if (m.role === 'user' || m.role === 'assistant') {
+      rest.push({ role: m.role, content: m.content });
+    }
+    // tool/tool_calls: pomijamy w fallbacku (Anthropic/OpenAI fallback to plain chat)
+  }
+  return { system: systemParts.join('\n\n'), rest };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Provider: Anthropic
+// ──────────────────────────────────────────────────────────────────────
+
+async function callAnthropic(
+  opts: CallLLMOptions,
+  geminiModel: string,
+  attempt: number,
+  fallback_reason: string,
+): Promise<LLMResult> {
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  const t0 = Date.now();
+  const model = mapToAnthropic(geminiModel);
+
+  if (!apiKey) {
+    logUsage({
+      provider: 'anthropic',
+      model,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      error: 'missing_api_key_anthropic',
+      context: opts.context,
+      metadata: { fallback_reason, attempt, skipped: true },
+    });
+    return { status: 0, model, provider: 'anthropic' };
+  }
+
+  const { system, rest } = splitSystemAndMessages(opts.messages);
+
+  try {
+    const response = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        ...(system ? { system } : {}),
+        messages: rest,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      logUsage({
+        provider: 'anthropic',
+        model,
+        latency_ms: Date.now() - t0,
+        request_id: opts.request_id,
+        error: `${response.status}: ${body.slice(0, 200)}`,
+        context: opts.context,
+        metadata: { fallback_reason, attempt },
+      });
+      return { status: response.status, model, provider: 'anthropic' };
+    }
+
+    const data = await response.json();
+    const text = data?.content?.[0]?.text ?? '';
+    const tokens_in = data?.usage?.input_tokens ?? 0;
+    const tokens_out = data?.usage?.output_tokens ?? 0;
+    const cost_cents = calcCostCents(model, tokens_in, tokens_out);
+
+    logUsage({
+      provider: 'anthropic',
+      model,
+      tokens_in,
+      tokens_out,
+      cost_cents,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      context: opts.context,
+      metadata: { fallback_reason, attempt },
+    });
+
+    return { status: 200, model, text, tokens_in, tokens_out, cost_cents, provider: 'anthropic' };
+  } catch (e) {
+    logUsage({
+      provider: 'anthropic',
+      model,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      error: `throw: ${(e as Error).message}`.slice(0, 200),
+      context: opts.context,
+      metadata: { fallback_reason, attempt },
+    });
+    return { status: 599, model, provider: 'anthropic' };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Provider: OpenAI
+// ──────────────────────────────────────────────────────────────────────
+
+async function callOpenAI(
+  opts: CallLLMOptions,
+  geminiModel: string,
+  attempt: number,
+  fallback_reason: string,
+): Promise<LLMResult> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  const t0 = Date.now();
+  const model = mapToOpenAI(geminiModel);
+
+  if (!apiKey) {
+    logUsage({
+      provider: 'openai',
+      model,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      error: 'missing_api_key_openai',
+      context: opts.context,
+      metadata: { fallback_reason, attempt, skipped: true },
+    });
+    return { status: 0, model, provider: 'openai' };
+  }
+
+  try {
+    const response = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages.map((m) => ({
+          role: m.role === 'tool' ? 'tool' : m.role,
+          content: m.content,
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+          ...(m.name ? { name: m.name } : {}),
+        })),
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      logUsage({
+        provider: 'openai',
+        model,
+        latency_ms: Date.now() - t0,
+        request_id: opts.request_id,
+        error: `${response.status}: ${body.slice(0, 200)}`,
+        context: opts.context,
+        metadata: { fallback_reason, attempt },
+      });
+      return { status: response.status, model, provider: 'openai' };
+    }
+
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content ?? '';
+    const tokens_in = data?.usage?.prompt_tokens ?? 0;
+    const tokens_out = data?.usage?.completion_tokens ?? 0;
+    const cost_cents = calcCostCents(model, tokens_in, tokens_out);
+
+    logUsage({
+      provider: 'openai',
+      model,
+      tokens_in,
+      tokens_out,
+      cost_cents,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      context: opts.context,
+      metadata: { fallback_reason, attempt },
+    });
+
+    return { status: 200, model, text, tokens_in, tokens_out, cost_cents, provider: 'openai' };
+  } catch (e) {
+    logUsage({
+      provider: 'openai',
+      model,
+      latency_ms: Date.now() - t0,
+      request_id: opts.request_id,
+      error: `throw: ${(e as Error).message}`.slice(0, 200),
+      context: opts.context,
+      metadata: { fallback_reason, attempt },
+    });
+    return { status: 599, model, provider: 'openai' };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Public: callLLM with triple fallback (non-streaming only)
+// ──────────────────────────────────────────────────────────────────────
+
 export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
@@ -134,58 +358,135 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
   const requestId = opts.request_id ?? crypto.randomUUID();
   const t0 = Date.now();
 
-  const response = await fetch(LOVABLE_GATEWAY_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: opts.messages,
-      stream,
-      ...(opts.tools && opts.tools.length > 0 ? { tools: opts.tools } : {}),
-      ...(opts.tool_choice ? { tool_choice: opts.tool_choice } : {}),
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    logUsage({
-      provider: 'lovable',
-      model,
-      latency_ms: Date.now() - t0,
-      request_id: requestId,
-      error: `${response.status}: ${body.slice(0, 200)}`,
-      context: opts.context,
+  // ─── Attempt 1: Lovable Gateway ───
+  let lovableResponse: Response | null = null;
+  let lovableThrew: Error | null = null;
+  try {
+    lovableResponse = await fetch(LOVABLE_GATEWAY_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        stream,
+        ...(opts.tools && opts.tools.length > 0 ? { tools: opts.tools } : {}),
+        ...(opts.tool_choice ? { tool_choice: opts.tool_choice } : {}),
+      }),
     });
-    return { status: response.status, model };
+  } catch (e) {
+    lovableThrew = e as Error;
   }
 
+  const lovableFailed =
+    lovableThrew !== null ||
+    !lovableResponse ||
+    !lovableResponse.ok ||
+    RETRYABLE_STATUSES.has(lovableResponse.status);
+
+  // ─── Streaming path: Lovable only, no fallback ───
+  // TODO(streaming-fallback): SSE bridge for Anthropic/OpenAI in a separate sprint.
   if (stream) {
+    if (lovableFailed) {
+      const errMsg = lovableThrew
+        ? `throw: ${lovableThrew.message}`
+        : `${lovableResponse?.status ?? 0}: stream_failed`;
+      logUsage({
+        provider: 'lovable',
+        model,
+        latency_ms: Date.now() - t0,
+        request_id: requestId,
+        error: errMsg.slice(0, 200),
+        context: opts.context,
+        metadata: { fallback_reason: 'none_stream_mode', attempt: 1, stream: true },
+      });
+      return { status: lovableResponse?.status ?? 503, model, provider: 'lovable' };
+    }
     return {
-      status: response.status,
+      status: lovableResponse!.status,
       model,
-      stream: response.body ?? undefined,
+      stream: lovableResponse!.body ?? undefined,
+      provider: 'lovable',
     };
   }
 
-  const data = await response.json();
-  const text = data?.choices?.[0]?.message?.content ?? '';
-  const tokens_in = data?.usage?.prompt_tokens ?? 0;
-  const tokens_out = data?.usage?.completion_tokens ?? 0;
-  const cost_cents = calcCostCents(model, tokens_in, tokens_out);
+  // ─── Non-streaming path: parse Lovable result, fallback if needed ───
+  if (!lovableFailed && lovableResponse) {
+    const data = await lovableResponse.json();
+    const text = data?.choices?.[0]?.message?.content ?? '';
+    const tokens_in = data?.usage?.prompt_tokens ?? 0;
+    const tokens_out = data?.usage?.completion_tokens ?? 0;
+    const cost_cents = calcCostCents(model, tokens_in, tokens_out);
+
+    logUsage({
+      provider: 'lovable',
+      model,
+      tokens_in,
+      tokens_out,
+      cost_cents,
+      latency_ms: Date.now() - t0,
+      request_id: requestId,
+      context: opts.context,
+      metadata: { attempt: 1 },
+    });
+
+    return { status: 200, model, text, tokens_in, tokens_out, cost_cents, provider: 'lovable' };
+  }
+
+  // Lovable failed — log and continue to fallback chain
+  const lovableStatus = lovableResponse?.status ?? 0;
+  const lovableErrBody = lovableResponse
+    ? await lovableResponse.text().catch(() => '')
+    : '';
+  const fallback_reason = lovableThrew
+    ? `lovable_throw`
+    : lovableStatus === 429
+      ? 'lovable_429'
+      : lovableStatus >= 500
+        ? `lovable_${lovableStatus}`
+        : `lovable_${lovableStatus}`;
 
   logUsage({
     provider: 'lovable',
     model,
-    tokens_in,
-    tokens_out,
-    cost_cents,
     latency_ms: Date.now() - t0,
     request_id: requestId,
+    error: lovableThrew
+      ? `throw: ${lovableThrew.message}`.slice(0, 200)
+      : `${lovableStatus}: ${lovableErrBody.slice(0, 200)}`,
     context: opts.context,
+    metadata: { attempt: 1, will_fallback: true },
   });
 
-  return { status: 200, model, text, tokens_in, tokens_out, cost_cents };
+  // ─── Attempt 2: Anthropic ───
+  const anthropicResult = await callAnthropic(opts, model, 2, fallback_reason);
+  if (anthropicResult.status === 200) {
+    return anthropicResult;
+  }
+
+  // ─── Attempt 3: OpenAI ───
+  const openaiResult = await callOpenAI(opts, model, 3, fallback_reason);
+  if (openaiResult.status === 200) {
+    return openaiResult;
+  }
+
+  // ─── All providers failed ───
+  logUsage({
+    provider: 'none',
+    model: 'none',
+    latency_ms: Date.now() - t0,
+    request_id: requestId,
+    error: 'all_providers_failed',
+    context: opts.context,
+    metadata: {
+      fallback_reason,
+      lovable_status: lovableStatus,
+      anthropic_status: anthropicResult.status,
+      openai_status: openaiResult.status,
+    },
+  });
+
+  return { status: 503, model: 'none', provider: 'none' };
 }
