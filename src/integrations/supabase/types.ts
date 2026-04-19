@@ -9968,6 +9968,21 @@ export type Database = {
         Args: { p_contact_id: string }
         Returns: Json
       }
+      rpc_sgu_get_snapshot: {
+        Args: { p_id: string }
+        Returns: {
+          data: Json
+          generated_at: string
+          generated_by: string
+          generated_by_user_id: string
+          id: string
+          period_end: string
+          period_start: string
+          period_type: string
+          team_id: string
+          tenant_id: string
+        }[]
+      }
       rpc_sgu_reactivate_representative: {
         Args: { p_user_id: string }
         Returns: Json
