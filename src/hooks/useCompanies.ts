@@ -433,140 +433,38 @@ export function getCompanyLogoUrl(website: string | null | undefined): string | 
 
 export function useRegenerateCompanyAI() {
   const queryClient = useQueryClient();
-  const { director } = useAuth();
-  
+
   return useMutation({
-    mutationFn: async ({ id, companyName, website, industryHint, contactEmail, existingKrs, existingNip }: { 
-      id: string; 
-      companyName: string; 
+    mutationFn: async ({ id }: {
+      id: string;
+      // Pozostałe pola zachowane dla backward-compat z call-sites; ignorowane przez worker.
+      companyName?: string;
       website?: string | null;
       industryHint?: string | null;
       contactEmail?: string | null;
       existingKrs?: string | null;
       existingNip?: string | null;
     }) => {
-      const { data: result, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
-        body: { 
-          company_name: companyName,
-          website: website,
-          industry_hint: industryHint,
-          contact_email: contactEmail,
-          existing_krs: existingKrs,
-          existing_nip: existingNip,
-          company_id: id  // Pass ID for direct DB save on fallback/timeout
-        }
+      // Sprint 19c-β.1: synchroniczny enrich → background job.
+      // Worker (enrich-company-worker) zapisuje do company_data_sources i aktualizuje companies.
+      const { data, error } = await supabase.functions.invoke('enqueue-enrich-company', {
+        body: { company_id: id },
       });
-      
-      if (enrichError) throw enrichError;
-      
-      const enriched = result?.data || result;
-      const finalWebsite = website || enriched.suggested_website || null;
-      
-      // Wyciągnij metadata z enrichment_metadata
-      const enrichmentMeta = enriched.enrichment_metadata || {};
-      
-      // Oblicz confidence score (0-1) z 'high'/'medium'/'low'
-      const confidenceMap: Record<string, number> = {
-        high: 0.85,
-        medium: 0.55,
-        low: 0.25
-      };
-      const confidenceScore = confidenceMap[enrichmentMeta.overall_confidence as string] || 0.5;
-      
-      // Przygotuj data sources info (including KRS verification status)
-      const dataSourcesConfidence = enrichmentMeta.data_sources_confidence || {};
-      const dataSources = {
-        perplexity: {
-          queries_used: enrichmentMeta.perplexity_queries_used || 0,
-          queries_detail: enrichmentMeta.perplexity_queries_detail || {},
-          queries_executed: enrichmentMeta.perplexity_queries_used || 0
-        },
-        firecrawl: {
-          pages_scraped: enrichmentMeta.firecrawl_stats?.successful_scrapes || 0,
-          total_words: enrichmentMeta.firecrawl_stats?.total_words || 0,
-          categories: enrichmentMeta.firecrawl_stats?.categories_found || []
-        },
-        lovable_ai: {
-          model: 'gemini-2.5-pro'
-        },
-        krs_api: enrichmentMeta.krs_api_used ? {
-          verified: true,
-          source: 'krs_api'
-        } : undefined,
-        registry_source: dataSourcesConfidence.registry?.source || 
-          (enrichmentMeta.krs_api_used ? 'krs_api' : 'firecrawl'),
-        completed_at: enrichmentMeta.completed_at || new Date().toISOString()
-      };
-      
-      // ai_analysis jest teraz JSONB - zapisujemy cały obiekt bez stringify
-      const updateData: CompanyUpdate = {
-        description: enriched.description || null,
-        ai_analysis: enriched, // Pełna analiza jako JSONB
-        company_analysis_status: 'completed' as const,
-        company_analysis_date: new Date().toISOString(),
-        analysis_confidence_score: confidenceScore,
-        analysis_data_sources: dataSources,
-        analysis_missing_sections: enrichmentMeta.missing_sections || [],
-        industry: enriched.industry || null,
-        logo_url: enriched.logo_url || null,
-        employee_count: enriched.employee_count?.toString() || null,
-        website: finalWebsite,
-        address: enriched.headquarters?.address || enriched.address || null,
-        city: enriched.headquarters?.city || enriched.city || null,
-        postal_code: enriched.headquarters?.postal_code || enriched.postal_code || null,
-        nip: enriched.nip || null,
-        regon: enriched.regon || null,
-        krs: enriched.krs || null,
-        // Ensure legal_form is always a string, never [object Object]
-        legal_form: typeof enriched.legal_form === 'string' 
-          ? enriched.legal_form 
-          : (enriched.legal_form && typeof enriched.legal_form === 'object' 
-              ? ((enriched.legal_form as any).nazwa || (enriched.legal_form as any).wartość || null)
-              : null),
-        updated_at: new Date().toISOString()
-      };
-      
-      const { data: updated, error: updateError } = await supabase
-        .from('companies')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (updateError) throw updateError;
-      
-      // Auto-assign contacts by domain after company is updated
-      const domain = extractWebsiteDomain(finalWebsite);
-      if (domain && director?.tenant_id) {
-        const { data: contactsToUpdate } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('tenant_id', director.tenant_id)
-          .eq('is_active', true)
-          .is('company_id', null)
-          .ilike('email', `%@${domain}`);
-
-        if (contactsToUpdate?.length) {
-          await supabase
-            .from('contacts')
-            .update({ company_id: id })
-            .in('id', contactsToUpdate.map(c => c.id));
-        }
-      }
-      
-      return updated;
+      if (error) throw error;
+      return data as { job_id: string; status: string; deduplicated?: boolean };
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['company', data.id] });
-      queryClient.invalidateQueries({ queryKey: ['contact'] });
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['company_contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['companies_with_contacts'] });
-      toast.success('Analiza AI została wygenerowana ponownie');
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['company', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['background-jobs'] });
+      if (data?.deduplicated) {
+        toast.info('Wzbogacenie tej firmy już trwa');
+      } else {
+        toast.success('Wzbogacenie zlecone — powiadomimy po zakończeniu');
+      }
     },
     onError: (error) => {
-      console.error('Error regenerating company AI:', error);
-      toast.error('Błąd podczas generowania analizy AI');
+      console.error('[useRegenerateCompanyAI]', error);
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zlecić wzbogacenia');
     },
   });
 }
@@ -884,43 +782,13 @@ export function useCreateCompanyFromDomain() {
         console.warn('Failed to assign contact:', updateError);
       }
 
-      // 3. Trigger AI enrichment
-      const { data: enrichResult, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
-        body: {
-          company_name: companyName,
-          website: `https://${domain}`,
-          contact_email: contactEmail,
-        }
+      // 3. Sprint 19c-β.1: zlecamy enrich w tle (worker zapisze do company_data_sources i companies)
+      const { error: enqueueError } = await supabase.functions.invoke('enqueue-enrich-company', {
+        body: { company_id: newCompany.id },
       });
-
-      if (enrichError) {
-        console.error('Enrichment failed:', enrichError);
-        // Continue anyway - company was created
-      } else if (enrichResult) {
-        // Update company with enriched data
-        const enriched = enrichResult?.data || enrichResult;
-        
-        const updateData = {
-          description: enriched.description || null,
-          ai_analysis: enriched,
-          company_analysis_status: 'completed',
-          company_analysis_date: new Date().toISOString(),
-          industry: enriched.industry || null,
-          logo_url: enriched.logo_url || null,
-          name: enriched.name || companyName,
-          nip: enriched.nip || null,
-          regon: enriched.regon || null,
-          krs: enriched.krs || null,
-          address: enriched.headquarters?.address || null,
-          city: enriched.headquarters?.city || null,
-          postal_code: enriched.headquarters?.postal_code || null,
-          updated_at: new Date().toISOString()
-        };
-
-        await supabase
-          .from('companies')
-          .update(updateData)
-          .eq('id', newCompany.id);
+      if (enqueueError) {
+        console.error('[useCreateCompanyFromDomain] enqueue failed', enqueueError);
+        // Firma została utworzona — kontynuujemy, user może zlecić ręcznie z karty firmy.
       }
 
       return newCompany;
@@ -979,41 +847,12 @@ export function useCreateCompanyFromName() {
         console.warn('Failed to assign contact:', updateError);
       }
 
-      // 3. Trigger AI enrichment
-      const { data: enrichResult, error: enrichError } = await supabase.functions.invoke('enrich-company-data', {
-        body: {
-          company_name: companyName,
-          company_id: newCompany.id,
-        }
+      // 3. Sprint 19c-β.1: zlecamy enrich w tle
+      const { error: enqueueError } = await supabase.functions.invoke('enqueue-enrich-company', {
+        body: { company_id: newCompany.id },
       });
-
-      if (enrichError) {
-        console.error('Enrichment failed:', enrichError);
-      } else if (enrichResult) {
-        const enriched = enrichResult?.data || enrichResult;
-        
-        const updateData = {
-          description: enriched.description || null,
-          ai_analysis: enriched,
-          company_analysis_status: 'completed',
-          company_analysis_date: new Date().toISOString(),
-          industry: enriched.industry || null,
-          logo_url: enriched.logo_url || null,
-          name: enriched.name || companyName,
-          nip: enriched.nip || null,
-          regon: enriched.regon || null,
-          krs: enriched.krs || null,
-          website: enriched.website || enriched.suggested_website || null,
-          address: enriched.headquarters?.address || null,
-          city: enriched.headquarters?.city || null,
-          postal_code: enriched.headquarters?.postal_code || null,
-          updated_at: new Date().toISOString()
-        };
-
-        await supabase
-          .from('companies')
-          .update(updateData)
-          .eq('id', newCompany.id);
+      if (enqueueError) {
+        console.error('[useCreateCompanyFromName] enqueue failed', enqueueError);
       }
 
       return newCompany;
