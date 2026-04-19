@@ -330,8 +330,31 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       
-      {/* Footer — admin + user info */}
+      {/* Footer — SGU jump + admin + user info */}
       <SidebarFooter className="border-t border-sidebar-border px-2 py-3">
+        {showSGUButton && (
+          <div className="mb-2 pb-2 border-b border-sidebar-border">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Przejdź do SGU" size="lg">
+                  <NavLink
+                    to={sguTarget}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 text-sidebar-foreground transition-colors duration-150 border border-primary/20"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 shrink-0 text-sidebar-primary" />
+                    {!isCollapsed && (
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium leading-tight">Przejdź do SGU</span>
+                        <span className="text-[10px] text-sidebar-foreground/50 leading-tight">Drugi rynek</span>
+                      </div>
+                    )}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+        )}
+
         {adminItems.length > 0 && (
           <>
             {!isCollapsed && (
