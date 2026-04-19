@@ -498,17 +498,27 @@ export function useAIImport(): UseAIImportReturn {
 
       setProgress({ current: 0, total: 1, stage: 'Analizowanie wizytówek przez AI...' });
 
-      // Call batch OCR function
-      const { data, error } = await supabase.functions.invoke('ocr-business-cards-batch', {
-        body: { images }
+      // Call unified OCR function (handles batch under the hood)
+      const { data, error } = await supabase.functions.invoke('ocr-business-cards', {
+        body: { items: images.map((img: string) => ({ image_base64: img })) }
       });
 
       if (error) {
         throw new Error(error.message || 'Błąd podczas skanowania wizytówek');
       }
 
-      if (!data.success || !data.contacts) {
-        throw new Error(data.error || 'Nie udało się przeanalizować wizytówek');
+      // ocr-business-cards routes >1 items to ocr-business-cards-batch which returns
+      // { contacts, errors, success } inside `raw`. Normalize.
+      const raw = (data?.raw ?? data) as Record<string, unknown>;
+      const rawContacts = Array.isArray((raw as any)?.contacts)
+        ? (raw as any).contacts
+        : Array.isArray(data?.results)
+          ? data.results.flatMap((r: any) => r?.data ? [r.data] : [])
+          : [];
+
+      if (!rawContacts.length) {
+        const errMsg = (raw as any)?.error || data?.error || 'Nie udało się przeanalizować wizytówek';
+        throw new Error(errMsg);
       }
 
       // Convert to extended contact format, keeping track of source image index
@@ -587,12 +597,13 @@ export function useAIImport(): UseAIImportReturn {
         sourceFormat: 'business_cards_batch',
         detectedColumns: ['first_name', 'last_name', 'company', 'position', 'email', 'phone'],
         totalParsed: contacts.length,
-        warnings: data.errors || []
+        warnings: (raw as any)?.errors || []
       });
 
       if (contacts.length === 0) {
-        if (data.errors && data.errors.length > 0) {
-          setErrors(data.errors);
+        const errs = (raw as any)?.errors;
+        if (Array.isArray(errs) && errs.length > 0) {
+          setErrors(errs);
         } else {
           setErrors(['Nie udało się wyodrębnić żadnych kontaktów ze zdjęć wizytówek.']);
         }
