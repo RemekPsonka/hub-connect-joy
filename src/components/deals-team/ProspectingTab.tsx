@@ -226,7 +226,8 @@ function SGUProspectingSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
