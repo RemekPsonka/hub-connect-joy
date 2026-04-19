@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import type { DealTeamContact } from '@/types/dealTeam';
 import { useSGUContactDisplay } from '@/hooks/useSGUContactDisplay';
+import { useLayoutMode } from '@/store/layoutMode';
+import { PremiumProgress } from '@/components/sgu/PremiumProgress';
 
 interface ClientCardProps {
   client: DealTeamContact;
@@ -15,6 +17,8 @@ interface ClientCardProps {
 export function ClientCard({ client, onClick }: ClientCardProps) {
   const { data: products = [] } = useClientProducts(client.id);
   const display = useSGUContactDisplay(client);
+  const { mode } = useLayoutMode();
+  const isSguMode = mode === 'sgu';
 
   const totals = useMemo(() => {
     const value = products.reduce((s, p) => s + p.deal_value, 0);
@@ -68,6 +72,13 @@ export function ClientCard({ client, onClick }: ClientCardProps) {
                 <span className="text-emerald-600 font-medium">{formatCompactCurrency(totals.commission)}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* SGU mode: premium progress (oczekiwany / wystawiony / opłacony) */}
+        {isSguMode && (
+          <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
+            <PremiumProgress dealTeamContactId={client.id} compact />
           </div>
         )}
       </CardContent>

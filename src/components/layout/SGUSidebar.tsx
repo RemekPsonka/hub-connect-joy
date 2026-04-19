@@ -58,7 +58,8 @@ const funnelSubItems: NavItemDef[] = [
   { title: 'Klienci', url: '/sgu/pipeline?view=clients', icon: UserCheck },
   { title: 'Ofertowanie', url: '/sgu/pipeline?view=offering', icon: Briefcase },
   { title: 'Zadania', url: '/sgu/pipeline?view=tasks', icon: ClipboardList },
-  { title: 'Prowizje', url: '/sgu/pipeline?view=commissions', icon: Receipt },
+  { title: 'Prowizje (cele)', url: '/sgu/pipeline?view=commissions', icon: Receipt },
+  { title: 'Prowizje (wpisy)', url: '/sgu/pipeline?view=entries', icon: Receipt },
   { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
 ];
 
