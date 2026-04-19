@@ -308,6 +308,7 @@ const READ_TOOLS = new Set([
   'analyze_pipeline',
   'get_task_analytics',
   'get_team_report',
+  'search_emails',
 ]);
 // Sprint 14/15: wszystkie integracje są realne.
 const STUB_TOOLS = new Set<string>();
