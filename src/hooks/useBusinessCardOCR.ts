@@ -119,11 +119,12 @@ export function useBusinessCardOCR() {
         throw new Error(error.message || 'Błąd podczas skanowania wizytówki');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Nie udało się przeanalizować wizytówki');
+      const first = Array.isArray(data?.results) ? data.results[0] : null;
+      if (!first?.success) {
+        throw new Error(first?.error || data?.error || 'Nie udało się przeanalizować wizytówki');
       }
 
-      return data.data as ExtractedContactData;
+      return first.data as ExtractedContactData;
     } finally {
       setIsScanning(false);
     }
