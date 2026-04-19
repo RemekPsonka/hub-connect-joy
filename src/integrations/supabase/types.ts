@@ -7652,6 +7652,82 @@ export type Database = {
           },
         ]
       }
+      sgu_representative_profiles: {
+        Row: {
+          active: boolean
+          commission_override_pct: number | null
+          deactivated_at: string | null
+          deactivated_by_user_id: string | null
+          first_name: string | null
+          invited_at: string
+          invited_by_user_id: string | null
+          last_name: string | null
+          notes: string | null
+          onboarded_at: string | null
+          phone: string | null
+          region: string | null
+          team_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          commission_override_pct?: number | null
+          deactivated_at?: string | null
+          deactivated_by_user_id?: string | null
+          first_name?: string | null
+          invited_at?: string
+          invited_by_user_id?: string | null
+          last_name?: string | null
+          notes?: string | null
+          onboarded_at?: string | null
+          phone?: string | null
+          region?: string | null
+          team_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          commission_override_pct?: number | null
+          deactivated_at?: string | null
+          deactivated_by_user_id?: string | null
+          first_name?: string | null
+          invited_at?: string
+          invited_by_user_id?: string | null
+          last_name?: string | null
+          notes?: string | null
+          onboarded_at?: string | null
+          phone?: string | null
+          region?: string | null
+          team_id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_representative_profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_representative_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_representative_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sgu_settings: {
         Row: {
           case_d_confirmed: boolean
@@ -9866,6 +9942,10 @@ export type Database = {
         Args: { p_candidate_id: string }
         Returns: Json
       }
+      rpc_sgu_deactivate_representative: {
+        Args: { p_reason?: string; p_user_id: string }
+        Returns: Json
+      }
       rpc_sgu_generate_snapshot: {
         Args: {
           p_period_end?: string
@@ -9886,6 +9966,25 @@ export type Database = {
       }
       rpc_sgu_get_crm_contact_basic: {
         Args: { p_contact_id: string }
+        Returns: Json
+      }
+      rpc_sgu_get_snapshot: {
+        Args: { p_id: string }
+        Returns: {
+          data: Json
+          generated_at: string
+          generated_by: string
+          generated_by_user_id: string
+          id: string
+          period_end: string
+          period_start: string
+          period_type: string
+          team_id: string
+          tenant_id: string
+        }[]
+      }
+      rpc_sgu_reactivate_representative: {
+        Args: { p_user_id: string }
         Returns: Json
       }
       rpc_sgu_reject_prospecting_candidate: {
