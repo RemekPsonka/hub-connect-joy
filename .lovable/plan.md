@@ -1,93 +1,47 @@
 
-## Plan: Restrukturyzacja SGU Sidebar + konsolidacja Prowizji + landing partner
+## Plan: Przeprojektowanie widoku Klienci w SGU
 
-### 1. `src/components/layout/SGUSidebar.tsx` — pełna przebudowa
-
-**Nowa struktura grup** (z localStorage per grupa, klucz `sgu-sidebar-group-<label>`):
-
-```ts
-const salesItems = [
-  { title: 'Kanban', url: '/sgu/pipeline?view=kanban', icon: LayoutGrid },
-  { title: 'Klienci', url: '/sgu/pipeline?view=clients', icon: UserCheck },
-  { title: 'Prospecting', url: '/sgu/pipeline?view=prospecting', icon: Search },
-  { title: 'Ofertowanie', url: '/sgu/pipeline?view=offering', icon: Briefcase },
-  { title: 'Zadania', url: '/sgu/pipeline?view=tasks', icon: ClipboardList },
-  { title: 'Prowizje', url: '/sgu/pipeline?view=commissions', icon: Receipt },
-  { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
-];
-
-const analyticsItems = [
-  { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
-  { title: 'Tabela', url: '/sgu/pipeline?view=table', icon: List },
-  { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 },
-];
-
-const adminItems = [
-  { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
-  { title: 'Przedstawiciele', url: '/sgu/admin/representatives', icon: UserCog },
-  { title: 'Przypisania', url: '/sgu/admin/assignments', icon: UserPlus },
-  { title: 'Produkty', url: '/sgu/admin/products', icon: Package },
-  { title: 'Konfiguracja prowizji', url: '/sgu/admin/commissions', icon: DollarSign },
-  { title: 'Case D', url: '/sgu/admin/case-d', icon: Calculator },
-];
-
-const systemItems = [
-  { title: 'Ustawienia', url: '/sgu/settings', icon: Settings },
-];
-```
-
-**Co usuwam:**
-- Cała sekcja `overviewItems` (Dashboard/Dziennik/Mój zespół) i `reportItems` (osobna grupa).
-- Komponent `FunnelCollapsible` + tablica `funnelSubItems` — pozycje renderowane płasko w grupie Sprzedaż.
-- Stara grupa Admin (`/sgu/admin/commissions/case-d` → zmiana ścieżki na `/sgu/admin/case-d` zgodnie z wymaganiem).
-
-**Default open state** (zapisywany w localStorage):
-- Sprzedaż: `true`
-- Analityka: `true`
-- Admin: `false` (collapsed)
-- System: `true`
-
-`useState` z lazy init czytającym `localStorage.getItem('sgu-sidebar-group-<label>')`, fallback do defaultu. `toggleGroup` zapisuje do localStorage.
-
-**Widoczność Admin:** `showAdmin = isPartner || isAdmin || isSuperadmin` (bez zmian względem obecnego — odpowiada wymaganiu „is_sgu_partner || director || superadmin"; `isAdmin` z `useOwnerPanel` to owner/director).
-
-**Aktywność linków:** zachowuję obecną logikę z `NavItem` (porównanie pathname + query params).
-
-**Footer:** zostawiam przycisk „Wróć do CRM" bez zmian.
-
-**Nagłówek:** zostawiam „CRM SGU Brokers" (poprzednia poprawka).
-
-### 2. `src/components/auth/PostLoginRedirect.tsx`
-
-Zmiana targetów:
-- `isRep && !isPartner` → `/sgu/pipeline?view=tasks` (było `/sgu/tasks`)
-- `isPartner` → `/sgu/pipeline?view=kanban` (było `/sgu/dashboard`)
-- Director (bez SGU role) → bez zmian (zostaje na `/`).
-
-`navigate(..., { replace: true })` z pełnym query stringiem.
-
-### 3. `src/pages/DealsTeamDashboard.tsx` — Tabs „Cele/Wpisy" w trybie SGU
-
-Gdy `forcedTeamId` jest ustawione (tryb SGU) **i** `viewMode === 'commissions'`:
-- Lokalny stan `commissionsTab: 'entries' | 'goals'`, default `'entries'`, persist w localStorage `sgu-commissions-tab`.
-- Renderuję `<Tabs>` z shadcn z dwiema zakładkami:
-  - „Wpisy" → `<CommissionsTable teamId={selectedTeamId} />` (obecny widok `entries`)
-  - „Cele" → `<CommissionsTab teamId={selectedTeamId} />` (obecny widok `commissions`)
-- Usuwam (w trybie SGU) osobny rendering dla `viewMode === 'entries'` — w SGU sidebarze nie ma już tej pozycji, ale dla bezpieczeństwa zostawiam handler dla nie-SGU (forcedTeamId === undefined).
-
-Logika non-SGU (`!forcedTeamId`) pozostaje bez zmian — użytkownicy CRM Deals Team nadal mają dwie osobne pozycje, jeśli ich sidebar je ma.
-
-### 4. Build + raport
-- `npm run build`
-- Lista zmodyfikowanych plików.
+### Recon najpierw
+Muszę zweryfikować strukturę kilku tabel/relacji zanim zacznę. Po zatwierdzeniu wykonam:
+1. `useSGUClientsPortfolio` — query do `deal_team_contacts` (category='client', team_id=SGU) + LEFT JOIN do `contacts`/`companies` + agregaty z `insurance_policies`, `deal_team_payment_schedule`, `commission_entries`. Wstępnie 1 query + równoległe doagregowania w hooku (Promise.all), wynik zmemoizowany. Filtr widoczności: jeśli rep — dodatkowy IN-filter na `representative_user_id` z `deal_team_representative_assignments.active=true`.
+2. `ClientsKPI` — 5 kart hero z trendami MoM tam gdzie wymagane (portfel, prowizja). Liczone z dataset hooka + osobne mini-zapytania MoM.
+3. Tabs: domyślny `portfolio`, persist w localStorage `sgu-clients-tab`.
+4. `ClientPortfolioTab` — Table z reuse `PremiumProgress` (SGU-03) w wariancie `compact`. Sortowanie po przypisie DESC, action popover.
+5. `ClientPaymentsTab` — segmented filter (overdue/this_month/upcoming_30d/all), kolor wierszy, mutation „Oznacz paid" (gated rolą).
+6. `ClientRenewalsTab` — grupowanie 30/60/90d po `end_date`, action „Przygotuj odnowienie" → INSERT do `tasks` z `due_date = end_date - 14d`, link do kontaktu.
+7. `ClientCrossSellTab` — 3 sekcje (1 polisa, brak życia, brak majątku), quick action create task.
+8. `SGUClientsView` — orchestruje KPI + Tabs.
+9. `DealsTeamDashboard` — branch: jeśli `useLayoutMode().mode === 'sgu'` i `viewMode === 'clients'` → `<SGUClientsView teamId={selectedTeamId} />`, inaczej obecny `<ClientsTab />`. Stats hero CRM (`<TeamStats />`) wyłączam dla SGU clients (KPI zastępuje).
 
 ### Pliki
-- `src/components/layout/SGUSidebar.tsx` — przebudowa.
-- `src/components/auth/PostLoginRedirect.tsx` — zmiana targetów.
-- `src/pages/DealsTeamDashboard.tsx` — Tabs Cele/Wpisy w SGU.
+**Nowe:**
+- `src/components/sgu/SGUClientsView.tsx`
+- `src/components/sgu/clients/ClientsKPI.tsx`
+- `src/components/sgu/clients/ClientPortfolioTab.tsx`
+- `src/components/sgu/clients/ClientPaymentsTab.tsx`
+- `src/components/sgu/clients/ClientRenewalsTab.tsx`
+- `src/components/sgu/clients/ClientCrossSellTab.tsx`
+- `src/hooks/useSGUClientsPortfolio.ts`
 
-### Ryzyka
-- Trasa `/sgu/admin/case-d` — wcześniej była `/sgu/admin/commissions/case-d`. Sidebar wskazuje nową ścieżkę zgodnie z wymaganiem; jeśli routing nie ma jej zarejestrowanej, link da 404. Nie zmieniam routingu (poza zakresem „zero zmian backend/DB", ale to FE — zostawiam zgodnie z wymaganiem klienta; ewentualną korektę routingu zrobię osobno, jeśli okaże się że route nie istnieje).
-- Trasy `/sgu/admin/team`, `/sgu/settings`, `/sgu/admin/products` — zakładam że istnieją (były w obecnym sidebarze).
-- localStorage SSR-safe: sprawdzam `typeof window !== 'undefined'` przy lazy init.
-- `PostLoginRedirect` używa `navigate('/sgu/pipeline?view=kanban', { replace: true })` — react-router 6 obsługuje query w stringu, OK.
+**Modyfikowany:**
+- `src/pages/DealsTeamDashboard.tsx` — gating SGU vs CRM dla `view=clients` + skip `<TeamStats />` w SGU clients (KPI zastępuje stats).
+
+### Założenia/ryzyka
+- Pole `is_our_policy` na `insurance_policies` — zweryfikuję, jeśli nie ma użyję samego `team_id`/`deal_team_contact_id`.
+- `commission_entries` — używam YTD per `recipient_user_id` (rep) lub team-wide (partner) zależnie od roli. Trend MoM = current month vs prev month sum.
+- Typy polis na badge — z `insurance_policies.policy_type` (enum/text). Mapowanie majątek/życie/OC/AC zrobię w utilu lokalnym.
+- Rep filter: użyję `useSGUAccess` (`isRep`, `isPartner`) + tabela `deal_team_representative_assignments`.
+- Reuse `PremiumProgress` z `src/components/sgu/PremiumProgress.tsx` (compact) — KPI per wiersz w Portfel.
+- `useSGUClientsPortfolio` shared cache: jeden queryKey, wszystkie taby konsumują, staleTime 60_000.
+- Mutacja „Oznacz paid" → invalidate `sgu-clients-portfolio` + `sgu-premium-progress`.
+- Brak zmian DB/backend — używam istniejących tabel/RLS.
+
+### Smoke test (po build)
+1. Login partner → `/sgu/pipeline?view=clients` → 5 KPI + Tab Portfel z listą.
+2. Tab Raty → filtr „Zaległe" → action „Oznacz paid".
+3. Tab Odnowienia → grupa 30d → „Przygotuj odnowienie" → task w workspace.
+4. Tab Cross-sell → 3 sekcje, quick action.
+5. CRM (`mode='crm'`) → ten sam route (gdyby ktoś trafił) renderuje stary `ClientsTab` bez zmian.
+
+### Build
+- `npm run build` + lista zmodyfikowanych plików.
