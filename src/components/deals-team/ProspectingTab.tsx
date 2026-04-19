@@ -31,6 +31,13 @@ import { useSGUAccess } from '@/hooks/useSGUAccess';
 import { useSGUProspects, type SGUProspect } from '@/hooks/useSGUProspects';
 import { AddLeadDialog } from '@/components/sgu/AddLeadDialog';
 import { ImportLeadsDialog } from '@/components/sgu/ImportLeadsDialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, Sparkles } from 'lucide-react';
+import { KRSProspectingForm } from '@/components/sgu/KRSProspectingForm';
+import { ProspectingJobProgress } from '@/components/sgu/ProspectingJobProgress';
+import { ProspectingCandidatesList } from '@/components/sgu/ProspectingCandidatesList';
+import { useProspectingJobs } from '@/hooks/useProspectingJobStatus';
 
 interface Props {
   teamId: string;
@@ -115,7 +122,24 @@ function SGUProspectingSection() {
   };
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="leads" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="leads">Leady ({prospects.length})</TabsTrigger>
+        {canManage && (
+          <TabsTrigger value="ai-krs" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI KRS
+          </TabsTrigger>
+        )}
+      </TabsList>
+
+      {canManage && (
+        <TabsContent value="ai-krs">
+          <AIKRSPanel />
+        </TabsContent>
+      )}
+
+      <TabsContent value="leads" className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
