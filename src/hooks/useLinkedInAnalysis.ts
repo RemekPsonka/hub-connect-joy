@@ -48,7 +48,7 @@ export function useLinkedInAnalysis() {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-linkedin-profile`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-person`,
         {
           method: 'POST',
           headers: {
@@ -56,6 +56,7 @@ export function useLinkedInAnalysis() {
             'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
+            mode: 'linkedin',
             contact_id: contactId,
             linkedin_url: linkedinUrl,
           }),
