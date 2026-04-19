@@ -42,7 +42,6 @@ export function AIKRSPanel() {
                 key={j.id}
                 jobId={j.id}
                 onShowCandidates={() => setSelectedJobId(j.id)}
-                isSelected={selectedJobId === j.id}
               />
             ))}
           </div>
