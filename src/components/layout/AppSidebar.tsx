@@ -77,8 +77,6 @@ const projectItems = [
 // SPRZEDAŻ
 const salesItems = [
   { title: 'Spotkania', url: '/meetings', icon: UsersRound, adminOnly: false },
-  { title: 'Ofertowanie', url: '/pipeline', icon: Briefcase, adminOnly: true },
-  { title: 'Dopasowania', url: '/matches', icon: Handshake, adminOnly: true },
 ];
 
 const funnelSubItems = [
@@ -96,8 +94,6 @@ const funnelSubItems = [
 // AI
 const aiItems = [
   { title: 'Sovra', url: '/sovra', icon: Sparkles },
-  { title: 'AI Chat', url: '/ai', icon: MessageSquare },
-  { title: 'Wyszukiwanie AI', url: '/search', icon: Search },
 ];
 
 // SYSTEM
