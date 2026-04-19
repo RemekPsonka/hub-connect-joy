@@ -9942,9 +9942,13 @@ export type Database = {
         Args: { p_candidate_id: string }
         Returns: Json
       }
+      rpc_sgu_complete_onboarding: {
+        Args: { p_notes?: string; p_phone?: string; p_region?: string }
+        Returns: undefined
+      }
       rpc_sgu_deactivate_representative: {
         Args: { p_reason?: string; p_user_id: string }
-        Returns: Json
+        Returns: undefined
       }
       rpc_sgu_generate_snapshot: {
         Args: {
@@ -9985,7 +9989,7 @@ export type Database = {
       }
       rpc_sgu_reactivate_representative: {
         Args: { p_user_id: string }
-        Returns: Json
+        Returns: undefined
       }
       rpc_sgu_reject_prospecting_candidate: {
         Args: { p_candidate_id: string; p_reason?: string }

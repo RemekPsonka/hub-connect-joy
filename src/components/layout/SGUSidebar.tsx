@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Users,
+  UserPlus,
   TrendingUp,
   PieChart,
   LayoutGrid,
@@ -72,6 +73,8 @@ const reportItems: NavItemDef[] = [
 
 const adminItems: NavItemDef[] = [
   { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
+  { title: 'Przedstawiciele', url: '/sgu/admin/representatives', icon: Users },
+  { title: 'Przypisania', url: '/sgu/admin/assignments', icon: UserPlus },
   { title: 'Produkty', url: '/sgu/admin/products', icon: Briefcase },
   { title: 'Prowizje', url: '/sgu/admin/commissions', icon: Receipt },
   { title: 'Case D', url: '/sgu/admin/commissions/case-d', icon: Calculator },

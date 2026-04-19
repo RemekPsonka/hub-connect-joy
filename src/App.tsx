@@ -23,6 +23,9 @@ import Login from "./pages/Login";
 
 // Lazy-loaded pages
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const SetupSGU = lazy(() => import("./pages/SetupSGU"));
+const SGURepresentatives = lazy(() => import("./pages/sgu/SGURepresentatives"));
+const SGUAssignments = lazy(() => import("./pages/sgu/SGUAssignments"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail"));
@@ -103,6 +106,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/setup-sgu" element={<AuthGuard><SetupSGU /></AuthGuard>} />
                 
                 {/* Protected routes */}
                 <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
@@ -160,6 +164,8 @@ const App = () => (
                   <Route path="/sgu/reports" element={<SGUReports />} />
                   <Route path="/sgu/reports/:period" element={<SGUReports />} />
                   <Route path="/sgu/admin" element={<SGUAdmin />} />
+                  <Route path="/sgu/admin/representatives" element={<SGURepresentatives />} />
+                  <Route path="/sgu/admin/assignments" element={<SGUAssignments />} />
                   <Route path="/sgu/admin/commissions/case-d" element={<SGUCaseD />} />
                   <Route path="/sgu/admin/:section" element={<SGUAdmin />} />
                   <Route path="/sgu/settings" element={<SGUSettings />} />
