@@ -26,14 +26,21 @@ type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' |
 const STORAGE_KEY = 'deals-team-selected';
 const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'tasks', 'snoozed', 'offering', 'dashboard'];
 
-export default function DealsTeamDashboard() {
+interface DealsTeamDashboardProps {
+  /** When set, locks the dashboard to this team and hides team-management UI (used by SGU pipeline route). */
+  forcedTeamId?: string;
+}
+
+export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardProps = {}) {
   const { data: teams = [], isLoading: teamsLoading } = useMyDealTeams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [selectedTeamId, setSelectedTeamId] = useState<string>(() => {
+  const [selectedTeamIdState, setSelectedTeamId] = useState<string>(() => {
+    if (forcedTeamId) return forcedTeamId;
     return localStorage.getItem(STORAGE_KEY) || '';
   });
+  const selectedTeamId = forcedTeamId ?? selectedTeamIdState;
 
   const currentView = searchParams.get('view') as ViewMode;
   const viewMode: ViewMode = VALID_VIEWS.includes(currentView) ? currentView : 'kanban';
@@ -45,18 +52,20 @@ export default function DealsTeamDashboard() {
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
 
   useEffect(() => {
+    if (forcedTeamId) return;
     if (!teamsLoading && teams.length > 0 && !selectedTeamId) {
       const firstTeamId = teams[0].id;
       setSelectedTeamId(firstTeamId);
       localStorage.setItem(STORAGE_KEY, firstTeamId);
     }
-  }, [teams, teamsLoading, selectedTeamId]);
+  }, [teams, teamsLoading, selectedTeamId, forcedTeamId]);
 
   useEffect(() => {
+    if (forcedTeamId) return;
     if (selectedTeamId) {
       localStorage.setItem(STORAGE_KEY, selectedTeamId);
     }
-  }, [selectedTeamId]);
+  }, [selectedTeamId, forcedTeamId]);
 
   const handleTeamChange = (teamId: string) => setSelectedTeamId(teamId);
   const handleTeamCreated = (teamId: string) => setSelectedTeamId(teamId);
@@ -66,7 +75,7 @@ export default function DealsTeamDashboard() {
     setSearchParams({ view });
   };
 
-  if (teamsLoading) {
+  if (teamsLoading && !forcedTeamId) {
     return (
       <div className="p-6 space-y-6">
         <div className="h-10 w-64 bg-muted animate-pulse rounded" />
@@ -84,7 +93,7 @@ export default function DealsTeamDashboard() {
     );
   }
 
-  if (teams.length === 0) {
+  if (!forcedTeamId && teams.length === 0) {
     return (
       <div className="p-6">
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -111,21 +120,23 @@ export default function DealsTeamDashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <TeamSelector
-          selectedTeamId={selectedTeamId}
-          onTeamChange={handleTeamChange}
-          teams={teams}
-          contactStats={contactStats}
-          onSettingsClick={handleSettingsClick}
-        />
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
+      {/* Header — hidden in forced (SGU) mode */}
+      {!forcedTeamId && (
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <TeamSelector
+            selectedTeamId={selectedTeamId}
+            onTeamChange={handleTeamChange}
+            teams={teams}
+            contactStats={contactStats}
+            onSettingsClick={handleSettingsClick}
+          />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => setShowCreateTeam(true)}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Stats - always visible when team selected (except dashboard, tasks, kanban) */}
       {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}

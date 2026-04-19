@@ -70,6 +70,24 @@
     --chart-5: 0 84% 60%;
   }
 
+  /* SGU theme — applied to subtree via [data-sgu-theme="true"] (set by SGULayout). */
+  [data-sgu-theme="true"] {
+    --primary: 224 64% 18%;
+    --primary-foreground: 44 92% 96%;
+    --accent: 44 92% 56%;
+    --accent-foreground: 224 70% 12%;
+    --ring: 44 92% 56%;
+
+    --sidebar-background: 224 70% 12%;
+    --sidebar-foreground: 44 92% 90%;
+    --sidebar-primary: 44 92% 56%;
+    --sidebar-primary-foreground: 224 70% 12%;
+    --sidebar-accent: 224 64% 22%;
+    --sidebar-accent-foreground: 44 92% 90%;
+    --sidebar-border: 224 50% 25%;
+    --sidebar-ring: 44 92% 56%;
+  }
+
   .dark {
     --background: 215 28% 10%;
     --foreground: 210 20% 90%;

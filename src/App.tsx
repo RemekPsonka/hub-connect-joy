@@ -8,7 +8,11 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { DirectorGuard } from "@/components/auth/DirectorGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
+import { SGUAccessGuard } from "@/components/auth/SGUAccessGuard";
+import { PostLoginRedirect } from "@/components/auth/PostLoginRedirect";
+import { LayoutModeProvider } from "@/store/layoutMode";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { SGULayout } from "@/components/layout/SGULayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -49,6 +53,14 @@ const Workspace = lazy(() => import("./pages/Workspace"));
 const AICosts = lazy(() => import("./pages/owner/AICosts"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 
+// SGU pages (lazy)
+const SGUDashboard = lazy(() => import("./pages/sgu/SGUDashboard"));
+const SGUTeam = lazy(() => import("./pages/sgu/SGUTeam"));
+const SGUReports = lazy(() => import("./pages/sgu/SGUReports"));
+const SGUAdmin = lazy(() => import("./pages/sgu/SGUAdmin"));
+const SGUSettings = lazy(() => import("./pages/sgu/SGUSettings"));
+const SGUPipelineRoute = lazy(() => import("./pages/sgu/SGUPipelineRoute"));
+
 const NetworkFallback = () => (
   <div className="flex h-full">
     <div className="flex-1 flex flex-col p-6">
@@ -80,6 +92,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <LayoutModeProvider>
+              <PostLoginRedirect />
               <Suspense fallback={<PageLoadingFallback />}>
                 <Routes>
                 {/* Public routes */}
@@ -133,11 +147,24 @@ const App = () => (
                   <Route path="/companies/:id" element={<DirectorGuard><CompanyDetail /></DirectorGuard>} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
+
+                {/* SGU routes — separate layout, gated by SGUAccessGuard */}
+                <Route element={<AuthGuard><SGUAccessGuard><SGULayout /></SGUAccessGuard></AuthGuard>}>
+                  <Route path="/sgu/dashboard" element={<SGUDashboard />} />
+                  <Route path="/sgu/team" element={<SGUTeam />} />
+                  <Route path="/sgu/pipeline" element={<SGUPipelineRoute />} />
+                  <Route path="/sgu/reports" element={<SGUReports />} />
+                  <Route path="/sgu/reports/:period" element={<SGUReports />} />
+                  <Route path="/sgu/admin" element={<SGUAdmin />} />
+                  <Route path="/sgu/admin/:section" element={<SGUAdmin />} />
+                  <Route path="/sgu/settings" element={<SGUSettings />} />
+                </Route>
                 
                 {/* Catch-all */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </Suspense>
+            </LayoutModeProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
