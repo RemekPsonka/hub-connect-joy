@@ -122,7 +122,24 @@ function SGUProspectingSection() {
   };
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="leads" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="leads">Leady ({prospects.length})</TabsTrigger>
+        {canManage && (
+          <TabsTrigger value="ai-krs" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI KRS
+          </TabsTrigger>
+        )}
+      </TabsList>
+
+      {canManage && (
+        <TabsContent value="ai-krs">
+          <AIKRSPanel />
+        </TabsContent>
+      )}
+
+      <TabsContent value="leads" className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
