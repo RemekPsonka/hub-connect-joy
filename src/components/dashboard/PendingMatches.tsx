@@ -1,13 +1,11 @@
-import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { Sparkles, ArrowRight, Check, X, Loader2 } from 'lucide-react';
+import { Sparkles, Check, X, Loader2 } from 'lucide-react';
 import { useMatches, useFindNewMatches, useUpdateMatchStatus } from '@/hooks/useMatches';
 
 export function PendingMatches() {
-  const navigate = useNavigate();
   const { data: matches, isLoading } = useMatches({ status: 'pending', limit: 4 });
   const findNewMatches = useFindNewMatches();
   const updateStatus = useUpdateMatchStatus();
