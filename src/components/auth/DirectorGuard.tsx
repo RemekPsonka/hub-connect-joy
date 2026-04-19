@@ -1,20 +1,27 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSGUAccess } from '@/hooks/useSGUAccess';
 
 interface DirectorGuardProps {
   children: ReactNode;
 }
 
 export function DirectorGuard({ children }: DirectorGuardProps) {
-  const { isAssistant, loading } = useAuth();
+  const { director, isAssistant, loading } = useAuth();
+  const { isPartner, isRep, isLoading: sguLoading } = useSGUAccess();
 
-  // Wait for auth to load
-  if (loading) {
+  if (loading || sguLoading) {
     return null;
   }
 
-  // Redirect assistants to contacts page
+  // SGU-only users (no director, no assistant) → push into their SGU landing
+  if (!director && !isAssistant && (isPartner || isRep)) {
+    const landing = isPartner ? '/sgu/pipeline?view=kanban' : '/sgu/pipeline?view=tasks';
+    return <Navigate to={landing} replace />;
+  }
+
+  // Assistants → contacts
   if (isAssistant) {
     return <Navigate to="/contacts" replace />;
   }
