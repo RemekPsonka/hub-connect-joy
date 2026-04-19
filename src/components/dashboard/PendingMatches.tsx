@@ -125,15 +125,6 @@ export function PendingMatches() {
               </div>
             ))}
             
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/matches')}
-              className="w-full mt-2 text-muted-foreground hover:text-foreground"
-            >
-              Zobacz wszystkie
-              <ArrowRight className="h-3.5 w-3.5 ml-1" />
-            </Button>
           </div>
         )}
       </CardContent>

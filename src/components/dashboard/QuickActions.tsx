@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserPlus, CalendarPlus, MessageSquare } from 'lucide-react';
+import { UserPlus, CalendarPlus, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ContactModal } from '@/components/contacts/ContactModal';
 import { ConsultationModal } from '@/components/consultations/ConsultationModal';
@@ -26,9 +26,9 @@ export function QuickActions() {
             <CalendarPlus className="h-4 w-4" />
             Nowa konsultacja
           </Button>
-          <Button onClick={() => navigate('/ai')} variant="outline" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            AI Chat
+          <Button onClick={() => navigate('/sovra')} variant="outline" className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            Sovra
           </Button>
         </CardContent>
       </Card>
