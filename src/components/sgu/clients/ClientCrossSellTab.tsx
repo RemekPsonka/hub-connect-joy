@@ -45,6 +45,7 @@ export function ClientCrossSellTab({ rows, teamId }: Props) {
       if (!userId) throw new Error('Brak użytkownika');
       const { data: dirData } = await supabase.from('directors').select('tenant_id').eq('user_id', userId).maybeSingle();
       const tenantId = dirData?.tenant_id;
+      if (!tenantId) throw new Error('Brak tenant_id');
       const due = new Date();
       due.setDate(due.getDate() + 7);
       const { error } = await supabase.from('tasks').insert({

@@ -70,6 +70,7 @@ export function ClientRenewalsTab({ rows, teamId }: Props) {
       if (!userId) throw new Error('Brak użytkownika');
       const { data: dirData } = await supabase.from('directors').select('tenant_id').eq('user_id', userId).maybeSingle();
       const tenantId = dirData?.tenant_id;
+      if (!tenantId) throw new Error('Brak tenant_id');
 
       const due = new Date(item.endDate);
       due.setDate(due.getDate() - 14);

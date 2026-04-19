@@ -156,7 +156,13 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       {selectedTeamId && viewMode === 'kanban' && <KanbanBoard teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'table' && <TableView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'clients' && (
+        forcedTeamId ? (
+          <SGUClientsView teamId={selectedTeamId} />
+        ) : (
+          <ClientsTab teamId={selectedTeamId} />
+        )
+      )}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'commissions' && forcedTeamId && (
         <Tabs

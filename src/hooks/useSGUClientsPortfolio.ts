@@ -103,7 +103,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
       let clientsQuery = supabase
         .from('deal_team_contacts')
         .select(
-          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, contact:contacts(full_name, company)'
+          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company)'
         )
         .eq('team_id', teamId)
         .eq('category', 'client');
@@ -261,8 +261,8 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           id: c.id,
           contact_id: c.contact_id,
           source_contact_id: c.source_contact_id,
-          full_name: c.contact?.full_name ?? '—',
-          company: c.contact?.company ?? null,
+          full_name: (c.contact as { full_name?: string; company?: string | null } | null)?.full_name ?? '—',
+          company: (c.contact as { full_name?: string; company?: string | null } | null)?.company ?? null,
           representative_user_id: c.representative_user_id,
           expected_annual_premium_gr: c.expected_annual_premium_gr ?? 0,
           policies: cps,
