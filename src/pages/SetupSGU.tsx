@@ -85,9 +85,9 @@ export default function SetupSGU() {
   const handleFinish = async () => {
     setSubmitting(true);
     const { error } = await supabase.rpc('rpc_sgu_complete_onboarding', {
-      p_phone: phone || null,
-      p_region: region || null,
-      p_notes: notes || null,
+      p_phone: phone || undefined,
+      p_region: region || undefined,
+      p_notes: notes || undefined,
     });
     setSubmitting(false);
     if (error) {
