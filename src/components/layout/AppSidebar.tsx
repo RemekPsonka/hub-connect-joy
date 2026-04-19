@@ -220,7 +220,12 @@ export function AppSidebar() {
   const { isAdmin } = useOwnerPanel();
   const { isAssistant, director, assistant } = useAuth();
   const { isSuperadmin } = useSuperadmin();
+  const { isPartner, isRep } = useSGUAccess();
+  const { enabled: sguEnabled } = useSGUTeamId();
   const location = useLocation();
+
+  const showSGUButton = !isAssistant && sguEnabled && (isAdmin || isSuperadmin || isPartner || isRep);
+  const sguTarget = isRep && !isPartner && !isAdmin && !isSuperadmin ? '/sgu/tasks' : '/sgu/dashboard';
 
   const getUserRole = () => {
     if (isSuperadmin) return 'Superadmin';
