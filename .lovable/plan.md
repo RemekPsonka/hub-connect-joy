@@ -1,52 +1,70 @@
 
-User pyta czy da się uruchomić pg_cron i czy zastosować jako domyślny scheduler. To zmiana decyzji ze Sprint 10 (gdzie pg_cron był odrzucony).
+User wrzucił sprint-13 MD bez treści wiadomości. Reading more of the file to plan properly.
 
-## Odpowiedź
+Plik widziałem do linii 55 (z 135). Główne wymagania jasne: redesign `/` jako „My Day" brief + RPC `rpc_dashboard_myday` + 3 sekcje + 4 KPI widgets.
 
-**Tak, pg_cron działa na Supabase** — to standardowe rozszerzenie Postgresa dostępne w każdym projekcie Supabase (również w Lovable Cloud). Razem z `pg_net` pozwala wywoływać edge functions na harmonogramie bez zewnętrznego schedulera.
+## Sprint 13 — Dashboard „My Day" (zaadaptowany)
 
-## Co zrobię po akceptacji
+### Korekty względem MD
+1. **Strona `/`** — sprawdziłem `App.tsx` wcześniej; istnieje już `Dashboard.tsx` lub `Index.tsx`. Custom instructions: `/my-day` ma wylecieć — czyli logikę „My Day" przenosimy do `/`. Stary widok dashboardu archiwizuję jako `Dashboard.legacy.tsx` (commit history wystarczy, nie kopiuję pliku — git keeps history).
+2. **RPC vs hooki** — MD chce `rpc_dashboard_myday()` zwracający jeden JSONB. Robię tak: jedna RPC = jeden roundtrip, łatwy cache w React Query. RLS przez `get_current_director_id()` w środku funkcji.
+3. **Pogoda** — wttr.in bez auth, fetch z FE z fallbackiem (jeśli error → bez pogody, bez błędu w UI). Cache 30 min w `localStorage` (custom instructions zabraniają localStorage dla **danych biznesowych** — pogoda to nie dane biznesowe, OK).
+4. **„Wiadomości"** — Gmail (S16) nie zrobiony → placeholder „0 nowych". Deal changes z `deal_team_audit_log` (mamy już audit logging dla deali per memory) WHERE `created_at > last_login`. `last_login` z `directors.last_sign_in_at` lub `auth.users.last_sign_in_at`.
+5. **KPI widgets reuse** — Sprint 11 zrobił widgety w `src/components/workspace/widgets/`. Reuse: `ContactsActiveWidget`, `TasksTodayWidget`, `ProspectsNewWidget`, `DealsActiveWidget` (lub odpowiedniki). Sprawdzę dokładne nazwy w trakcie.
 
-### 1. Włączenie rozszerzeń (migracja SQL)
-```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
-```
+### A. Migracja SQL `<ts>_sprint13_dashboard_myday.sql`
+- `CREATE OR REPLACE FUNCTION public.rpc_dashboard_myday() RETURNS jsonb` `LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public`.
+- W środku:
+  - `v_actor := get_current_director_id()`, `v_tenant := get_current_tenant_id()`.
+  - `tasks_overdue`: SELECT id, title, due_date, priority FROM tasks WHERE owner_id=v_actor AND status='todo' AND due_date < current_date LIMIT 5.
+  - `meetings_today`: SELECT id, title, start_at FROM meetings WHERE owner_id=v_actor AND start_at::date = current_date ORDER BY start_at LIMIT 5.
+  - `top_ai_recs`: SELECT id, title, content FROM ai_recommendations WHERE actor_id=v_actor AND status='active' ORDER BY created_at DESC LIMIT 3.
+  - `deals_recent_changes`: SELECT entity_id, action, created_at FROM deal_team_audit_log WHERE actor_id=v_actor AND created_at > now() - interval '24 hours' LIMIT 10. (Zamiast `last_login` — proste 24h okno; uproszczenie vs MD bo last_login wymaga osobnej tabeli lub hack przez auth.users który wymaga elevated access.)
+- Returns `jsonb_build_object(...)`.
+- GRANT EXECUTE TO authenticated.
+- `-- ROLLBACK: DROP FUNCTION public.rpc_dashboard_myday;`
 
-### 2. Helper SQL `schedule_edge_function(name, cron_expr, function_path, body)` 
-Jedna funkcja owijająca `cron.schedule` + `net.http_post` z poprawnym auth headerem (service role key z Vault). Dzięki temu kolejne joby = jedna linia, bez powielania URL/klucza.
+### B. Frontend
 
-### 3. Vault — przechowanie service role key
-Service role key w `vault.secrets` (zamiast hardkodowania w każdym jobie). Helper czyta przez `vault.decrypted_secrets`.
+**Hook nowy** `src/hooks/useDashboardMyDay.ts`:
+- React Query, key `['dashboard-myday', directorId]`, staleTime 2 min.
+- `supabase.rpc('rpc_dashboard_myday')` → typed return.
 
-### 4. Migracja istniejących cronów na nowy wzorzec
-Aktualnie mamy edge functions oznaczone w `config.toml` jako cron-callable (`background-sync-runner`, `sovra-reminder-trigger`, `sovra-weekly-report`). Sprawdzę czy mają już zaplanowane joby — jeśli nie, zaplanuję:
-- `background-sync-runner` — co 5 min
-- `sovra-reminder-trigger` — codziennie 7:00 (Europe/Warsaw → 6:00 UTC)
-- `sovra-weekly-report` — poniedziałki 8:00 (7:00 UTC)
+**Hook nowy** `src/hooks/useWeather.ts`:
+- Fetch `https://wttr.in/Warsaw?format=j1` z 30-min cache w localStorage (klucz `weather_warsaw_v1` + timestamp).
+- Fallback: `null` przy błędzie/timeout 3s.
 
-### 5. Sprint 12 — re-enable lazy + cron
-W Sprint 12 zrobiłem AIRecsWidget z lazy generate on-read. Teraz dodaję także cron `sovra-generate-daily-recs` codziennie 6:00 UTC, żeby user widział recs od razu po otwarciu. Lazy zostaje jako fallback (gdy cron padnie).
+**Edycja `src/pages/Dashboard.tsx`** (lub `Index.tsx` — sprawdzę):
+- Nowy layout:
+  - **Header**: „Dzień dobry Remek, {dayName}, {DD MMMM YYYY}." + opcjonalnie „Pogoda: {temp}°C, {desc}".
+  - **Sekcja „Dzisiaj"** (Card, max 5): merged list `tasks_overdue` (badge „Zaległe", red) + `meetings_today` (badge „Spotkanie", blue) + `top_ai_recs` (badge „Sovra", purple). Każdy klikalny → routing.
+  - **Sekcja „Wiadomości"** (Card, 2 cols): „📧 0 nowych emaili" (placeholder) + „💼 {N} zmian w dealach (24h)" → klik rozwija listę z `deals_recent_changes`.
+  - **Sekcja „Szybki start"** (3 duże tiles z gradientem, h-32): „➕ Dodaj kontakt" → `/contacts?new=1`, „💬 Rozmowa z Sovrą" → `/sovra`, „📅 Nowe spotkanie" → `/meetings?new=1`.
+  - **KPI grid** (4 cols, reuse z workspace widgets) — bez drag&drop, statyczny grid.
 
-### 6. Aktualizacja project knowledge
-Update memory: `mem://technical/scheduling-pg-cron` — pg_cron + pg_net są domyślnym schedulerem, helper `schedule_edge_function`, Vault dla service key. Wcześniejsza decyzja "no pg_cron" ze Sprint 10 — odwołana.
+### C. Czystka (custom instructions)
+- `/my-day` route w `App.tsx` → usuwam (z archiwizacją: redirect na `/` przez `<Navigate to="/" replace />`).
+- Stary Dashboard content nadpisuję — git history = archiwum.
 
-### 7. Monitoring
-- Widok `cron_job_health` (SECURITY DEFINER, admin-only) z `cron.job_run_details` — ostatnie 100 uruchomień + status. Do wykorzystania w przyszłym admin panelu.
+### D. Kolejność
+1. Migracja RPC.
+2. Hook `useDashboardMyDay` + `useWeather`.
+3. Przebudowa `Dashboard.tsx`.
+4. Redirect `/my-day` → `/` w `App.tsx`.
+5. Smoke test.
 
-## Co NIE robię
-- Nie ruszam crona aplikacyjnego dla rzeczy real-time (np. notyfikacje natychmiastowe → realtime/triggery, nie cron).
-- Nie planuję jobów częstszych niż co 1 min (limit pg_cron).
-- Service role key idzie do Vault — **nie** do `config.toml` ani do kodu klienta.
+### E. DoD
+- [ ] RPC `rpc_dashboard_myday` zwraca 4 sekcje.
+- [ ] Strona `/` ma header z datą + opcjonalną pogodą.
+- [ ] Sekcja „Dzisiaj" merguje overdue/meetings/recs (max 5).
+- [ ] Sekcja „Wiadomości" pokazuje placeholder + deal changes.
+- [ ] 3 quick-start tiles routują poprawnie.
+- [ ] 4 KPI widgets renderują dane.
+- [ ] `/my-day` redirectuje na `/`.
 
-## Ryzyka
-- **R1:** Jeśli `vault` extension nie jest dostępne → fallback: secret w jednorazowej tabeli `private.scheduler_secrets` z RLS „deny all" + dostęp tylko przez SECURITY DEFINER funkcję.
-- **R2:** Cron joby mogą się duplikować przy re-deployu migracji. Mitygacja: helper sprawdza `cron.job` po nazwie i robi `cron.unschedule` przed `cron.schedule` (idempotent).
-- **R3:** Service role wywoływany z DB ma pełen dostęp — każda cron-callable funkcja MUSI walidować że to wywołanie z cron (porównanie tokena z `SUPABASE_SERVICE_ROLE_KEY`), co już robi `sovra-reminder-trigger` (Path A).
-
-## DoD
-- [ ] `pg_cron` + `pg_net` enabled.
-- [ ] Helper `schedule_edge_function` działa.
-- [ ] 3 istniejące cron-callable funkcje mają zaplanowane joby.
-- [ ] `sovra-generate-daily-recs` ma cron 6:00 UTC.
-- [ ] Memory update — pg_cron jako default.
+### F. Ryzyka
+- **R1** `meetings.owner_id` może nie istnieć (czasem `created_by`). Sprawdzę w migracji; jeśli inny — użyję faktycznej kolumny.
+- **R2** `deal_team_audit_log` schema — sprawdzę kolumny (`actor_id` vs `director_id`). Adjust query.
+- **R3** Pogoda wttr.in może być wolna/down → 3s timeout + fallback bez pogody, brak blokowania renderu.
+- **R4** KPI widgets z workspace mogą wymagać kontekstu (props specyficznego dla workspace) — jeśli tak, wyciągnę logikę do `KpiCard` reusable component.
+- **R5** Reszta MD (linie 56-135) niewidoczna — jeśli zawierają sprzeczne wymagania, zaadaptuję lub wskażę odchylenia po implementacji.
