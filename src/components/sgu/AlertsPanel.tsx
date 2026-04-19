@@ -30,7 +30,7 @@ export function AlertsPanel() {
       <AccordionItem value="expiring">
         <AccordionTrigger className="hover:no-underline">
           <div className="flex items-center gap-2">
-            <CalendarClock className="h-4 w-4 text-amber-600" />
+            <CalendarClock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="font-medium">Polisy kończące się (≤14 dni)</span>
             <Badge variant={expiring.length > 0 ? 'default' : 'secondary'}>{expiring.length}</Badge>
           </div>
