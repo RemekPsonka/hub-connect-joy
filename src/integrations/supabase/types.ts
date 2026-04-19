@@ -8763,6 +8763,7 @@ export type Database = {
           total_tokens_out: number
         }[]
       }
+      rpc_dashboard_myday: { Args: never; Returns: Json }
       rpc_sovra_analyze_pipeline: {
         Args: { p_team_id?: string }
         Returns: Json
