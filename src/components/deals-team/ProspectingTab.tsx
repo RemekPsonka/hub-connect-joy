@@ -32,8 +32,9 @@ import { useSGUProspects, type SGUProspect } from '@/hooks/useSGUProspects';
 import { AddLeadDialog } from '@/components/sgu/AddLeadDialog';
 import { ImportLeadsDialog } from '@/components/sgu/ImportLeadsDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Globe } from 'lucide-react';
 import { AIKRSPanel } from '@/components/sgu/AIKRSPanel';
+import { AIWebPanel } from '@/components/sgu/AIWebPanel';
 
 interface Props {
   teamId: string;
@@ -122,17 +123,28 @@ function SGUProspectingSection() {
       <TabsList>
         <TabsTrigger value="leads">Leady ({prospects.length})</TabsTrigger>
         {canManage && (
-          <TabsTrigger value="ai-krs" className="gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
-            AI KRS
-          </TabsTrigger>
+          <>
+            <TabsTrigger value="ai-krs" className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI KRS
+            </TabsTrigger>
+            <TabsTrigger value="ai-web" className="gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              AI Web
+            </TabsTrigger>
+          </>
         )}
       </TabsList>
 
       {canManage && (
-        <TabsContent value="ai-krs">
-          <AIKRSPanel />
-        </TabsContent>
+        <>
+          <TabsContent value="ai-krs">
+            <AIKRSPanel />
+          </TabsContent>
+          <TabsContent value="ai-web">
+            <AIWebPanel />
+          </TabsContent>
+        </>
       )}
 
       <TabsContent value="leads" className="space-y-4">
