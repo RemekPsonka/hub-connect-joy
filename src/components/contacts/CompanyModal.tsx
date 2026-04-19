@@ -230,21 +230,10 @@ export function CompanyModal({ open, onOpenChange, company, ownerContactId }: Co
   };
 
   const handleRegenerateAI = async () => {
-    const values = form.getValues();
-    const result = await regenerateAI.mutateAsync({
-      id: company.id,
-      companyName: values.name,
-      website: values.website,
-      industryHint: values.industry,
-    });
-
-    // Update form with new AI data - ai_analysis is now JSONB
-    const newAiData = parseAIAnalysis(result.ai_analysis);
-    form.setValue('description', result.description || '');
-    form.setValue('industry', result.industry || '');
-    form.setValue('services', newAiData.services);
-    form.setValue('collaboration_areas', newAiData.collaboration_areas);
-    form.setValue('logo_url', result.logo_url || '');
+    // Sprint 19c-β.1: enrich teraz idzie w tle (background job).
+    // UI nie czeka na payload — toast pokazuje hook + JobsBell zasygnalizuje completion,
+    // a invalidacja queries odświeży kartę firmy gdy worker zapisze do company_data_sources.
+    await regenerateAI.mutateAsync({ id: company.id });
   };
 
   const handleScrapeLogo = async () => {
