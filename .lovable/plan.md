@@ -1,37 +1,63 @@
 
-## Diagnoza: „Remigiusz" vs „Moje" w selektorze zespołu SGU
 
-### Co widzi user
-Na `/sgu/pipeline` selektor zespołu pokazuje dwie pozycje, które dla Remka (jednoosobowego użytkownika SGU) wyglądają jak duplikat: zespół „Remigiusz" i zespół „Moje" — ale dane (kontakty/lejek) są różne.
+## Bug: „Moje" i „Nieprzypisane" pokazują te same kontakty
 
-### Hipoteza
-W `deal_teams` dla tenanta Remka są **dwa różne zespoły** w których jest członkiem:
-1. „SGU" (lub „Remigiusz"/„Moje" — jeden z nich) — właściwy zespół SGU (`team_type='sgu'` albo po nazwie), gdzie `team_id = 9842c3d4-c2a4-4d2b-9e35-afa7fb8d6a57` (znany z planu sidebar).
-2. Drugi zespół CRM-owy/osobisty — historyczny rekord (np. utworzony przy seedzie, „Moje" jako default per-director albo „Remigiusz" jako personal team).
+### Diagnoza (KanbanBoard.tsx, linie 96–107)
 
-Selektor zespołu w `/sgu/pipeline` (komponent prawdopodobnie `TeamSelector` w `DealsTeamDashboard`) pobiera **wszystkie** zespoły do których user ma dostęp (przez `deal_team_members`), a nie filtruje do `team_type='sgu'`. Przez to user-SGU widzi również niezwiązany z SGU zespół CRM-owy → różne dane lejka.
+```ts
+if (filterMember === 'unassigned') {
+  return searchFilteredContacts.filter(c => !activeTaskMap?.get(c.id));
+}
+const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
+return searchFilteredContacts.filter(c => {
+  const info = activeTaskMap?.get(c.id);
+  if (!info) return filterMember === 'mine'; // ← BUG
+  return info.assignedTo === targetId;
+});
+```
 
-### Plan naprawy
+**Problem:** dla `filterMember === 'mine'` linia `if (!info) return filterMember === 'mine'` zwraca `true` dla **wszystkich** kontaktów bez aktywnego zadania → czyli dokładnie tego samego zbioru co „Nieprzypisane". Komentarz „shared contacts visible in 'mine'" jest błędny dla SGU/jednoosobowego użycia — przecina się z „Nieprzypisane".
 
-**Krok 1 — Recon (przed kodem):**
-1. `supabase--read_query`: sprawdzić w `deal_teams` ile zespołów jest dla tenanta Remka, ich `name`, `team_type`/jakkolwiek się to pole nazywa, kto jest w `deal_team_members` dla każdego.
-2. Znaleźć komponent selektora zespołu w `/sgu/pipeline` (najpewniej w `src/pages/DealsTeamDashboard.tsx` lub `src/components/deals-team/TeamSelector.tsx`) i hook który ładuje listę zespołów (`useDealTeams` / `useTeamsForUser`).
-3. Sprawdzić czy w trybie SGU (`useLayoutMode().mode === 'sgu'`) jest forsowany konkretny `teamId` (`forcedTeamId` znany z `DealsTeamDashboard`), czy selektor mimo wszystko pokazuje wybór.
+Dla Remka (sam w SGU) efekt:
+- „Moje" = (kontakty z taskiem assigned_to=Remek) ∪ (kontakty bez taska) 
+- „Nieprzypisane" = (kontakty bez taska)
+- Skoro Remek nie ma jeszcze tasków assigned_to=siebie albo task.assigned_to to null/`director_id` mismatch — oba zbiory kończą jako identyczne.
 
-**Krok 2 — Fix (jedna z dwóch ścieżek, zależnie od recon):**
+### Dodatkowy problem
+`activeTaskMap` mapuje `assignedTo` z `tasks.assigned_to`. Trzeba zweryfikować czy `tasks.assigned_to` przechowuje `director_id` czy `auth.uid()` — od tego zależy poprawność porównania `info.assignedTo === currentDirector?.id`. Sprawdzę w recon przed kodem (jeden read query do `tasks` + jeden grep `assigned_to` w hookach tworzących taski).
 
-**Wariant A** (najpewniej): selektor w trybie SGU NIE powinien być widoczny — pokazujemy nazwę zespołu jako label (read-only). `forcedTeamId` z `useSGUTeamId()` jest pojedynczy i twardy. Schowam selektor pod `mode === 'sgu'` i wyświetlę tylko nazwę zespołu „SGU" lub po prostu usunę widget.
+### Naprawa
 
-**Wariant B**: jeśli realnie są dwa SGU-typowane zespoły (mało prawdopodobne dla Remka) — przefiltrować listę do `team_type='sgu'` w hooku.
+**1. `src/components/deals-team/KanbanBoard.tsx`** — popraw logikę „Moje":
+```ts
+if (filterMember === 'mine') {
+  const myId = currentDirector?.id;
+  return searchFilteredContacts.filter(c => {
+    const info = activeTaskMap?.get(c.id);
+    return info?.assignedTo === myId; // tylko własne aktywne zadania
+  });
+}
+// pozostali członkowie:
+const targetId = filterMember;
+return searchFilteredContacts.filter(c => activeTaskMap?.get(c.id)?.assignedTo === targetId);
+```
 
-**Wariant C**: jeśli jeden z zespołów to legacy/duplikat („Moje" = stary personal team, „Remigiusz" = nowy SGU) — zarchiwizować duplikat zgodnie z project-knowledge (`archive.deal_teams_backup_YYYYMMDD` + DELETE / soft delete). To wymaga zmiany DB — zrobię tylko po potwierdzeniu po recon.
+**2. `src/components/deals-team/SubKanbanView.tsx`** — identyczna naprawa (linie 47–58 mają ten sam bug: `if (!info) return localFilterMember === 'mine'`).
 
-### Pliki (oczekiwane do edycji)
-- `src/pages/DealsTeamDashboard.tsx` — ukrycie selektora w trybie SGU
-- ewentualnie `src/components/deals-team/TeamSelector.tsx` lub równoważny — filter `team_type='sgu'` dla SGU mode
-- ewentualnie migracja archiwizacyjna duplikatu (wariant C) — tylko po Twoim OK
+**3. Recon przed implementacją:**
+- `supabase--read_query` na `tasks` (sample 5 wierszy z SGU teamu) — sprawdzić czy `assigned_to` to UUID directora czy auth.uid().
+- Jeśli to auth.uid() — porównanie musi być `info.assignedTo === currentDirector?.user_id` (a nie `.id`). Wtedy fix trochę większy, ale ten sam plik.
 
-### Co teraz zrobię
-Najpierw recon (DB query + lokalizacja selektora), potem konkretny patch. Bez zmian DB w tym kroku — tylko FE fix selektora. Jeśli okaże się że to duplikat w DB i wymaga merge'u — wrócę z osobnym planem migracji.
+### Pliki do edycji
+- `src/components/deals-team/KanbanBoard.tsx` (linie 96–107)
+- `src/components/deals-team/SubKanbanView.tsx` (linie 47–58)
 
-### Brak zmian backend/DB w fazie 1. Build + lista plików po wdrożeniu.
+### Smoke test
+1. SGU Remek → „Moje" pokazuje TYLKO kontakty gdzie ma aktywne zadanie przypisane do siebie.
+2. „Nieprzypisane" → TYLKO kontakty bez żadnego aktywnego zadania.
+3. Zbiory rozłączne (przecięcie = ∅).
+4. „Wszyscy" = suma wszystkich.
+5. Drill-down (np. AUDYT) — ten sam fix w SubKanbanView, identyczne zachowanie.
+
+Brak zmian DB. Build + lista plików po wdrożeniu.
+
