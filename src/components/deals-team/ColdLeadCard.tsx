@@ -1,8 +1,10 @@
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { useSGUContactDisplay } from '@/hooks/useSGUContactDisplay';
 
 interface ColdLeadCardProps {
   contact: DealTeamContact;
@@ -15,6 +17,7 @@ interface ColdLeadCardProps {
 }
 
 export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging, taskStatus }: ColdLeadCardProps) {
+  const display = useSGUContactDisplay(contact);
   if (!contact.contact) return null;
 
   return (
@@ -40,13 +43,16 @@ export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragg
           </span>
         )}
         <span className="text-xs font-medium truncate">
-          {contact.contact.full_name}
+          {display.fullName ?? '—'}
         </span>
-        {contact.contact.company && (
+        {display.isSguRef && (
+          <Badge variant="secondary" className="h-4 px-1 text-[9px] shrink-0">Z CRM</Badge>
+        )}
+        {display.company && (
           <>
             <span className="text-muted-foreground text-xs shrink-0">·</span>
             <span className="text-xs text-muted-foreground truncate">
-              {contact.contact.company}
+              {display.company}
             </span>
           </>
         )}

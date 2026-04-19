@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { UserCheck, BarChart3 } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 import { useClientProducts } from '@/hooks/useTeamClients';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import type { DealTeamContact } from '@/types/dealTeam';
+import { useSGUContactDisplay } from '@/hooks/useSGUContactDisplay';
 
 interface ClientCardProps {
   client: DealTeamContact;
@@ -13,6 +14,7 @@ interface ClientCardProps {
 
 export function ClientCard({ client, onClick }: ClientCardProps) {
   const { data: products = [] } = useClientProducts(client.id);
+  const display = useSGUContactDisplay(client);
 
   const totals = useMemo(() => {
     const value = products.reduce((s, p) => s + p.deal_value, 0);
@@ -31,9 +33,14 @@ export function ClientCard({ client, onClick }: ClientCardProps) {
             <UserCheck className="h-4 w-4 text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{client.contact?.full_name}</p>
-            {client.contact?.company && (
-              <p className="text-xs text-muted-foreground truncate">{client.contact.company}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-semibold text-sm truncate">{display.fullName ?? '—'}</p>
+              {display.isSguRef && (
+                <Badge variant="secondary" className="h-4 px-1 text-[9px] shrink-0">Z CRM</Badge>
+              )}
+            </div>
+            {display.company && (
+              <p className="text-xs text-muted-foreground truncate">{display.company}</p>
             )}
             {client.contact?.position && (
               <p className="text-xs text-muted-foreground truncate">{client.contact.position}</p>

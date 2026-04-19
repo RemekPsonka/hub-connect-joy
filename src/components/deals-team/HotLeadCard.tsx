@@ -1,9 +1,11 @@
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { TaskContactInfo } from '@/hooks/useActiveTaskContacts';
 import { offeringStageLabel } from '@/utils/offeringStageLabels';
+import { useSGUContactDisplay } from '@/hooks/useSGUContactDisplay';
 
 interface HotLeadCardProps {
   contact: DealTeamContact;
@@ -16,6 +18,7 @@ interface HotLeadCardProps {
 }
 
 export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragging, taskStatus }: HotLeadCardProps) {
+  const display = useSGUContactDisplay(contact);
   if (!contact.contact) return null;
 
   const stageLabel = offeringStageLabel(contact.offering_stage, contact.category);
@@ -44,13 +47,16 @@ export function HotLeadCard({ contact, onClick, onDragStart, onDragEnd, isDraggi
             </span>
           )}
           <span className="text-xs font-medium truncate">
-            {contact.contact.full_name}
+            {display.fullName ?? '—'}
           </span>
-          {contact.contact.company && (
+          {display.isSguRef && (
+            <Badge variant="secondary" className="h-4 px-1 text-[9px] shrink-0">Z CRM</Badge>
+          )}
+          {display.company && (
             <>
               <span className="text-muted-foreground text-xs shrink-0">·</span>
               <span className="text-xs text-muted-foreground truncate">
-                {contact.contact.company}
+                {display.company}
               </span>
             </>
           )}
