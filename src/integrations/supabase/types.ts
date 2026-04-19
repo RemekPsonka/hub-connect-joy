@@ -874,6 +874,51 @@ export type Database = {
           },
         ]
       }
+      audit_crm_contact_reads: {
+        Row: {
+          client_ip: unknown
+          contact_id: string
+          id: number
+          read_at: string | null
+          reader_user_id: string | null
+          tenant_id: string | null
+          via_rpc: string
+        }
+        Insert: {
+          client_ip?: unknown
+          contact_id: string
+          id?: number
+          read_at?: string | null
+          reader_user_id?: string | null
+          tenant_id?: string | null
+          via_rpc: string
+        }
+        Update: {
+          client_ip?: unknown
+          contact_id?: string
+          id?: number
+          read_at?: string | null
+          reader_user_id?: string | null
+          tenant_id?: string | null
+          via_rpc?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_crm_contact_reads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "audit_crm_contact_reads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -1579,6 +1624,60 @@ export type Database = {
             columns: ["parent_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commission_base_split: {
+        Row: {
+          active_from: string
+          active_to: string | null
+          created_at: string | null
+          created_by_user_id: string | null
+          id: string
+          notes: string | null
+          recipient_user_id: string | null
+          role_key: string
+          share_pct: number
+          tenant_id: string
+        }
+        Insert: {
+          active_from?: string
+          active_to?: string | null
+          created_at?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          recipient_user_id?: string | null
+          role_key: string
+          share_pct: number
+          tenant_id: string
+        }
+        Update: {
+          active_from?: string
+          active_to?: string | null
+          created_at?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          recipient_user_id?: string | null
+          role_key?: string
+          share_pct?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_base_split_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "commission_base_split_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -3379,6 +3478,7 @@ export type Database = {
           created_at: string | null
           deal_id: string | null
           estimated_value: number | null
+          expected_annual_premium_gr: number | null
           id: string
           last_status_update: string | null
           next_action: string | null
@@ -3389,10 +3489,12 @@ export type Database = {
           notes: string | null
           offering_stage: string | null
           priority: string | null
+          representative_user_id: string | null
           review_frequency: string | null
           snooze_reason: string | null
           snoozed_from_category: string | null
           snoozed_until: string | null
+          source_contact_id: string | null
           status: string
           status_overdue: boolean | null
           team_id: string
@@ -3410,6 +3512,7 @@ export type Database = {
           created_at?: string | null
           deal_id?: string | null
           estimated_value?: number | null
+          expected_annual_premium_gr?: number | null
           id?: string
           last_status_update?: string | null
           next_action?: string | null
@@ -3420,10 +3523,12 @@ export type Database = {
           notes?: string | null
           offering_stage?: string | null
           priority?: string | null
+          representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
           snoozed_until?: string | null
+          source_contact_id?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id: string
@@ -3441,6 +3546,7 @@ export type Database = {
           created_at?: string | null
           deal_id?: string | null
           estimated_value?: number | null
+          expected_annual_premium_gr?: number | null
           id?: string
           last_status_update?: string | null
           next_action?: string | null
@@ -3451,10 +3557,12 @@ export type Database = {
           notes?: string | null
           offering_stage?: string | null
           priority?: string | null
+          representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
           snoozed_until?: string | null
+          source_contact_id?: string | null
           status?: string
           status_overdue?: boolean | null
           team_id?: string
@@ -3466,6 +3574,13 @@ export type Database = {
           {
             foreignKeyName: "deal_team_contacts_contact_id_fkey"
             columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_contacts_source_contact_id_fkey"
+            columns: ["source_contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
             referencedColumns: ["id"]
@@ -3679,6 +3794,74 @@ export type Database = {
           },
           {
             foreignKeyName: "deal_team_product_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_team_representative_assignments: {
+        Row: {
+          active: boolean
+          assigned_at: string | null
+          assigned_by_user_id: string | null
+          deal_team_contact_id: string
+          id: string
+          notes: string | null
+          representative_user_id: string
+          team_id: string
+          tenant_id: string
+          unassigned_at: string | null
+        }
+        Insert: {
+          active?: boolean
+          assigned_at?: string | null
+          assigned_by_user_id?: string | null
+          deal_team_contact_id: string
+          id?: string
+          notes?: string | null
+          representative_user_id: string
+          team_id: string
+          tenant_id: string
+          unassigned_at?: string | null
+        }
+        Update: {
+          active?: boolean
+          assigned_at?: string | null
+          assigned_by_user_id?: string | null
+          deal_team_contact_id?: string
+          id?: string
+          notes?: string | null
+          representative_user_id?: string
+          team_id?: string
+          tenant_id?: string
+          unassigned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_representative_assignments_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_representative_assignments_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_representative_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "deal_team_representative_assignments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -4839,6 +5022,7 @@ export type Database = {
           end_date: string
           forecasted_commission: number | null
           forecasted_premium: number | null
+          has_handling: boolean
           id: string
           insurer_name: string | null
           is_our_policy: boolean | null
@@ -4850,6 +5034,7 @@ export type Database = {
           premium: number | null
           product_id: string | null
           renewal_checklist: Json | null
+          representative_user_id: string | null
           start_date: string
           sum_insured: number | null
           tenant_id: string
@@ -4870,6 +5055,7 @@ export type Database = {
           end_date: string
           forecasted_commission?: number | null
           forecasted_premium?: number | null
+          has_handling?: boolean
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
@@ -4881,6 +5067,7 @@ export type Database = {
           premium?: number | null
           product_id?: string | null
           renewal_checklist?: Json | null
+          representative_user_id?: string | null
           start_date: string
           sum_insured?: number | null
           tenant_id: string
@@ -4901,6 +5088,7 @@ export type Database = {
           end_date?: string
           forecasted_commission?: number | null
           forecasted_premium?: number | null
+          has_handling?: boolean
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
@@ -4912,6 +5100,7 @@ export type Database = {
           premium?: number | null
           product_id?: string | null
           renewal_checklist?: Json | null
+          representative_user_id?: string | null
           start_date?: string
           sum_insured?: number | null
           tenant_id?: string
@@ -4976,9 +5165,11 @@ export type Database = {
           code: string
           created_at: string | null
           default_commission_rate: number | null
+          has_handling: boolean
           id: string
           is_active: boolean | null
           name: string
+          requires_pesel: boolean
           subcategory: string | null
           tenant_id: string
           updated_at: string | null
@@ -4988,9 +5179,11 @@ export type Database = {
           code: string
           created_at?: string | null
           default_commission_rate?: number | null
+          has_handling?: boolean
           id?: string
           is_active?: boolean | null
           name: string
+          requires_pesel?: boolean
           subcategory?: string | null
           tenant_id: string
           updated_at?: string | null
@@ -5000,9 +5193,11 @@ export type Database = {
           code?: string
           created_at?: string | null
           default_commission_rate?: number | null
+          has_handling?: boolean
           id?: string
           is_active?: boolean | null
           name?: string
+          requires_pesel?: boolean
           subcategory?: string | null
           tenant_id?: string
           updated_at?: string | null
@@ -7078,6 +7273,61 @@ export type Database = {
           },
         ]
       }
+      sgu_settings: {
+        Row: {
+          created_at: string | null
+          default_handling_pct: number
+          default_rep_commission_pct: number
+          enable_sgu_layout: boolean
+          notes: string | null
+          sgu_team_id: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_handling_pct?: number
+          default_rep_commission_pct?: number
+          enable_sgu_layout?: boolean
+          notes?: string | null
+          sgu_team_id?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          default_handling_pct?: number
+          default_rep_commission_pct?: number
+          enable_sgu_layout?: boolean
+          notes?: string | null
+          sgu_team_id?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_settings_sgu_team_id_fkey"
+            columns: ["sgu_team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sovra_pending_actions: {
         Row: {
           actor_id: string
@@ -8971,6 +9221,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: string
       }
+      get_sgu_team_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -8983,6 +9234,7 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      has_sgu_access: { Args: never; Returns: boolean }
       immutable_unaccent: { Args: { "": string }; Returns: string }
       is_admin_anywhere: { Args: { _user_id: string }; Returns: boolean }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
@@ -8995,6 +9247,8 @@ export type Database = {
         | { Args: { p_team_id: string }; Returns: boolean }
       is_group_shared_to_me: { Args: { _group_id: string }; Returns: boolean }
       is_sales_representative: { Args: { _user_id: string }; Returns: boolean }
+      is_sgu_partner: { Args: never; Returns: boolean }
+      is_sgu_representative: { Args: never; Returns: boolean }
       is_superadmin:
         | { Args: never; Returns: boolean }
         | { Args: { check_user_id: string }; Returns: boolean }
@@ -9069,6 +9323,10 @@ export type Database = {
           path_names: string[]
           total_strength: number
         }[]
+      }
+      rpc_sgu_get_crm_contact_basic: {
+        Args: { p_contact_id: string }
+        Returns: Json
       }
       rpc_sovra_analyze_pipeline: {
         Args: { p_team_id?: string }
