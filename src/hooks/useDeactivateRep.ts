@@ -8,7 +8,7 @@ export function useDeactivateRep() {
     mutationFn: async ({ userId, reason }: { userId: string; reason?: string }) => {
       const { error } = await supabase.rpc('rpc_sgu_deactivate_representative', {
         p_user_id: userId,
-        p_reason: reason ?? null,
+        p_reason: reason ?? undefined,
       });
       if (error) throw error;
     },

@@ -27,11 +27,11 @@ export function useUpdateRepProfile() {
       patch,
     }: {
       userId: string;
-      patch: Partial<Pick<SGURepresentativeProfile, 'phone' | 'region' | 'notes' | 'first_name' | 'last_name' | 'team_id'>>;
+      patch: { phone?: string | null; region?: string | null; notes?: string | null; first_name?: string | null; last_name?: string | null; team_id?: string };
     }) => {
       const { error } = await supabase
         .from('sgu_representative_profiles')
-        .update(patch)
+        .update(patch as never)
         .eq('user_id', userId);
       if (error) throw error;
     },

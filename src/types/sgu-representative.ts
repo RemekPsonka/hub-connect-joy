@@ -1,11 +1,10 @@
 export interface SGURepresentativeProfile {
-  id: string;
   user_id: string;
   tenant_id: string;
-  team_id: string | null;
-  first_name: string;
-  last_name: string;
-  email: string;
+  team_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email?: string | null;
   phone: string | null;
   region: string | null;
   notes: string | null;
@@ -14,9 +13,8 @@ export interface SGURepresentativeProfile {
   invited_by_user_id: string | null;
   onboarded_at: string | null;
   deactivated_at: string | null;
-  deactivated_reason: string | null;
-  created_at: string;
-  updated_at: string;
+  deactivated_by_user_id: string | null;
+  commission_override_pct: number | null;
 }
 
 export interface InviteRepInput {

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { RepAssignment } from '@/types/sgu-representative';
 
 interface UnassignedContact {
   id: string;
@@ -21,7 +20,6 @@ export function useRepAssignmentsBoard(teamId: string | null | undefined) {
     queryKey: ['sgu-rep-assignments', teamId],
     enabled: !!teamId,
     queryFn: async () => {
-      // Active reps in this team's tenant
       const { data: reps, error: repsErr } = await supabase
         .from('sgu_representative_profiles')
         .select('user_id, first_name, last_name')
@@ -29,14 +27,12 @@ export function useRepAssignmentsBoard(teamId: string | null | undefined) {
         .order('last_name');
       if (repsErr) throw repsErr;
 
-      // All deal_team_contacts of this team
-      const { data: contacts, error: contactsErr } = await supabase
+      const { data: dtcRows, error: contactsErr } = await supabase
         .from('deal_team_contacts')
-        .select('id, full_name, company_name, status')
+        .select('id, status, contact_id, contacts(full_name, company)')
         .eq('team_id', teamId!);
       if (contactsErr) throw contactsErr;
 
-      // Active assignments for this team
       const { data: assignments, error: assignErr } = await supabase
         .from('deal_team_representative_assignments')
         .select('id, deal_team_contact_id, representative_user_id, active')
@@ -51,19 +47,23 @@ export function useRepAssignmentsBoard(teamId: string | null | undefined) {
 
       const repColumns: RepWithAssignments[] = (reps ?? []).map((r) => ({
         user_id: r.user_id,
-        full_name: `${r.first_name} ${r.last_name}`,
+        full_name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || 'Bez nazwiska',
         contacts: [],
       }));
       const repIndex = new Map(repColumns.map((r) => [r.user_id, r] as const));
       const unassigned: UnassignedContact[] = [];
 
-      for (const c of contacts ?? []) {
-        const repId = assignmentMap.get(c.id);
+      for (const row of (dtcRows ?? []) as Array<{
+        id: string;
+        status: string | null;
+        contacts: { full_name: string | null; company: string | null } | null;
+      }>) {
+        const repId = assignmentMap.get(row.id);
         const card: UnassignedContact = {
-          id: c.id,
-          full_name: c.full_name,
-          company_name: c.company_name,
-          status: c.status,
+          id: row.id,
+          full_name: row.contacts?.full_name ?? null,
+          company_name: row.contacts?.company ?? null,
+          status: row.status,
         };
         if (repId && repIndex.has(repId)) {
           repIndex.get(repId)!.contacts.push(card);
@@ -89,7 +89,6 @@ export function useAssignContactToRep(teamId: string | null | undefined) {
       repUserId: string | null;
       tenantId: string;
     }) => {
-      // Deactivate current active assignment for this contact (if any)
       const { error: deactErr } = await supabase
         .from('deal_team_representative_assignments')
         .update({ active: false, unassigned_at: new Date().toISOString() })
@@ -97,7 +96,6 @@ export function useAssignContactToRep(teamId: string | null | undefined) {
         .eq('active', true);
       if (deactErr) throw deactErr;
 
-      // If repUserId is null, just unassign
       if (!repUserId) return;
 
       const { data: { user } } = await supabase.auth.getUser();

@@ -70,7 +70,7 @@ function Column({
 }
 
 export function AssignmentBoard() {
-  const { teamId } = useSGUTeamId();
+  const { sguTeamId: teamId } = useSGUTeamId();
   const { director } = useAuth();
   const { data, isLoading } = useRepAssignmentsBoard(teamId);
   const assign = useAssignContactToRep(teamId);

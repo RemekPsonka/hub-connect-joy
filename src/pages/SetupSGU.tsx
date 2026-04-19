@@ -37,9 +37,10 @@ export default function SetupSGU() {
         .maybeSingle();
       if (cancelled) return;
       if (data) {
-        setPhone(data.phone ?? '');
-        setRegion(data.region ?? '');
-        setNotes(data.notes ?? '');
+        const d = data as { phone: string | null; region: string | null; notes: string | null };
+        setPhone(d.phone ?? '');
+        setRegion(d.region ?? '');
+        setNotes(d.notes ?? '');
       }
       setProfileLoaded(true);
     })();
