@@ -12,6 +12,7 @@ export interface Connection {
 export interface ContactNode {
   id: string;
   full_name: string;
+  email?: string | null;
   company: string | null;
   position: string | null;
   primary_group_id: string | null;
@@ -47,6 +48,7 @@ export function useConnections() {
         .select(`
           id,
           full_name,
+          email,
           company,
           position,
           primary_group_id,
@@ -78,6 +80,7 @@ export function useConnections() {
       const nodes: ContactNode[] = (contacts || []).map((contact: any) => ({
         id: contact.id,
         full_name: contact.full_name,
+        email: contact.email,
         company: contact.company,
         position: contact.position,
         primary_group_id: contact.primary_group_id,

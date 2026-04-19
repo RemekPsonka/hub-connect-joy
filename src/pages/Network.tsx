@@ -19,6 +19,7 @@ import { GraphSidebar } from '@/components/network/GraphSidebar';
 import { FindPathModal } from '@/components/network/FindPathModal';
 import { AddConnectionModal } from '@/components/network/AddConnectionModal';
 import { ConnectionLegend } from '@/components/network/ConnectionLegend';
+import { PathExplorerPanel } from '@/components/network/PathExplorerPanel';
 import { useConnections } from '@/hooks/useConnections';
 import type { Connection } from '@/hooks/useConnections';
 import { useContactGroups } from '@/hooks/useContactGroups';
@@ -259,6 +260,16 @@ export default function Network() {
 
         {/* Legend */}
         <ConnectionLegend className="mx-4 mb-2" />
+
+        {/* Path Explorer */}
+        <div className="mx-4 mb-2">
+          <PathExplorerPanel
+            nodes={nodes}
+            contactsById={Object.fromEntries(
+              nodes.map((n) => [n.id, { email: n.email, company: n.company }]),
+            )}
+          />
+        </div>
 
         {/* Footer Stats */}
         <div className="px-4 py-2 border-t bg-muted/30 flex items-center justify-between text-sm text-muted-foreground">

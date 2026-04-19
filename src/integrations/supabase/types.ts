@@ -1763,7 +1763,10 @@ export type Database = {
           connection_type: string | null
           contact_a_id: string | null
           contact_b_id: string | null
+          created_at: string
           id: string
+          metadata: Json
+          relationship_type: string | null
           strength: number | null
           tenant_id: string
         }
@@ -1771,7 +1774,10 @@ export type Database = {
           connection_type?: string | null
           contact_a_id?: string | null
           contact_b_id?: string | null
+          created_at?: string
           id?: string
+          metadata?: Json
+          relationship_type?: string | null
           strength?: number | null
           tenant_id: string
         }
@@ -1779,7 +1785,10 @@ export type Database = {
           connection_type?: string | null
           contact_a_id?: string | null
           contact_b_id?: string | null
+          created_at?: string
           id?: string
+          metadata?: Json
+          relationship_type?: string | null
           strength?: number | null
           tenant_id?: string
         }
@@ -9137,7 +9146,30 @@ export type Database = {
           total_tokens_out: number
         }[]
       }
+      rpc_contact_neighbors: {
+        Args: { p_contact_id: string; p_min_strength?: number }
+        Returns: {
+          company: string
+          connection_id: string
+          connection_type: string
+          contact_id: string
+          email: string
+          full_name: string
+          position: string
+          relationship_type: string
+          strength: number
+        }[]
+      }
       rpc_dashboard_myday: { Args: never; Returns: Json }
+      rpc_network_paths: {
+        Args: { p_from: string; p_max_hops?: number; p_to: string }
+        Returns: {
+          hops: number
+          path_ids: string[]
+          path_names: string[]
+          total_strength: number
+        }[]
+      }
       rpc_sovra_analyze_pipeline: {
         Args: { p_team_id?: string }
         Returns: Json
