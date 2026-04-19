@@ -9974,6 +9974,18 @@ export type Database = {
         Args: { p_team_id: string; p_tenant_id: string }
         Returns: undefined
       }
+      sgu_next_prospecting_job: {
+        Args: never
+        Returns: {
+          actor_user_id: string
+          id: string
+          payload: Json
+          progress: number
+          result: Json
+          status: string
+          tenant_id: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }
