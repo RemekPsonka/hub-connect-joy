@@ -161,9 +161,10 @@ export default function ContactDetail() {
 
               {/* TABY z resztą treści */}
               <Tabs defaultValue={getDefaultTab()} className="w-full">
-                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-5">
+                <TabsList className="inline-flex h-auto flex-wrap gap-1 p-1 w-full lg:grid lg:grid-cols-6">
                   <TabsTrigger value="meetings">Spotkania</TabsTrigger>
                   <TabsTrigger value="needs-offers">Potrzeby</TabsTrigger>
+                  <TabsTrigger value="emails">Emaile</TabsTrigger>
                   <TabsTrigger value="wanted" className="gap-1"><Target className="h-3 w-3" />Poszukiwani</TabsTrigger>
                   <TabsTrigger value="profile-ai">Profil AI</TabsTrigger>
                   <TabsTrigger value="more">Więcej</TabsTrigger>
