@@ -148,22 +148,32 @@ Deno.serve(async (req: Request) => {
           break;
         }
         case 'create_task': {
+          if (!args.contact_id) throw new Error('contact_id required');
+          const contactId = String(args.contact_id);
           const { data, error } = await supabase
             .from('tasks')
             .insert({
               tenant_id: pa.tenant_id,
-              created_by: pa.actor_id,
-              contact_id: String(args.contact_id),
+              owner_id: pa.actor_id,
               title: String(args.title ?? ''),
               description: args.description ? String(args.description) : null,
               due_date: args.due_date ? String(args.due_date) : null,
               priority: args.priority ? String(args.priority) : 'medium',
-              status: 'pending',
+              status: 'todo',
+              task_type: 'standard',
+              visibility: 'private',
             })
             .select('id, title')
             .single();
           if (error) throw new Error(error.message);
-          result = { task_id: data.id, title: data.title };
+          const { error: linkErr } = await supabase
+            .from('task_contacts')
+            .insert({ task_id: data.id, contact_id: contactId, role: 'primary' });
+          if (linkErr) {
+            await supabase.from('tasks').delete().eq('id', data.id);
+            throw new Error(`Failed to link contact: ${linkErr.message}`);
+          }
+          result = { task_id: data.id, title: data.title, contact_id: contactId };
           break;
         }
         case 'create_note': {
