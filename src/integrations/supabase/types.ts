@@ -1425,7 +1425,8 @@ export type Database = {
       }
       background_jobs: {
         Row: {
-          actor_id: string
+          actor_id: string | null
+          actor_user_id: string | null
           created_at: string
           error: string | null
           finished_at: string | null
@@ -1440,7 +1441,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          actor_id: string
+          actor_id?: string | null
+          actor_user_id?: string | null
           created_at?: string
           error?: string | null
           finished_at?: string | null
@@ -1455,7 +1457,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          actor_id?: string
+          actor_id?: string | null
+          actor_user_id?: string | null
           created_at?: string
           error?: string | null
           finished_at?: string | null
@@ -6268,6 +6271,27 @@ export type Database = {
           },
         ]
       }
+      pkd_codes_seed: {
+        Row: {
+          code: string
+          name: string
+          search_tsv: unknown
+          sector: string | null
+        }
+        Insert: {
+          code: string
+          name: string
+          search_tsv?: unknown
+          sector?: string | null
+        }
+        Update: {
+          code?: string
+          name?: string
+          search_tsv?: unknown
+          sector?: string | null
+        }
+        Relationships: []
+      }
       policy_production_records: {
         Row: {
           actual_commission: number | null
@@ -7385,8 +7409,254 @@ export type Database = {
           },
         ]
       }
+      sgu_csv_import_presets: {
+        Row: {
+          column_mapping: Json
+          created_at: string
+          created_by_user_id: string | null
+          description: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          tenant_id: string
+          updated_at: string
+          usage_count: number
+        }
+        Insert: {
+          column_mapping: Json
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          tenant_id: string
+          updated_at?: string
+          usage_count?: number
+        }
+        Update: {
+          column_mapping?: Json
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+          usage_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_csv_import_presets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_csv_import_presets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sgu_prospecting_candidates: {
+        Row: {
+          added_as_deal_team_contact_id: string | null
+          address_city: string | null
+          address_postal: string | null
+          address_street: string | null
+          ai_model: string | null
+          ai_reasoning: string | null
+          ai_score: number | null
+          created_at: string
+          email: string | null
+          employees_estimate: number | null
+          founded_year: number | null
+          id: string
+          krs_number: string | null
+          name: string
+          nip: string | null
+          phone: string | null
+          pkd_codes: string[] | null
+          primary_pkd: string | null
+          regon: string | null
+          rejection_reason: string | null
+          revenue_estimate_gr: number | null
+          reviewed_at: string | null
+          reviewed_by_user_id: string | null
+          source: string
+          source_job_id: string | null
+          status: string
+          tenant_id: string
+          website: string | null
+        }
+        Insert: {
+          added_as_deal_team_contact_id?: string | null
+          address_city?: string | null
+          address_postal?: string | null
+          address_street?: string | null
+          ai_model?: string | null
+          ai_reasoning?: string | null
+          ai_score?: number | null
+          created_at?: string
+          email?: string | null
+          employees_estimate?: number | null
+          founded_year?: number | null
+          id?: string
+          krs_number?: string | null
+          name: string
+          nip?: string | null
+          phone?: string | null
+          pkd_codes?: string[] | null
+          primary_pkd?: string | null
+          regon?: string | null
+          rejection_reason?: string | null
+          revenue_estimate_gr?: number | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: string | null
+          source: string
+          source_job_id?: string | null
+          status?: string
+          tenant_id: string
+          website?: string | null
+        }
+        Update: {
+          added_as_deal_team_contact_id?: string | null
+          address_city?: string | null
+          address_postal?: string | null
+          address_street?: string | null
+          ai_model?: string | null
+          ai_reasoning?: string | null
+          ai_score?: number | null
+          created_at?: string
+          email?: string | null
+          employees_estimate?: number | null
+          founded_year?: number | null
+          id?: string
+          krs_number?: string | null
+          name?: string
+          nip?: string | null
+          phone?: string | null
+          pkd_codes?: string[] | null
+          primary_pkd?: string | null
+          regon?: string | null
+          rejection_reason?: string | null
+          revenue_estimate_gr?: number | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: string | null
+          source?: string
+          source_job_id?: string | null
+          status?: string
+          tenant_id?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_prospecting_candidates_added_as_deal_team_contact_id_fkey"
+            columns: ["added_as_deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_prospecting_candidates_source_job_id_fkey"
+            columns: ["source_job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_prospecting_candidates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_prospecting_candidates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sgu_reports_snapshots: {
+        Row: {
+          data: Json
+          generated_at: string
+          generated_by: string
+          generated_by_user_id: string | null
+          id: string
+          pdf_generated_at: string | null
+          pdf_storage_path: string | null
+          period_end: string
+          period_start: string
+          period_type: string
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          data: Json
+          generated_at?: string
+          generated_by?: string
+          generated_by_user_id?: string | null
+          id?: string
+          pdf_generated_at?: string | null
+          pdf_storage_path?: string | null
+          period_end: string
+          period_start: string
+          period_type: string
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          data?: Json
+          generated_at?: string
+          generated_by?: string
+          generated_by_user_id?: string | null
+          id?: string
+          pdf_generated_at?: string | null
+          pdf_storage_path?: string | null
+          period_end?: string
+          period_start?: string
+          period_type?: string
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_reports_snapshots_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sgu_reports_snapshots_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_reports_snapshots_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sgu_settings: {
         Row: {
+          case_d_confirmed: boolean
+          case_d_confirmed_at: string | null
+          case_d_confirmed_by_user_id: string | null
           created_at: string | null
           default_handling_pct: number
           default_rep_commission_pct: number
@@ -7397,6 +7667,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          case_d_confirmed?: boolean
+          case_d_confirmed_at?: string | null
+          case_d_confirmed_by_user_id?: string | null
           created_at?: string | null
           default_handling_pct?: number
           default_rep_commission_pct?: number
@@ -7407,6 +7680,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          case_d_confirmed?: boolean
+          case_d_confirmed_at?: string | null
+          case_d_confirmed_by_user_id?: string | null
           created_at?: string | null
           default_handling_pct?: number
           default_rep_commission_pct?: number
@@ -7435,6 +7711,75 @@ export type Database = {
             foreignKeyName: "sgu_settings_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sgu_web_sources: {
+        Row: {
+          active: boolean
+          ai_prompt_override: string | null
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          last_error: string | null
+          last_result_count: number | null
+          last_scraped_at: string | null
+          name: string
+          product_hint_filter: string[] | null
+          scrape_interval_hours: number
+          search_keywords: string[] | null
+          source_type: string
+          tenant_id: string
+          url: string
+        }
+        Insert: {
+          active?: boolean
+          ai_prompt_override?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_result_count?: number | null
+          last_scraped_at?: string | null
+          name: string
+          product_hint_filter?: string[] | null
+          scrape_interval_hours?: number
+          search_keywords?: string[] | null
+          source_type: string
+          tenant_id: string
+          url: string
+        }
+        Update: {
+          active?: boolean
+          ai_prompt_override?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_result_count?: number | null
+          last_scraped_at?: string | null
+          name?: string
+          product_hint_filter?: string[] | null
+          scrape_interval_hours?: number
+          search_keywords?: string[] | null
+          source_type?: string
+          tenant_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sgu_web_sources_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sgu_web_sources_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9457,9 +9802,35 @@ export type Database = {
           total_strength: number
         }[]
       }
+      rpc_sgu_accept_prospecting_candidate: {
+        Args: { p_candidate_id: string }
+        Returns: Json
+      }
+      rpc_sgu_generate_snapshot: {
+        Args: {
+          p_period_end?: string
+          p_period_start: string
+          p_period_type: string
+        }
+        Returns: Json
+      }
+      rpc_sgu_generate_snapshot_internal: {
+        Args: {
+          p_period_end: string
+          p_period_start: string
+          p_period_type: string
+          p_team_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       rpc_sgu_get_crm_contact_basic: {
         Args: { p_contact_id: string }
         Returns: Json
+      }
+      rpc_sgu_reject_prospecting_candidate: {
+        Args: { p_candidate_id: string; p_reason?: string }
+        Returns: undefined
       }
       rpc_sgu_team_performance: {
         Args: { p_week_offset?: number }
