@@ -1,164 +1,132 @@
 
-## Sprint SGU-07 — Prospecting web scraping + Case D activation
+## Sprint SGU-08 — Raporty miesięczne/kwartalne + PDF export
 
 ### Recon (READ-ONLY, równolegle)
 
-**Round 1 — 6 calls równolegle:**
-1. `supabase--read_query` × 5:
-   - `sgu_prospecting_candidates` kolumny (potwierdzenie wdrożenia SGU-06: `source`, `source_job_id`, `candidate_data`/`name`, `status`, `ai_score`).
-   - `pg_proc` SGU prospecting functions (`sgu_next_prospecting_job`, `sgu_enqueue_prospecting_job` — albo brak).
-   - `cron.job` lista SGU jobów (czy `sgu_web_prospecting_*` nie istnieje).
-   - Trigger `tr_calculate_commission_entries_for_payment` — `pg_get_triggerdef` (potwierdzenie SGU-03 wdrożone).
-   - `background_jobs` FK constraints (`actor_id` FK target — directors czy auth.users; po SGU-06 powinno być `actor_user_id` jako alternatywa).
-2. `code--view supabase/functions/sgu-prospecting-krs-worker/index.ts` — wzorzec workera (lock, drain, AI scoring, finalize).
-3. `code--view supabase/functions/sgu-prospecting-krs/index.ts` — wzorzec enqueue (auth, quota, INSERT background_jobs).
+**Round 1 — 5 calls równolegle:**
+1. `supabase--read_query` × 4:
+   - `pg_matviews WHERE matviewname LIKE 'mv_sgu_%'` — potwierdzenie SGU-04 MV (do reuse w snapshot logic).
+   - `cron.job WHERE jobname LIKE 'sgu_%'` — żeby nie kolidować z istniejącymi (SGU-04 weekly KPI refresh, SGU-06 KRS worker, SGU-07 web worker).
+   - `storage.buckets WHERE id='sgu-reports'` — domyślnie brak, MVP bez bucketu.
+   - `tasks` kolumny (`completed_at`, `status`, `due_date`) dla KPI completed_tasks_count.
+2. `code--search_files "jsPDF|from 'jspdf'"` w `src/` — istniejący pattern PDF (polski font, header/footer reuse).
 
-**Round 2 (zależnie od round 1):**
-- `supabase--read_query` — `pg_get_functiondef` dla `fn_calculate_commission_entries_for_payment` (KLUCZOWE — pełne body do CREATE OR REPLACE z dodaniem Case D bez ruszania A/B/C).
-- `supabase--read_query` — `sgu_settings` kolumny (potwierdzenie istnienia tabeli, czy `case_d_confirmed` już nie istnieje).
-- `code--view src/components/deals-team/ProspectingTab.tsx` (po SGU-06 z `AIKRSPanel`) — punkt wpięcia nowego taba `ai-web`.
-- `code--view src/components/sgu/AIKRSPanel.tsx` — wzorzec dla `AIWebPanel`.
-- `code--view src/components/layout/SGUSidebar.tsx` — gdzie dodać link „Case D" w grupie Admin.
-- `code--view src/App.tsx` — punkt wpięcia route `/sgu/admin/commissions/case-d`.
+**Round 2 (zależnie):**
+- `code--view` znalezionego pliku z jsPDF (jeśli istnieje) — wzorzec embedowania Roboto.
+- `code--view src/pages/sgu/SGUReports.tsx` — obecny placeholder z SGU-01 (do zastąpienia).
+- `code--view src/components/layout/SGUSidebar.tsx` (lines 30-50) — gdzie dodać link „Raporty" w grupie Overview.
+- `code--list_dir public/fonts` — czy Roboto-Regular.ttf już jest.
+- `supabase--read_query` — `deal_team_contacts`, `commission_entries`, `insurance_policies` (kolumny istotne dla snapshot data builder).
 
-**Wypisuję 8-pkt status.** Jeśli SGU-06 lub trigger SGU-03 nie wdrożony → STOP + report.
+### Implementacja
 
-### Implementacja (po reconie, batch po częściach)
+**A. Migracja SQL** `supabase/migrations/<ts>_sgu_08_reports.sql`:
+1. `CREATE TABLE sgu_reports_snapshots`:
+   - `id uuid PK`, `tenant_id`, `team_id`, `period_type text CHECK IN ('weekly','monthly','quarterly','yearly','custom')`, `period_start date`, `period_end date`, `data jsonb NOT NULL`, `generated_at timestamptz DEFAULT now()`, `generated_by text CHECK IN ('cron','manual')`, `generated_by_user_id uuid REFERENCES auth.users(id) NULL`.
+   - UNIQUE `(tenant_id, team_id, period_type, period_start)` (umożliwia ON CONFLICT UPDATE z cron).
+   - Indexy: `(tenant_id, period_type, period_start DESC)`.
+2. RLS enable + policies:
+   - SELECT: `is_sgu_partner() OR get_current_director_id() IS NOT NULL OR is_superadmin()` (rep blokowany).
+   - DELETE: tylko director/superadmin.
+   - INSERT/UPDATE: brak policy authenticated → tylko przez SECURITY DEFINER RPC.
+3. `rpc_sgu_generate_snapshot_internal(p_tenant uuid, p_team uuid, p_type text, p_start date, p_end date)` SECURITY DEFINER:
+   - Buduje `data jsonb` z 6 sekcji (KPI, top_products, team_performance, commission_breakdown, alerts, comparison_previous_period).
+   - KPI: `policies_sold_count`, `gwp_pln`, `commission_pln`, `completed_tasks_count`, `new_leads_count`, `conversion_rate_pct` — agregacje na `deal_team_contacts`/`insurance_policies`/`commission_entries`/`tasks` z filtrem `tenant_id`+`team_id`+okres.
+   - top_products: TOP 5 produktów po commission z `commission_entries JOIN insurance_policies JOIN deal_team_products`.
+   - team_performance: per-rep agregacje (sales count, gwp, commission).
+   - commission_breakdown: suma per `recipient_label` (Rep/Handling/SGU/Adam/Paweł/Remek).
+   - alerts: rules (np. „spadek GWP >20% MoM", „rep bez aktywności >14 dni").
+   - comparison_previous_period: te same KPI dla poprzedniego okna + delta_pct.
+   - INSERT z `ON CONFLICT (tenant_id, team_id, period_type, period_start) DO UPDATE SET data=EXCLUDED.data, generated_at=now()`.
+   - RETURN id.
+4. `rpc_sgu_generate_snapshot(p_type text, p_start date, p_end date DEFAULT NULL)` authenticated wrapper:
+   - Auth: `has_sgu_access() OR director`.
+   - Resolve tenant + team via `get_current_tenant_id()` + `get_sgu_team_id()`.
+   - Default `p_end`: jeśli NULL, kalkuluj z type (weekly = +6d, monthly = end of month, quarterly = end of quarter, yearly = end of year, custom wymaga p_end).
+   - Wywołanie `_internal` z `generated_by='manual'`, `generated_by_user_id=auth.uid()`.
+5. `rpc_sgu_get_snapshot(p_id uuid)` — SELECT z RLS check.
+6. GRANT EXECUTE dla `rpc_sgu_generate_snapshot` i `rpc_sgu_get_snapshot` TO authenticated.
 
-## CZĘŚĆ A — WEB PROSPECTING
-
-**A.1 Migracja SQL** `supabase/migrations/<ts>_sgu_07_web_prospecting.sql`:
-1. Archive snapshot `sgu_prospecting_candidates`.
-2. CREATE TABLE `sgu_web_sources`:
-   - `id`, `tenant_id`, `name`, `url`, `source_type` ('rss'|'html'|'api'), `parser_config jsonb`, `keywords text[]`, `is_active boolean DEFAULT true`, `last_run_at`, `last_status`, `last_error`, `created_by_user_id`, `created_at`.
-3. RLS enable + 4 policies (partner+director+superadmin SELECT/INSERT/UPDATE/DELETE; tenant scope).
-4. CREATE TABLE `sgu_web_source_runs` (audit log: source_id, started_at, finished_at, items_found, candidates_added, status, error).
-5. Indexy: `(tenant_id, is_active)`, `(source_id, started_at DESC)`.
-6. RPC `sgu_next_web_source_to_run()` SECURITY DEFINER — zwraca 1 source ready (active AND last_run_at < now() - interval '6 hours') z FOR UPDATE SKIP LOCKED.
-
-**A.2 pg_cron** (przez **insert tool**, nie migracja):
+**B. pg_cron (insert tool, NIE migracja — zawiera URL/secrets pattern):** 4 joby per `schedule_edge_function`. Alternatywnie bezpośredni SELECT do RPC bez edge fn (ponieważ snapshot jest pure SQL):
 ```sql
-cron.schedule('sgu_web_prospecting_tick', '*/15 * * * *',
-  $$SELECT public.schedule_edge_function('sgu-prospecting-web-worker', '{}'::jsonb);$$);
+-- Każdy job iteruje po SGU teamach w tenancie i wywołuje rpc_sgu_generate_snapshot_internal
+cron.schedule('sgu_weekly_snapshot', '0 6 * * 1', $$ ... per tenant loop ... $$);
+cron.schedule('sgu_monthly_snapshot', '0 6 1 * *', ...);
+cron.schedule('sgu_quarterly_snapshot', '10 6 1 1,4,7,10 *', ...);
+cron.schedule('sgu_yearly_snapshot', '20 6 1 1 *', ...);
 ```
+Decyzja: zrobić to przez **helper SQL function** `sgu_run_scheduled_snapshots(p_type text)` który iteruje po tenantach z SGU teamem — wtedy cron command krótki: `SELECT public.sgu_run_scheduled_snapshots('weekly');`. Helper kalkuluje period_start/end relatywnie do `CURRENT_DATE - 1 day`.
 
-**A.3 Edge functions:**
-- `sgu-prospecting-web/index.ts` — manualny enqueue (FE button „Uruchom teraz" per source). POST `{ source_id }` → INSERT `background_jobs(job_type='sgu_web_prospecting', payload={source_id}, status='pending')`. Reuse pattern z `sgu-prospecting-krs`.
-- `sgu-prospecting-web-worker/index.ts` — cron drain. Reuse `sgu-prospecting-krs-worker` jako szkielet:
-  - `x-cron-secret` check.
-  - Pobierz 1 pending job (`sgu_next_prospecting_job` rozszerzony o `job_type='sgu_web_prospecting'` — **lub** dodaj nowy RPC `sgu_next_web_prospecting_job`).
-  - Parse source_id → SELECT `sgu_web_sources`.
-  - **Fetch + parse** zależnie od `source_type`:
-    - `rss`: `npm:fast-xml-parser@4` (lekki, działa w Deno).
-    - `html`: `npm:linkedom@0.16` (DOM parsing) + selektory z `parser_config.selectors`.
-    - `api`: fetch z `parser_config.headers`.
-  - Dla każdego item (max 30/tick): keyword filter → AI classify (LLM provider, prompt PL: „Czy to firma/osoba potencjalna na klienta agencji ubezpieczeniowej? Zwróć JSON {is_lead:bool, score:0-100, reasoning, extracted:{name,phone?,email?}}"). Jeśli `is_lead && score >= 30` → INSERT `sgu_prospecting_candidates(source='web', source_job_id, name=extracted.name, ai_score, ai_reasoning, ai_model, candidate_data=raw item)`.
-  - INSERT `sgu_web_source_runs` na koniec.
-  - UPDATE `sgu_web_sources.last_run_at`, `last_status`, `last_error`.
-  - Finalize `background_jobs` jak w SGU-06.
+**C. FE — nowe pliki:**
+- `src/types/sgu-report-snapshot.ts` — interfaces (`SGUReportSnapshot`, `SnapshotData`, `KPIBlock`, `TopProduct`, `TeamPerformanceRow`, `CommissionBreakdown`, `Alert`, `ComparisonBlock`).
+- `src/hooks/useSGUReports.ts` — `useQuery` lista snapshots filter by `period_type`, sort `period_start DESC`.
+- `src/hooks/useGenerateSnapshot.ts` — mutation `rpc_sgu_generate_snapshot` + invalidate + toast.
+- `src/hooks/useSnapshotPreview.ts` — `useQuery` single by id (`rpc_sgu_get_snapshot`).
+- `src/components/sgu/ReportPreview.tsx` — render `data`:
+  - KPI cards (4-6 grid: policies, GWP, commission, tasks, leads, conversion) z deltą vs previous.
+  - Tabela top 5 products.
+  - Tabela team performance.
+  - Recharts `<PieChart>` commission breakdown.
+  - Lista alertów (badge severity).
+- `src/components/sgu/GenerateSnapshotDialog.tsx` — RHF + Zod (period_type select, period_start date, period_end date conditional dla custom). Submit → mutation.
+- `src/components/sgu/ExportPDFButton.tsx` — button → wywołanie `generateSGUReportPDF(snapshot)` → blob → download.
+- `src/lib/pdf/sgu-report-pdf.ts` — helper jspdf:
+  - Cover page (granatowy bg via rect, biały „Raport SGU", typ okresu, daty).
+  - Sekcje: KPI summary, Top products (autotable), Team performance (autotable), Commission breakdown (autotable + opis).
+  - Alerty.
+  - Footer z page number.
+  - Polskie znaki: `addFileToVFS` + `addFont` z `Roboto-Regular.ttf` (base64 inline lub fetch z `/fonts/`).
+- `public/fonts/Roboto-Regular.ttf` — pobierz z Google Fonts (~170KB) i zapisz lokalnie.
 
-**A.4 Hooki:**
-- `useSGUWebSources.ts` — query + create/update/delete/triggerNow mutations.
-- `useSGUWebCandidates.ts` — wrapper na `useProspectingCandidates({ source: 'web' })`.
-
-**A.5 Komponenty:**
-- `WebSourcesTable.tsx` — `<Table>` z kolumnami: nazwa, URL, typ, last_run_at, last_status, ✓/✗, akcje (Edit / Delete / Uruchom teraz / Toggle active).
-- `WebSourceDialog.tsx` — RHF + Zod (`name` min 2, `url` URL, `source_type` enum, `keywords` chips, `parser_config` JSON textarea z domyślnym szablonem per typ).
-- `AIWebPanel.tsx` — wrapper analogiczny do `AIKRSPanel`: `<WebSourcesTable>` na górze + `<ProspectingCandidatesList source='web'>` poniżej (sortowane po ai_score DESC).
-
-**A.6 Modyfikacje:**
-- `src/components/deals-team/ProspectingTab.tsx` — dodaj `<TabsTrigger value='ai-web'>AI Web</TabsTrigger>` obok `ai-krs` + `<TabsContent value='ai-web'><AIWebPanel/></TabsContent>`. Tab widoczny TYLKO dla `is_sgu_partner() || directorId`.
-
-## CZĘŚĆ B — CASE D ACTIVATION
-
-**B.1 Migracja SQL** `supabase/migrations/<ts>_sgu_07_case_d_activation.sql`:
-1. Archive snapshot `sgu_settings` + `commission_entries` (tylko schema/struktura — dane v1 zostają nietknięte).
-2. ALTER TABLE `sgu_settings`:
-   - ADD COLUMN `case_d_confirmed boolean NOT NULL DEFAULT false`
-   - ADD COLUMN `case_d_confirmed_at timestamptz`
-   - ADD COLUMN `case_d_confirmed_by_user_id uuid REFERENCES auth.users(id)`.
-3. CREATE OR REPLACE FUNCTION `fn_calculate_commission_entries_for_payment()` — **WAŻNE**: kopia całego body z SGU-03 (z reconu), z dodaniem nowej gałęzi Case D **bez ruszania A/B/C**:
-   ```
-   IF policy.has_handling = true AND policy.representative_user_id IS NOT NULL THEN
-     -- Case D
-     SELECT case_d_confirmed INTO v_confirmed FROM sgu_settings WHERE tenant_id = policy.tenant_id;
-     IF NOT v_confirmed THEN
-       RAISE EXCEPTION '[SGU commission] Edge Case D — awaiting Remek confirmation (sgu_settings.case_d_confirmed=false). Activate at /sgu/admin/commissions/case-d';
-     END IF;
-     -- Subcase rep_first_then_handling:
-     -- Base = payment.amount × policy.commission_rate
-     -- Rep 10% of base
-     -- Handling 9% of base (modyfikator po rep)
-     -- Pozostałe 81% × split (sgu 30 / adam 35 / paweł 17.5 / remek 17.5):
-     --   SGU = 81% × 30% = 24.30%
-     --   Adam = 81% × 35% = 28.35%
-     --   Paweł = 81% × 17.5% = 14.175%
-     --   Remek = 81% × 17.5% = 14.175%
-     -- Suma kontrolna = 10 + 9 + 24.30 + 28.35 + 14.175 + 14.175 = 100% ✓
-     -- INSERT 6 wpisów z algorithm_version='v2-case-d', calculation_log={case:'D', case_d_subcase:'rep_first_then_handling', base_gr, rep_pct:10, handling_pct:9, residual_pct:81, split:{...}}
-     -- Korekta zaokrąglenia: różnicę przypisać do ostatniego wpisu (Remek).
-   ELSE
-     -- Case A/B/C — bez zmian z SGU-03 (skopiowane 1:1 z reconu)
-   END IF;
-   ```
-4. Trigger `tr_calculate_commission_entries_for_payment` **NIE jest dropowany** — działa dalej na zaktualizowanej funkcji (CREATE OR REPLACE FUNCTION zachowuje binding triggera).
-
-**B.2 FE:**
-- `useCaseDStatus.ts` — query `sgu_settings.case_d_confirmed` + mutation `confirm()` (UPDATE z `case_d_confirmed=true, case_d_confirmed_at=now(), case_d_confirmed_by_user_id=auth.uid()`).
-- `CaseDPreviewTable.tsx` — TS-only kalkulator: input `policy_amount_pln` + `commission_rate_pct` → wyświetla 6 wierszy z procentami i kwotami. Bez wywołań DB.
-- `SGUCaseD.tsx` — strona admin: nagłówek „Case D — rep + handling", opis algorytmu, `<CaseDPreviewTable>`, status badge (potwierdzony/oczekujący), button „Potwierdzam aktywację Case D" (z AlertDialog confirm). Po potwierdzeniu — disabled + info „Aktywowano przez X dnia Y".
-- `App.tsx` — dodaj `<Route path="/sgu/admin/commissions/case-d" element={<SGUCaseD/>}/>` w drzewie SGU (z `AdminGuard`).
-- `SGUSidebar.tsx` — link „Case D" w grupie `adminItems` (`/sgu/admin/commissions/case-d`, ikona `Receipt` lub `Calculator`), widoczny dla `isAdmin || isSuperadmin`.
-
-**B.3 Smoke test (wg specu):**
-1. Pre-aktywacja: UPDATE polisy + raty → ERROR z fn_calculate (transakcja rollback, `is_paid` zostaje false).
-2. Aktywacja przez UI lub SQL.
-3. Post-aktywacja: UPDATE rata → 6 wpisów `commission_entries` z `algorithm_version='v2-case-d'`, suma 200.00 PLN.
-
-**B.4 Walidacja:**
-- types.ts auto-regen.
-- Deploy 2 edge fns (`sgu-prospecting-web`, `sgu-prospecting-web-worker`).
-- `npm run build` + `npm run lint`.
+**D. FE — modyfikacje:**
+- `src/pages/sgu/SGUReports.tsx` — pełna przebudowa (zastąpienie placeholder z SGU-01):
+  - Header z buttonem „Generuj teraz" → `<GenerateSnapshotDialog>`.
+  - `<Tabs>` z 4 zakładkami: Tygodniowe / Miesięczne / Kwartalne / Roczne (+ ewentualnie „Custom" jako 5).
+  - Per tab: lista snapshots (tabela: data, generated_by, akcje [Podgląd, Export PDF, Usuń dla director]).
+  - Klik wiersz → expand `<ReportPreview snapshotId={...}>` inline lub w drawer.
+- `src/components/layout/SGUSidebar.tsx` — `reportItems` (linie 76-79) już ma „Tygodniowy" i „Miesięczny" → zastąp jednym linkiem `{ title: 'Raporty', url: '/sgu/reports', icon: BarChart3 }` ALBO zostaw 2 + dodaj kolejne. Decyzja: zastąp 2 jednym linkiem „Raporty" → SGUReports z tabs (zgodnie z 1 widokiem z tabami). Sprawdzić czy `App.tsx` ma route `/sgu/reports` → jeśli jest tylko `/sgu/reports/weekly` i `/sgu/reports/monthly`, dodać `/sgu/reports`.
+- `src/App.tsx` — dodaj `<Route path="/sgu/reports" element={<SGUReports/>}/>` (lub upewnij się że istniejący routing pasuje).
 
 ### Pliki
 
-**Nowe (12):**
-- `supabase/migrations/<ts>_sgu_07_web_prospecting.sql`
-- `supabase/migrations/<ts>_sgu_07_case_d_activation.sql`
-- `supabase/functions/sgu-prospecting-web/index.ts`
-- `supabase/functions/sgu-prospecting-web-worker/index.ts`
-- `src/hooks/useSGUWebSources.ts`
-- `src/hooks/useSGUWebCandidates.ts`
-- `src/hooks/useCaseDStatus.ts`
-- `src/components/sgu/WebSourcesTable.tsx`
-- `src/components/sgu/WebSourceDialog.tsx`
-- `src/components/sgu/AIWebPanel.tsx`
-- `src/components/sgu/CaseDPreviewTable.tsx`
-- `src/pages/sgu/SGUCaseD.tsx`
+**Nowe (10):**
+- `supabase/migrations/<ts>_sgu_08_reports.sql`
+- `src/types/sgu-report-snapshot.ts`
+- `src/hooks/useSGUReports.ts`
+- `src/hooks/useGenerateSnapshot.ts`
+- `src/hooks/useSnapshotPreview.ts`
+- `src/components/sgu/ReportPreview.tsx`
+- `src/components/sgu/GenerateSnapshotDialog.tsx`
+- `src/components/sgu/ExportPDFButton.tsx`
+- `src/lib/pdf/sgu-report-pdf.ts`
+- `public/fonts/Roboto-Regular.ttf`
 
 **Modyfikowane (3):**
-- `src/components/deals-team/ProspectingTab.tsx` (dodanie taba `ai-web`)
-- `src/App.tsx` (route Case D)
-- `src/components/layout/SGUSidebar.tsx` (link Case D w grupie Admin)
+- `src/pages/sgu/SGUReports.tsx` (full rebuild z placeholder)
+- `src/components/layout/SGUSidebar.tsx` (link „Raporty" zamiast 2 podlinków)
+- `src/App.tsx` (route `/sgu/reports`)
 
 ### Ryzyka / decyzje
 
-- **fn_calculate_commission_entries_for_payment body**: KLUCZOWY recon — muszę przeczytać pełne body z SGU-03 i wkleić CALE wraz z dodaną gałęzią D. Ryzyko regression na A/B/C jeśli przeoczę szczegół. Mitigation: diff przed/po + smoke z istniejącymi v1 wpisami (żaden nie powinien się zmienić, bo trigger nie re-procesuje historycznych is_paid=true).
-- **Dependencje Deno worker**: `npm:fast-xml-parser@4` (RSS) i `npm:linkedom@0.16` (HTML). Lekkie, działają w Deno. Jeśli problem z deploy → fallback do `npm:cheerio@1.0.0-rc.12` lub manualnego regex parse dla MVP.
-- **Worker dla web vs krs**: dwa osobne workery (different cron tick + different parse logic). Dzielą wzorzec lock/finalize, ale parse layer jest różny. Nie konsoliduję — komplikacja per source_type byłaby gorsza.
-- **Rate limit web fetching**: sleep 2s między item fetches; max 30 items/tick. Dla 5 źródeł × 30 items = 150 candidates per 15-min tick = 600/h. OK.
-- **AI cost**: 30 items × 5 sources = 150 LLM calls per 15-min tick. Reuse `_shared/llm-provider.ts` (Gemini default, tani). Daily ~14 400 calls — w granicach budżetu.
-- **`sgu_next_prospecting_job` reuse vs new**: dodam parametr `p_job_type text DEFAULT 'sgu_krs_prospecting'` żeby worker web mógł reuse'ować ten sam RPC. Mniej duplikacji.
-- **Case D korekta zaokrąglenia**: różnica gr (max ±5 gr) trafia do ostatniego wpisu (Remek). Komentarz w `calculation_log.rounding_adjustment_gr`.
-- **Brak seedów źródeł web**: zgodnie ze specem — Remek dodaje manualnie. UI z polem `parser_config` JSON pozwala mu skonfigurować RSS/HTML selektory bez deployu kodu.
+- **Snapshot data builder (~200 linii SQL)**: Główna złożoność sprintu. Per okres agreguje 6 bloków na `deal_team_contacts`/`insurance_policies`/`commission_entries`/`tasks`. Ryzyko: brak kolumn (np. `gwp` - czy istnieje w `insurance_policies`? `expected_annual_premium_gr` w `deal_team_contacts`?). Mitigation: recon z konkretnym `\d insurance_policies` + `\d deal_team_contacts` przed pisaniem RPC.
+- **pg_cron — RPC vs edge fn**: Snapshot jest pure SQL, więc nie potrzeba edge fn. Cron uruchamia bezpośrednio `SELECT sgu_run_scheduled_snapshots('weekly')` (helper iteruje po tenantach). Brak self-call HTTP. Mniej zależności (CRON_SECRET, schedule_edge_function nie wymagane).
+- **Roboto font (~170KB) w `public/fonts/`**: Bundlowane do build → ~170KB do każdej sesji jednorazowo. Akceptowalne. Alternative: lazy-load tylko przy kliknięciu „Export PDF" (fetch + cache). MVP: bundle (prościej). Dodać do `.gitattributes` jako binary.
+- **Custom period**: `rpc_sgu_generate_snapshot` wymaga `p_end NOT NULL` dla type='custom'. Walidacja w RPC + FE form.
+- **Top products / team performance — kolumny**: zależne od reconu. Jeśli `insurance_policies.product_id` brak → fallback na `deal_team_products.name`. Sprintową wartość obniża, ale nie blokuje sprintu.
+- **PDF QA**: zgodnie z artifact rules — po generacji testowej PDF konwertuję 1-2 strony do PNG i sprawdzam: polskie znaki, brak overlapping, granatowy cover. Jeśli problem z fontem → fallback do helvetica (bez polskich znaków, znaki PL transliterowane).
+- **RLS rep block**: rep ma `has_sgu_access()=true` ale NIE jest partnerem ani directorem. Policy SELECT używa `is_sgu_partner() OR get_current_director_id() IS NOT NULL OR is_superadmin()` — rep dostaje pusty wynik (zgodnie ze specem).
+- **Alerty (rules)**: w MVP 2-3 reguły hardcoded w RPC: (a) GWP MoM < -20% → severity high; (b) rep bez sales w okresie → severity medium; (c) commission breakdown niezgodne z 100% → severity critical (data integrity). Rozszerzenie = follow-up.
+- **`useSGUReports` filter**: jeden hook z parametrem `period_type` zamiast 4 oddzielnych. React Query key: `['sgu-reports', period_type]`.
 
 ### Raport końcowy
-1. Lista nowych + modyfikowanych plików (absolute paths).
-2. Status 2 migracji + insert pg_cron + 2 edge fns deploy.
-3. Wyniki 8-pkt reconu (zwłaszcza pełne body fn_calculate przed zmianą).
-4. Smoke web: dodać 1 test RSS source (np. Polska Agencja Prasowa biznes) → kliknąć „Uruchom teraz" → po 1-2 min ≥1 candidate w `sgu_prospecting_candidates` z `source='web'`.
-5. Smoke Case D: 3-step (pre-aktywacja ERROR → aktywacja UI → post-aktywacja 6 wpisów z sumą 200.00 PLN, algorithm_version='v2-case-d').
-6. `npm run build` + `npm run lint`.
-7. Diff body fn_calculate (linie zmienione).
+1. Lista plików (10 nowych + 3 modyfikowane, absolute paths).
+2. Status migracji + status pg_cron 4 jobów.
+3. Wyniki recon (5 punktów + round 2).
+4. Smoke 1: `SELECT rpc_sgu_generate_snapshot_internal(...)` → wpis w `sgu_reports_snapshots` z poprawnym `data jsonb`.
+5. Smoke 2: UI Remek loguje `/sgu/reports` → klik „Generuj teraz" monthly → preview KPI/products/team/pie/alerts → Export PDF → plik z polskimi znakami otwiera się.
+6. Smoke 3: rep loguje → `/sgu/reports` brak linka w sidebarze (lub access denied), `SELECT count(*) FROM sgu_reports_snapshots = 0`.
+7. Smoke 4: custom 14-dniowy snapshot → wpis z `period_type='custom'`, `generated_by='manual'`, `generated_by_user_id=remek.uid`.
+8. `npm run build` + `npm run lint` zielone.
+9. `cron.job WHERE jobname LIKE 'sgu_%_snapshot'` — 4 wpisy aktywne.
 
-Po Twojej akceptacji: recon (8 calls) → Część A (migracja + edge fns + FE) → Część B (migracja + FE) → deploy + smoke → raport.
+Po Twojej akceptacji: recon (5 calls + round 2 conditional) → migracja SQL → insert pg_cron 4 jobów → FE batch (10 nowych + 3 modyfikowane) → fetch Roboto-Regular.ttf → smoke 4 scenariuszy + PDF QA → raport.
