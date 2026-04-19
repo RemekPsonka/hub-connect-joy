@@ -213,6 +213,25 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
 
+  // ============ MEETINGS UNIFIED (Sprint 18) ============
+  {
+    type: 'function',
+    function: {
+      name: 'search_meetings',
+      description: 'Wyszukuje spotkania (konsultacje + spotkania grupowe) z widoku unified_meetings. Read-only, bez potwierdzenia. Filtry: type, contact_id, date_from, date_to, limit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['consultation', 'group'], description: 'Filtr typu spotkania (opcjonalny)' },
+          contact_id: { type: 'string', description: 'UUID kontaktu — dla group filtrowane przez meeting_participants (opcjonalne)' },
+          date_from: { type: 'string', description: 'ISO 8601 — początek zakresu scheduled_at (opcjonalne)' },
+          date_to: { type: 'string', description: 'ISO 8601 — koniec zakresu scheduled_at (opcjonalne)' },
+          limit: { type: 'number', description: 'Limit wyników (domyślnie 20, max 100)' },
+        },
+      },
+    },
+  },
+
   // ============ ANALYTICS READ TOOLS (Sprint 06) ============
   {
     type: 'function',
@@ -327,6 +346,7 @@ const READ_TOOLS = new Set([
   'get_team_report',
   'search_emails',
   'find_intro_path',
+  'search_meetings',
 ]);
 // Sprint 14/15: wszystkie integracje są realne.
 const STUB_TOOLS = new Set<string>();
@@ -483,6 +503,77 @@ export async function executeReadTool(
       }
       allPaths.sort((a, b) => Number(b.total_strength) - Number(a.total_strength));
       return { results: allPaths.slice(0, 3) };
+    }
+    case 'search_meetings': {
+      const limit = Math.max(1, Math.min(100, Number(args.limit ?? 20)));
+      let q = (userClient as unknown as { from: (n: string) => any })
+        .from('unified_meetings')
+        .select('id, type, scheduled_at, location, notes, status, contact_id_main, source_table')
+        .order('scheduled_at', { ascending: false })
+        .limit(limit);
+
+      if (args.type) q = q.eq('type', String(args.type));
+      if (args.date_from) q = q.gte('scheduled_at', String(args.date_from));
+      if (args.date_to) q = q.lte('scheduled_at', String(args.date_to));
+
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      let rows = (data ?? []) as Array<Record<string, unknown>>;
+
+      // Filtr po kontakcie: dla consultation = contact_id_main; dla group = meeting_participants.
+      if (args.contact_id) {
+        const cid = String(args.contact_id);
+        const groupIds = rows.filter((r) => r.type === 'group').map((r) => r.id as string);
+        let allowedGroup = new Set<string>();
+        if (groupIds.length > 0) {
+          const { data: parts } = await userClient
+            .from('meeting_participants')
+            .select('meeting_id')
+            .eq('contact_id', cid)
+            .in('meeting_id', groupIds);
+          allowedGroup = new Set((parts ?? []).map((p: { meeting_id: string }) => p.meeting_id));
+        }
+        rows = rows.filter((r) =>
+          r.type === 'consultation' ? r.contact_id_main === cid : allowedGroup.has(r.id as string),
+        );
+      }
+
+      // Wzbogacenie o nazwę kontaktu dla konsultacji.
+      const contactIds = Array.from(
+        new Set(
+          rows
+            .filter((r) => r.type === 'consultation' && r.contact_id_main)
+            .map((r) => r.contact_id_main as string),
+        ),
+      );
+      const nameMap = new Map<string, string>();
+      if (contactIds.length > 0) {
+        const { data: cs } = await userClient
+          .from('contacts')
+          .select('id, full_name')
+          .in('id', contactIds);
+        for (const c of (cs ?? []) as Array<{ id: string; full_name: string }>) {
+          nameMap.set(c.id, c.full_name);
+        }
+      }
+
+      const results = rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        scheduled_at: r.scheduled_at,
+        location: r.location,
+        status: r.status,
+        notes_excerpt: typeof r.notes === 'string' ? r.notes.slice(0, 200) : null,
+        contact_name: r.contact_id_main ? nameMap.get(r.contact_id_main as string) ?? null : null,
+        source_table: r.source_table,
+      }));
+
+      const consultations = results.filter((r) => r.type === 'consultation').length;
+      const groups = results.filter((r) => r.type === 'group').length;
+      return {
+        results,
+        summary: `Znaleziono ${results.length} spotkań (${consultations} konsultacje, ${groups} grupowe).`,
+      };
     }
   }
 }
