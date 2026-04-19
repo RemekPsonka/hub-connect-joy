@@ -1,4 +1,4 @@
 
-User wants 3 specific changes. I'm in plan mode so I need to present plan, then approval switches to default mode for execution.
+Błąd z replay: `relation 'public.task_activity_log' does not exist`. Trigger na `tasks` próbuje wpisywać do nieistniejącej tabeli, więc każdy UPDATE zadania pada (status, priority, title itp.).
 
-Let me quickly verify current state of files.
+Sprawdzę triggery na `tasks` i co dokładnie odwołuje się do `task_activity_log`, potem zdecyduję: utworzyć tabelę czy usunąć trigger.
