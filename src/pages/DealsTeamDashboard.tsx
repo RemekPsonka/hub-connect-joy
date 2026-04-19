@@ -20,6 +20,8 @@ import {
   SalesFunnelDashboard,
 } from '@/components/deals-team';
 import { CommissionsTable } from '@/components/sgu/CommissionsTable';
+import { SGUClientsView } from '@/components/sgu/SGUClientsView';
+import { useLayoutMode } from '@/store/layoutMode';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -145,7 +147,7 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       )}
 
       {/* Stats - always visible when team selected (except dashboard, tasks, kanban) */}
-      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && !(forcedTeamId && viewMode === 'clients') && <TeamStats teamId={selectedTeamId} />}
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
@@ -154,7 +156,13 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       {selectedTeamId && viewMode === 'kanban' && <KanbanBoard teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'table' && <TableView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode === 'clients' && (
+        forcedTeamId ? (
+          <SGUClientsView teamId={selectedTeamId} />
+        ) : (
+          <ClientsTab teamId={selectedTeamId} />
+        )
+      )}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'commissions' && forcedTeamId && (
         <Tabs
