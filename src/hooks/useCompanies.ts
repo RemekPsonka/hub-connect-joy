@@ -1209,3 +1209,36 @@ export function useFetchKRS() {
     },
   });
 }
+
+// ============= BACKGROUND ENRICHMENT (Sprint 19) =============
+/**
+ * Enqueues a background enrichment job for a company.
+ * Returns immediately with the job_id; progress is surfaced via JobsBell + toasts.
+ *
+ * Use this for "fire-and-forget" enrichment from UI buttons. The synchronous
+ * `useRegenerateCompanyAI` is preserved for flows that need the response payload.
+ */
+export function useEnqueueEnrichCompany() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ companyId, options }: { companyId: string; options?: Record<string, unknown> }) => {
+      const { data, error } = await supabase.functions.invoke('enqueue-enrich-company', {
+        body: { company_id: companyId, options },
+      });
+      if (error) throw error;
+      return data as { job_id: string; status: string; deduplicated?: boolean };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['background-jobs'] });
+      if (data.deduplicated) {
+        toast.info('Wzbogacenie tej firmy już trwa');
+      } else {
+        toast.success('Wzbogacenie zlecone — powiadomimy po zakończeniu');
+      }
+    },
+    onError: (error) => {
+      console.error('[enqueue-enrich-company]', error);
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zlecić wzbogacenia');
+    },
+  });
+}

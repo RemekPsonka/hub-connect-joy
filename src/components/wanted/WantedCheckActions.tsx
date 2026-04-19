@@ -85,8 +85,8 @@ export function WantedCheckActions({ personName, companyName, onEnrichResult, co
     try {
       const { first_name, last_name } = splitName(personName);
 
-      const { data, error } = await supabase.functions.invoke('enrich-person-data', {
-        body: { first_name, last_name, company: companyName || undefined },
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: { mode: 'full', first_name, last_name, company: companyName || undefined },
       });
 
       if (error) throw error;

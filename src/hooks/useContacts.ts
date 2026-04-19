@@ -542,8 +542,8 @@ export function useGenerateContactProfile() {
 
   return useMutation({
     mutationFn: async (contactId: string) => {
-      const { data, error } = await supabase.functions.invoke('generate-contact-profile', {
-        body: { contact_id: contactId }
+      const { data, error } = await supabase.functions.invoke('enrich-person', {
+        body: { mode: 'profile', contact_id: contactId }
       });
       
       if (error) throw error;
