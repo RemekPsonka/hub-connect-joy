@@ -51,10 +51,37 @@ serve(async (req) => {
     const { tenantId } = authResult;
     // ============= END AUTHORIZATION CHECK =============
 
-    const { existingContactId, newContactData } = await req.json() as MergeRequest;
+    const rawBody = await req.json();
+
+    // ============= NEW SHAPE: { pairs: [{ target_id, source_ids }] } → delegate to bulk-merge-contacts =============
+    if (Array.isArray(rawBody?.pairs)) {
+      const authHeader = req.headers.get('Authorization')!;
+      const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const results: Array<Record<string, unknown>> = [];
+      for (const pair of rawBody.pairs as Array<{ target_id: string; source_ids: string[]; merged_fields?: Record<string, unknown> }>) {
+        for (const sourceId of pair.source_ids ?? []) {
+          const { data, error } = await userClient.functions.invoke('bulk-merge-contacts', {
+            body: {
+              primaryContactId: pair.target_id,
+              secondaryContactId: sourceId,
+              mergedFields: pair.merged_fields ?? {},
+            },
+          });
+          results.push({ target_id: pair.target_id, source_id: sourceId, ok: !error, data, error: error?.message });
+        }
+      }
+      return new Response(JSON.stringify({ success: true, results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    // ============= END NEW SHAPE =============
+
+    const { existingContactId, newContactData } = rawBody as MergeRequest;
 
     if (!existingContactId) {
-      return new Response(JSON.stringify({ error: 'existingContactId is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'existingContactId or pairs is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // ============= RESOURCE ACCESS CHECK =============
