@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { getValidAccessToken } from "../_shared/gcal.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,7 +19,6 @@ const RequestSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
 interface GCalEvent {
@@ -42,100 +42,48 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
 
   try {
-    // 1. Validate body
     const body = await req.json();
     const parsed = RequestSchema.safeParse(body);
     if (!parsed.success) {
       return jsonResponse(
         { error: "Validation error", details: parsed.error.format() },
-        400
+        400,
       );
     }
 
-    // 2. Authenticate
-    const auth = await verifyAuth(req, serviceClient);
-    if (isAuthError(auth)) {
-      return unauthorizedResponse(auth, corsHeaders);
-    }
-
+    const auth = await verifyAuth(req, supabase);
+    if (isAuthError(auth)) return unauthorizedResponse(auth, corsHeaders);
     if (auth.userType !== "director" || !auth.directorId) {
       return jsonResponse({ error: "Only directors can access Google Calendar" }, 403);
     }
 
-    // 3. Fetch tokens
-    const { data: tokenRow, error: tokenError } = await serviceClient
-      .from("gcal_tokens")
-      .select("*")
-      .eq("director_id", auth.directorId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
-
-    if (tokenError) {
-      console.error("Token fetch error:", tokenError);
-      return jsonResponse({ error: "Database error" }, 500);
+    const tokenResult = await getValidAccessToken(supabase, auth.directorId);
+    if (!tokenResult.ok) {
+      return jsonResponse({ error: tokenResult.reason, message: tokenResult.message }, 200);
     }
 
-    if (!tokenRow) {
-      return jsonResponse(
-        { error: "not_connected", message: "Połącz Google Calendar w ustawieniach" },
-        200
-      );
-    }
-
-    // 4. Check token expiry & auto-refresh
-    let accessToken = tokenRow.access_token;
-    const expiresAt = new Date(tokenRow.expires_at);
-
-    if (expiresAt <= new Date()) {
-      const refreshResult = await refreshAccessToken(
-        tokenRow.refresh_token,
-        clientId,
-        clientSecret,
-        serviceClient,
-        auth.directorId,
-        auth.tenantId
-      );
-
-      if (!refreshResult.success) {
-        return jsonResponse(
-          { error: refreshResult.error, message: refreshResult.message },
-          200
-        );
-      }
-
-      accessToken = refreshResult.accessToken!;
-    }
-
-    // 5. Route by action
-    const { data: requestData } = parsed;
+    const { accessToken, row } = tokenResult;
+    const requestData = parsed.data;
 
     if (requestData.action === "list-calendars") {
       return await handleListCalendars(accessToken);
     }
 
-    // action === "get-events"
     return await handleGetEvents(
       accessToken,
       requestData.time_min,
       requestData.time_max,
       requestData.calendar_ids,
-      tokenRow.selected_calendars as string[] | null
+      row.selected_calendars,
     );
   } catch (error) {
     console.error("gcal-events error:", error);
@@ -143,46 +91,31 @@ Deno.serve(async (req) => {
   }
 });
 
-// ─── List calendars action ──────────────────────────────────────────
 async function handleListCalendars(accessToken: string) {
-  try {
-    const res = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("CalendarList API error:", res.status, errText);
-      return jsonResponse({ error: "Failed to fetch calendars" }, 502);
-    }
-
-    const data = await res.json();
-    const calendars = (data.items || []).map(
-      (cal: Record<string, unknown>) => ({
-        id: cal.id as string,
-        summary: (cal.summary as string) || (cal.id as string),
-        backgroundColor: (cal.backgroundColor as string) || "#4285f4",
-        accessRole: (cal.accessRole as string) || "reader",
-        primary: !!(cal.primary as boolean),
-      })
-    );
-
-    return jsonResponse({ calendars });
-  } catch (e) {
-    console.error("handleListCalendars error:", e);
-    return jsonResponse({ error: "Internal server error" }, 500);
+  const res = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    return jsonResponse({ error: "Failed to fetch calendars" }, 502);
   }
+  const data = await res.json();
+  const calendars = (data.items || []).map((cal: Record<string, unknown>) => ({
+    id: cal.id as string,
+    summary: (cal.summary as string) || (cal.id as string),
+    backgroundColor: (cal.backgroundColor as string) || "#4285f4",
+    accessRole: (cal.accessRole as string) || "reader",
+    primary: !!(cal.primary as boolean),
+  }));
+  return jsonResponse({ calendars });
 }
 
-// ─── Get events action ──────────────────────────────────────────────
 async function handleGetEvents(
   accessToken: string,
   timeMin: string,
   timeMax: string,
   requestCalendarIds: string[] | undefined,
-  storedSelectedCalendars: string[] | null
+  storedSelectedCalendars: string[] | null,
 ) {
-  // Determine which calendars to fetch
   const calendarIds: string[] =
     requestCalendarIds && requestCalendarIds.length > 0
       ? requestCalendarIds
@@ -192,19 +125,11 @@ async function handleGetEvents(
 
   const allEvents: GCalEvent[] = [];
   let calendarsSynced = 0;
-
-  // Fetch calendar list for names/colors
   const calendarMap = await fetchCalendarList(accessToken);
 
   for (const calendarId of calendarIds) {
     try {
-      const events = await fetchCalendarEvents(
-        accessToken,
-        calendarId,
-        timeMin,
-        timeMax,
-        calendarMap
-      );
+      const events = await fetchCalendarEvents(accessToken, calendarId, timeMin, timeMax, calendarMap);
       allEvents.push(...events);
       calendarsSynced++;
     } catch (e) {
@@ -212,7 +137,6 @@ async function handleGetEvents(
     }
   }
 
-  // Sort chronologically
   allEvents.sort((a, b) => {
     const aTime = a.start.dateTime || a.start.date || "";
     const bTime = b.start.dateTime || b.start.date || "";
@@ -222,83 +146,14 @@ async function handleGetEvents(
   return jsonResponse({ events: allEvents, calendars_synced: calendarsSynced });
 }
 
-// ─── Refresh access token ────────────────────────────────────────────
-async function refreshAccessToken(
-  refreshToken: string,
-  clientId: string,
-  clientSecret: string,
-  serviceClient: ReturnType<typeof createClient>,
-  directorId: string,
-  tenantId: string
-): Promise<{ success: boolean; accessToken?: string; error?: string; message?: string }> {
-  try {
-    const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok || !data.access_token) {
-      console.error("Token refresh failed:", data);
-
-      if (data.error === "invalid_grant") {
-        await serviceClient
-          .from("gcal_tokens")
-          .delete()
-          .eq("director_id", directorId)
-          .eq("tenant_id", tenantId);
-
-        return {
-          success: false,
-          error: "disconnected",
-          message: "Dostęp do Google Calendar został cofnięty. Połącz ponownie w ustawieniach.",
-        };
-      }
-
-      return {
-        success: false,
-        error: "refresh_failed",
-        message: "Nie udało się odświeżyć tokena. Spróbuj ponownie połączyć Google Calendar.",
-      };
-    }
-
-    const newExpiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
-
-    await serviceClient
-      .from("gcal_tokens")
-      .update({
-        access_token: data.access_token,
-        expires_at: newExpiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("director_id", directorId)
-      .eq("tenant_id", tenantId);
-
-    return { success: true, accessToken: data.access_token };
-  } catch (e) {
-    console.error("Refresh error:", e);
-    return { success: false, error: "refresh_error", message: "Błąd odświeżania tokena" };
-  }
-}
-
-// ─── Fetch calendar list for names/colors ────────────────────────────
 async function fetchCalendarList(
-  accessToken: string
+  accessToken: string,
 ): Promise<Map<string, { name: string; color: string }>> {
   const map = new Map<string, { name: string; color: string }>();
-
   try {
     const res = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
     if (res.ok) {
       const data = await res.json();
       for (const cal of data.items || []) {
@@ -311,21 +166,18 @@ async function fetchCalendarList(
   } catch (e) {
     console.warn("Failed to fetch calendar list:", e);
   }
-
   if (!map.has("primary")) {
     map.set("primary", { name: "Kalendarz główny", color: "#4285f4" });
   }
-
   return map;
 }
 
-// ─── Fetch events for a single calendar ──────────────────────────────
 async function fetchCalendarEvents(
   accessToken: string,
   calendarId: string,
   timeMin: string,
   timeMax: string,
-  calendarMap: Map<string, { name: string; color: string }>
+  calendarMap: Map<string, { name: string; color: string }>,
 ): Promise<GCalEvent[]> {
   const params = new URLSearchParams({
     timeMin,
@@ -334,20 +186,16 @@ async function fetchCalendarEvents(
     orderBy: "startTime",
     maxResults: "250",
   });
-
   const res = await fetch(
     `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` } },
   );
-
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Calendar API error ${res.status}: ${errText}`);
   }
-
   const data = await res.json();
   const calInfo = calendarMap.get(calendarId) || { name: calendarId, color: "#4285f4" };
-
   return (data.items || []).map((event: Record<string, unknown>) => ({
     id: event.id as string,
     summary: (event.summary as string) || "(Brak tytułu)",

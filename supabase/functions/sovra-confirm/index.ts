@@ -294,6 +294,31 @@ ${consultationText}`;
           result = { contact_id: contactId, filled: true, fields_count: Object.keys(parsed.answers ?? {}).length };
           break;
         }
+        case 'create_calendar_event': {
+          // Sprint 14: real GCal write via gcal-push-event
+          const start = String(args.start ?? '');
+          const end = String(args.end ?? args.start ?? '');
+          if (!args.title || !start) {
+            throw new Error('title i start są wymagane');
+          }
+          const payload: Record<string, unknown> = {
+            summary: String(args.title),
+            start,
+            end,
+          };
+          if (args.description) payload.description = String(args.description);
+
+          const { data: pushData, error: pushErr } = await supabase.functions.invoke('gcal-push-event', {
+            body: payload,
+            headers: { Authorization: req.headers.get('Authorization') ?? '' },
+          });
+          if (pushErr) throw new Error(pushErr.message);
+          if (pushData?.error) {
+            throw new Error(pushData.message || pushData.error);
+          }
+          result = { event_id: pushData.event_id, html_link: pushData.html_link, summary: pushData.summary };
+          break;
+        }
         default:
           execError = `Tool ${pa.tool} nie jest obsługiwany przez confirm.`;
       }

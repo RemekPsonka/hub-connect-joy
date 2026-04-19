@@ -132,6 +132,42 @@ export function useUpdateSelectedCalendars() {
   });
 }
 
+// ─── Push event to Google Calendar (Sprint 14) ──────────────────────
+export interface PushEventInput {
+  summary: string;
+  start: string; // ISO 8601
+  end: string;
+  description?: string;
+  location?: string;
+  attendees?: string[];
+  calendar_id?: string;
+  all_day?: boolean;
+}
+
+export function useGCalPushEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: PushEventInput) => {
+      const { data, error } = await supabase.functions.invoke('gcal-push-event', {
+        body: input,
+      });
+      if (error) throw error;
+      if (data?.error) {
+        throw new Error(data.message || data.error);
+      }
+      return data as { ok: true; event_id: string; html_link: string; summary: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gcal-events'] });
+      toast.success('Wydarzenie zapisane w Google Calendar');
+    },
+    onError: (err: Error) => {
+      toast.error(`Błąd zapisu w Google Calendar: ${err.message}`);
+    },
+  });
+}
+
 // ─── Fetch events ───────────────────────────────────────────────────
 export function useGCalEvents(timeMin: string, timeMax: string, enabled: boolean) {
   const { director } = useAuth();

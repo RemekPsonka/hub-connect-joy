@@ -271,7 +271,8 @@ const READ_TOOLS = new Set([
   'get_task_analytics',
   'get_team_report',
 ]);
-const STUB_TOOLS = new Set(['draft_email', 'create_calendar_event']);
+// Sprint 14: create_calendar_event jest realnie zintegrowany (gcal-push-event).
+const STUB_TOOLS = new Set(['draft_email']);
 
 export function isReadTool(name: string): boolean {
   return READ_TOOLS.has(name);
@@ -373,7 +374,7 @@ export function humanSummary(name: string, args: Record<string, unknown>): strin
     case 'draft_email':
       return `Przygotuję szkic e-maila: "${args.subject ?? '?'}" (integracja Gmail jeszcze nieaktywna).`;
     case 'create_calendar_event':
-      return `Utworzę wydarzenie: "${args.title ?? '?'}"${args.start ? ` o ${args.start}` : ''} (integracja Calendar jeszcze nieaktywna).`;
+      return `Utworzę wydarzenie w Google Calendar: "${args.title ?? '?'}"${args.start ? ` o ${args.start}` : ''}.`;
     default:
       return `Wykonam akcję: ${name}.`;
   }
