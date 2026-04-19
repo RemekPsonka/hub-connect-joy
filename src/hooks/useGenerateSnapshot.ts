@@ -24,7 +24,7 @@ export function useGenerateSnapshot() {
       const { data, error } = await supabase.rpc('rpc_sgu_generate_snapshot', {
         p_period_type: input.period_type,
         p_period_start: input.period_start,
-        p_period_end: input.period_end ?? null,
+        p_period_end: input.period_end ?? undefined,
       });
       if (error) throw error;
       const payload = (data ?? {}) as Record<string, unknown>;
