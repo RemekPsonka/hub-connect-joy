@@ -28,3 +28,7 @@ verify_jwt = false
 
 [functions.ai-stream]
 verify_jwt = false
+
+# Sprint 14: cron-triggered sync (validates service_role bearer in code)
+[functions.gcal-sync-events]
+verify_jwt = false

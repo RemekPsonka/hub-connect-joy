@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "zod";
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
+import { encryptRefreshToken, GCAL_WRITE_SCOPE } from "../_shared/gcal.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,7 @@ const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo"
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events.readonly",
+  GCAL_WRITE_SCOPE, // Sprint 14: write access
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
@@ -51,19 +53,17 @@ Deno.serve(async (req) => {
   const frontendUrl = Deno.env.get("FRONTEND_URL")!;
 
   try {
-    // ── GET: OAuth callback from Google ──
     if (req.method === "GET") {
       return await handleCallback(req, serviceClient, clientId, clientSecret, redirectUri, frontendUrl);
     }
 
-    // ── POST: authenticated actions ──
     if (req.method === "POST") {
       const body = await req.json();
       const parsed = PostSchema.safeParse(body);
       if (!parsed.success) {
         return jsonResponse(
           { error: "Validation error", details: parsed.error.format() },
-          400
+          400,
         );
       }
 
@@ -93,12 +93,11 @@ Deno.serve(async (req) => {
   }
 });
 
-// ─── get-auth-url ────────────────────────────────────────────────────
 function handleGetAuthUrl(
   directorId: string,
   tenantId: string,
   clientId: string,
-  redirectUri: string
+  redirectUri: string,
 ) {
   const state = btoa(JSON.stringify({ director_id: directorId, tenant_id: tenantId }));
 
@@ -115,14 +114,13 @@ function handleGetAuthUrl(
   return jsonResponse({ auth_url: `${GOOGLE_AUTH_ENDPOINT}?${params.toString()}` });
 }
 
-// ─── callback ────────────────────────────────────────────────────────
 async function handleCallback(
   req: Request,
   serviceClient: ReturnType<typeof createClient>,
   clientId: string,
   clientSecret: string,
   redirectUri: string,
-  frontendUrl: string
+  frontendUrl: string,
 ) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -151,7 +149,6 @@ async function handleCallback(
   }
 
   try {
-    // Exchange code for tokens
     const tokenRes = await fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -166,12 +163,11 @@ async function handleCallback(
 
     const tokenData = await tokenRes.json();
 
-    if (!tokenRes.ok || !tokenData.access_token) {
+    if (!tokenRes.ok || !tokenData.access_token || !tokenData.refresh_token) {
       console.error("Token exchange failed:", tokenData);
       return redirectResponse(`${frontendUrl}/settings?gcal=error&reason=token_exchange`);
     }
 
-    // Get user email
     let connectedEmail: string | null = null;
     try {
       const userInfoRes = await fetch(GOOGLE_USERINFO_ENDPOINT, {
@@ -185,23 +181,27 @@ async function handleCallback(
       console.warn("Failed to fetch user info:", e);
     }
 
-    // Calculate expiry
-    const expiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000).toISOString();
+    // Sprint 14: encrypt refresh_token before storage
+    const enc = await encryptRefreshToken(tokenData.refresh_token);
+    const grantedScopes = typeof tokenData.scope === "string"
+      ? (tokenData.scope as string).split(" ").filter(Boolean)
+      : [];
 
-    // Upsert tokens
     const { error: upsertError } = await serviceClient
       .from("gcal_tokens")
       .upsert(
         {
           tenant_id: tenantId,
           director_id: directorId,
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          expires_at: expiresAt,
+          refresh_token_encrypted: enc.ciphertext,
+          refresh_token_iv: enc.iv,
+          scopes: grantedScopes,
           connected_email: connectedEmail,
+          // expires_at kept as legacy column; we always re-refresh on demand
+          expires_at: new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "tenant_id,director_id" }
+        { onConflict: "tenant_id,director_id" },
       );
 
     if (upsertError) {
@@ -216,11 +216,10 @@ async function handleCallback(
   }
 }
 
-// ─── disconnect ──────────────────────────────────────────────────────
 async function handleDisconnect(
   directorId: string,
   tenantId: string,
-  serviceClient: ReturnType<typeof createClient>
+  serviceClient: ReturnType<typeof createClient>,
 ) {
   const { error } = await serviceClient
     .from("gcal_tokens")
@@ -232,6 +231,9 @@ async function handleDisconnect(
     console.error("Disconnect error:", error);
     return jsonResponse({ error: "Failed to disconnect" }, 500);
   }
+
+  // Also clear cached events
+  await serviceClient.from("gcal_events").delete().eq("director_id", directorId);
 
   return jsonResponse({ success: true });
 }

@@ -4446,39 +4446,133 @@ export type Database = {
           },
         ]
       }
+      gcal_events: {
+        Row: {
+          all_day: boolean | null
+          attendees: Json | null
+          calendar_color: string | null
+          calendar_id: string
+          calendar_name: string | null
+          created_at: string
+          description: string | null
+          director_id: string
+          end_at: string | null
+          gcal_event_id: string
+          html_link: string | null
+          id: string
+          location: string | null
+          start_at: string | null
+          summary: string | null
+          synced_at: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean | null
+          attendees?: Json | null
+          calendar_color?: string | null
+          calendar_id: string
+          calendar_name?: string | null
+          created_at?: string
+          description?: string | null
+          director_id: string
+          end_at?: string | null
+          gcal_event_id: string
+          html_link?: string | null
+          id?: string
+          location?: string | null
+          start_at?: string | null
+          summary?: string | null
+          synced_at?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean | null
+          attendees?: Json | null
+          calendar_color?: string | null
+          calendar_id?: string
+          calendar_name?: string | null
+          created_at?: string
+          description?: string | null
+          director_id?: string
+          end_at?: string | null
+          gcal_event_id?: string
+          html_link?: string | null
+          id?: string
+          location?: string | null
+          start_at?: string | null
+          summary?: string | null
+          synced_at?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gcal_events_director_id_fkey"
+            columns: ["director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gcal_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "gcal_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gcal_tokens: {
         Row: {
-          access_token: string
           connected_email: string | null
           created_at: string
+          deprecated_access_token_20260419: string | null
+          deprecated_refresh_token_20260419: string | null
           director_id: string
           expires_at: string
           id: string
-          refresh_token: string
+          refresh_token_encrypted: string | null
+          refresh_token_iv: string | null
+          scopes: string[] | null
           selected_calendars: Json | null
           tenant_id: string
           updated_at: string
         }
         Insert: {
-          access_token: string
           connected_email?: string | null
           created_at?: string
+          deprecated_access_token_20260419?: string | null
+          deprecated_refresh_token_20260419?: string | null
           director_id: string
           expires_at: string
           id?: string
-          refresh_token: string
+          refresh_token_encrypted?: string | null
+          refresh_token_iv?: string | null
+          scopes?: string[] | null
           selected_calendars?: Json | null
           tenant_id: string
           updated_at?: string
         }
         Update: {
-          access_token?: string
           connected_email?: string | null
           created_at?: string
+          deprecated_access_token_20260419?: string | null
+          deprecated_refresh_token_20260419?: string | null
           director_id?: string
           expires_at?: string
           id?: string
-          refresh_token?: string
+          refresh_token_encrypted?: string | null
+          refresh_token_iv?: string | null
+          scopes?: string[] | null
           selected_calendars?: Json | null
           tenant_id?: string
           updated_at?: string
