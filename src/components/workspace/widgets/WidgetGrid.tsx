@@ -52,7 +52,7 @@ export function WidgetGrid() {
     lg: widgets.map((w) => ({ i: w.id, x: w.grid_x, y: w.grid_y, w: w.grid_w, h: w.grid_h })),
   };
 
-  const handleChange = (current: Layout[]) => {
+  const handleChange = (current: readonly LayoutItem[]) => {
     updateLayout.mutate(current.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   };
 
