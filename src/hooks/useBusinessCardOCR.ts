@@ -284,11 +284,14 @@ export function useBusinessCardOCR() {
         throw new Error(error.message || 'Błąd podczas wzbogacania danych osoby');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Nie udało się wzbogacić danych osoby');
+      // enrich-person (orchestrator) returns { results: { data: <payload> } }
+      // legacy fallback: payload directly
+      const payload = data?.results?.data ?? data;
+      if (payload?.success === false) {
+        throw new Error(payload?.error || data?.error || 'Nie udało się wzbogacić danych osoby');
       }
 
-      return data.data as EnrichedPersonData;
+      return (payload?.data ?? payload) as EnrichedPersonData;
     } finally {
       setIsEnrichingPerson(false);
     }
