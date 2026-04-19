@@ -147,7 +147,7 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       )}
 
       {/* Stats - always visible when team selected (except dashboard, tasks, kanban) */}
-      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && <TeamStats teamId={selectedTeamId} />}
+      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && !(forcedTeamId && viewMode === 'clients') && <TeamStats teamId={selectedTeamId} />}
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
