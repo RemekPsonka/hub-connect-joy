@@ -1,44 +1,37 @@
 
-## Plan: Wymuś landing SGU dla użytkowników bez dostępu do CRM
+## Diagnoza: „Remigiusz" vs „Moje" w selektorze zespołu SGU
 
-### Problem
-Obecny `PostLoginRedirect` przekierowuje do SGU tylko jeśli użytkownik ląduje na `/` lub `/login`. Dla SGU-only userów (Paweł, Adam — bez `directors`/`assistants`) — `/` jest chronione `DirectorGuard`, więc dostają redirect do `/login` albo pusty ekran. Dodatkowo redirect odpala się tylko raz per session (flag `sgu.post-login-redirect-done`), więc po wylogowaniu/odświeżeniu może nie zadziałać poprawnie.
+### Co widzi user
+Na `/sgu/pipeline` selektor zespołu pokazuje dwie pozycje, które dla Remka (jednoosobowego użytkownika SGU) wyglądają jak duplikat: zespół „Remigiusz" i zespół „Moje" — ale dane (kontakty/lejek) są różne.
 
-### Rozwiązanie
+### Hipoteza
+W `deal_teams` dla tenanta Remka są **dwa różne zespoły** w których jest członkiem:
+1. „SGU" (lub „Remigiusz"/„Moje" — jeden z nich) — właściwy zespół SGU (`team_type='sgu'` albo po nazwie), gdzie `team_id = 9842c3d4-c2a4-4d2b-9e35-afa7fb8d6a57` (znany z planu sidebar).
+2. Drugi zespół CRM-owy/osobisty — historyczny rekord (np. utworzony przy seedzie, „Moje" jako default per-director albo „Remigiusz" jako personal team).
 
-**1. `src/components/auth/PostLoginRedirect.tsx`**
-- Zmień warunek: zamiast „tylko z `/` lub `/login`" → przekieruj zawsze gdy SGU-only user trafi na trasę CRM (`/`, `/contacts*`, `/meetings*`, `/calendar` itd. — czyli cokolwiek poza `/sgu/*`, `/login`, `/forgot-password`, `/setup-sgu`).
-- Dla SGU-only (rep/partner bez `director`/`isAssistant`/`isAdmin`/`isSuperadmin`) — twardy redirect na ich landing (rep → `?view=tasks`, partner → `?view=kanban`).
-- Dla mieszanych (np. director + sgu) — zostaje obecna logika one-shot z `/` lub `/login`.
-- Czyść flag `sgu.post-login-redirect-done` przy logout (dorzucę w `AuthContext.signOut` lub przy zmianie `user` na `null`).
+Selektor zespołu w `/sgu/pipeline` (komponent prawdopodobnie `TeamSelector` w `DealsTeamDashboard`) pobiera **wszystkie** zespoły do których user ma dostęp (przez `deal_team_members`), a nie filtruje do `team_type='sgu'`. Przez to user-SGU widzi również niezwiązany z SGU zespół CRM-owy → różne dane lejka.
 
-**2. `src/components/auth/AuthGuard.tsx`** (sprawdzę najpierw — może wystarczy sam PostLoginRedirect)
-- Jeśli `AuthGuard` po sukcesie sesji zostawia usera na trasie CRM, dorzucę tam fallback redirect dla SGU-only.
+### Plan naprawy
 
-**3. `DirectorGuard` / `CRMOnlyGuard`** — sprawdzę co dziś robią dla SGU-only na `/`. Jeśli pokazują „brak dostępu" zamiast redirectu — zmienię na `<Navigate to="/sgu/...">`.
+**Krok 1 — Recon (przed kodem):**
+1. `supabase--read_query`: sprawdzić w `deal_teams` ile zespołów jest dla tenanta Remka, ich `name`, `team_type`/jakkolwiek się to pole nazywa, kto jest w `deal_team_members` dla każdego.
+2. Znaleźć komponent selektora zespołu w `/sgu/pipeline` (najpewniej w `src/pages/DealsTeamDashboard.tsx` lub `src/components/deals-team/TeamSelector.tsx`) i hook który ładuje listę zespołów (`useDealTeams` / `useTeamsForUser`).
+3. Sprawdzić czy w trybie SGU (`useLayoutMode().mode === 'sgu'`) jest forsowany konkretny `teamId` (`forcedTeamId` znany z `DealsTeamDashboard`), czy selektor mimo wszystko pokazuje wybór.
 
-### Pliki
-- `src/components/auth/PostLoginRedirect.tsx` (główna zmiana — usunięcie one-shot dla SGU-only, redirect z dowolnej CRM trasy)
-- `src/contexts/AuthContext.tsx` (czyszczenie flag przy logout — do potwierdzenia po recon)
-- ewentualnie `src/components/auth/DirectorGuard.tsx` (fallback redirect zamiast pustego stanu)
+**Krok 2 — Fix (jedna z dwóch ścieżek, zależnie od recon):**
 
-### Logika finalna
-```
-isSGUOnly = (isRep || isPartner) && !director && !isAssistant && !isAdmin && !isSuperadmin
+**Wariant A** (najpewniej): selektor w trybie SGU NIE powinien być widoczny — pokazujemy nazwę zespołu jako label (read-only). `forcedTeamId` z `useSGUTeamId()` jest pojedynczy i twardy. Schowam selektor pod `mode === 'sgu'` i wyświetlę tylko nazwę zespołu „SGU" lub po prostu usunę widget.
 
-if (isSGUOnly && !pathname.startsWith('/sgu') && pathname !== '/login') {
-  navigate(isPartner ? '/sgu/pipeline?view=kanban' : '/sgu/pipeline?view=tasks', { replace: true })
-}
-```
-Bez one-shot flagi dla SGU-only — zawsze egzekwuj. Dla mieszanych zostaje obecny one-shot z `/` lub `/login`.
+**Wariant B**: jeśli realnie są dwa SGU-typowane zespoły (mało prawdopodobne dla Remka) — przefiltrować listę do `team_type='sgu'` w hooku.
 
-### Recon przed wdrożeniem
-Przed kodem przeczytam: `AuthContext.tsx`, `AuthGuard.tsx`, `DirectorGuard.tsx`, obecny `PostLoginRedirect.tsx`, `useSGUAccess.ts` — żeby potwierdzić źródła `isPartner`/`isRep` i flagi mieszanych ról.
+**Wariant C**: jeśli jeden z zespołów to legacy/duplikat („Moje" = stary personal team, „Remigiusz" = nowy SGU) — zarchiwizować duplikat zgodnie z project-knowledge (`archive.deal_teams_backup_YYYYMMDD` + DELETE / soft delete). To wymaga zmiany DB — zrobię tylko po potwierdzeniu po recon.
 
-### Smoke test
-1. Login Paweł (sgu-only rep) → trafia na `/sgu/pipeline?view=tasks` niezależnie skąd próbuje wejść.
-2. Login Adam (sgu-only partner) → `/sgu/pipeline?view=kanban`.
-3. Login Remek (director + sgu) → zostaje na `/` (CRM landing), toggle do SGU działa ręcznie.
-4. SGU-only user wpisuje ręcznie `/contacts` → redirect na swój landing SGU.
+### Pliki (oczekiwane do edycji)
+- `src/pages/DealsTeamDashboard.tsx` — ukrycie selektora w trybie SGU
+- ewentualnie `src/components/deals-team/TeamSelector.tsx` lub równoważny — filter `team_type='sgu'` dla SGU mode
+- ewentualnie migracja archiwizacyjna duplikatu (wariant C) — tylko po Twoim OK
 
-### Brak zmian DB. Build + lista plików po wdrożeniu.
+### Co teraz zrobię
+Najpierw recon (DB query + lokalizacja selektora), potem konkretny patch. Bez zmian DB w tym kroku — tylko FE fix selektora. Jeśli okaże się że to duplikat w DB i wymaga merge'u — wrócę z osobnym planem migracji.
+
+### Brak zmian backend/DB w fazie 1. Build + lista plików po wdrożeniu.
