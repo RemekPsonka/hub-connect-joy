@@ -1,90 +1,64 @@
 
-Sprint 19c — duży, ryzykowny. Najpierw recon żeby uniknąć red flagów ze spec'u.
+User chce pełny audyt systemu po Sprintach 19a/19b/19c-α. Tryb READ-ONLY — robię recon + raport.
 
-## Recon (przed pisaniem migracji)
+## Plan audytu
 
-1. **Schemat `companies`** — które z 8 legacy kolumn faktycznie istnieją? Sprawdzę `information_schema.columns`.
-2. **Schemat `company_data_sources`** — `source_type` enum vs text + kompletna lista wartości używanych w kodzie (już w `useCompanyDataSources.ts` widzę: `external_api | www | financial_3y | ai_analysis | source_data_api | other`). UWAGA: spec mówi `'website' | 'financials' | 'profile'` — to NIE pasuje do aktualnego enum (`www`, `financial_3y`, `ai_analysis`). **Czerwona flaga #2 ze spec'u.** Trzymam się aktualnych wartości.
-3. **Trigger `trg_sync_company_data_sources`** — czy istnieje? Jaka funkcja?
-4. **Worker `enrich-company-worker`** — z kontekstu widzę że ma 5 kroków w `PIPELINE`. ✅ Czerwona flaga #1 OK.
-5. **`enqueue-enrich-company`** — sprawdzić że istnieje i przyjmuje `{ company_id }`.
-6. **FE call-sites** — pełny grep po: legacy kolumnach, `enrich-company-data`, `ocr-business-card[s-batch]?`, `bulk-merge-contacts`, `analyze-linkedin-profile`, `generate-contact-profile`, `enrich-person-data`.
-7. **`src/lib/export/companies.ts`** lub jakikolwiek eksport — czy czyta legacy kolumny? (czerwona flaga #3).
-8. **Edge fn write-sites** — `scan-company-website`, `analyze-company-external`, `fetch-company-financials`, `synthesize-company-profile` — co dokładnie zapisują dziś?
+### 1. Sanity check kompilacji
+- `tsc --noEmit` (build check) + lint w tle.
+- `grep` na zakazane wzorce: `console.log`, `any`, legacy edge fn (`enrich-company-data`, `bulk-merge-contacts`, `ocr-business-card[s-batch]?`, `analyze-linkedin-profile|generate-contact-profile|enrich-person-data` w `src/`).
 
-## Mapowanie source_type (decyzja)
+### 2. Backend (DB + edge fn)
+- `supabase--read_query`:
+  - kolumny `companies` (czy A5 RENAME nie został przypadkiem zrobiony?)
+  - `pg_trigger` — `trg_sync_company_data_sources` (powinien jeszcze istnieć — A3 odłożone)
+  - `archive.companies_backup_20260419` count vs `public.companies`
+  - `cron.job` — czy jakieś legacy funkcje mają jeszcze schedule (`enrich-company-data`, `bulk-merge-contacts`, `ocr-business-card*`, `sovra-weekly-report`)
+  - `ai_usage_log` policy (S19a fix) — czy WITH CHECK true zniknął
+  - `unified_meetings` COMMENT
+  - `archive.deprecated_*_20260418` — w archive schemacie
+- `supabase--linter` — generic security scan
+- `ls supabase/functions/` — czy fizycznie skasowane: `bulk-merge-contacts`, `ocr-business-card`, `ocr-business-cards-batch`, `sovra-weekly-report`, `ai-chat`, `remek-chat`, `learn-contact-agent`, `bi-fill-from-note`, `process-bi-ai`, `bi-agent-interview`, etc.
 
-Trzymam istniejące wartości enum z `useCompanyDataSources.ts`:
-- `external_data` → `external_api`
-- `www_data` → `www`
-- `financial_data_3y` → `financial_3y`
-- `ai_analysis` → `ai_analysis`
+### 3. Flow audyt — kluczowe akcje E2E (czytane z kodu)
+- **Enrich Company**: FE wciąż woła `enrich-company-data` (E odłożone) — sprawdzić call-sites, czy nie psuje to że plik istnieje. Worker `enrich-company-worker` + `enqueue-enrich-company` istnieją równolegle.
+- **OCR wizytówek**: `useBusinessCardOCR.ts` po refactorze → `ocr-business-cards` z `{items}`. Sprawdzić że kontrakt zgodny z `ocr-business-cards/index.ts`.
+- **Enrich Person**: orchestrator `enrich-person` z `steps`. Sprawdzić call-sites i body shape.
+- **Merge contacts**: `merge-contacts` z 3 shapes. Sprawdzić `useContacts.ts` że woła `pairs`.
+- **Sovra (chat)**: nie ruszane — sanity check że istnieje.
+- **Background jobs**: realtime + JobsBell.
+- **BI 2.0**: ContactBI nie ruszane.
+- **Pipeline / Lejek (deal-team)**: nie ruszane.
 
-To jest ZGODNE z tym co już używa FE. Nie wprowadzam nowych wartości typu `website/financials/profile` — to by zepsuło już działający `CompanyExternalDataTab`.
+### 4. Tech debt zostawiony świadomie (sprint 19c-β)
+- Companies dual-write — pełen FE refactor + RENAME kolumn.
+- Kasacja `enrich-company-data` monolitu.
+- Drop trigger `trg_sync_company_data_sources`.
 
-## Plan wykonania (po recon)
+### 5. Format raportu (krótki, biznesowy + sekcja techniczna)
 
-### A. Companies dual-write cleanup
-- **A1** migracja `*_a1_companies_backup.sql`: `archive.companies_backup_20260419` + count.
-- **A2** migracja `*_a2_backfill_company_data_sources.sql`: 4× `INSERT ... ON CONFLICT (company_id, source_type) DO NOTHING` (lub DO UPDATE jeśli unique constraint istnieje; jeśli nie — najpierw sprawdzę i ewentualnie pominę ON CONFLICT, użyję `WHERE NOT EXISTS`). Mapowanie j.w.
-- **A3** migracja `*_a3_drop_dualwrite_trigger.sql`: `DROP TRIGGER IF EXISTS trg_sync_company_data_sources` + `DROP FUNCTION IF EXISTS public.sync_company_data_sources()` (sprawdzę dokładną nazwę w recon).
-- **A4** edge fn refactor:
-  - `scan-company-website` → tylko `company_data_sources` (`source_type='www'`), wyciąć update na `companies.www_data*`.
-  - `analyze-company-external` → `source_type='external_api'`, wyciąć update na `companies.external_data*`.
-  - `fetch-company-financials` → `source_type='financial_3y'`, wyciąć update na `companies.financial_data_3y`.
-  - `synthesize-company-profile` → `source_type='ai_analysis'`, wyciąć update na `companies.ai_analysis`.
-  - **NIE rusz** `enrich-company-data` (skasujemy w E).
-- **A4 FE refactor**:
-  - `useCompanies.ts`, `useCompanyProfile.ts`, `useCompanyEnrichment.ts` — usunąć selecty legacy kolumn, dane czytać przez `useCompanyDataSources(companyId)`.
-  - `CompanyDetail.tsx`, `SourcesTabContent.tsx`, `CompanyPipelineController.tsx` — przepiąć na hook.
-- **A5** migracja `*_a5_rename_legacy_columns.sql`: `DO $$ ... ALTER TABLE ... RENAME COLUMN` w bloku z `EXCEPTION WHEN undefined_column THEN NULL` per kolumna. RENAME tylko tych które recon potwierdzi.
-- **WAŻNE kolejność**: A1 → A2 → A3 → A4 (kod) → testy build → A5 (rename). Jeśli A4 zostawi gdzieś `companies.external_data` to A5 zepsuje `tsc`.
+```
+## ✅ Co działa
+- ...
+## ⚠️ Co wymaga dokończenia (sprint 19c-β)
+- ...
+## 🐛 Ewentualne bugi / regresje
+- ...
+## 🔒 Security
+- ...
+## 📋 Rekomendowana kolejność dalej
+1. ...
+```
 
-### B. OCR konsolidacja
-- Grep call-sites starych endpointów.
-- Zamienić wywołania na `ocr-business-cards` z `{ items: [{ image_base64, filename }] }` (to jest aktualny kontrakt z kontekstu, NIE `{ images: [...] }` jak w spec — spec się myli, trzymam istniejący kontrakt z `ocr-business-cards/index.ts`).
-- Usunąć foldery `ocr-business-card/` i `ocr-business-cards-batch/` + sekcje w `config.toml` (jeśli są) + `delete_edge_functions`.
+## Tool calls (równolegle gdzie się da)
 
-### C. merge-contacts
-- Otworzyć `merge-contacts/index.ts` — sprawdzić aktualną logikę. Rozszerzyć: jeśli body ma `pairs: []` → iteracja nad single-merge logic; w przeciwnym razie zachowanie aktualne (backward compat).
-- Grep `bulk-merge-contacts` w `src/` → zamienić na `merge-contacts` z `{ pairs: [...] }`.
-- Usunąć folder `bulk-merge-contacts/` + `delete_edge_functions`.
+**Round 1** (recon, wszystko równolegle):
+- `code--exec`: `npx tsc --noEmit 2>&1 | head -100 & ls supabase/functions/ | sort & grep -rn "enrich-company-data\|bulk-merge-contacts\|ocr-business-card\b\|ocr-business-cards-batch\|analyze-linkedin-profile\|generate-contact-profile\|enrich-person-data" src/ 2>/dev/null & wait`
+- `supabase--read_query`: kolumny companies + trg_sync + archive count + cron.job + unified_meetings comment (jednym multi-statement nie wolno → kilka równoległych)
+- `supabase--linter`
 
-### D. enrich-person orchestrator
-- Już istnieje (kontekst). Zmiana kontraktu: zamiast `mode: 'full'|'profile'|'linkedin'` rozszerzyć na `{ contact_id, steps?: ['linkedin'|'profile'|'data'] }` (default wszystkie 3) + agregacja wyników. Backward compat: jeśli body ma `mode` → mapuj na pojedynczy step.
-- Grep `analyze-linkedin-profile|generate-contact-profile|enrich-person-data` w `src/` → zamienić na `enrich-person` z odpowiednim `steps`.
-- Dodać header-comment `// INTERNAL` w 3 plikach implementacyjnych.
-- NIE kasujemy folderów (orchestrator je woła).
+**Round 2** (po wynikach):
+- `code--view`: kluczowe pliki które wymagają walidacji (np. `useBusinessCardOCR.ts`, `useContacts.ts`, `merge-contacts/index.ts`, `enrich-person/index.ts`) — tylko jeśli recon wskaże podejrzenia.
 
-### E. enrich-company-data wyłączenie
-- Grep — potwierdzić 5 call-sites (spec mówi 5, walidacja).
-- Każde wywołanie: `enrich-company-data` → `enqueue-enrich-company` z `{ company_id }`. Toast „Wzbogacanie w tle".
-- Sprawdzić czy `useBackgroundJob(jobId)` istnieje (kontekst memorek wskazuje na tabelę `background_jobs` + JobsBell). Jeśli tak — użyć dla progress UI tam gdzie ma sens. Jeśli nie — sam toast wystarczy (worker i tak loguje progress do `background_jobs`).
-- Worker: kontekst pokazuje 5 kroków. ✅
-- Po grep=0 → kasacja folderu `enrich-company-data/` + sekcji config.toml (jeśli jest) + `delete_edge_functions`. Jeśli jakaś niepewność (np. nie znalazłem `enqueue-enrich-company`) → ZOSTAW i raport.
+**Round 3**: raport końcowy z 4-5 sekcjami + lista TODO dla 19c-β + decyzja czy są blockery do natychmiastowego fixu.
 
-## Kolejność tool calls
-
-1. **Recon (równolegle)**: 
-   - `supabase--read_query`: kolumny `companies` + `pg_trigger` dla trg_sync + count companies + `\d company_data_sources` (constraint info).
-   - `code--exec`: jeden `grep -rn` na wszystkie 9 wzorców + `ls supabase/functions/` (filtr na enrich/ocr/merge/enqueue) + sprawdzenie `src/lib/export/`.
-   - `code--view`: `useCompanies.ts`, `useCompanyProfile.ts`, `useCompanyEnrichment.ts`, `CompanyDetail.tsx`, `SourcesTabContent.tsx`, edge fn (4 write-sites + `merge-contacts` + `enqueue-enrich-company` jeśli istnieje).
-2. **A1**: backup migration.
-3. **A2**: backfill (po sprawdzeniu unique constraint).
-4. **A3**: drop trigger.
-5. **A4**: edge fn (4 plików) → FE hooks + komponenty (równolegle gdzie się da).
-6. **build/lint check** przed A5.
-7. **A5**: rename columns.
-8. **B**: OCR przepięcie + delete.
-9. **C**: merge-contacts rozszerzenie + przepięcie + delete.
-10. **D**: enrich-person rozbudowa + przepięcie + INTERNAL comments.
-11. **E**: enrich-company-data przepięcie + delete (warunkowo).
-12. **lint** w tle + raport końcowy z 3 listami (zrobione / odłożone / wymagające decyzji).
-
-## Pytania / red flags do user'a
-
-Nic blokującego — recon rozstrzygnie wątpliwości. Trzymam się istniejących `source_type` z `useCompanyDataSources.ts` (nie tych ze spec'u, które się myli).
-
-Jeśli w trakcie wykryję że `enqueue-enrich-company` nie istnieje LUB worker nie ma 5 kroków — ZATRZYMAM sekcję E i raportuję jako blocker do decyzji. A-D pójdą niezależnie.
-
-Bez zmian w `ContactBI`, `useContactAgent`, `Sovra`, `_shared/llm-provider.ts`. Bez DROP danych. Tylko RENAME kolumn (fizyczny DROP w osobnej migracji za 30 dni).
+Bez zmian w kodzie (tryb READ-ONLY).
