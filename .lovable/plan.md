@@ -1,76 +1,80 @@
 
 
-## Sprint 17 — Sieć kontaktów 2.0 (zaadaptowany)
+## Sprint 18 — Spotkania + Konsultacje scalenie (zaadaptowany)
 
-### Stan obecny
-- Tabela `connections` (contact_a_id/contact_b_id, strength, connection_type, tenant_id) — istnieje, używana.
-- `find_mutual_connections` RPC istnieje.
-- `/network` (Network.tsx) + komponenty: `ConnectionGraph.tsx`, `AddConnectionModal`, `FindPathModal`, `GraphSidebar`, `ConnectionLegend`. Brak Three.js — graf już 2D (prawdopodobnie sigma/graphology z stacku). MD przewiduje usuwanie 3D, ale **u nas nic do usuwania**.
-- Hook `useConnections` używany w `AddConnectionModal`.
+### Reality check vs MD
+Plan MD nie pasuje do obecnego schematu. Konkrety:
 
-### Korekty względem MD
-1. **NIE archiwizuję+rebuild `connections`** — schemat i tak praktycznie się zgadza (kierunkowe `from/to` vs `a/b`). Zamiast: **rozszerzam istniejącą `connections`** o `relationship_type text`, `metadata jsonb`, `created_at timestamptz`. Snapshot do `archive.connections_backup_20260419` (read-only kopia, zgodnie z policy).
-2. **Bez nowej tabeli `contact_connections`** — to byłaby duplikacja (zasada „jedna implementacja per domena"). Zostaje `connections`, RPC pracują na niej.
-3. **2D graf już mamy** — `ConnectionGraph.tsx`. Sprawdzę co używa; jeśli `react-force-graph-2d` lub sigma — zostaje. Nie instaluję `react-force-graph-2d` jeśli sigma działa.
-4. **RPC do dodania:**
-   - `rpc_contact_neighbors(p_contact_id uuid, p_min_strength int)` — zwraca sąsiadów z obu kierunków (a↔b).
-   - `rpc_network_paths(p_from uuid, p_to uuid, p_max_hops int default 3)` — BFS po `connections` (undirected, oba kierunki w CTE).
-5. **Akcja „Poproś o intro"** — przycisk w panelu prawym `/network` (po wybraniu pośrednika): otwiera istniejący `ComposeEmailModal` (S15) z `initialTo=intermediate.email`, `initialSubject="Prośba o przedstawienie"`, `initialBody=` polski draft template (statyczny — bez dodatkowego callu do Sovry w MVP; user może dalej edytować lub poprosić Sovrę o przepisanie).
-6. **`tenant_id`-based RPC** zamiast `director_id` — `connections.tenant_id` istnieje, RLS już per tenant.
-7. **Warsztat z Remkiem** — pomijam jako gating (per project rules: „komendy bez pytań, Remek akceptuje domyślnie"). Default zakres = ten plan.
+1. **`one_on_one_meetings` NIE jest tabelą spotkań 1:1** — to **sub-tabela `group_meetings`** rejestrująca pary osób, które rozmawiały podczas spotkania grupowego (`group_meeting_id` NOT NULL, `contact_a_id`/`contact_b_id`, `outcome`, `was_recommended`). Backfill jako `type='networking'` zniszczyłby semantykę i odetnie od grupowego eventu.
+2. **`meeting_participants` już istnieje** — z FK do `group_meetings`, `prospect_id`, `is_member`, `is_new`, `attendance_status`, realtime publication. Tworzenie nowej tabeli o tej samej nazwie się wywali (kolizja).
+3. **`consultations` ma 6 child tables** (`consultation_chat_messages`, `consultation_guests`, `consultation_questionnaire`, `consultation_recommendations`, `consultation_thanks`, `consultation_meetings`) + `tasks.consultation_id` FK + 2 triggery (`refresh_dashboard_stats`, `set_updated_at`). Sam RENAME zostawi te FK wskazujące na `deprecated_consultations_*`, ale UI wciąż będzie czytał `consultations` — wszystko padnie.
+4. **`useMeetings` hook już istnieje** i operuje na `group_meetings`. Re-write zmieni semantykę dla wszystkich konsumentów `MeetingsList`, `MeetingModal`, `MeetingsHeader`, `MeetingsOverview`, `Dashboard.MeetingsOverview`.
+5. **59 plików** referuje stare tabele/hooki, w tym `Dashboard`, `Notifications` (`/consultations/${id}` route), `ContactDetail` (`MeetingsTab` → `ContactConsultationsTab`), `Calendar`, `Sovra` tools.
+6. **Dane**: 1 konsultacja, 0 1:1, 2 spotkania grupowe — produkcyjne, ale ilościowo trywialne.
 
-### A. Migracja `<ts>_sprint17_network_v2.sql`
+Decyzja: **NIE robię big-bang scalenia w tym sprincie**. Ryzyko: zbyt szerokie blast-radius dla zysku ~3 rekordów. Robię „bridge view" + ujednolicony FE, fizyczne scalanie tabel odkładam do osobnego sprintu deprecation.
+
+### Co robię (adapted scope)
+
+#### A. Migracja `<ts>_sprint18_meetings_unified_view.sql`
 - `CREATE SCHEMA IF NOT EXISTS archive;`
-- `CREATE TABLE archive.connections_backup_20260419 AS SELECT * FROM public.connections;`
-- `ALTER TABLE public.connections ADD COLUMN IF NOT EXISTS relationship_type text, ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb, ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();`
-- 2 indeksy: `(contact_a_id, strength DESC)`, `(contact_b_id, strength DESC)`.
-- `CREATE OR REPLACE FUNCTION public.rpc_contact_neighbors(...)` — UNION obu kierunków + LEFT JOIN do `contacts` (full_name, contact_type), filtr `tenant_id = get_current_tenant_id()`. SECURITY INVOKER, `STABLE`, `SET search_path = public`.
-- `CREATE OR REPLACE FUNCTION public.rpc_network_paths(...)` — recursive CTE; uwaga: undirected, więc w kroku rekurencyjnym joinujemy po `(a=last OR b=last)` i wybieramy „other end". Limit 10 ścieżek, sort po `total_strength DESC`. `SECURITY INVOKER`, `SET search_path = public`.
-- Komentarz `-- ROLLBACK:` z DROP funkcji + DROP nowych kolumn (deprecated rename pattern niepotrzebny — kolumny dodawane, nie usuwane).
+- Snapshoty (read-only): `archive.consultations_backup_20260419`, `archive.group_meetings_backup_20260419`, `archive.one_on_one_meetings_backup_20260419`, `archive.meeting_participants_backup_20260419`.
+- **NIE** tworzę nowej `public.meetings` (kolizja semantyczna z istniejącym `useMeetings` na `group_meetings`).
+- Tworzę **VIEW `public.unified_meetings`** z `UNION ALL`:
+  - `consultations` → `(id, type='consultation', tenant_id, scheduled_at, duration=duration_minutes, location, notes, status, contact_id_main=contact_id, source_table='consultations')`.
+  - `group_meetings` → `(id, type='group', tenant_id, scheduled_at, duration=duration_minutes, location, notes=description, status, contact_id_main=NULL, source_table='group_meetings')`.
+  - (Pomijam `one_on_one_meetings` w widoku — to są wyniki z group_meeting, nie samoistne spotkania. Pokazane w detalu group_meeting.)
+- VIEW z `security_invoker = true` (RLS jest na tabelach źródłowych, więc filtrowanie per-tenant zadziała).
+- Indeksy istnieją na źródłach — view nie wymaga.
+- ROLLBACK: `DROP VIEW unified_meetings;` + `DROP TABLE archive.*_backup_20260419;`.
 
-### B. Frontend
-- **`src/hooks/useNetworkGraph.ts`** (nowy):
-  - `useContactNeighbors(contactId, minStrength)` → `supabase.rpc('rpc_contact_neighbors', ...)`.
-  - `useNetworkPath(fromId, toId, maxHops)` → `rpc_network_paths`, enabled tylko gdy oba ID są ustawione.
-- **`src/pages/Network.tsx`**: sprawdzę istniejącą strukturę; dodam:
-  - Tryb „Eksploracja od kontaktu" (rootContactId picker w sidebar) — używa `useContactNeighbors` zamiast pełnego ładowania.
-  - Modal/panel „Ścieżka A→B" — input 2 kontaktów + lista ścieżek (sekwencja imion + cumulative strength) z `useNetworkPath`.
-  - Przycisk „Poproś o intro" przy każdym węźle pośrednim ścieżki → otwiera `ComposeEmailModal` z prefillem.
-- **`src/components/network/RequestIntroButton.tsx`** (nowy, mały):
-  - Props: `intermediate: {id, full_name, email}`, `target: {full_name, company?}`.
-  - Renderuje przycisk Mail + na klik: builduje template body PL (`"Cześć {imię}, czy mógłbyś przedstawić mnie {target}? ..."`), otwiera `ComposeEmailModal` z `initialTo=intermediate.email`, `initialSubject`, `initialBody`, `contactId=intermediate.id`. Disabled jeśli brak `intermediate.email`.
+#### B. Frontend
+- **Nowy `src/hooks/useUnifiedMeetings.ts`**:
+  - `useUnifiedMeetings({type?, contactId?, range?})` → SELECT z `unified_meetings` + `meeting_participants` (dla group) + `consultations.contact_id` join (dla consultation).
+  - `useUnifiedMeeting(id, source)` → routuje do właściwej tabeli.
+- **Nowa strona `src/pages/Meetings.tsx`** (rename istniejącej do `MeetingsLegacy.tsx` na 30 dni? — **nie, prostszą drogą**: zostawiam istniejącą `Meetings.tsx` (group_meetings), dodaję **zakładki** w niej:
+  - „Wszystkie / Konsultacje / Grupowe" — filtr napędzany `useUnifiedMeetings`.
+  - „Konsultacje" → klik nawigation `/consultations/:id` (istniejąca trasa).
+  - „Grupowe" → klik `/meetings/:id` (istniejąca, na `group_meetings`).
+- **`src/components/contacts/MeetingsTab.tsx`**: dodaję zakładkę „Wszystkie spotkania" (lista z `useUnifiedMeetings({contactId})`) obok istniejących Konsultacje/BI/GCal. Bez zmiany istniejących.
 
-### C. Sovra (opcjonalnie, jeśli czas)
-- Nowy tool `find_intro_path(from_contact_id, target_name)` — read-only:
-  - Resolve target przez fuzzy match na `contacts.full_name` (per tenant).
-  - Wywołaj `rpc_network_paths`.
-  - Zwróć top 3 ścieżki z imionami.
-- Update `human_summary`: „Znalazłem ścieżkę: Ty → Jan → Anna (siła 45)".
-- Dodaję jako ostatni krok jeśli budżet pozwala; jeśli nie — pomijam, akcja „intro" działa ręcznie z `/network`.
+#### C. Sovra
+- **`sovra/tools.ts`** — nowy tool `search_meetings({type?, contact_id?, date_from?, date_to?, limit?})` (read-only, no confirmation):
+  - Handler: SELECT z `unified_meetings` + filtry → zwraca `[{id, type, scheduled_at, location, notes_excerpt, contact_name, source_table}]`.
+  - `human_summary`: „Znalazłem N spotkań (X konsultacje, Y grupowe)".
+- **NIE** zmieniam `create_meeting` w tym sprincie (istniejący tool tworzy `group_meetings`; tworzenie `consultations` przez Sovrę wymaga osobnego tool `create_consultation` — out of scope, można dodać później jeśli Remek zażąda).
 
-### D. Memory
-- Update `mem://features/network-graph` (nowy plik) — opisuje `connections` + RPC + akcja intro + S15 reuse.
-- Update `mem://index.md` — dopis w sekcji Memories.
+#### D. Co odkładam do osobnego sprintu (deprecation, 30+ dni później)
+- Fizyczne scalenie do jednej tabeli `meetings`.
+- Migracja child tables konsultacji (questionnaire/thanks/recommendations) do JSONB `metadata`.
+- Migracja `tasks.consultation_id` → `tasks.meeting_id`.
+- RENAME starych tabel na `deprecated_*`.
+- Usunięcie tras `/consultations/:id`.
+- ADR `docs/adr/0018-meetings-unification.md` — zapis dlaczego rozłożone na 2 sprinty.
 
-### E. Kolejność
-1. Migracja SQL (alter + 2 RPC + archive snapshot).
-2. `useNetworkGraph.ts` hook.
-3. `RequestIntroButton.tsx`.
-4. Modyfikacja `Network.tsx` (path explorer panel + intro buttons).
-5. Sovra `find_intro_path` (jeśli czas).
-6. Memory update.
+#### E. Memory
+- Nowy `mem://features/meetings/unified-view` — opisuje view, hook, zakres scalenia FE-only w S18, plan fizycznego scalenia w późniejszym sprincie.
+- Update `mem://index.md`.
 
-### F. DoD
-- [ ] `connections` ma `relationship_type`, `metadata`, `created_at`.
-- [ ] Snapshot `archive.connections_backup_20260419`.
-- [ ] `rpc_contact_neighbors`, `rpc_network_paths` działają z RLS.
-- [ ] `/network`: panel ścieżki A→B → lista ścieżek.
-- [ ] Klik „Poproś o intro" → `ComposeEmailModal` z prefillem.
-- [ ] (Stretch) Sovra `find_intro_path`.
+### F. Kolejność
+1. Migracja SQL (4 snapshoty + view).
+2. `useUnifiedMeetings.ts` hook.
+3. Tabs w `Meetings.tsx` + nowy filtr.
+4. Zakładka „Wszystkie spotkania" w `ContactDetail.MeetingsTab`.
+5. Sovra `search_meetings` tool.
+6. Memory + ADR.
 
-### G. Ryzyka
-- **R1** Recursive CTE undirected — duże grafy (tysiące krawędzi) mogą spowolnić. Mitygacja: hard cap `max_hops=3`, `LIMIT 10` na finalnym SELECT, indeksy na obu FK.
-- **R2** Istniejący `Network.tsx` może mieć inną architekturę grafu niż zakłada plan — przed edycją zweryfikuję co tam jest, w razie potrzeby skoryguję podejście (nie będę przepisywał działającego ConnectionGraph).
-- **R3** Email pośrednika może być pusty → przycisk disabled + tooltip.
-- **R4** `get_current_tenant_id()` — sprawdzę istnienie helpera (z innych RPC istnieje; fallback `(SELECT tenant_id FROM directors WHERE user_id=auth.uid())`).
+### G. DoD
+- [ ] 4 snapshoty w `archive.*_backup_20260419`.
+- [ ] `unified_meetings` view zwraca konsultacje + group_meetings z poprawnym tenant filteringiem (RLS via `security_invoker`).
+- [ ] `/meetings` ma zakładki Wszystkie/Konsultacje/Grupowe.
+- [ ] Tab „Wszystkie spotkania" na karcie kontaktu.
+- [ ] Sovra `search_meetings` zwraca realne wyniki cross-table.
+- [ ] ADR zapisany.
+
+### H. Ryzyka
+- **R1 (główne)** — MD zakładał big-bang, my nie. Remek może oczekiwać pełnego scalenia. Mitygacja: ADR + jasna deklaracja w changelog.
+- **R2** `unified_meetings` view performance przy dużych wolumenach — obecnie 3 wiersze, irrelevant. Indeksy źródłowe istnieją.
+- **R3** `security_invoker=true` na view — Postgres ≥15. Jeśli wersja niższa: fallback na SECURITY DEFINER funkcję `rpc_unified_meetings(p_type?, p_contact_id?)`. Sprawdzę przy migracji.
+- **R4** Konflikt nazwy hook `useMeetings` vs `useUnifiedMeetings` — rozdzielam świadomie; nie ruszam istniejącego.
 
