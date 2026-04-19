@@ -35,9 +35,9 @@ export function PostLoginRedirect() {
     sessionStorage.setItem(SESSION_FLAG, '1');
 
     if (isRep && !isPartner) {
-      navigate('/sgu/tasks', { replace: true });
+      navigate('/sgu/pipeline?view=tasks', { replace: true });
     } else if (isPartner) {
-      navigate('/sgu/dashboard', { replace: true });
+      navigate('/sgu/pipeline?view=kanban', { replace: true });
     }
   }, [user, loading, accessLoading, flagLoading, enabled, isPartner, isRep, location.pathname, navigate]);
 
