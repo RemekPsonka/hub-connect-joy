@@ -443,6 +443,47 @@ export async function executeReadTool(
       }));
       return { results };
     }
+    case 'find_intro_path': {
+      const fromId = String(args.from_contact_id ?? '');
+      const targetName = String(args.target_name ?? '').trim();
+      const maxHops = Math.max(1, Math.min(4, Number(args.max_hops ?? 3)));
+      if (!fromId || !targetName) return { error: 'from_contact_id i target_name są wymagane' };
+
+      const { data: candidates, error: cErr } = await userClient
+        .from('contacts')
+        .select('id, full_name, company, email')
+        .ilike('full_name', `%${targetName}%`)
+        .limit(5);
+      if (cErr) return { error: cErr.message };
+      if (!candidates || candidates.length === 0) {
+        return { results: [], note: `Nie znaleziono kontaktu pasującego do "${targetName}".` };
+      }
+
+      const allPaths: Array<Record<string, unknown>> = [];
+      for (const target of candidates) {
+        if (target.id === fromId) continue;
+        const { data: paths, error: pErr } = await userClient.rpc('rpc_network_paths', {
+          p_from: fromId,
+          p_to: target.id,
+          p_max_hops: maxHops,
+        });
+        if (pErr) continue;
+        for (const p of (paths ?? []) as Array<Record<string, unknown>>) {
+          allPaths.push({
+            target_id: target.id,
+            target_name: target.full_name,
+            target_company: target.company,
+            target_email: target.email,
+            path_ids: p.path_ids,
+            path_names: p.path_names,
+            hops: p.hops,
+            total_strength: p.total_strength,
+          });
+        }
+      }
+      allPaths.sort((a, b) => Number(b.total_strength) - Number(a.total_strength));
+      return { results: allPaths.slice(0, 3) };
+    }
   }
 }
 
