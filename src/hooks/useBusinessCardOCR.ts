@@ -110,8 +110,8 @@ export function useBusinessCardOCR() {
   const scanBusinessCard = async (imageBase64: string): Promise<ExtractedContactData> => {
     setIsScanning(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ocr-business-card', {
-        body: { image: imageBase64 }
+      const { data, error } = await supabase.functions.invoke('ocr-business-cards', {
+        body: { items: [{ image_base64: imageBase64 }] }
       });
 
       if (error) {
