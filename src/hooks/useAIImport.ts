@@ -507,8 +507,8 @@ export function useAIImport(): UseAIImportReturn {
         throw new Error(error.message || 'Błąd podczas skanowania wizytówek');
       }
 
-      // ocr-business-cards routes >1 items to ocr-business-cards-batch which returns
-      // { contacts, errors, success } inside `raw`. Normalize.
+      // ocr-business-cards (orchestrator) handles batch internally and returns
+      // either { results: [{data}, ...] } or { raw: { contacts, errors } }. Normalize.
       const raw = (data?.raw ?? data) as Record<string, unknown>;
       const rawContacts = Array.isArray((raw as any)?.contacts)
         ? (raw as any).contacts
