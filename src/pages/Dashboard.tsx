@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardMyDay } from '@/hooks/useDashboardMyDay';
 import { useWeather } from '@/hooks/useWeather';
+import { useTask } from '@/hooks/useTasks';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { KPIWidget } from '@/components/workspace/widgets/KPIWidget';
+import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
@@ -34,6 +37,8 @@ export default function Dashboard() {
   const { director } = useAuth();
   const { data: myDay, isLoading } = useDashboardMyDay();
   const { data: weather } = useWeather();
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const { data: openTask } = useTask(openTaskId ?? undefined);
 
   const firstName = director?.full_name?.split(' ')[0] || 'Użytkowniku';
   const today = new Date();
@@ -61,7 +66,7 @@ export default function Dashboard() {
       subtitle: t.due_date
         ? `Termin: ${format(new Date(t.due_date), 'd MMM', { locale: pl })}`
         : 'Zaległe',
-      onClick: () => navigate('/workspace'),
+      onClick: () => setOpenTaskId(t.id),
     });
   });
 
