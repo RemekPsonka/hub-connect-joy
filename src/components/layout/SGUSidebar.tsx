@@ -67,8 +67,7 @@ const funnelSubItems: NavItemDef[] = [
 ];
 
 const reportItems: NavItemDef[] = [
-  { title: 'Tygodniowy', url: '/sgu/reports/weekly', icon: BarChart3 },
-  { title: 'Miesięczny', url: '/sgu/reports/monthly', icon: BarChart3 },
+  { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 },
 ];
 
 const adminItems: NavItemDef[] = [
