@@ -180,7 +180,11 @@ export default function ContactDetail() {
                   <ContactNeedsOffersTab contactId={contact.id} />
                 </TabsContent>
 
-                {/* Tab: Poszukiwani */}
+                {/* Tab: Emaile */}
+                <TabsContent value="emails" className="mt-6">
+                  <ContactEmailsTab contactId={contact.id} />
+                </TabsContent>
+
                 <TabsContent value="wanted" className="mt-6">
                   <ContactWantedTab contactId={contact.id} />
                 </TabsContent>
