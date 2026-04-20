@@ -1,63 +1,34 @@
 
+## Plan: Sprint RD-A1 — Contact V2 (feature flag + notes + AI cache)
 
-## Bug: „Moje" i „Nieprzypisane" pokazują te same kontakty
+W READ-ONLY mode nie mogę utworzyć pliku migracji. Po Twojej akceptacji w default mode wykonam recon + utworzę migrację.
 
-### Diagnoza (KanbanBoard.tsx, linie 96–107)
+### Recon przed migracją (musi przejść)
+Twój SQL używa kilku obiektów których muszę zweryfikować że istnieją z tymi nazwami:
+1. `public.tenants(id)` — sprawdzę czy tabela się tak nazywa (możliwe że to `directors` jako tenant proxy w single-tenant setup).
+2. `public.get_current_tenant_id()` — funkcja musi istnieć (RLS innych tabel powinno to ujawnić).
+3. `public.get_current_director_id()` — j.w.
+4. `directors.email` + rekord `remek@ideecom.pl` — sprawdzę.
+5. `ai_messages.scope_type`/`scope_id` — sprawdzę kolumny.
+6. `gmail_messages` ma kolumnę `contact_id`? (z pamięci: tabela istnieje, ale link do kontaktu może być przez `gmail_threads`). Jeśli nie ma — trigger `trg_inv_cache_on_email` użyje `NEW.contact_id` które będzie NULL → no-op (bezpieczne, ale warto wiedzieć).
+7. `gcal_events.contact_id` — analogicznie.
 
-```ts
-if (filterMember === 'unassigned') {
-  return searchFilteredContacts.filter(c => !activeTaskMap?.get(c.id));
-}
-const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
-return searchFilteredContacts.filter(c => {
-  const info = activeTaskMap?.get(c.id);
-  if (!info) return filterMember === 'mine'; // ← BUG
-  return info.assignedTo === targetId;
-});
-```
+Jeśli któryś obiekt ma inną nazwę → dostosuję SQL przed zapisem migracji (np. `tenants` → `directors`, helper funkcje → faktyczne nazwy z bazy). Bez wymyślania — sprawdzę read query.
 
-**Problem:** dla `filterMember === 'mine'` linia `if (!info) return filterMember === 'mine'` zwraca `true` dla **wszystkich** kontaktów bez aktywnego zadania → czyli dokładnie tego samego zbioru co „Nieprzypisane". Komentarz „shared contacts visible in 'mine'" jest błędny dla SGU/jednoosobowego użycia — przecina się z „Nieprzypisane".
+### Wykonanie (po recon)
+1. Utworzę plik `supabase/migrations/20260420100000_sprint_rd_a1_contact_v2.sql` z Twoim SQL (z poprawkami nazw jeśli recon wykryje rozjazdy).
+2. Migracja zawiera: `feature_flags` jsonb na `directors` + flaga dla Remka, tabela `contact_notes` z RLS, tabela `contact_ai_cache` z RLS i unique per contact, funkcja `invalidate_contact_ai_cache`, dwa trigger helpers (`trg_inv_cache_direct`, `trg_inv_cache_from_ai`), 4 triggery invalidujące cache (notes/gmail/gcal/ai).
+3. Uruchomię migrację przez tool migracji (auto-approval).
+4. Wypiszę: `[OK] Migracja 20260420100000 przeszła. flag+notes+cache+triggery`.
 
-Dla Remka (sam w SGU) efekt:
-- „Moje" = (kontakty z taskiem assigned_to=Remek) ∪ (kontakty bez taska) 
-- „Nieprzypisane" = (kontakty bez taska)
-- Skoro Remek nie ma jeszcze tasków assigned_to=siebie albo task.assigned_to to null/`director_id` mismatch — oba zbiory kończą jako identyczne.
+### Brak ROLLBACK w pliku
+Twój SQL nie zawiera komentarza `-- ROLLBACK:`. Project knowledge wymaga rollback w każdej migracji. Dorzucę go na końcu pliku jako komentarz (DROP triggers/functions/tables/column/index — w odwrotnej kolejności). Bez wpływu na exec.
 
-### Dodatkowy problem
-`activeTaskMap` mapuje `assignedTo` z `tasks.assigned_to`. Trzeba zweryfikować czy `tasks.assigned_to` przechowuje `director_id` czy `auth.uid()` — od tego zależy poprawność porównania `info.assignedTo === currentDirector?.id`. Sprawdzę w recon przed kodem (jeden read query do `tasks` + jeden grep `assigned_to` w hookach tworzących taski).
+### Ryzyka
+- Jeśli `tenants` nie istnieje jako tabela — RLS się wywali na FK. Recon to wykryje.
+- Triggery na `gmail_messages`/`gcal_events` — jeśli te tabele nie mają `contact_id`, trigger będzie no-op (NEW.contact_id IS NULL → return). Bezpieczne, ale warto rozważyć join przez `gmail_threads` w osobnym sprincie.
 
-### Naprawa
+### Pliki
+- `supabase/migrations/20260420100000_sprint_rd_a1_contact_v2.sql` (nowy)
 
-**1. `src/components/deals-team/KanbanBoard.tsx`** — popraw logikę „Moje":
-```ts
-if (filterMember === 'mine') {
-  const myId = currentDirector?.id;
-  return searchFilteredContacts.filter(c => {
-    const info = activeTaskMap?.get(c.id);
-    return info?.assignedTo === myId; // tylko własne aktywne zadania
-  });
-}
-// pozostali członkowie:
-const targetId = filterMember;
-return searchFilteredContacts.filter(c => activeTaskMap?.get(c.id)?.assignedTo === targetId);
-```
-
-**2. `src/components/deals-team/SubKanbanView.tsx`** — identyczna naprawa (linie 47–58 mają ten sam bug: `if (!info) return localFilterMember === 'mine'`).
-
-**3. Recon przed implementacją:**
-- `supabase--read_query` na `tasks` (sample 5 wierszy z SGU teamu) — sprawdzić czy `assigned_to` to UUID directora czy auth.uid().
-- Jeśli to auth.uid() — porównanie musi być `info.assignedTo === currentDirector?.user_id` (a nie `.id`). Wtedy fix trochę większy, ale ten sam plik.
-
-### Pliki do edycji
-- `src/components/deals-team/KanbanBoard.tsx` (linie 96–107)
-- `src/components/deals-team/SubKanbanView.tsx` (linie 47–58)
-
-### Smoke test
-1. SGU Remek → „Moje" pokazuje TYLKO kontakty gdzie ma aktywne zadanie przypisane do siebie.
-2. „Nieprzypisane" → TYLKO kontakty bez żadnego aktywnego zadania.
-3. Zbiory rozłączne (przecięcie = ∅).
-4. „Wszyscy" = suma wszystkich.
-5. Drill-down (np. AUDYT) — ten sam fix w SubKanbanView, identyczne zachowanie.
-
-Brak zmian DB. Build + lista plików po wdrożeniu.
-
+### Bez zmian FE w tym kroku. Tylko DB.
