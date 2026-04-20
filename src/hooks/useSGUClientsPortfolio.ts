@@ -98,6 +98,8 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           renewals30dCount: 0,
           commissionMonthGr: 0,
           commissionPrevMonthGr: 0,
+          ambassadorsCount: 0,
+          complexClientsCount: 0,
         },
       };
       if (!teamId) return empty;
@@ -110,7 +112,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
       let clientsQuery = supabase
         .from('deal_team_contacts')
         .select(
-          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company)'
+          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, client_status, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company)'
         )
         .eq('team_id', teamId)
         .eq('category', 'client');
