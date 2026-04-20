@@ -22,6 +22,7 @@ interface Props {
   isLoading: boolean;
   teamId: string;
   onSelectClient?: (id: string) => void;
+  filter?: string | null;
 }
 
 function policyTypeLabel(t: string | null): string {
@@ -45,14 +46,19 @@ function paymentStatusColor(row: SGUClientRow): string {
   return 'text-emerald-600';
 }
 
-export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient }: Props) {
+export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient, filter }: Props) {
   const complexityMap = useClientComplexity(rows);
   const updateContact = useUpdateTeamContact();
+
+  const visibleRows =
+    filter === 'ambassadors'
+      ? rows.filter((r) => (r.client_status ?? '') === 'ambassador')
+      : rows;
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground p-8 text-center">Ładowanie portfela…</div>;
   }
-  if (rows.length === 0) {
+  if (visibleRows.length === 0) {
     return <div className="text-sm text-muted-foreground p-8 text-center">Brak klientów w portfelu</div>;
   }
 
@@ -74,7 +80,7 @@ export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient }: 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => {
+            {visibleRows.map((r) => {
               const types = Array.from(new Set(r.policies.map((p) => policyTypeLabel(p.policy_type))));
               const complexity = complexityMap.get(r.id);
               return (

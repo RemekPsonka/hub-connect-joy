@@ -12,6 +12,7 @@ import type { SGUClientRow } from '@/hooks/useSGUClientsPortfolio';
 interface Props {
   rows: SGUClientRow[];
   teamId: string;
+  filter?: string | null;
 }
 
 interface RenewalItem {
@@ -33,8 +34,9 @@ function daysUntil(d: string): number {
   return Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-export function ClientRenewalsTab({ rows, teamId }: Props) {
+export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
   const qc = useQueryClient();
+  const maxDays = filter === 'lt14' ? 14 : 90;
 
   const groups = useMemo(() => {
     const g30: RenewalItem[] = [];
@@ -44,7 +46,7 @@ export function ClientRenewalsTab({ rows, teamId }: Props) {
       for (const p of r.policies) {
         if (!p.end_date) continue;
         const d = daysUntil(p.end_date);
-        if (d < 0 || d > 90) continue;
+        if (d < 0 || d > maxDays) continue;
         const item: RenewalItem = {
           policyId: p.id,
           clientName: r.full_name,
