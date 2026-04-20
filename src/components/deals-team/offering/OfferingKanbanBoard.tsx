@@ -159,6 +159,7 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
             return (
               <div
                 key={stageId}
+                data-testid={`column-${stageId}`}
                 className={cn(
                   'bg-muted/30 rounded-lg border border-t-2 flex flex-col min-w-[220px] flex-1 min-h-[350px] transition-all',
                   meta.color,
