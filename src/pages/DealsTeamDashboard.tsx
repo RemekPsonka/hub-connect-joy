@@ -30,12 +30,16 @@ type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' |
 const STORAGE_KEY = 'deals-team-selected';
 const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'entries', 'tasks', 'snoozed', 'offering', 'dashboard'];
 
+type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
+
 interface DealsTeamDashboardProps {
   /** When set, locks the dashboard to this team and hides team-management UI (used by SGU pipeline route). */
   forcedTeamId?: string;
+  /** SGU header card filter — drives view + stage filtering. */
+  forcedFilter?: SalesFilter | null;
 }
 
-export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardProps = {}) {
+export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: DealsTeamDashboardProps = {}) {
   const { data: teams = [], isLoading: teamsLoading } = useMyDealTeams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
