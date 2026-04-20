@@ -90,6 +90,7 @@ function DraggableCard({
   onOfferingStageChange,
   onOfferingWonClick,
   onOfferingLostClick,
+  onSubcategoryChange,
 }: {
   contact: DealTeamContact;
   stage: DealStage;
@@ -97,6 +98,7 @@ function DraggableCard({
   onOfferingStageChange: (next: string) => void;
   onOfferingWonClick: () => void;
   onOfferingLostClick: () => void;
+  onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -115,6 +117,7 @@ function DraggableCard({
         onOfferingStageChange={onOfferingStageChange}
         onOfferingWonClick={onOfferingWonClick}
         onOfferingLostClick={onOfferingLostClick}
+        onSubcategoryChange={onSubcategoryChange}
         isDragging={isDragging}
       />
     </div>
@@ -129,6 +132,7 @@ function DroppableColumn({
   onOfferingStageChange,
   onOfferingWonClick,
   onOfferingLostClick,
+  onSubcategoryChange,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -137,6 +141,7 @@ function DroppableColumn({
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
   onOfferingLostClick: (c: DealTeamContact) => void;
+  onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
@@ -151,6 +156,7 @@ function DroppableColumn({
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
       onOfferingWonClick={() => onOfferingWonClick(c)}
       onOfferingLostClick={() => onOfferingLostClick(c)}
+      onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
     />
   );
 
@@ -293,6 +299,19 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
       offeringStage: next as DealTeamContact['offering_stage'],
     });
   }
+
+  function handleSubcategoryChange(
+    c: DealTeamContact,
+    field: 'temperature' | 'prospect_source' | 'client_status',
+    value: string,
+  ) {
+    if (field === 'temperature') {
+      updateContact.mutate({ id: c.id, teamId, temperature: value as DealTeamContact['temperature'] });
+    } else if (field === 'prospect_source') {
+      updateContact.mutate({ id: c.id, teamId, prospectSource: value as DealTeamContact['prospect_source'] });
+    } else {
+      updateContact.mutate({ id: c.id, teamId, clientStatus: value });
+    }
 
   if (isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">Ładowanie kontaktów…</div>;
