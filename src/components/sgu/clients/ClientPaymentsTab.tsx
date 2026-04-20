@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +10,10 @@ import { useSGUAccess } from '@/hooks/useSGUAccess';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { toast } from 'sonner';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
+import { format, addMonths, startOfMonth, parseISO } from 'date-fns';
+import { pl } from 'date-fns/locale';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import type { SGUClientRow } from '@/hooks/useSGUClientsPortfolio';
 
 type Filter = 'all' | 'overdue' | 'this_month' | 'upcoming_30d';
