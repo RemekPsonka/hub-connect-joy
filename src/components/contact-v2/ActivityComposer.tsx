@@ -10,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 interface ActivityComposerProps {
   contactId: string;
+  activeTab?: 'note' | 'email' | 'meeting';
+  onTabChange?: (tab: string) => void;
 }
 
 async function getDirectorContext() {
@@ -24,7 +26,7 @@ async function getDirectorContext() {
   return director;
 }
 
-export function ActivityComposer({ contactId }: ActivityComposerProps) {
+export function ActivityComposer({ contactId, activeTab, onTabChange }: ActivityComposerProps) {
   const qc = useQueryClient();
   const [noteContent, setNoteContent] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -56,7 +58,7 @@ export function ActivityComposer({ contactId }: ActivityComposerProps) {
 
   return (
     <TooltipProvider>
-      <Tabs defaultValue="note" className="w-full">
+      <Tabs value={activeTab ?? 'note'} onValueChange={onTabChange} className="w-full">
         <TabsList>
           <TabsTrigger value="note">📝 Notatka</TabsTrigger>
           <Tooltip>

@@ -77,7 +77,20 @@ Format: emoji + krótki stan + kluczowa liczba. Przykłady:
 - "⚠️ Brak kontaktu 37 dni · deal stoi"
 - "🆕 Nowy lead · brak kontaktu · zaplanuj pierwszy"
 
-NIE wymyślaj danych. Tylko fakty z inputu. Zwróć CZYSTY tekst bez cudzysłowów.`;
+NIE wymyślaj danych. Tylko fakty z inputu.
+
+KRYTYCZNE: Zwróć CZYSTY TEKST. Nie zwracaj JSON, nie używaj cudzysłowów, nie opakowuj odpowiedzi.`;
+
+    const dealsList = (deals ?? [])
+      .map((d) => `${d.category ?? '?'} ${Number(d.expected_annual_premium_gr ?? 0) / 100} PLN [${d.status ?? '?'}]`)
+      .join(', ') || 'brak';
+
+    const userPrompt = `Kontakt: ${contact.full_name}${contact.position ? ` (${contact.position})` : ''}
+Firma: ${(contact.companies as { name?: string } | null)?.name ?? 'brak'}
+Ostatni kontakt: ${daysSince !== null ? `${daysSince} dni temu` : 'brak danych'}
+Aktywne deale (${deals?.length ?? 0}): ${dealsList}
+
+Wygeneruj JEDNĄ linię TL;DR po polsku, max 100 znaków, czysty tekst (nie JSON, nie markdown).`;
 
     const payload = {
       name: contact.full_name,
@@ -90,12 +103,15 @@ NIE wymyślaj danych. Tylko fakty z inputu. Zwróć CZYSTY tekst bez cudzysłow�
         status: d.status,
       })),
     };
-    const userPayload = JSON.stringify(payload);
+
+    console.log('[tldr] prompt', { userPrompt, contact_id });
 
     const llmResp = await callLLM({
+      model_hint: 'google/gemini-2.5-flash',
+      stream: false,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPayload },
+        { role: 'user', content: userPrompt },
       ],
       context: {
         function_name: 'sovra-contact-tldr',
@@ -103,6 +119,16 @@ NIE wymyślaj danych. Tylko fakty z inputu. Zwróć CZYSTY tekst bez cudzysłow�
         actor_id: auth.directorId ?? auth.assistantId,
         tenant_id: auth.tenantId,
       },
+    });
+
+    console.log('[tldr] llmResp', {
+      text: llmResp.text,
+      text_len: (llmResp.text ?? '').length,
+      tokens_in: llmResp.tokens_in,
+      tokens_out: llmResp.tokens_out,
+      model: llmResp.model,
+      status: llmResp.status,
+      provider: llmResp.provider,
     });
 
     const tldr = (llmResp.text || '').trim().slice(0, 120) || 'Brak podsumowania AI';
