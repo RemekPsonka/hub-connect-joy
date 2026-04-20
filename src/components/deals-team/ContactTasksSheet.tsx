@@ -28,6 +28,7 @@ import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import { useUpdateTeamContact, useRemoveContactFromTeam } from '@/hooks/useDealsTeamContacts';
 import { useTeamContactWeeklyStatuses } from '@/hooks/useTeamContactWeeklyStatuses';
+import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useAuth } from '@/contexts/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,6 +59,14 @@ interface ContactTasksSheetProps {
 const categoryLabels: Record<string, string> = {
   hot: 'Hot', top: 'Top', lead: 'Lead', '10x': '10x', cold: 'Cold',
   offering: 'Oferta', client: 'Klient', lost: 'Lost', audit: 'Audyt',
+};
+
+const stageLabels: Record<string, string> = {
+  prospect: 'Prospekt',
+  lead: 'Lead',
+  offering: 'Ofertowanie',
+  client: 'Klient',
+  lost: 'Utracony',
 };
 
 const statusLabels: Record<string, string> = {
@@ -274,7 +283,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                       <Target className="h-3.5 w-3.5" /> Status w lejku
                     </h4>
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline">{categoryLabels[contact.category] || contact.category}</Badge>
+                      <Badge variant="outline">{stageLabels[deriveStage(contact)] || contact.category}</Badge>
                       <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
                       <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
                       {contact.offering_stage && CATEGORIES_WITH_SUBSTAGES.has(contact.category) && (
