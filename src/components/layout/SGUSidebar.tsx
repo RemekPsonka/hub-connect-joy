@@ -1,25 +1,12 @@
-import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Users,
-  UserPlus,
-  UserCog,
   LayoutGrid,
-  List,
-  Search,
   UserCheck,
-  Briefcase,
   ClipboardList,
-  Receipt,
-  Moon,
   BarChart3,
   Settings,
-  Calculator,
-  ChevronDown,
   ArrowRightLeft,
-  Package,
-  DollarSign,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -48,68 +35,12 @@ interface NavItemDef {
   icon: IconType;
 }
 
-const salesItems: NavItemDef[] = [
-  { title: 'Kanban', url: '/sgu/pipeline?view=kanban', icon: LayoutGrid },
-  { title: 'Klienci', url: '/sgu/pipeline?view=clients', icon: UserCheck },
-  { title: 'Prospecting', url: '/sgu/pipeline?view=prospecting', icon: Search },
-  { title: 'Ofertowanie', url: '/sgu/pipeline?view=offering', icon: Briefcase },
-  { title: 'Zadania', url: '/sgu/pipeline?view=tasks', icon: ClipboardList },
-  { title: 'Prowizje', url: '/sgu/pipeline?view=commissions', icon: Receipt },
-  { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
-];
-
-const analyticsItemsBase: NavItemDef[] = [
-  { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
-  { title: 'Tabela', url: '/sgu/pipeline?view=table', icon: List },
-];
-
-const reportsItem: NavItemDef = { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 };
-
-const adminItems: NavItemDef[] = [
-  { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
-  { title: 'Przedstawiciele', url: '/sgu/admin/representatives', icon: UserCog },
-  { title: 'Przypisania', url: '/sgu/admin/assignments', icon: UserPlus },
-  { title: 'Produkty', url: '/sgu/admin/products', icon: Package },
-  { title: 'Konfiguracja prowizji', url: '/sgu/admin/commissions', icon: DollarSign },
-  { title: 'Case D', url: '/sgu/admin/case-d', icon: Calculator },
-];
-
-const systemItems: NavItemDef[] = [
-  { title: 'Ustawienia', url: '/sgu/settings', icon: Settings },
-];
-
-const STORAGE_PREFIX = 'sgu-sidebar-group-';
-
-function readGroupOpen(label: string, fallback: boolean): boolean {
-  if (typeof window === 'undefined') return fallback;
-  const v = window.localStorage.getItem(`${STORAGE_PREFIX}${label}`);
-  if (v === '1') return true;
-  if (v === '0') return false;
-  return fallback;
-}
-
-function writeGroupOpen(label: string, open: boolean) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(`${STORAGE_PREFIX}${label}`, open ? '1' : '0');
-}
-
 function NavItem({ item }: { item: NavItemDef }) {
   const location = useLocation();
-  const hasQuery = item.url.includes('?');
-  const basePath = hasQuery ? item.url.split('?')[0] : item.url;
-
-  let isActive = false;
-  if (hasQuery) {
-    if (location.pathname === basePath) {
-      const itemParams = new URLSearchParams(item.url.split('?')[1]);
-      const locParams = new URLSearchParams(location.search);
-      isActive = Array.from(itemParams.entries()).every(
-        ([k, v]) => locParams.get(k) === v,
-      );
-    }
-  } else {
-    isActive = location.pathname === item.url;
-  }
+  const isActive =
+    item.url === '/sgu'
+      ? location.pathname === '/sgu'
+      : location.pathname.startsWith(item.url);
 
   const baseClass =
     'flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150';
@@ -119,35 +50,16 @@ function NavItem({ item }: { item: NavItemDef }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild tooltip={item.title}>
-        <NavLink to={item.url} end className={`${baseClass} ${isActive ? activeClass : ''}`}>
+        <NavLink
+          to={item.url}
+          end={item.url === '/sgu'}
+          className={`${baseClass} ${isActive ? activeClass : ''}`}
+        >
           <item.icon className="h-4 w-4 shrink-0" />
           <span>{item.title}</span>
         </NavLink>
       </SidebarMenuButton>
     </SidebarMenuItem>
-  );
-}
-
-function GroupLabel({
-  children,
-  isCollapsed,
-  isOpen,
-  onToggle,
-}: {
-  children: string;
-  isCollapsed: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  if (isCollapsed) return null;
-  return (
-    <button
-      onClick={onToggle}
-      className="flex items-center justify-between w-full text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/35 px-3 mb-1 font-semibold hover:text-sidebar-foreground/60 transition-colors"
-    >
-      <span>{children}</span>
-      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
-    </button>
   );
 }
 
@@ -160,31 +72,20 @@ export function SGUSidebar() {
   const { enableReports } = useSGUTeamId();
 
   const showAdmin = isPartner || isAdmin || isSuperadmin;
-  const analyticsItems: NavItemDef[] = enableReports
-    ? [...analyticsItemsBase, reportsItem]
-    : analyticsItemsBase;
+  const showReports = enableReports;
 
-  const groups: Array<{ label: string; items: NavItemDef[]; defaultOpen: boolean }> = [
-    { label: 'Sprzedaż', items: salesItems, defaultOpen: true },
-    { label: 'Analityka', items: analyticsItems, defaultOpen: true },
-    ...(showAdmin ? [{ label: 'Admin', items: adminItems, defaultOpen: false }] : []),
-    { label: 'System', items: systemItems, defaultOpen: true },
-  ];
-
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    groups.forEach((g) => {
-      init[g.label] = readGroupOpen(g.label, g.defaultOpen);
-    });
-    return init;
-  });
-
-  const toggleGroup = (label: string) =>
-    setOpenGroups((prev) => {
-      const next = { ...prev, [label]: !prev[label] };
-      writeGroupOpen(label, next[label]);
-      return next;
-    });
+  const items: NavItemDef[] = (
+    [
+      { title: 'Dashboard', url: '/sgu', icon: LayoutDashboard, show: true },
+      { title: 'Sprzedaż', url: '/sgu/sprzedaz', icon: LayoutGrid, show: true },
+      { title: 'Klienci', url: '/sgu/klienci', icon: UserCheck, show: true },
+      { title: 'Zadania', url: '/sgu/zadania', icon: ClipboardList, show: true },
+      { title: 'Raporty', url: '/sgu/raporty', icon: BarChart3, show: showReports },
+      { title: 'Admin', url: '/sgu/admin', icon: Settings, show: showAdmin },
+    ] as Array<NavItemDef & { show: boolean }>
+  )
+    .filter((i) => i.show)
+    .map(({ title, url, icon }) => ({ title, url, icon }));
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -200,26 +101,15 @@ export function SGUSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-3 scrollbar-thin">
-        {groups.map((group) => (
-          <SidebarGroup key={group.label} className="mb-1">
-            <GroupLabel
-              isCollapsed={isCollapsed}
-              isOpen={openGroups[group.label] ?? group.defaultOpen}
-              onToggle={() => toggleGroup(group.label)}
-            >
-              {group.label}
-            </GroupLabel>
-            {(isCollapsed || openGroups[group.label] !== false) && (
-              <SidebarGroupContent>
-                <SidebarMenu className="space-y-0.5">
-                  {group.items.map((item) => (
-                    <NavItem key={item.title + item.url} item={item} />
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            )}
-          </SidebarGroup>
-        ))}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-0.5">
+              {items.map((item) => (
+                <NavItem key={item.url} item={item} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border px-2 py-3">
