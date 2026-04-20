@@ -140,6 +140,24 @@ export function ClientPaymentsTab({ rows, teamId }: Props) {
 
   return (
     <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Timeline płatności (24 mc)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={timelineConfig} className="h-[200px] w-full">
+            <AreaChart data={timelineData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCompactCurrency(v)} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Area type="monotone" dataKey="booked" stroke="var(--color-booked)" fill="var(--color-booked)" fillOpacity={0.2} />
+              <Area type="monotone" dataKey="paid" stroke="var(--color-paid)" fill="var(--color-paid)" fillOpacity={0.3} />
+            </AreaChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
       <div className="inline-flex rounded-md border p-1 text-sm">
         {(['all', 'overdue', 'this_month', 'upcoming_30d'] as const).map((f) => (
           <button
