@@ -93,35 +93,6 @@ export function ClientPaymentsTab({ rows, teamId }: Props) {
     paid: { label: 'Opłacone', color: 'hsl(142 71% 45%)' },
   };
 
-  // Timeline 24mc — booked (scheduled) vs paid per month
-  const timelineData = useMemo(() => {
-    const now = startOfMonth(new Date());
-    const start = addMonths(now, -23);
-    const months = Array.from({ length: 24 }, (_, i) => {
-      const d = addMonths(start, i);
-      return {
-        month: format(d, 'LLL yy', { locale: pl }),
-        key: format(d, 'yyyy-MM'),
-        booked: 0,
-        paid: 0,
-      };
-    });
-    const indexByKey = new Map(months.map((m, i) => [m.key, i]));
-    for (const p of flat) {
-      const k = format(parseISO(p.scheduled_date), 'yyyy-MM');
-      const idx = indexByKey.get(k);
-      if (idx === undefined) continue;
-      months[idx].booked += p.amount;
-      if (p.is_paid) months[idx].paid += p.amount;
-    }
-    return months;
-  }, [flat]);
-
-  const timelineConfig: ChartConfig = {
-    booked: { label: 'Zaplanowane', color: 'hsl(var(--primary))' },
-    paid: { label: 'Opłacone', color: 'hsl(142 71% 45%)' },
-  };
-
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = new Date();
   monthStart.setDate(1);
