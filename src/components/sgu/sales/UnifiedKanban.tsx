@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
@@ -109,6 +110,7 @@ function DraggableCard({
   onOfferingLostClick,
   onSubcategoryChange,
   onMoreClick,
+  taskInfo,
 }: {
   contact: DealTeamContact;
   stage: DealStage;
@@ -119,6 +121,7 @@ function DraggableCard({
   onOfferingLostClick: () => void;
   onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: () => void;
+  taskInfo?: TaskContactInfo;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -141,6 +144,7 @@ function DraggableCard({
         onSubcategoryChange={onSubcategoryChange}
         onMoreClick={onMoreClick}
         isDragging={isDragging}
+        taskInfo={taskInfo}
       />
     </div>
   );
