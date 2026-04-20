@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MoreHorizontal, Plus, Sparkles, Building2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Sparkles, Building2, Mail, Phone, Linkedin, AlertCircle } from 'lucide-react';
 import { useContactTldr } from '@/hooks/useContactTldr';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,9 @@ interface ContactHeaderTLDRProps {
     id: string;
     full_name: string;
     position?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    linkedin_url?: string | null;
     company_id?: string | null;
     companies?: { id?: string; name: string } | null;
     director_id?: string | null;
@@ -39,6 +42,24 @@ function initials(name: string): string {
 export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps) {
   const { data: tldr, isLoading } = useContactTldr(contactId);
   const [sguOpen, setSguOpen] = useState(false);
+
+  const hasContactInfo = contact.email || contact.phone || contact.linkedin_url;
+
+  const renderTldr = () => {
+    if (isLoading) return <Skeleton className="h-4 w-3/4" />;
+    if (tldr?.error === true) {
+      return (
+        <p className="text-sm text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          TL;DR: błąd generowania ({tldr.message ?? 'sprawdź logi funkcji'})
+        </p>
+      );
+    }
+    if (!tldr?.tldr || tldr.tldr === 'Brak podsumowania AI') {
+      return <p className="text-sm text-muted-foreground italic">Brak podsumowania AI (cache pusty lub LLM nie zwrócił treści)</p>;
+    }
+    return <p className="text-sm text-muted-foreground">{tldr.tldr}</p>;
+  };
 
   return (
     <TooltipProvider>
@@ -62,6 +83,33 @@ export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps
                   </Link>
                 )}
               </div>
+              {hasContactInfo && (
+                <div className="mt-2 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                  {contact.email && (
+                    <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1 hover:text-foreground">
+                      <Mail className="h-4 w-4" />
+                      {contact.email}
+                    </a>
+                  )}
+                  {contact.phone && (
+                    <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1 hover:text-foreground">
+                      <Phone className="h-4 w-4" />
+                      {contact.phone}
+                    </a>
+                  )}
+                  {contact.linkedin_url && (
+                    <a
+                      href={contact.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                    >
+                      <Linkedin className="h-4 w-4" />
+                      LinkedIn
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -109,13 +157,7 @@ export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps
           </div>
         </div>
 
-        <div className="rounded-lg border bg-muted/30 px-3 py-2">
-          {isLoading ? (
-            <Skeleton className="h-4 w-3/4" />
-          ) : (
-            <p className="text-sm text-muted-foreground">{tldr?.tldr ?? 'Brak podsumowania AI'}</p>
-          )}
-        </div>
+        <div className="rounded-lg border bg-muted/30 px-3 py-2">{renderTldr()}</div>
       </div>
 
       <PushToSGUDialog

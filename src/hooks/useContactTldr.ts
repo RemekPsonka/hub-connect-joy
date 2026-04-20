@@ -8,8 +8,9 @@ export function useContactTldr(contactId: string) {
       const { data, error } = await supabase.functions.invoke('sovra-contact-tldr', {
         body: { contact_id: contactId },
       });
+      console.log('[tldr]', { data, error, contact_id: contactId });
       if (error) throw error;
-      return data as { tldr: string; generated_at: string; cached: boolean; error?: boolean };
+      return data as { tldr: string; generated_at: string; cached: boolean; error?: boolean; message?: string };
     },
     staleTime: 10 * 60 * 1000,
     enabled: !!contactId,
