@@ -17,6 +17,7 @@ import { SGULayout } from "@/components/layout/SGULayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { FeatureFlagGate } from "@/components/common/FeatureFlagGate";
 
 // Static imports (login page - fast loading)
 import Login from "./pages/Login";
@@ -151,7 +152,7 @@ const App = () => (
                   
                   {/* Routes accessible by both directors and assistants — but blocked for SGU-only users */}
                   <Route path="/contacts" element={<CRMOnlyGuard><Contacts /></CRMOnlyGuard>} />
-                  <Route path="/contacts/:id" element={<CRMOnlyGuard><ContactDetail /></CRMOnlyGuard>} />
+                  <Route path="/contacts/:id" element={<CRMOnlyGuard><FeatureFlagGate flag="contact_detail_v2" fallback={<ContactDetail />}><ContactDetailV2 /></FeatureFlagGate></CRMOnlyGuard>} />
                   <Route path="/contacts-v2/:id" element={<CRMOnlyGuard><ContactDetailV2 /></CRMOnlyGuard>} />
                   <Route path="/companies/:id" element={<CRMOnlyGuard><DirectorGuard><CompanyDetail /></DirectorGuard></CRMOnlyGuard>} />
                   <Route path="/settings" element={<Settings />} />
