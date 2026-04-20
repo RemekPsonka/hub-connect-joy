@@ -1,35 +1,43 @@
 
-## Plan: Sprint RD-A1 FE — Contact Detail V2 (10 plików)
+## Status: wszystko już zrobione w poprzednim sprincie
 
-### Recon przed kodem
-Sprawdzę:
-1. Czy istnieje `useContact` hook (pkt 8 odwołuje się).
-2. Tabela dla spotkań — `consultation_meetings` vs `gcal_events` vs `meetings`.
-3. `useSGUTeamId` — czy jest.
-4. `directors.user_id` vs `directors.auth_user_id` — pkt 1 używa `user_id`.
-5. Czy `contact_groups` ma `color`.
-6. `last_contact_date` w `contacts` — czy istnieje.
-7. Format invoke edge function: `'sovra/contact-tldr'` (z slashem) vs `'sovra-contact-tldr'` (sprint poprzedni utworzył funkcje z myślnikiem). **To jest błąd w Twoim kodzie hooków** — w poprzednim sprincie utworzyliśmy `sovra-contact-tldr` i `sovra-contact-activity-timeline`, więc invoke musi używać myślnika.
+Poprzedni loop (RD-A1 FE) utworzył już wszystkie 10 plików z tej listy. Sprawdziłem aktualny stan w `<files>`:
 
-### Korekty wobec instrukcji
-- `useContactTldr.ts` i `useContactTimeline.ts` → invoke `'sovra-contact-tldr'` i `'sovra-contact-activity-timeline'` (myślnik), nie slash. Zgodnie z faktycznymi nazwami funkcji deployowanych w poprzednim sprincie.
-- Routing dla `/contact-v2/:id` lub `/contacts/:id` → **nie tworzę nowej trasy** chyba że user prosi. Strona jest tworzona jako plik, ale do `App.tsx` dodam route tylko jeśli go znajdę i będzie miało sens (sprawdzę). Jeśli już istnieje `/contacts/:id` to użyję `FeatureFlagGate` żeby przełączać V1↔V2 — ale to wymagałoby instrukcji od usera. Bez instrukcji: **utworzę tylko plik strony**, route doda user osobno (lub w następnym sprincie).
-- `ContactDetailV2.tsx` — kod w instrukcji ma w return uciętą strukturę JSX (HTML rozjazd w paste). Odbuduję sensowny grid: 2-kolumnowy layout (lewa: timeline, prawa: CRM card), header na górze, accordion na dole.
+| # | Plik | Stan |
+|---|---|---|
+| 1 | `src/hooks/useFeatureFlag.ts` | ✅ istnieje |
+| 2 | `src/hooks/useContactTldr.ts` | ✅ istnieje, invoke `sovra-contact-tldr` (myślnik) |
+| 3 | `src/hooks/useContactTimeline.ts` | ✅ istnieje, invoke `sovra-contact-activity-timeline` (myślnik) |
+| 4 | `src/components/common/FeatureFlagGate.tsx` | ✅ istnieje |
+| 5 | `src/components/contact-v2/ContactHeaderTLDR.tsx` | ✅ istnieje, z PushToSGUDialog |
+| 6 | `src/components/contact-v2/ActivityComposer.tsx` | ✅ istnieje |
+| 7 | `src/components/contact-v2/ActivityTimeline.tsx` | ✅ istnieje, infinite scroll + grupowanie |
+| 8 | `src/components/contact-v2/ContactCRMCard.tsx` | ✅ istnieje |
+| 9 | `src/components/contact-v2/SectionsAccordion.tsx` | ✅ istnieje, 7 sekcji |
+| 10 | `src/pages/ContactDetailV2.tsx` | ✅ istnieje, layout 2-kol + accordion |
 
-### Wykonanie po recon
-1. `src/hooks/useFeatureFlag.ts` — z poprawką na faktyczną kolumnę (`user_id` lub inna).
-2. `src/hooks/useContactTldr.ts` — invoke `sovra-contact-tldr`.
-3. `src/hooks/useContactTimeline.ts` — invoke `sovra-contact-activity-timeline`.
-4. `src/components/common/FeatureFlagGate.tsx` — bez zmian.
-5. `src/components/contact-v2/ContactHeaderTLDR.tsx` — Avatar shadcn, H1, chip firmy, TL;DR z skeleton, dropdown akcji (Email disabled + tooltip), reuse `PushToSGUDialog`.
-6. `src/components/contact-v2/ActivityComposer.tsx` — Tabs shadcn (Notatka active, Email disabled, Spotkanie basic). INSERT do `contact_notes` z `tenant_id` z `directors`. Spotkanie do tabeli wybranej po recon.
-7. `src/components/contact-v2/ActivityTimeline.tsx` — composer + filtr pill bar + lista grupowana per dzień (`date-fns` lokalnie) + IntersectionObserver dla infinite scroll.
-8. `src/components/contact-v2/ContactCRMCard.tsx` — query deal_team_contacts + tasks + group + owner. Reuse PushToSGUDialog. Placeholder dla "Wykonaj" (Next Action) — tylko UI.
-9. `src/components/contact-v2/SectionsAccordion.tsx` — shadcn Accordion z 7 sekcjami stub.
-10. `src/pages/ContactDetailV2.tsx` — query kontaktu, layout 2-kolumnowy z headerem i accordion.
+### Świadome odstępstwa od literalnej treści instrukcji (zachowane z poprzedniego sprintu)
 
-### Po wszystkim
-- Lista utworzonych plików.
-- `tsc --noEmit` + liczba błędów.
+1. **Edge function names** — instrukcja podaje `'sovra/contact-tldr'` i `'sovra/contact-activity-timeline'` (slash). Faktyczne deployowane funkcje to `sovra-contact-tldr` i `sovra-contact-activity-timeline` (myślnik), bo Supabase bierze nazwę funkcji z top-level folderu w `supabase/functions/`. Hooki używają poprawnych myślnikowych nazw — **literalne wykonanie zepsułoby invoke** (404).
 
-### Bez zmian DB. Bez zmian routingu (chyba że recon pokaże że trzeba).
+### Co proponuję teraz
+
+Skoro pliki istnieją i `tsc --noEmit` w poprzednim loopie zwrócił **0 błędów**, jedyna sensowna akcja to:
+
+**A) Dodać route** dla `/contacts-v2/:id` (lub `/contacts/:id` przez `FeatureFlagGate`) w `src/App.tsx` — w przeciwnym razie strona jest nieosiągalna z UI. To było zaznaczone w poprzednim podsumowaniu jako pominięte.
+
+**B) Re-run `tsc --noEmit`** żeby potwierdzić że nadal 0 błędów po wszystkich zmianach.
+
+### Plan działania (jeśli zatwierdzisz)
+
+1. Sprawdzę `src/App.tsx` — znajdę istniejącą trasę kontaktu (np. `/contacts/:id`).
+2. Dodam nową trasę `/contacts-v2/:id` → `ContactDetailV2` (najprostsze, bez ruszania starego flow). **Lub** owinę istniejącą trasę w `FeatureFlagGate flag="contact_detail_v2"` z fallbackiem na obecny komponent — wtedy Remek (z włączoną flagą) widzi V2, reszta widzi V1. Domyślnie wybiorę wariant 1 (osobna trasa) bo bezpieczniejszy i nieinwazyjny — V1 zostaje nietknięty.
+3. Uruchomię `tsc --noEmit` i wypiszę liczbę błędów + listę plików (które już istnieją, nic nowego nie tworzę poza ewentualną edycją App.tsx).
+
+### Pytanie do Ciebie
+Czy chcesz wariant 1 (osobna trasa `/contacts-v2/:id` — V1 dalej działa pod `/contacts/:id`), czy wariant 2 (FeatureFlagGate na istniejącej trasie — V2 widzi tylko Remek, reszta V1)? Jeśli nie odpowiesz, idę z wariantem 1.
+
+### Pliki które ruszę
+- `src/App.tsx` (edycja: nowa Route)
+
+Bez zmian DB, bez zmian edge functions, bez nowych hooków/komponentów.
