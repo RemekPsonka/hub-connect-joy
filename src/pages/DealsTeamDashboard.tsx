@@ -14,14 +14,13 @@ import {
   ProspectingTab,
   ClientsTab,
   MyTeamTasksView,
-  OfferingTab,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks' | 'offering';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks';
 
 const STORAGE_KEY = 'deals-team-selected';
-const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks', 'offering'];
+const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks'];
 
 type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
 
@@ -96,10 +95,10 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
   useEffect(() => {
     if (!forcedTeamId || forcedFilter === undefined) return;
     if (forcedFilter === null) return;
-    const map: Record<SalesFilter, { view: string; filter?: string }> = {
+    const map: Record<SalesFilter, { view: ViewMode; filter?: string }> = {
       prospect: { view: 'kanban', filter: 'prospect' },
       lead: { view: 'kanban', filter: 'lead' },
-      offering: { view: 'offering' },
+      offering: { view: 'kanban', filter: 'offering' },
       today: { view: 'tasks', filter: 'today' },
       overdue: { view: 'tasks', filter: 'overdue' },
     };
@@ -188,7 +187,7 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
+      {/* usunięte: viewMode === 'offering' (BLOK IA-3-FIX-2) */}
 
       <CreateTeamDialog open={showCreateTeam} onOpenChange={setShowCreateTeam} onTeamCreated={handleTeamCreated} />
       {selectedTeamId && <WeeklyStatusPanel teamId={selectedTeamId} open={showWeeklyStatus} onOpenChange={setShowWeeklyStatus} />}
