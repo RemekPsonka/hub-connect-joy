@@ -103,6 +103,26 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
     }
   }, [selectedTeamId, forcedTeamId]);
 
+  // Map SGU header filter → view (URL searchParams)
+  useEffect(() => {
+    if (!forcedTeamId || forcedFilter === undefined) return;
+    if (forcedFilter === null) return;
+    const map: Record<SalesFilter, { view: string; filter?: string }> = {
+      prospect: { view: 'kanban', filter: 'prospect' },
+      lead: { view: 'kanban', filter: 'lead' },
+      offering: { view: 'offering' },
+      today: { view: 'tasks', filter: 'today' },
+      overdue: { view: 'tasks', filter: 'overdue' },
+    };
+    const target = map[forcedFilter];
+    const next = new URLSearchParams(searchParams);
+    next.set('view', target.view);
+    if (target.filter) next.set('filter', target.filter);
+    else next.delete('filter');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedFilter, forcedTeamId]);
+
   const handleTeamChange = (teamId: string) => setSelectedTeamId(teamId);
   const handleTeamCreated = (teamId: string) => setSelectedTeamId(teamId);
   const handleSettingsClick = () => setShowTeamSettings(true);
