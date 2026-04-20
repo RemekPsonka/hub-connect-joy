@@ -1,91 +1,78 @@
 
 
-## Plan: KROK 7 część 1 — Dashboard "Co dziś" (priorytety + szkielet)
+## Status: KROK 7 już zaimplementowany w poprzedniej iteracji + brakujące elementy
 
-### Recon (co już istnieje wg kontekstu + memory)
-- ✅ `SGUDashboard.tsx` — ma `<DashboardHeader/>`, KPICards, `TeamPerformanceTable` (partner-only), `AlertsPanel`. Brakuje: nowego gridu Priorytety+Alerts, FunnelConversionChart, StickyQuickActions, EmptyStateCTA.
-- ✅ `DashboardHeader` (IA-2) — zachowuje
-- ✅ `FunnelConversionChart` — istnieje w `src/components/deals-team/` → reuse
-- ✅ `useSGUAccess` → `isPartner` (rola partner/director check)
-- ❓ `useCrossSellCandidates` — w IA-2 świadomie skipnięte ("nie istnieje, do IA-3"). Sprawdzę grep, jeśli brak → zbuduję inline w hooku P5.
+Po analizie kontekstu (poprzednia wiadomość AI + pliki w `<current-code>`) — większość Kroku 7 jest **zrobiona**. Sprawdzam co JEST vs. BRAKUJE wg tego prompta.
 
-### Pliki do utworzenia (10)
+### Co JEST (potwierdzone w `<current-code>`)
+- ✅ `SGUDashboard.tsx` — przebudowany: `DashboardHeader` + grid 2-col (`PriorityTodayCard` + `AlertsCard`) + `TeamPerformanceCard` (partner-only) + `FunnelConversionChart` + `StickyQuickActions` + empty state guard
+- ✅ `PriorityTodayCard.tsx` — 5 wierszy P1–P5 z hookami `usePriorityTaskToday/StuckNegotiation/OverduePayment/ColdTopLead/CrossSell`, klikalne navigate, placeholder "Brak priorytetu"
+- ✅ `StickyQuickActions.tsx` — 3 buttony (Dodaj kontakt / Nowe zadanie / Nowa polisa)
+- ✅ `TeamPerformanceCard.tsx` — wrapper + `useSGUTeamPerformance`, render warunkowy w SGUDashboard (`isPartner`)
+- ✅ `AlertsCard.tsx` — wrapper wokół istniejącego `<AlertsPanel/>`
+- ✅ `EmptyStateCTA.tsx` — 3 tiles (Dodaj klienta / Import CSV / AI KRS)
+- ✅ `FunnelConversionChart` reuse z `deals-team/`
 
-**Hooki w `src/hooks/sgu-dashboard/`:**
-1. `usePriorityTaskToday.ts` — query `tasks` (priority=high, due_date=today)
-2. `usePriorityStuckNegotiation.ts` — `deal_team_contacts` (offering/negotiation, updated_at < now-3d)
-3. `usePriorityOverduePayment.ts` — `deal_team_payment_schedule` (status=overdue)
-4. `usePriorityColdTopLead.ts` — `deal_team_contacts` (temperature=top, stale 7d)
-5. `usePriorityCrossSell.ts` — `deal_team_contacts` (client + potential_*_gr=0 dla ≥1 obszaru, client_status=standard)
-6. `useDashboardEmptyState.ts` — `count(*)` z `deal_team_contacts` (clients + contacts) → boolean `isEmpty`
+### Rozjazd vs. obecny prompt (5 punktów do uzupełnienia)
 
-**Komponenty w `src/components/sgu/dashboard/`:**
-7. `PriorityTodayCard.tsx` — Card z 5 wierszami P1–P5 + ikony + navigate
-8. `AlertsCard.tsx` — wrapper Card wokół istniejącego `AlertsPanel`
-9. `TeamPerformanceCard.tsx` — wrapper Card wokół istniejącego `TeamPerformanceTable` + `useSGUTeamPerformance` (partner-only)
-10. `StickyQuickActions.tsx` — bottom sticky bar (np. Dodaj kontakt / Nowe zadanie / Nowa polisa)
-11. `EmptyStateCTA.tsx` — 3 CTA tiles (Dodaj klienta / Import CSV / AI KRS)
+**1. Tytuł `PriorityTodayCard` → "Co dziś" + ikona Target**
+- Obecnie: `"Priorytety na dziś"` bez ikony. Drobna korekta tekstu + dodać `<Target/>` z lucide.
 
-**Typy:**
-12. `src/types/sgu-dashboard.ts` — `DashboardPriorityItem` (kind/id/title/meta/navigateTo + opcjonalnie icon key)
+**2. URL params w nawigacji P1–P5 — NIEZGODNE**
+| Priorytet | Obecnie | Wymagane |
+|---|---|---|
+| P1 | `/sgu/zadania` (bez taskId) | `/sgu/zadania?taskId={id}` |
+| P2 | `/sgu/sprzedaz?contact={id}` | `/sgu/sprzedaz?contactId={id}&stage=offering` |
+| P3 | `/sgu/klienci?contact={id}&tab=raty` | `/sgu/klienci?tab=raty&contactId={id}` |
+| P4 | `/sgu/sprzedaz?contact={id}` | `/sgu/sprzedaz?contactId={id}` |
+| P5 | `/sgu/klienci?contact={id}&tab=obszary` | `/sgu/klienci?contactId={id}&tab=obszary` |
 
-### Pliki do edycji (1)
-- `src/pages/sgu/SGUDashboard.tsx` — przebudowa layoutu:
-  - Header (zostaje DashboardHeader)
-  - Empty state guard (jeśli `isEmpty` → render `<EmptyStateCTA/>`, skip reszty)
-  - Grid 2-col: `PriorityTodayCard` + `AlertsCard`
-  - `TeamPerformanceCard` (gdy `isPartner`)
-  - `FunnelConversionChart` (reuse) — query stats z `useDealsTeamStats` lub equivalent (sprawdzę co istnieje; jeśli brak prostego hooka → inline RPC/select counts po stage)
-  - `StickyQuickActions` (fixed bottom)
-  - Usunięcie obecnych KPICards (są zduplikowane z DashboardHeader) — TBD: jeśli DashboardHeader już je pokazuje, usuwamy stare; jeśli inne metryki, zostawiamy. **Decyzja:** porównam i usunę duplikat (DashboardHeader z IA-2 ma już 4 karty: Nowe polisy / Booked / Collected / Prowizja).
+Akcja: zmiana `navigateTo` w 5 hookach (`contact` → `contactId`, dodać taskId/stage).
 
-### Pattern hooka priorytetowego
-```ts
-export function usePriorityTaskToday() {
-  return useQuery({
-    queryKey: ['sgu-priority-task-today'],
-    queryFn: async (): Promise<DashboardPriorityItem | null> => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('id, title, due_date')
-        .eq('priority', 'high')
-        .gte('due_date', startOfToday)
-        .lt('due_date', startOfTomorrow)
-        .order('due_date', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      return {
-        kind: 'task',
-        id: data.id,
-        title: data.title,
-        meta: `Termin: ${formatTime(data.due_date)}`,
-        navigateTo: '/sgu/zadania?filter=today&priority=high',
-      };
-    },
-    staleTime: 60_000,
-  });
-}
-```
+**3. `AlertsCard` — BRAKUJE 5 dedykowanych alertów A1–A5**
+- Obecnie: tylko wrapper wokół `AlertsPanel` (legacy, nieznana zawartość).
+- Wymagane: 5 konkretnych liczników z navigate:
+    - A1: Polisy wygasające <14d → `/sgu/klienci?tab=odnowienia&filter=lt14`
+    - A2: Raty zaległe 30+d → `/sgu/klienci?tab=raty&filter=overdue30`
+    - A3: Klienci stale 30+d → `/sgu/klienci?filter=stale`
+    - A4: Nowe prospekty AI KRS 7d → `/sgu/sprzedaz?filter=prospect&source=ai_krs`
+    - A5: Kandydaci na Ambasadora (5/6 complexity) → `/sgu/klienci?filter=near_ambassador`
+- Każdy z badge count: `0` szary, `>0` warning/destructive.
 
-### Decyzje implementacyjne
-- **Empty state detection:** lekki `count` HEAD request (`{ count: 'exact', head: true }`) na `deal_team_contacts` filtrowane po user/team — bez ciągnięcia danych.
-- **FunnelConversionChart props:** wymaga `stats`. Sprawdzę czy jest `useDealsTeamStats` / `useFunnelStats`. Jeśli tak → reuse. Jeśli nie → minimalny inline hook `useFunnelStats` (5 counts po stage) w tym samym kroku.
-- **StickyQuickActions:** `fixed bottom-0 left-0 right-0 border-t bg-background` z 3-4 buttonami (navigate). Mobile-friendly.
-- **EmptyStateCTA:** 3 duże tiles z ikonami i opisami. CTA #3 "AI KRS" → `/sgu/admin/team` lub dialog (placeholder navigate).
-- **Brak modyfikacji** `useTasks`, `useDealsTeamContacts` — zgodnie z constraint.
-- **Brak `useCrossSellCandidates`:** zbuduję go ad-hoc w `usePriorityCrossSell` (single-record query) bez tworzenia osobnego hooka shared (ten zostawiam na IA-3 część dalsza).
+Akcja: przepisać `AlertsCard.tsx` od zera + 5 hooków (lub 1 hook z 5 countami). **Nie używam** `AlertsPanel` legacy.
 
-### Kolejność wykonania
-1. Czytam aktualny `SGUDashboard.tsx`, `FunnelConversionChart.tsx`, sprawdzam istnienie `useFunnelStats` / `useCrossSellCandidates` / `AlertsPanel` props.
-2. Tworzę typy + 6 hooków równolegle.
-3. Tworzę 5 komponentów (PriorityTodayCard najbardziej złożony — łączy 5 hooków).
-4. Przepisuję `SGUDashboard.tsx`.
-5. Typecheck (`npx tsc --noEmit`).
-6. Raport: lista plików + status DoD.
+**4. `StickyQuickActions` — BRAKUJE 4. przycisku + zmiana składu**
+- Obecnie: 3 (Dodaj kontakt / Nowe zadanie / Nowa polisa).
+- Wymagane: 4 (Dodaj klienta / Import CSV / AI KRS scan / Raport tygodniowy PDF).
+- Akcja: przepisać. „Raport tygodniowy PDF" = `toast.info("Sprint SGU-08")` stub.
 
-### Skipy świadome
-- **`useCrossSellCandidates` shared hook** — nie tworzę osobnego, tylko `usePriorityCrossSell` (zwraca 1 rekord). Jeśli IA-3 dalej go potrzebuje gdziekolwiek indziej, wydzielę wtedy.
-- **`StickyQuickActions` actions** — na razie 3 buttony z navigate (Dodaj kontakt → `/contacts/new` lub equivalent, Nowe zadanie → `/sgu/zadania`, Nowa polisa → `/sgu/admin/products`). Bez dialogów modalnych (te w IA-3 dalej).
+**5. P3 query — meta info**
+- Obecnie hook P3 query OK, ale meta nie pokazuje nazwy klienta (P3 navigateTo używa `deal_team_contact_id`, sprawdzę czy hook to zwraca).
+
+### Pliki do edycji (5) + utworzenia (5 hooków alertów)
+
+**EDIT (5):**
+1. `src/components/sgu/dashboard/PriorityTodayCard.tsx` — tytuł "Co dziś" + ikona Target
+2. `src/hooks/sgu-dashboard/usePriorityTaskToday.ts` — `?taskId={id}`
+3. `src/hooks/sgu-dashboard/usePriorityStuckNegotiation.ts` — `?contactId={id}&stage=offering`
+4. `src/hooks/sgu-dashboard/usePriorityOverduePayment.ts` — `?tab=raty&contactId={id}`
+5. `src/hooks/sgu-dashboard/usePriorityColdTopLead.ts` — `?contactId={id}`
+6. `src/hooks/sgu-dashboard/usePriorityCrossSell.ts` — `?contactId={id}&tab=obszary`
+7. `src/components/sgu/dashboard/AlertsCard.tsx` — przepisać: 5 wierszy A1–A5 z navigate
+8. `src/components/sgu/dashboard/StickyQuickActions.tsx` — 4 buttony (Dodaj klienta / Import CSV / AI KRS / Raport PDF)
+
+**NEW (1 hook agregujący):**
+9. `src/hooks/sgu-dashboard/useDashboardAlerts.ts` — 5 countów w 1 hooku (jedna `Promise.all` 5 supabase queries, zwraca `{a1, a2, a3, a4, a5}`).
+
+### Kluczowe decyzje
+- **AlertsPanel legacy** — nie zmieniam, nie usuwam (może być używany gdzie indziej). Po prostu `AlertsCard` przestaje go renderować.
+- **A5 (Ambasador 5/6)** — heurystyka: count `deal_team_contacts` gdzie `client_status='standard'` i dokładnie 1 z 4 `potential_*_gr` = 0 (czyli 3 z 4 active = bliskie pokrycia). Komplet 6 elementów complexity (4 obszary + referrals + references) wymaga JOIN — uproszczę do "3 z 4 obszarów aktywne" jako proxy. Komentarz `// TODO: pełna logika 5/6 complexity w IA-3 część dalsza`.
+- **A4 (prospect_source='ai_krs')** — sprawdzę czy kolumna `prospect_source` istnieje w `deal_team_contacts`. Jeśli nie → fallback `created_at > now()-7d AND deal_stage='top'` + komentarz TODO.
+- **Counts** — `{ count: 'exact', head: true }` dla efektywności (bez ciągnięcia danych).
+- **Empty state** — warunek `clients+contacts === 0` już zaimplementowany w `useDashboardEmptyState` (count na `deal_team_contacts`). Bez zmian.
+
+### Pominięte świadomie
+- **Pełna logika "5/6 complexity"** dla A5 — wymaga osobnego hooka z weryfikacją 6 pól per rekord. Obecnie proxy "3/4 obszarów". Notka w kodzie.
+- **`useCrossSellCandidates`** shared hook — dalej skip (P5 ma swój dedykowany).
+- **A4 jeśli `prospect_source` nie istnieje** — fallback z TODO.
 
