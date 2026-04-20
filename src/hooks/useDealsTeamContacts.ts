@@ -253,6 +253,8 @@ export function useUpdateTeamContact() {
       snoozeReason,
       snoozedFromCategory,
       clientStatus,
+      temperature,
+      prospectSource,
       isLost,
       lostReason,
       lostAt,
@@ -293,6 +295,8 @@ export function useUpdateTeamContact() {
       if (snoozeReason !== undefined) updates.snooze_reason = snoozeReason;
       if (snoozedFromCategory !== undefined) updates.snoozed_from_category = snoozedFromCategory;
       if (clientStatus !== undefined) updates.client_status = clientStatus;
+      if (temperature !== undefined) updates.temperature = temperature;
+      if (prospectSource !== undefined) updates.prospect_source = prospectSource;
       if (isLost !== undefined) {
         updates.is_lost = isLost;
         if (isLost) {
