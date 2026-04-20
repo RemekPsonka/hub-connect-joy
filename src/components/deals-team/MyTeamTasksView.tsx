@@ -412,18 +412,18 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           <SnoozeDialog
             open={showSnooze}
             onOpenChange={setShowSnooze}
-            teamContactId={workflowContact.teamContactId}
-            teamId={teamId}
             contactName={workflowContact.contactName}
-            onSnoozed={() => { setShowSnooze(false); setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }}
+            onSnooze={() => { setShowSnooze(false); setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }}
           />
           <ConvertToClientDialog
             open={showConvert}
-            onOpenChange={setShowConvert}
+            onOpenChange={(open) => {
+              setShowConvert(open);
+              if (!open) { setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }
+            }}
             teamContactId={workflowContact.teamContactId}
             teamId={teamId}
             contactName={workflowContact.contactName}
-            onConverted={() => { setShowConvert(false); setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }}
           />
         </>
       )}
