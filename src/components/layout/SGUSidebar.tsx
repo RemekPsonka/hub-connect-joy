@@ -157,8 +157,12 @@ export function SGUSidebar() {
   const { isPartner } = useSGUAccess();
   const { isAdmin } = useOwnerPanel();
   const { isSuperadmin } = useSuperadmin();
+  const { enableReports } = useSGUTeamId();
 
   const showAdmin = isPartner || isAdmin || isSuperadmin;
+  const analyticsItems: NavItemDef[] = enableReports
+    ? [...analyticsItemsBase, reportsItem]
+    : analyticsItemsBase;
 
   const groups: Array<{ label: string; items: NavItemDef[]; defaultOpen: boolean }> = [
     { label: 'Sprzedaż', items: salesItems, defaultOpen: true },
