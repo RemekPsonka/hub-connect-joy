@@ -70,7 +70,7 @@ export function SectionHistory({ contactId }: SectionHistoryProps) {
       id: `a-${(a as { id: string }).id}`,
       kind: 'activity' as const,
       date: (a as { created_at: string }).created_at,
-      data: a as Record<string, unknown>,
+      data: a as unknown as Record<string, unknown>,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
