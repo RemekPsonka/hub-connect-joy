@@ -312,6 +312,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
     } else {
       updateContact.mutate({ id: c.id, teamId, clientStatus: value });
     }
+  }
 
   if (isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">Ładowanie kontaktów…</div>;
@@ -356,6 +357,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
                 setLostFromOffering(true);
                 setLostContact(c);
               }}
+              onSubcategoryChange={handleSubcategoryChange}
             />
           ))}
         </div>
