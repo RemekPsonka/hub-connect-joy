@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { PaymentScheduleEntry } from '@/hooks/usePaymentSchedule';
+import { FourAreasBar } from './FourAreasBar';
 
 interface OfferingKanbanCardProps {
   contact: DealTeamContact;
@@ -35,6 +36,14 @@ export function OfferingKanbanCard({ contact, payments, onClick, onDragStart }: 
           </p>
         </div>
       </div>
+
+      <FourAreasBar
+        propertyGr={contact.potential_property_gr}
+        financialGr={contact.potential_financial_gr}
+        communicationGr={contact.potential_communication_gr}
+        lifeGroupGr={contact.potential_life_group_gr}
+        className="mt-2"
+      />
 
       {totalValue > 0 && (
         <div className="flex items-center gap-1 mt-2 text-xs">
