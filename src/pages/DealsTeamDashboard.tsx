@@ -9,7 +9,6 @@ import {
   KanbanBoard,
   CreateTeamDialog,
   WeeklyStatusPanel,
-  TeamStats,
   TableView,
   TeamSettings,
   ProspectingTab,
@@ -171,8 +170,7 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
         </div>
       )}
 
-      {/* Stats - always visible when team selected (except dashboard, tasks, kanban) */}
-      {selectedTeamId && viewMode !== 'dashboard' && viewMode !== 'tasks' && viewMode !== 'kanban' && !(forcedTeamId && viewMode === 'clients') && <TeamStats teamId={selectedTeamId} />}
+      {/* TeamStats removed in SGU-REFACTOR-IA-2 — replaced by context-aware headers per route */}
 
       {/* Content */}
       {selectedTeamId && viewMode === 'dashboard' && (
