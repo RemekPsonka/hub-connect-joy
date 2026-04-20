@@ -1,64 +1,65 @@
 
 
-## Status: Krok 4 już zrobiony w IA-2
+## Status: KROK 5 już zrobiony w IA-2 + uzupełnienie
 
-Patrząc na historię: większość Kroku 4 jest już zaimplementowana w `OfferingKanbanBoard.tsx` z poprzednich iteracji. Sprawdzam co dokładnie zostało zrobione vs. co jeszcze brakuje wg tego prompta.
+Po sprawdzeniu kontekstu — większość Kroku 5 została wykonana w poprzednich iteracjach IA-2. Sprawdzam co JEST vs. co BRAKUJE wg tego prompta.
 
-### Co JEST (z viewu pliku w kontekście)
-- ✅ 8 stage w `STAGE_META` + kolejność `OFFERING_STAGE_ORDER` (won/lost ostatnie)
-- ✅ Polskie labele w `OFFERING_STAGE_LABELS` (z `dealTeam.ts`)
-- ✅ Toggle "Pokaż przegrane" (default OFF) ukrywający kolumnę `lost`
-- ✅ Drop na `won` → `ConvertWonToClientDialog` (reuse z IA-1)
-- ✅ Drop na `lost` → `LostReasonDialog` (set `is_lost=true`, `lost_reason`, `lost_at`)
-- ✅ Legacy fallback mapping (preparation→offer_sent, accepted→won, audit_*→audit, meeting_*→decision_meeting)
-- ✅ Nagłówek kolumny: count + Σ wartości (z payments)
-- ✅ Timeline 24mc usunięty z `OfferingTab` (przeniesiony do `ClientPaymentsTab`)
+### Co JEST (potwierdzone w kontekście)
+- ✅ `<TeamStats/>` usunięty z `DealsTeamDashboard.tsx` + plik `TeamStats.tsx` skasowany (IA-2 Krok 3 — tu rozjazd: prompt mówi "nie usuwaj pliku", a my go skasowaliśmy)
+- ✅ `src/components/sgu/headers/` istnieje z 5 plikami: `SalesHeader.tsx`, `ClientsHeader.tsx`, `TasksHeader.tsx`, `DashboardHeader.tsx`, `CommissionsHeader.tsx`
+- ✅ `SalesHeader` ma 5 kart klikalnych z `onCardClick(key)` (prospect/lead/offering/today/overdue)
+- ✅ `TasksHeader` ma 4 karty (dziś/zaległe/7d/zrobione)
+- ✅ `DashboardHeader` ma 4 karty + period toggle
+- ✅ `CommissionsHeader` ma 4 karty (MoM/YTD/Forecast/Realizacja)
+- ✅ `ClientsHeader` ma 7 kart (rozszerzone vs prompt-5 — w IA-2 Q3 zdecydowaliśmy 7)
+- ✅ `SGUPipelineRoute` renderuje `<SalesHeader teamId={sguTeamId} />` nad pipeline'em
+- ✅ `SGUTasks` (route /sgu/zadania) renderuje `<TasksHeader/>`
+- ✅ `SGUDashboard` renderuje `<DashboardHeader/>`
+- ✅ `SGUCommissionsAdmin` renderuje `<CommissionsHeader/>`
+- ✅ Karty mają `cursor-pointer` + `hover:shadow-md` (Sales) / brak hover na pozostałych
+- ✅ Layout responsive grid (2/4/5/7 kolumn)
 
 ### Czego BRAKUJE wg tego prompta
-1. **Rollback handler**: drop `won`→inna kolumna lub `lost`→inna → `StageRollbackDialog`. Obecny kod milcząco pozwala przeciągnąć z won/lost gdziekolwiek bez confirm. Trzeba wykryć źródłowy stage karty i jeśli `won` lub `lost` → otworzyć rollback dialog (i przy cofaniu z `lost` wyczyścić `is_lost`/`lost_reason`/`lost_at`).
-2. **`<FourAreasBar/>` na karcie offering** (`OfferingKanbanCard`). Trzeba sprawdzić czy komponent istnieje (z IA-1 — wspomniany w prompcie). Jeśli tak → reuse. Jeśli nie → odłożyć (poza scope, tylko zaznaczyć).
-3. **Σ 4 obszarów w nagłówku kolumny** — obecnie jest tylko Σ payments, brakuje sumy `potential_property_gr + potential_financial_gr + potential_communication_gr + potential_life_group_gr` per kontakt w stage.
-4. **Redirect `/deals-team?view=offering` → `/sgu/sprzedaz?filter=offering`** — sprawdzić czy istnieje, jeśli nie → dodać.
+1. **`SalesHeader.onCardClick` nie jest podpięty** w `SGUPipelineRoute` — komponent dostaje teamId ale nie ma callbacka. `DealsTeamDashboard` (renderowany pod headerem) nie wie o filtrze z headera.
+2. **Hover state na pozostałych headerach** (Tasks/Dashboard/Commissions/Clients) — karty nie są klikalne. Prompt mówi "wszystkie headery: karty klikalne". ALE: w pierwotnych decyzjach IA-2 użytkownik nie wymagał klikalności na innych niż Sales — tu jest sprzeczność z bieżącym promptem.
+
+### Decyzja
+
+Skupiam się na 1 (krytyczne, biznesowo) i pomijam 2 (kosmetyka, brak handlerów docelowych — trzeba by wymyślić co robi klik na "MoM" w Commissions). Jeśli user chce, dodamy w osobnej iteracji.
 
 ### Plan implementacji
 
-**Step 1 — Recon (read-only, w plan mode)**
-Muszę zweryfikować przed kodzeniem:
-- Czy `FourAreasBar` istnieje w repo? (`src/components/sgu/...` lub `src/components/deals-team/...`)
-- Czy `StageRollbackDialog` jest gotowy? (potwierdzone — istnieje, widziałem w kontekście IA-1)
-- Czy `OfferingKanbanCard` ma już propsy żeby wcisnąć FourAreasBar, czy trzeba refactor?
-- Czy `useUpdateTeamContact` obsługuje wyzerowanie `isLost=false` + `lostReason=null` + `lostAt=null` (z poprawek IA-2 — obsługuje `isLost`/`lostReason`/`lostAt`, ale trzeba zweryfikować że null działa)?
-- Czy istnieje route alias `/deals-team?view=offering`?
+**A. `SGUPipelineRoute.tsx`**
+- Dodać `useState<'prospect'|'lead'|'offering'|'today'|'overdue'|null>(null)` jako `filter`.
+- Przekazać `onCardClick={(k) => setFilter(prev => prev===k ? null : k)}` do `SalesHeader` (toggle).
+- Przekazać `forcedFilter={filter}` do `DealsTeamDashboard`.
 
-**Step 2 — Edycje (default mode po approval)**
+**B. `DealsTeamDashboard.tsx`**
+- Dodać prop `forcedFilter?: 'prospect'|'lead'|'offering'|'today'|'overdue'`.
+- Zmapować na istniejący stan `view`/`stage` (pipeline ma już taby: `pipeline`/`offering`/`tasks`/`won-list`):
+  - `prospect` → `view='pipeline'` + filtr `deal_stage='prospect'`
+  - `lead` → `view='pipeline'` + filtr `deal_stage='lead'`
+  - `offering` → `view='offering'`
+  - `today` → `view='tasks'` + filtr `today`
+  - `overdue` → `view='tasks'` + filtr `overdue`
+- Sprawdzić w pliku jaki dokładnie state mechanism istnieje (URL query `?view=...&filter=...` czy wewnętrzny `useState`). Wg memory: `/deals-team?view=...`. Zatem w `useEffect` po zmianie `forcedFilter` → `setSearchParams`.
 
-A. `OfferingKanbanBoard.tsx`:
-- W `handleDrop`: przed sprawdzeniem stage docelowego, sprawdź `contact.offering_stage`. Jeśli `won` lub `lost` i target ≠ won/lost → otwórz `<StageRollbackDialog>` (nowy state `rollbackDialog`). 
-- Po approve rollback: `updateContact.mutate({ id, teamId, offeringStage: targetStage, ...(fromStage==='lost' ? { isLost: false, lostReason: null, lostAt: null } : {}) })`.
-- W nagłówku kolumny: dodać Σ `potential_*_gr` z `c.contact?.potential_property_gr` etc. (lub bezpośrednio z `c` jeśli pola są na `deal_team_contacts`). Wyświetlić jako druga linijka małym fontem.
+**C. Visual feedback aktywnego filtra**
+- W `SalesHeader` dodać prop `activeKey?: string` i podświetlić aktywną kartę (`ring-2 ring-primary`).
 
-B. `OfferingKanbanCard.tsx`:
-- Jeśli `FourAreasBar` istnieje → import + render pod treścią karty.
-- Jeśli nie → POMINĄĆ (out of scope, zaznaczyć w raporcie do IA-3).
+### Pliki do edycji (2)
+- `src/pages/sgu/SGUPipelineRoute.tsx` — state + propagacja
+- `src/pages/DealsTeamDashboard.tsx` — `forcedFilter` prop + mapping
 
-C. `useUpdateTeamContact` (jeśli trzeba):
-- Upewnić się że `null` w `lostReason`/`lostAt` propaguje do `update()` jako `null` (a nie `undefined` które pomija pole).
+### Pliki do edycji opcjonalnie (1, jeśli chcemy active state)
+- `src/components/sgu/headers/SalesHeader.tsx` — `activeKey` prop + ring
 
-D. Redirect `/deals-team?view=offering` → `/sgu/sprzedaz?filter=offering`:
-- W `App.tsx` lub odpowiednim routerze: dodać `<Route path="/deals-team" element={<DeprecatedRedirect />} />` z parsowaniem query param. ALBO jeśli `/deals-team` jeszcze działa jako pełna strona → dodać przekierowanie wewnątrz `DealsTeamDashboard.tsx` przy `view==='offering'`.
+### Pominięte (świadomie)
+- Klikalność TasksHeader/DashboardHeader/CommissionsHeader/ClientsHeader — brak jasnych handlerów, kosmetyka. Do osobnej iteracji jeśli user potwierdzi.
+- "Nie usuwaj pliku TeamStats.tsx" — plik już skasowany w IA-2 Krok 3 (zaakceptowane wtedy). Nie przywracam.
 
-E. `OfferingTab.tsx` — Timeline 24mc usunięty (potwierdzone w IA-2). Skip.
-
-**Step 3 — Raport**
-- Lista zmodyfikowanych plików (max 4: OfferingKanbanBoard, OfferingKanbanCard?, useDealsTeamContacts?, App.tsx/redirect?).
-- Status checklisty DoD (5 punktów).
-- Zaznaczenie ewentualnego skip-a (FourAreasBar jeśli nie istnieje).
-
-### Pytania do usera (1, krytyczne)
-
-Przed implementacją muszę wiedzieć: czy `FourAreasBar` faktycznie istnieje w repo z IA-1, czy to prompt-założenie które nie zostało zaimplementowane? Jeśli nie istnieje — czy mam:
-- (A) stworzyć go teraz jako część Kroku 4 (mini horizontal bar z 4 segmentami: 🏠💰📞🏥, każdy proporcjonalny do `potential_*_gr`, kolor active/muted), albo
-- (B) skip i odłożyć do IA-3.
-
-Reszta jest jasna.
+### Raport końcowy
+- Lista zmodyfikowanych plików.
+- Potwierdzenie DoD (4 punkty).
+- Odnotowanie skip-ów + sprzeczności z poprzednimi decyzjami.
 
