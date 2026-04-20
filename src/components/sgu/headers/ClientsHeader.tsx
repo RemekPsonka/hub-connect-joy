@@ -1,5 +1,14 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, Wallet, AlertTriangle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
+import {
+  Users,
+  Wallet,
+  AlertTriangle,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Trophy,
+  Layers,
+} from 'lucide-react';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import type { SGUClientsPortfolio } from '@/hooks/useSGUClientsPortfolio';
 
@@ -14,13 +23,13 @@ function trend(curr: number, prev: number): { pct: number; up: boolean } | null 
   return { pct: Math.abs(pct), up: pct >= 0 };
 }
 
-export function ClientsKPI({ data, isLoading }: Props) {
+export function ClientsHeader({ data, isLoading }: Props) {
   const t = data?.totals;
   const portfolioTrend = t ? trend(t.portfolioBookedPln, t.portfolioBookedPlnPrevMonth) : null;
   const commTrend = t ? trend(t.commissionMonthGr, t.commissionPrevMonthGr) : null;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
       <KpiCard
         icon={<Users className="h-4 w-4" />}
         label="Klienci aktywni"
@@ -51,7 +60,11 @@ export function ClientsKPI({ data, isLoading }: Props) {
         }
       />
       <KpiCard
-        icon={<AlertTriangle className={`h-4 w-4 ${t && t.overdueCount > 0 ? 'text-destructive' : ''}`} />}
+        icon={
+          <AlertTriangle
+            className={`h-4 w-4 ${t && t.overdueCount > 0 ? 'text-destructive' : ''}`}
+          />
+        }
         label="Zaległe raty"
         value={isLoading ? '—' : String(t?.overdueCount ?? 0)}
         sub={t && t.overdueCount > 0 ? formatCompactCurrency(t.overdueAmountPln) : 'Brak'}
@@ -67,9 +80,7 @@ export function ClientsKPI({ data, isLoading }: Props) {
         icon={<Wallet className="h-4 w-4" />}
         label="Prowizja miesięczna"
         value={isLoading ? '—' : formatCompactCurrency((t?.commissionMonthGr ?? 0) / 100)}
-        sub={
-          commTrend ? `${commTrend.up ? '+' : '−'}${commTrend.pct}% MoM` : undefined
-        }
+        sub={commTrend ? `${commTrend.up ? '+' : '−'}${commTrend.pct}% MoM` : undefined}
         subIcon={
           commTrend ? (
             commTrend.up ? (
@@ -79,6 +90,18 @@ export function ClientsKPI({ data, isLoading }: Props) {
             )
           ) : null
         }
+      />
+      <KpiCard
+        icon={<Trophy className="h-4 w-4 text-emerald-600" />}
+        label="Ambasadorzy"
+        value={isLoading ? '—' : String(t?.ambassadorsCount ?? 0)}
+        sub="🏆 status"
+      />
+      <KpiCard
+        icon={<Layers className="h-4 w-4 text-violet-600" />}
+        label="Kompleksowi"
+        value={isLoading ? '—' : String(t?.complexClientsCount ?? 0)}
+        sub="≥3 obszary aktywne"
       />
     </div>
   );

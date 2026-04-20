@@ -327,6 +327,10 @@ export interface UpdateTeamContactInput {
   snoozedUntil?: string | null;
   snoozeReason?: string | null;
   snoozedFromCategory?: string | null;
+  clientStatus?: ClientStatus | string;
+  isLost?: boolean;
+  lostReason?: string | null;
+  lostAt?: string | null;
 }
 
 export interface PromoteContactInput {

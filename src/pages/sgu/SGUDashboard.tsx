@@ -8,6 +8,7 @@ import { AlertsPanel } from '@/components/sgu/AlertsPanel';
 import { useSGUWeeklyKPI } from '@/hooks/useSGUWeeklyKPI';
 import { useSGUTeamPerformance } from '@/hooks/useSGUTeamPerformance';
 import { useSGUAccess } from '@/hooks/useSGUAccess';
+import { DashboardHeader } from '@/components/sgu/headers/DashboardHeader';
 
 const formatPLN = (gr: number) =>
   new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 0 }).format(gr / 100);
@@ -52,6 +53,8 @@ export default function SGUDashboard() {
           </Link>
         </Button>
       </div>
+
+      <DashboardHeader />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard

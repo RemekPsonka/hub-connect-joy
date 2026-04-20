@@ -252,6 +252,10 @@ export function useUpdateTeamContact() {
       snoozedUntil,
       snoozeReason,
       snoozedFromCategory,
+      clientStatus,
+      isLost,
+      lostReason,
+      lostAt,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -288,6 +292,15 @@ export function useUpdateTeamContact() {
       if (snoozedUntil !== undefined) updates.snoozed_until = snoozedUntil;
       if (snoozeReason !== undefined) updates.snooze_reason = snoozeReason;
       if (snoozedFromCategory !== undefined) updates.snoozed_from_category = snoozedFromCategory;
+      if (clientStatus !== undefined) updates.client_status = clientStatus;
+      if (isLost !== undefined) {
+        updates.is_lost = isLost;
+        if (isLost) {
+          updates.lost_at = lostAt ?? new Date().toISOString();
+        }
+      }
+      if (lostReason !== undefined) updates.lost_reason = lostReason;
+      if (lostAt !== undefined && isLost === undefined) updates.lost_at = lostAt;
 
       const { error } = await supabase
         .from('deal_team_contacts')
@@ -304,6 +317,7 @@ export function useUpdateTeamContact() {
       queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
       queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] });
       queryClient.invalidateQueries({ queryKey: ['contact-deal-teams-bulk'] });
+      queryClient.invalidateQueries({ queryKey: ['sgu-clients-portfolio'] });
       toast.success('Kontakt został zaktualizowany');
     },
     onError: (error: Error) => {

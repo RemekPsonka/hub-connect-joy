@@ -1,6 +1,7 @@
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { PageLoadingFallback } from '@/components/PageLoadingFallback';
 import DealsTeamDashboard from '@/pages/DealsTeamDashboard';
+import { SalesHeader } from '@/components/sgu/headers/SalesHeader';
 
 export default function SGUPipelineRoute() {
   const { sguTeamId, isLoading } = useSGUTeamId();
@@ -14,5 +15,10 @@ export default function SGUPipelineRoute() {
     );
   }
 
-  return <DealsTeamDashboard forcedTeamId={sguTeamId} />;
+  return (
+    <div className="space-y-4">
+      <SalesHeader teamId={sguTeamId} />
+      <DealsTeamDashboard forcedTeamId={sguTeamId} />
+    </div>
+  );
 }

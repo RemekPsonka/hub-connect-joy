@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useSGUClientsPortfolio } from '@/hooks/useSGUClientsPortfolio';
-import { ClientsKPI } from './clients/ClientsKPI';
+import { ClientsHeader } from './headers/ClientsHeader';
 import { ClientPortfolioTab } from './clients/ClientPortfolioTab';
 import { ClientPaymentsTab } from './clients/ClientPaymentsTab';
 import { ClientRenewalsTab } from './clients/ClientRenewalsTab';
@@ -33,7 +33,7 @@ export function SGUClientsView({ teamId }: Props) {
 
   return (
     <div className="space-y-6">
-      <ClientsKPI data={data} isLoading={isLoading} />
+      <ClientsHeader data={data} isLoading={isLoading} />
 
       <Tabs value={tab} onValueChange={onTabChange}>
         <TabsList>
@@ -45,7 +45,7 @@ export function SGUClientsView({ teamId }: Props) {
           <TabsTrigger value="commissions">Prowizje</TabsTrigger>
         </TabsList>
         <TabsContent value="portfolio" className="mt-4">
-          <ClientPortfolioTab rows={rows} isLoading={isLoading} />
+          <ClientPortfolioTab rows={rows} isLoading={isLoading} teamId={teamId} />
         </TabsContent>
         <TabsContent value="payments" className="mt-4">
           <ClientPaymentsTab rows={rows} teamId={teamId} />

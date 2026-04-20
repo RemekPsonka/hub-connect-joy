@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CommissionsHeader } from '@/components/sgu/headers/CommissionsHeader';
 
 interface SplitRow {
   id: string;
@@ -63,6 +64,7 @@ export default function SGUCommissionsAdmin() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
+      <CommissionsHeader />
       <Card>
         <CardHeader>
           <CardTitle>Konfiguracja prowizji — split bazowy</CardTitle>
