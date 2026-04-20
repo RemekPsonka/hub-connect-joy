@@ -16,7 +16,7 @@ export default function ContactDetailV2() {
       const { data, error } = await supabase
         .from('contacts')
         .select(
-          'id, full_name, position, company_id, director_id, companies(id, name), contact_groups:primary_group_id(id, name, color), directors:director_id(id, full_name)',
+          'id, full_name, position, email, phone, linkedin_url, company_id, director_id, companies(id, name), contact_groups:primary_group_id(id, name, color), directors:director_id(id, full_name)',
         )
         .eq('id', id!)
         .single();
@@ -42,6 +42,9 @@ export default function ContactDetailV2() {
     id: contact.id,
     full_name: contact.full_name,
     position: contact.position,
+    email: contact.email,
+    phone: contact.phone,
+    linkedin_url: contact.linkedin_url,
     company_id: contact.company_id,
     companies: (contact as unknown as { companies?: { id: string; name: string } | null }).companies ?? null,
     director_id: contact.director_id,
@@ -60,7 +63,11 @@ export default function ContactDetailV2() {
         </div>
       </div>
 
-      <SectionsAccordion />
+      <SectionsAccordion
+        contactId={id}
+        companyId={contact.company_id ?? null}
+        contactEmail={contact.email ?? null}
+      />
     </div>
   );
 }
