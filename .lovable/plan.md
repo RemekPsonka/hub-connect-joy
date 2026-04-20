@@ -1,109 +1,93 @@
 
 
-# B-FIX.8 — Status w lejku spójny z Kanbanem + potencjał składki
+# B-FIX.5 — Wizualne statusy zadań na karcie kanban
 
-## Problem
+## Cel
+Karta w `UnifiedKanban` ma "od pierwszego rzutu oka" pokazywać stan zadań kontaktu: kolorowy lewy pasek (overdue/today/active/done/none), pill ze statusem + licznikiem, awatary asystentek, mini-banner najstarszego przeterminowanego zadania.
 
-W `ContactTasksSheet` → sekcja "STATUS W LEJKU":
-1. **Sub-stage pokazuje błędną wartość** — dla kontaktu `category=top` (Lead) pokazuje `decision_meeting` (offering_stage), zamiast `TOP` (temperature). Logika `CATEGORIES_WITH_SUBSTAGES` zawiera `hot`/`top`, ale czyta `offering_stage`, który jest polem etapu **Ofertowania**, nie Leada.
-2. **Brak potencjału składki** (`expected_annual_premium_gr`) — to kluczowa kwota widoczna na karcie Kanban i powinna być w bocznym menu.
-
-Dodatkowo badge'y "Aktywny" + "Średni" duplikują info o etapie (status/priority to oddzielne wymiary, ale w sekcji "Status w lejku" zaciemniają obraz).
-
-## Rozwiązanie
-
-**Plik:** `src/components/deals-team/ContactTasksSheet.tsx`
-
-### 1. Sub-stage zależny od derived stage
-
-Zamienić obecną logikę (linia 289-291) na funkcję wybierającą właściwe pole + label per stage Kanbana:
-
-```tsx
-// Importy z @/types/dealTeam
-import {
-  TEMPERATURE_LABELS,
-  PROSPECT_SOURCE_LABELS,
-  CLIENT_STATUS_LABELS,
-  OFFERING_STAGE_LABELS,
-} from '@/types/dealTeam';
-
-// Helper w komponencie
-const stage = deriveStage(contact);
-const subStageBadge = (() => {
-  if (stage === 'lead' && contact.temperature) {
-    return TEMPERATURE_LABELS[contact.temperature] ?? contact.temperature;
-  }
-  if (stage === 'prospect' && contact.prospect_source) {
-    return PROSPECT_SOURCE_LABELS[contact.prospect_source] ?? contact.prospect_source;
-  }
-  if (stage === 'client' && contact.client_status) {
-    return CLIENT_STATUS_LABELS[contact.client_status] ?? contact.client_status;
-  }
-  if (stage === 'offering' && contact.offering_stage) {
-    return OFFERING_STAGE_LABELS[contact.offering_stage] ?? contact.offering_stage;
-  }
-  return null;
-})();
-```
-
-W JSX (sekcja "Status w lejku"):
-
-```tsx
-<div className="flex flex-wrap gap-1.5">
-  <Badge variant="outline">{stageLabels[stage] || contact.category}</Badge>
-  {subStageBadge && <Badge variant="secondary">{subStageBadge}</Badge>}
-  <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
-  <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
-</div>
-```
-
-Usuwamy stary blok `contact.offering_stage && CATEGORIES_WITH_SUBSTAGES.has(contact.category)` oraz stałą `CATEGORIES_WITH_SUBSTAGES` i `subStageLabels` jeśli nie są używane gdzie indziej (sprawdzić — na razie tylko ten render je używa).
-
-### 2. Potencjał składki
-
-Pod badge'ami (przed/obok `estimated_value`) dodać linię z `expected_annual_premium_gr`:
-
-```tsx
-{contact.expected_annual_premium_gr != null && contact.expected_annual_premium_gr > 0 && (
-  <p className="text-xs text-muted-foreground mt-1.5">
-    Potencjał składki: {new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      maximumFractionDigits: 0,
-    }).format(contact.expected_annual_premium_gr / 100)}
-    {' '}/ rok
-  </p>
-)}
-```
-
-Konwencja: kwoty w **groszach** (integer) zgodnie z project-knowledge → dzielimy przez 100 w renderze.
+## Świadome decyzje
+- **Kanał danych**: rozszerzam istniejące `useActiveTaskContacts` (już używane przez stary `KanbanBoard.tsx`) → wszystkie miejsca, które konsumują `TaskContactInfo` (HotLeadCard, TopLeadCard, LeadCard, ColdLeadCard, SubKanbanView, KanbanBoard) MUSZĄ działać po rozszerzeniu typu. Stare pole `assignedTo: string | null` zostaje usunięte i zastąpione bogatszym kształtem — sprawdzę i dotknę te konsumenty (jeśli czytają `info.assignedTo`, zaktualizuję na `info.assignees`).
+- **Refetch po mutacji tasków**: `staleTime: 10 min` zostaje, ale dorzucam `refetchOnMount: true` + `refetchOnWindowFocus: true` żeby pill odświeżał się przy powrocie do widoku.
+- **Avatar fallback**: dla braku `directors.full_name` → "?". Kolor z hash(id) → stała paleta Tailwind.
+- **Banner overdue**: klik → otwiera `ContactTasksSheet` przez `onMoreClick` (już propagowane przez DraggableCard/DroppableColumn).
+- **Stary `isOverdue`** w `UnifiedKanbanCard` (czytał `contact.status_overdue` + `next_action_date`) wylatuje — źródłem prawdy są teraz taski.
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/deals-team/ContactTasksSheet.tsx` | EDIT — import labeli sub-stage, helper `subStageBadge`, render potencjału składki, usunąć martwe `CATEGORIES_WITH_SUBSTAGES` + `subStageLabels` |
+| 1 | `src/hooks/useActiveTaskContacts.ts` | EDIT — rozszerzony typ `TaskContactInfo` + agregacja overdue/today/active/done + `oldestOverdue` + `assignees[]` z join na `directors!tasks_assigned_to_fkey` |
+| 2 | `src/components/sgu/sales/TaskStatusPill.tsx` | NEW — Badge + ikona + licznik + tooltip; klik → `onClick()` z `stopPropagation` |
+| 3 | `src/components/sgu/sales/AssigneeAvatars.tsx` | NEW — do 3 awatarów z inicjałami + tooltip; "+N" dla nadmiaru |
+| 4 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — prop `taskInfo`, `border-l-4` per status, header z Pill + Avatars (zamiast `AlertTriangle`), mini-banner overdue przed stopką, usunięcie `isOverdue` z `status_overdue/next_action_date` |
+| 5 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — `useActiveTaskContacts(teamId)` → `taskInfoMap`, propagacja przez `DroppableColumn` → `DraggableCard` → `UnifiedKanbanCard` |
+| 6 | Konsumenty starego typu (`KanbanBoard.tsx`, `HotLeadCard.tsx`, `TopLeadCard.tsx`, `LeadCard.tsx`, `ColdLeadCard.tsx`, `SubKanbanView.tsx`) | AUDIT + minimalny EDIT — jeśli czytają `info.assignedTo`, podmienić na `info.assignees[0]?.id` lub usunąć (zależnie od użycia). Bez zmiany layoutu. |
 
-## Efekt (przykład z screenshota)
+## Szczegóły kluczowych zmian
 
-Michał Matejka (`category=top`, `temperature=top`, `expected_annual_premium_gr=...`):
-- **Przed:** `Lead | Aktywny | Średni | decision_meeting`  (brak składki)
-- **Po:** `Lead | ⭐ TOP | Aktywny | Średni` + linia "Potencjał składki: 4 200 000 zł / rok"
+### 1. `useActiveTaskContacts.ts` — nowy kształt
+```ts
+export type TaskStatus = 'overdue' | 'today' | 'active' | 'done' | 'none';
+export type TaskAssignee = { id: string; full_name: string };
+export type TaskContactInfo = {
+  status: TaskStatus;
+  overdueCount: number; todayCount: number; activeCount: number; doneCount: number;
+  oldestOverdue?: { title: string; due_date: string; days_ago: number };
+  assignees: TaskAssignee[];
+};
+```
+Query: `select` rozszerzony o `title, assigned_to, assignee:directors!tasks_assigned_to_fkey(id, full_name)`, `.in('status', ['todo','in_progress','completed'])`. Priorytet statusu: overdue > today > active > done > none.
 
-Inne stany:
-- Prospekt z `prospect_source=ai_krs` → badge "AI KRS"
-- Klient z `client_status=ambassador` → badge "🏆 Ambasador"
-- Ofertowanie z `offering_stage=handshake` → badge "Handshake"
+### 2. `TaskStatusPill.tsx`
+Badge `h-5 px-1.5` + ikona (AlertCircle/Clock/Circle/CheckCircle2/Plus) + licznik (`done` → `N✓`, reszta → suma open). Tooltip z rozbiciem. `e.stopPropagation()` na `onClick` i `onPointerDown`.
+
+### 3. `AssigneeAvatars.tsx`
+Max 3 widocznych awatarów (`h-5 w-5` z inicjałami), ring biały dla nakładki, "+N" badge dla reszty. Tooltip z `full_name`. **Uwaga implementacyjna**: w briefie JSX był obcięty (puste linie) — zaimplementuję pełny komponent zgodnie z opisem, używając `flex -space-x-1`.
+
+### 4. `UnifiedKanbanCard.tsx`
+- Usuwam `isOverdue` z `status_overdue`/`next_action_date` + `AlertTriangle` w headerze.
+- Dodaję `taskInfo?: TaskContactInfo` do propsów.
+- `borderClass: Record<TaskStatus, string>` → `border-l-4` + kolor.
+- W headerze (po prawej stronie tytułu): `<TaskStatusPill info={taskInfo} onClick={onMoreClick} />` + `<AssigneeAvatars assignees={taskInfo?.assignees ?? []} />`.
+- Przed stopką: warunkowy `<button>` mini-banner z `oldestOverdue` (klik → `onMoreClick`).
+
+### 5. `UnifiedKanban.tsx`
+```tsx
+const { data: taskInfoMap } = useActiveTaskContacts(teamId);
+```
+- `DroppableColumn` props: `taskInfoMap?: Map<string, TaskContactInfo>`, w `renderCard` → `taskInfo={taskInfoMap?.get(c.contact_id)}`.
+- `DraggableCard` props: `taskInfo?: TaskContactInfo`, przekazany do `UnifiedKanbanCard`.
+- W `visibleColumns.map` → `taskInfoMap={taskInfoMap}`.
+
+### 6. Audit konsumentów starego typu
+`assignedTo: string | null` znika. Konsumenty używają tylko `import type { TaskContactInfo }` — sprawdzę czy gdziekolwiek czytają `.assignedTo` lub `.status === 'active'/'overdue'` (oba stany pozostają, więc 99% przypadków bez zmian). Jeśli tak — minimalny patch (np. `assignees[0]?.id`).
+
+## Weryfikacja
+
+```bash
+npx tsc --noEmit                                                                    # exit 0
+grep -rn "status_overdue\|next_action_date" src/components/sgu/sales/UnifiedKanbanCard.tsx   # 0
+grep -n "border-l-4" src/components/sgu/sales/UnifiedKanbanCard.tsx                  # ≥ 1
+grep -rn "info\.assignedTo\|\.assignedTo" src/components/                            # 0 po patchu
+```
+
+Manual smoke (po stronie usera):
+- Kontakt z taskiem `due_date < today` → pasek czerwony, pill pulsuje (`AlertCircle + N`), mini-banner "X dni temu: <tytuł>"
+- Kontakt bez tasków → pasek szary, pill `+`
+- Kontakt z 2 wykonanymi → pasek przygaszony zielony, pill `2✓`
+- Klik pill / banner → otwiera `ContactTasksSheet`
+- Drag & drop nadal działa (Pill ma `onPointerDown stopPropagation`)
+- Awatary pokazują inicjały asystentek z join `directors`
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Lead → sub-badge z temperature (HOT/TOP/10x/COLD) | ✅ |
-| Prospekt → sub-badge ze źródła | ✅ |
-| Klient → sub-badge ze statusu klienta | ✅ |
-| Ofertowanie → sub-badge z offering_stage | ✅ |
-| Potencjał składki widoczny (gr → PLN) | ✅ |
-| Brak martwego kodu (`CATEGORIES_WITH_SUBSTAGES`) | ✅ |
+| Typ `TaskContactInfo` rozszerzony, query z join `directors` | ✅ |
+| `TaskStatusPill` + `AssigneeAvatars` istnieją | ✅ |
+| Karta ma `border-l-4` zależny od statusu zadań | ✅ |
+| Mini-banner overdue klikalny | ✅ |
+| `useActiveTaskContacts` propagowany przez Kanban → Column → DraggableCard → Card | ✅ |
+| Konsumenty starego typu skompilowane bez błędów | ✅ |
 | `tsc --noEmit` exit 0 | ✅ |
 
