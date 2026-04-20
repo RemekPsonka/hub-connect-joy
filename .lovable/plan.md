@@ -1,90 +1,83 @@
 
 
-# BLOK B-FIX.6 — TemperatureBadge tylko dla LEAD
+# B-FIX.4 — Badge "Więcej" → ContactTasksSheet w UnifiedKanban
 
-## Problem
-Po B-FIX.4 wszystkie 3 sub-badges (Temperature, Source, ClientStatus) renderują się na każdej karcie. To błąd domenowy:
-- **Temperature (HOT/TOP/10x/COLD)** to etapy LEADA — nie dotyczą kontaktu w Ofertowaniu (tam mamy `offering_stage`: handshake → wygrana/przegrana) ani Klienta.
-- **Source (CRM_PUSH/CC/AI_KRS/...)** to skąd przyszedł prospekt — sensowne tylko dla Prospekta (i ewentualnie Lead jako historia).
-- **ClientStatus (standard/ambassador/...)** dotyczy tylko Klienta.
-
-## Rozwiązanie
-Każdy sub-badge widoczny tylko w „swojej" kolumnie. Mapowanie:
-
-| Badge | Widoczny w `stage` |
-|---|---|
-| `TemperatureBadge` | `lead` |
-| `SourceBadge` | `prospect` |
-| `ClientStatusBadge` | `client` |
-| `StageBadge` (offering) | `offering` (już działa) |
-
-W kolumnie Ofertowanie pokazuje się tylko `StageBadge` z `offering_stage` — bez Temperature/Source/ClientStatus. Source pozostaje tylko w Prospekt (zgodnie z domeną — to atrybut źródła pozyskania).
+## Cel
+Dodać do każdej karty w `UnifiedKanban` przycisk "Więcej", który otwiera reusowalny `ContactTasksSheet` (boczny panel z pełnymi danymi kontaktu, taskami i quick actions). Reuse 1:1 — bez modyfikacji `ContactTasksSheet.tsx`.
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — warunkowy render każdego sub-badge per `stage` |
+| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — prop `onMoreClick`, button "Więcej" w stopce |
+| 2 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — stan `sheetContact`, render `<ContactTasksSheet>`, prop drilling |
 
-## Szczegóły zmiany
+## Szczegóły
 
-W `UnifiedKanbanCard.tsx` rząd badges (obecnie zawsze 3) zamienić na warunkowy render:
+### 1. `UnifiedKanbanCard.tsx`
+- Dodać `onMoreClick: () => void` do `UnifiedKanbanCardProps`
+- Import `MoreHorizontal` z `lucide-react`
+- W stopce (`<div className="pt-1 border-t flex justify-end" ...>`) **na lewo** od buttona "Oznacz jako lost" wstawić:
+  ```tsx
+  <Button
+    variant="outline"
+    size="sm"
+    className="h-6 px-2 text-[10px] gap-1 mr-auto"
+    onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+  >
+    <MoreHorizontal className="h-3 w-3" />
+    Więcej
+  </Button>
+  ```
+- Klik karty (poza badgem/buttonem) bez zmian → nawigacja do `/sgu/klienci?contactId=...`
 
-```tsx
-<div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-  {stage === 'lead' && (
-    <TemperatureBadge
-      value={contact.temperature}
-      onChange={(v) => onSubcategoryChange('temperature', v)}
-    />
-  )}
-  {stage === 'prospect' && (
-    <SourceBadge
-      value={contact.prospect_source}
-      onChange={(v) => onSubcategoryChange('prospect_source', v)}
-    />
-  )}
-  {stage === 'client' && (
-    <ClientStatusBadge
-      value={contact.client_status}
-      onChange={(v) => onSubcategoryChange('client_status', v)}
-    />
-  )}
-</div>
-```
+### 2. `UnifiedKanban.tsx`
+- Import: `import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';`
+- Stan: `const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);`
+- Rozszerzyć propsy `DraggableCard` i `DroppableColumn` o `onMoreClick: (c: DealTeamContact) => void`
+- Prop drilling: `UnifiedKanban` → `DroppableColumn` (`onMoreClick={onMoreClick}`) → `DraggableCard` (`onMoreClick={() => onMoreClick(contact)}`) → `UnifiedKanbanCard` (`onMoreClick={onMoreClick}`)
+- W `UnifiedKanban` przekazać `onMoreClick={(c) => setSheetContact(c)}` do każdego `DroppableColumn`
+- Pod `<DndContext>` (obok istniejących dialogów Convert/Lost) dorenderować:
+  ```tsx
+  <ContactTasksSheet
+    contact={sheetContact}
+    teamId={teamId}
+    open={sheetContact !== null}
+    onOpenChange={(open) => !open && setSheetContact(null)}
+  />
+  ```
 
-Dla `stage === 'offering'` wrapper pozostaje pusty (cały blok można dodatkowo opakować w `{(stage === 'lead' || stage === 'prospect' || stage === 'client') && ...}` żeby nie renderować pustego diva — drobna optymalizacja).
-
-`StageBadge` dla offering — bez zmian (już warunkowy `stage === 'offering'`).
+### 3. Drag & drop hardening
+Button ma już `onClick` z `e.stopPropagation()`. dnd-kit nasłuchuje na `onPointerDown` z `useDraggable.listeners`. Jeśli klik buttona zostałby przechwycony przez sensor (PointerSensor ma `activationConstraint.distance: 6` — kliknięcie bez ruchu nie aktywuje draggu, więc powinno działać). Jeśli w testach okaże się problem → dodać `onPointerDown={(e) => e.stopPropagation()}` na buttonie. W planie: zostawiamy tylko `onClick stopPropagation` zgodnie z briefem; wariant `onPointerDown` trzymamy w odwodzie.
 
 ## Świadome decyzje
-
-1. **Source tylko w Prospekt** — nie duplikujemy w Lead. Source jest atrybutem pozyskania; po awansie do Lead temperatura niesie informację, source nie jest już akcjonowalny.
-2. **Brak fallback "(brak)" w innych kolumnach** — jeśli badge nie należy do kolumny, w ogóle go nie ma. User nie powinien móc ustawić temperatury klientowi.
-3. **Dane w DB nie są usuwane** — `temperature`/`prospect_source`/`client_status` w `deal_team_contacts` zostają, po prostu nie renderujemy badge'a poza właściwą kolumną. Gdy kontakt wraca z Ofertowania do Leada, zachowuje swoją starą temperaturę.
+1. **Brak modyfikacji `ContactTasksSheet`** — komponent już akceptuje `contact: DealTeamContact | null` + `teamId` + `open/onOpenChange`. Reuse 1:1.
+2. **Pojedynczy stan `sheetContact`** w `UnifiedKanban` — nie per-column. Tylko jeden Sheet otwarty naraz.
+3. **`mr-auto`** na buttonie "Więcej" — wypycha go do lewej, zachowując "Oznacz jako lost" po prawej (stopka używa `flex justify-end`).
+4. **Bez zmian w hookach** — `ContactTasksSheet` sam używa `useCreateTask`, `useUpdateTeamContact` itd.
 
 ## Weryfikacja
 
 ```bash
-npx tsc --noEmit          # 0 errors
+grep -n "Więcej" src/components/sgu/sales/UnifiedKanbanCard.tsx   # 1 wynik
+npx tsc --noEmit                                                   # exit 0
 ```
 
-Manualne:
-- Karta **Prospekt** → tylko `SourceBadge`.
-- Karta **Lead** → tylko `TemperatureBadge` (HOT/TOP/10x/COLD).
-- Karta **Ofertowanie** → tylko `StageBadge` z offering stage (handshake → wygrana/przegrana). Brak Temperature/Source/ClientStatus.
-- Karta **Klient** → tylko `ClientStatusBadge`.
-- Drag karty Lead → Ofertowanie: TemperatureBadge znika, pojawia się StageBadge.
-- Drag z powrotem Ofertowanie → Lead: TemperatureBadge wraca z poprzednią wartością.
+Manual smoke (po stronie usera, nie smokuję sam zgodnie z konwencją):
+- Każda karta ma badge "Więcej" w stopce (po lewej)
+- Klik "Więcej" → otwiera Sheet z prawej; klik karty (poza buttonami/badge) → nadal nawigacja do `/sgu/klienci?contactId=...`
+- Quick actions w Sheet (Umów spotkanie / Zadzwoń / Wyślij ofertę / Wyślij mail) tworzą task widoczny w liście
+- "Umów spotkanie" na kontakcie `category=hot|top` → auto `offering_stage='meeting_plan'`
+- Drag & drop dalej działa
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Temperature widoczne tylko w kolumnie Lead | ✅ |
-| Source widoczne tylko w kolumnie Prospekt | ✅ |
-| ClientStatus widoczne tylko w kolumnie Klient | ✅ |
-| Ofertowanie ma tylko StageBadge | ✅ |
-| Drag między kolumnami przełącza badges poprawnie | ✅ |
-| `tsc --noEmit` 0 błędów | ✅ |
+| Każda karta ma button "Więcej" | ✅ |
+| Klik "Więcej" otwiera `ContactTasksSheet` | ✅ |
+| Klik karty nadal nawiguje | ✅ |
+| Drag & drop działa | ✅ |
+| `ContactTasksSheet` niezmodyfikowany | ✅ |
+| `tsc --noEmit` exit 0 | ✅ |
 
