@@ -187,7 +187,7 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
+      {/* usunięte: viewMode === 'offering' (BLOK IA-3-FIX-2) */}
 
       <CreateTeamDialog open={showCreateTeam} onOpenChange={setShowCreateTeam} onTeamCreated={handleTeamCreated} />
       {selectedTeamId && <WeeklyStatusPanel teamId={selectedTeamId} open={showWeeklyStatus} onOpenChange={setShowWeeklyStatus} />}
