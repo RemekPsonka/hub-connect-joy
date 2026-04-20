@@ -61,6 +61,14 @@ const categoryLabels: Record<string, string> = {
   offering: 'Oferta', client: 'Klient', lost: 'Lost', audit: 'Audyt',
 };
 
+const stageLabels: Record<string, string> = {
+  prospect: 'Prospekt',
+  lead: 'Lead',
+  offering: 'Ofertowanie',
+  client: 'Klient',
+  lost: 'Utracony',
+};
+
 const statusLabels: Record<string, string> = {
   active: 'Aktywny', on_hold: 'Wstrzymany', won: 'Wygrany', lost: 'Przegrany', disqualified: 'Zdyskwalifikowany',
 };
