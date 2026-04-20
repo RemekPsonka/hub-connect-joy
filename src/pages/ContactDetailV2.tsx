@@ -7,11 +7,14 @@ import { ActivityTimeline } from '@/components/contact-v2/ActivityTimeline';
 import { ContactCRMCard } from '@/components/contact-v2/ContactCRMCard';
 import { SectionsAccordion } from '@/components/contact-v2/SectionsAccordion';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { ContactWithGroup } from '@/hooks/useContacts';
 
 export default function ContactDetailV2() {
   const { id } = useParams<{ id: string }>();
   const [composerTab, setComposerTab] = useState<'note' | 'email' | 'meeting'>('note');
   const composerRef = useRef<HTMLDivElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   const { data: contact, isLoading } = useQuery({
     queryKey: ['contact', id],
@@ -19,7 +22,7 @@ export default function ContactDetailV2() {
       const { data, error } = await supabase
         .from('contacts')
         .select(
-          'id, full_name, position, email, phone, linkedin_url, company_id, director_id, companies(id, name), contact_groups:primary_group_id(id, name, color), directors:director_id(id, full_name)',
+          '*, companies(id, name), contact_groups:primary_group_id(id, name, color), directors:director_id(id, full_name)',
         )
         .eq('id', id!)
         .single();
@@ -41,16 +44,28 @@ export default function ContactDetailV2() {
     );
   }
 
+  const contactRecord = contact as unknown as {
+    id: string;
+    full_name: string;
+    position: string | null;
+    email: string | null;
+    phone: string | null;
+    linkedin_url: string | null;
+    company_id: string | null;
+    director_id: string | null;
+    companies?: { id: string; name: string } | null;
+  };
+
   const headerContact = {
-    id: contact.id,
-    full_name: contact.full_name,
-    position: contact.position,
-    email: contact.email,
-    phone: contact.phone,
-    linkedin_url: contact.linkedin_url,
-    company_id: contact.company_id,
-    companies: (contact as unknown as { companies?: { id: string; name: string } | null }).companies ?? null,
-    director_id: contact.director_id,
+    id: contactRecord.id,
+    full_name: contactRecord.full_name,
+    position: contactRecord.position,
+    email: contactRecord.email,
+    phone: contactRecord.phone,
+    linkedin_url: contactRecord.linkedin_url,
+    company_id: contactRecord.company_id,
+    companies: contactRecord.companies ?? null,
+    director_id: contactRecord.director_id,
   };
 
   const handleSelectAction = (tab: 'note' | 'email' | 'meeting') => {
@@ -58,9 +73,20 @@ export default function ContactDetailV2() {
     setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
+  const handleRequestHistory = () => {
+    setHistoryOpen(true);
+    setTimeout(() => historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  };
+
   return (
     <div className="container mx-auto max-w-7xl p-6 space-y-6">
-      <ContactHeaderTLDR contactId={id} contact={headerContact} onSelectAction={handleSelectAction} />
+      <ContactHeaderTLDR
+        contactId={id}
+        contact={headerContact}
+        fullContact={contact as unknown as ContactWithGroup}
+        onSelectAction={handleSelectAction}
+        onRequestHistory={handleRequestHistory}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2" ref={composerRef}>
@@ -77,8 +103,10 @@ export default function ContactDetailV2() {
 
       <SectionsAccordion
         contactId={id}
-        companyId={contact.company_id ?? null}
-        contactEmail={contact.email ?? null}
+        companyId={contactRecord.company_id ?? null}
+        contactEmail={contactRecord.email ?? null}
+        forceOpenHistory={historyOpen}
+        historyRef={historyRef}
       />
     </div>
   );
