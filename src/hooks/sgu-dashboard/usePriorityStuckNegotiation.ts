@@ -37,7 +37,7 @@ export function usePriorityStuckNegotiation() {
         id: data.id,
         title: `Negocjacje utknęły: ${name}`,
         meta: `Bez ruchu od ${days} dni`,
-        navigateTo: `/sgu/sprzedaz?contact=${data.id}`,
+        navigateTo: `/sgu/sprzedaz?contactId=${data.id}&stage=offering`,
       };
     },
     staleTime: 60_000,

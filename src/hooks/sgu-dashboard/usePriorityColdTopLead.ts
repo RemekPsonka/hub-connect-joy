@@ -36,7 +36,7 @@ export function usePriorityColdTopLead() {
         id: data.id,
         title: `Wystygły TOP lead: ${name}`,
         meta,
-        navigateTo: `/sgu/sprzedaz?contact=${data.id}`,
+        navigateTo: `/sgu/sprzedaz?contactId=${data.id}`,
       };
     },
     staleTime: 60_000,
