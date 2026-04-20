@@ -58,11 +58,12 @@ const salesItems: NavItemDef[] = [
   { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
 ];
 
-const analyticsItems: NavItemDef[] = [
+const analyticsItemsBase: NavItemDef[] = [
   { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
   { title: 'Tabela', url: '/sgu/pipeline?view=table', icon: List },
-  { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 },
 ];
+
+const reportsItem: NavItemDef = { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 };
 
 const adminItems: NavItemDef[] = [
   { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
