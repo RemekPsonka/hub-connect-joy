@@ -100,7 +100,7 @@ export function AlertsCard() {
           icon={CalendarX}
           count={data?.a1}
           loading={isLoading}
-          navigateTo="/sgu/klienci?tab=odnowienia&filter=lt14"
+          navigateTo="/sgu/klienci?tab=renewals&filter=lt14"
           severity="warn"
         />
         <AlertRow
@@ -108,7 +108,7 @@ export function AlertsCard() {
           icon={Wallet}
           count={data?.a2}
           loading={isLoading}
-          navigateTo="/sgu/klienci?tab=raty&filter=overdue30"
+          navigateTo="/sgu/klienci?tab=payments&filter=overdue30"
           severity="destructive"
         />
         <AlertRow
@@ -116,7 +116,7 @@ export function AlertsCard() {
           icon={UserX}
           count={data?.a3}
           loading={isLoading}
-          navigateTo="/sgu/klienci?filter=stale"
+          navigateTo="/sgu/klienci?tab=portfolio&filter=stale"
           severity="warn"
         />
         <AlertRow
@@ -132,7 +132,7 @@ export function AlertsCard() {
           icon={UserCheck}
           count={data?.a5}
           loading={isLoading}
-          navigateTo="/sgu/klienci?filter=near_ambassador"
+          navigateTo="/sgu/klienci?tab=renewals&filter=near_ambassador"
           severity="warn"
         />
       </CardContent>

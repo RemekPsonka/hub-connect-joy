@@ -145,7 +145,15 @@ function DroppableColumn({
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
-  const sumPLN = contacts.reduce((acc, c) => acc + (c.estimated_value ?? 0), 0);
+  const sumPLN = contacts.reduce(
+    (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
+    0,
+  );
+  const plnFormatter = new Intl.NumberFormat('pl-PL', {
+    style: 'currency',
+    currency: 'PLN',
+    maximumFractionDigits: 0,
+  });
 
   const renderCard = (c: DealTeamContact) => (
     <DraggableCard
@@ -208,7 +216,7 @@ function DroppableColumn({
           </Badge>
           {sumPLN > 0 && (
             <span className="text-xs text-muted-foreground">
-              · Σ {Math.round(sumPLN / 1000)}k PLN
+              · Σ {plnFormatter.format(sumPLN)}
             </span>
           )}
         </div>
