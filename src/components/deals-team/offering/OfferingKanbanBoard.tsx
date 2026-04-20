@@ -146,6 +146,15 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
               const cp = paymentsByContact.get(c.id) || [];
               return sum + cp.reduce((s, p) => s + p.amount, 0);
             }, 0);
+            const stageAreasGr = stageContacts.reduce(
+              (sum, c) =>
+                sum +
+                (c.potential_property_gr ?? 0) +
+                (c.potential_financial_gr ?? 0) +
+                (c.potential_communication_gr ?? 0) +
+                (c.potential_life_group_gr ?? 0),
+              0,
+            );
 
             return (
               <div
@@ -175,6 +184,11 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
                   {stageValue > 0 && (
                     <p className="text-[10px] text-muted-foreground mt-1">
                       {formatCompactCurrency(stageValue)}
+                    </p>
+                  )}
+                  {stageAreasGr > 0 && (
+                    <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                      Σ obszary: {fmtPLN(stageAreasGr / 100)}
                     </p>
                   )}
                 </div>
