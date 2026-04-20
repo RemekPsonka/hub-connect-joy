@@ -24,6 +24,7 @@ import {
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useSGUAccess } from '@/hooks/useSGUAccess';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
