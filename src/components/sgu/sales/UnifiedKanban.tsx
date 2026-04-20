@@ -11,12 +11,20 @@ import {
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
-import type { DealTeamContact, DealStage } from '@/types/dealTeam';
+import {
+  TEMPERATURE_LABELS,
+  PROSPECT_SOURCE_LABELS,
+  CLIENT_STATUS_LABELS,
+  OFFERING_STAGE_LABELS,
+  type DealTeamContact,
+  type DealStage,
+} from '@/types/dealTeam';
 
 interface UnifiedKanbanProps {
   teamId: string;
@@ -37,7 +45,7 @@ const COLUMNS: ColumnDef[] = [
   { stage: 'client', title: 'Klient', icon: '⭐', borderClass: 'border-t-emerald-500' },
 ];
 
-function deriveStage(c: DealTeamContact): DealStage {
+export function deriveStage(c: DealTeamContact): DealStage {
   if (c.deal_stage) return c.deal_stage;
   const cat = c.category;
   if (cat === 'client') return 'client';
@@ -46,6 +54,34 @@ function deriveStage(c: DealTeamContact): DealStage {
   if (cat === 'lost') return 'lost';
   return 'prospect';
 }
+
+interface SubgroupConfig {
+  getter: (c: DealTeamContact) => string | null | undefined;
+  labels: Record<string, string>;
+}
+
+const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
+  prospect: {
+    getter: (c) => c.prospect_source,
+    labels: PROSPECT_SOURCE_LABELS as Record<string, string>,
+  },
+  lead: {
+    getter: (c) => c.temperature,
+    labels: TEMPERATURE_LABELS as Record<string, string>,
+  },
+  offering: {
+    getter: (c) => c.offering_stage,
+    labels: OFFERING_STAGE_LABELS as Record<string, string>,
+  },
+  client: {
+    getter: (c) => c.client_status,
+    labels: CLIENT_STATUS_LABELS as Record<string, string>,
+  },
+  lost: {
+    getter: () => null,
+    labels: {},
+  },
+};
 
 function DraggableCard({
   contact,
@@ -88,6 +124,7 @@ function DraggableCard({
 function DroppableColumn({
   col,
   contacts,
+  groupBy,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -95,12 +132,57 @@ function DroppableColumn({
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
+  groupBy: boolean;
   onLostClick: (c: DealTeamContact) => void;
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
   onOfferingLostClick: (c: DealTeamContact) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
+
+  const sumPLN = contacts.reduce((acc, c) => acc + (c.estimated_value ?? 0), 0);
+
+  const renderCard = (c: DealTeamContact) => (
+    <DraggableCard
+      key={c.id}
+      contact={c}
+      stage={col.stage}
+      onLostClick={() => onLostClick(c)}
+      onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
+      onOfferingWonClick={() => onOfferingWonClick(c)}
+      onOfferingLostClick={() => onOfferingLostClick(c)}
+    />
+  );
+
+  let body: JSX.Element;
+  if (contacts.length === 0) {
+    body = (
+      <div className="flex items-center justify-center h-full min-h-[200px] text-center p-4">
+        <p className="text-sm text-muted-foreground">Brak kontaktów</p>
+      </div>
+    );
+  } else if (groupBy) {
+    const cfg = SUBGROUP_CONFIG[col.stage];
+    const groups: Record<string, DealTeamContact[]> = {};
+    for (const c of contacts) {
+      const k = cfg.getter(c) ?? '__none__';
+      (groups[k] ??= []).push(c);
+    }
+    body = (
+      <div className="space-y-3">
+        {Object.entries(groups).map(([k, list]) => (
+          <div key={k} className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground px-1">
+              {cfg.labels[k] ?? '(brak)'} ({list.length})
+            </div>
+            <div className="space-y-2">{list.map(renderCard)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  } else {
+    body = <div className="space-y-2">{contacts.map(renderCard)}</div>;
+  }
 
   return (
     <div
@@ -112,35 +194,20 @@ function DroppableColumn({
       )}
     >
       <div className="p-3 border-b bg-muted/50">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-lg">{col.icon}</span>
           <h3 className="font-semibold text-sm">{col.title}</h3>
           <Badge variant="secondary" className="text-xs">
             {contacts.length}
           </Badge>
+          {sumPLN > 0 && (
+            <span className="text-xs text-muted-foreground">
+              · Σ {Math.round(sumPLN / 1000)}k PLN
+            </span>
+          )}
         </div>
       </div>
-      <ScrollArea className="flex-1 p-2">
-        {contacts.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[200px] text-center p-4">
-            <p className="text-sm text-muted-foreground">Brak kontaktów</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {contacts.map((c) => (
-              <DraggableCard
-                key={c.id}
-                contact={c}
-                stage={col.stage}
-                onLostClick={() => onLostClick(c)}
-                onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
-                onOfferingWonClick={() => onOfferingWonClick(c)}
-                onOfferingLostClick={() => onOfferingLostClick(c)}
-              />
-            ))}
-          </div>
-        )}
-      </ScrollArea>
+      <ScrollArea className="flex-1 p-2">{body}</ScrollArea>
     </div>
   );
 }
@@ -152,6 +219,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [convertContact, setConvertContact] = useState<DealTeamContact | null>(null);
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
   const [lostFromOffering, setLostFromOffering] = useState(false);
+  const [groupBySubcategory, setGroupBySubcategory] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -197,7 +265,6 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
     const toStage = over.id as DealStage;
     if (fromStage === toStage) return;
 
-    // Allowed transitions
     if (fromStage === 'prospect' && toStage === 'lead') {
       updateContact.mutate({ id: contact.id, teamId, category: 'lead' });
       return;
@@ -242,6 +309,16 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
 
   return (
     <>
+      <div className="flex items-center justify-end">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+          <Checkbox
+            checked={groupBySubcategory}
+            onCheckedChange={(v) => setGroupBySubcategory(v === true)}
+          />
+          Grupuj wg sub-kategorii
+        </label>
+      </div>
+
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
@@ -249,6 +326,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               key={col.stage}
               col={col}
               contacts={grouped[col.stage]}
+              groupBy={groupBySubcategory}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);

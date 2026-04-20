@@ -3,6 +3,7 @@ import { Users, Flame, Briefcase, CalendarCheck, AlertTriangle } from 'lucide-re
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { useSGUTasks } from '@/hooks/useSGUTasks';
 import { cn } from '@/lib/utils';
+import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
 
 interface SalesHeaderProps {
   teamId: string;
@@ -15,10 +16,11 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
   const { data: today = [] } = useSGUTasks('today');
   const { data: overdue = [] } = useSGUTasks('overdue');
 
+  const visibleContacts = contacts.filter((c) => !c.is_lost);
   const counts = {
-    prospect: contacts.filter((c) => ['cold'].includes(c.category)).length,
-    lead: contacts.filter((c) => ['hot', 'top', 'lead', '10x'].includes(c.category)).length,
-    offering: contacts.filter((c) => c.category === 'offering' || c.category === 'audit').length,
+    prospect: visibleContacts.filter((c) => deriveStage(c) === 'prospect').length,
+    lead: visibleContacts.filter((c) => deriveStage(c) === 'lead').length,
+    offering: visibleContacts.filter((c) => deriveStage(c) === 'offering').length,
     today: today.length,
     overdue: overdue.length,
   };
