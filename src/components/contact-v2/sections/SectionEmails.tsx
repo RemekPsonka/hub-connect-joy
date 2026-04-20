@@ -45,9 +45,9 @@ export function SectionEmails({ contactEmail, enabled }: Props) {
         {query.data?.map((m) => (
           <div key={m.id} className="py-2 text-sm flex gap-2">
             {m.direction === 'in' ? (
-              <ArrowDownLeft className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+              <ArrowDownLeft className="h-4 w-4 text-primary shrink-0 mt-0.5" />
             ) : (
-              <ArrowUpRight className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             )}
             <div className="min-w-0 flex-1">
               <div className="font-medium truncate">{m.subject ?? '(bez tematu)'}</div>
