@@ -128,6 +128,7 @@ export function UnifiedTaskRow({
   members,
   contactName,
   companyName,
+  dealStageBadge,
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
