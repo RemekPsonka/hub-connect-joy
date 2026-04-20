@@ -109,6 +109,13 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
       const contact = contacts.find((c) => c.id === contactId);
       if (!contact || contact.offering_stage === stage) return;
 
+      const fromStage = (contact.offering_stage || 'handshake') as OfferingStage;
+      // Rollback: opuszczenie won/lost do innego etapu wymaga potwierdzenia
+      if ((fromStage === 'won' || fromStage === 'lost') && stage !== 'won' && stage !== 'lost') {
+        setRollbackDialog({ contact, toStage: stage });
+        return;
+      }
+
       if (stage === 'won') {
         setWonDialog(contact);
         return;
