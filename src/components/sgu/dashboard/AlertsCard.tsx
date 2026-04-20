@@ -54,7 +54,7 @@ function AlertRow({
             ? 'text-muted-foreground'
             : severity === 'destructive'
               ? 'text-destructive'
-              : 'text-amber-600 dark:text-amber-400'
+              : 'text-warning'
         )}
       />
       <div className="flex-1 min-w-0">
@@ -90,7 +90,7 @@ export function AlertsCard() {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertCircle className="h-4 w-4 text-warning" />
           Alerty
         </CardTitle>
       </CardHeader>
