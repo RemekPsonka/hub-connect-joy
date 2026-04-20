@@ -6,8 +6,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface TeamAdminTabProps {
   teamId: string | null;
@@ -31,10 +36,19 @@ export function TeamAdminTab({ teamId }: TeamAdminTabProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Zespół SGU</CardTitle>
-        <Button size="sm" onClick={() => toast.info('Sprint SGU-09')}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Zaproś przedstawiciela
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button size="sm" disabled>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Zaproś przedstawiciela
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Wkrótce (SGU-09)</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </CardHeader>
       <CardContent>
         {isLoading ? (

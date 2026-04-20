@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { UserPlus } from 'lucide-react';
 import { useSGUClientsPortfolio } from '@/hooks/useSGUClientsPortfolio';
 import { ClientsHeader } from './headers/ClientsHeader';
 import { ClientPortfolioTab } from './clients/ClientPortfolioTab';
@@ -8,6 +11,7 @@ import { ClientRenewalsTab } from './clients/ClientRenewalsTab';
 import { ClientObszaryTab } from './clients/ClientObszaryTab';
 import { ClientReferralsTab } from './clients/ClientReferralsTab';
 import { ClientCommissionsTab } from './clients/ClientCommissionsTab';
+import { AddLeadDialog } from './AddLeadDialog';
 
 interface Props {
   teamId: string;
@@ -59,10 +63,33 @@ export function SGUClientsView({ teamId }: Props) {
   };
 
   const rows = data?.rows ?? [];
+  const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'new-client') {
+      setAddOpen(true);
+    }
+  }, [searchParams]);
+
+  const handleAddOpenChange = (open: boolean) => {
+    setAddOpen(open);
+    if (!open && searchParams.get('action')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   return (
     <div className="space-y-6">
       <ClientsHeader data={data} isLoading={isLoading} onCardClick={onHeaderCardClick} />
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-1.5" />
+          Dodaj kontakt
+        </Button>
+      </div>
 
       <Tabs value={tab} onValueChange={onTabChange}>
         <TabsList>
@@ -92,6 +119,8 @@ export function SGUClientsView({ teamId }: Props) {
           <ClientCommissionsTab teamId={teamId} />
         </TabsContent>
       </Tabs>
+
+      <AddLeadDialog open={addOpen} onOpenChange={handleAddOpenChange} />
     </div>
   );
 }

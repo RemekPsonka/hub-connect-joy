@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { FileCheck, Wallet, Coins, Landmark, TrendingUp, TrendingDown } from 'lucide-react';
+import { FileCheck, Wallet, Coins, TrendingUp, TrendingDown } from 'lucide-react';
 import { useSGUWeeklyKPI } from '@/hooks/useSGUWeeklyKPI';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,6 @@ export function DashboardHeader() {
   const { data: kpi, isLoading } = useSGUWeeklyKPI(0);
 
   const policies = Number(kpi?.policies_issued_count ?? 0);
-  const booked = Number(kpi?.premium_collected_gr ?? 0); // booked proxy for now
   const collected = Number(kpi?.premium_collected_gr ?? 0);
   const commission = Number(kpi?.commission_earned_gr ?? 0);
 
@@ -30,7 +29,6 @@ export function DashboardHeader() {
 
   const items = [
     { label: 'Nowe polisy', value: isLoading ? '—' : String(policies), trend: policiesT, icon: FileCheck, tone: 'text-emerald-600' },
-    { label: 'Przypis Booked', value: isLoading ? '—' : formatCompactCurrency(booked / 100), trend: null, icon: Landmark, tone: 'text-sky-600' },
     { label: 'Collected', value: isLoading ? '—' : formatCompactCurrency(collected / 100), trend: collectedT, icon: Wallet, tone: 'text-violet-600' },
     { label: 'Prowizja', value: isLoading ? '—' : formatCompactCurrency(commission / 100), trend: commissionT, icon: Coins, tone: 'text-amber-600' },
   ];
@@ -48,7 +46,7 @@ export function DashboardHeader() {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {items.map((it) => (
           <Card key={it.label}>
             <CardContent className="p-3 space-y-1">
