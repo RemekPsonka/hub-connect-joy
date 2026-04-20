@@ -9,6 +9,7 @@ import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { OfferingKanbanCard } from './OfferingKanbanCard';
 import { ConvertWonToClientDialog } from '@/components/sgu/sales/ConvertWonToClientDialog';
 import { LostReasonDialog } from '@/components/sgu/sales/LostReasonDialog';
+import { StageRollbackDialog } from '@/components/sgu/sales/StageRollbackDialog';
 import {
   OFFERING_STAGE_LABELS,
   OFFERING_STAGE_ORDER,
@@ -56,6 +57,7 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
   const [showLost, setShowLost] = useState(false);
   const [wonDialog, setWonDialog] = useState<DealTeamContact | null>(null);
   const [lostDialog, setLostDialog] = useState<DealTeamContact | null>(null);
+  const [rollbackDialog, setRollbackDialog] = useState<{ contact: DealTeamContact; toStage: OfferingStage } | null>(null);
 
   const visibleStages = useMemo(
     () => OFFERING_STAGE_ORDER.filter((s) => showLost || s !== 'lost'),
@@ -107,6 +109,13 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
       const contact = contacts.find((c) => c.id === contactId);
       if (!contact || contact.offering_stage === stage) return;
 
+      const fromStage = (contact.offering_stage || 'handshake') as OfferingStage;
+      // Rollback: opuszczenie won/lost do innego etapu wymaga potwierdzenia
+      if ((fromStage === 'won' || fromStage === 'lost') && stage !== 'won' && stage !== 'lost') {
+        setRollbackDialog({ contact, toStage: stage });
+        return;
+      }
+
       if (stage === 'won') {
         setWonDialog(contact);
         return;
@@ -137,6 +146,15 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
               const cp = paymentsByContact.get(c.id) || [];
               return sum + cp.reduce((s, p) => s + p.amount, 0);
             }, 0);
+            const stageAreasGr = stageContacts.reduce(
+              (sum, c) =>
+                sum +
+                (c.potential_property_gr ?? 0) +
+                (c.potential_financial_gr ?? 0) +
+                (c.potential_communication_gr ?? 0) +
+                (c.potential_life_group_gr ?? 0),
+              0,
+            );
 
             return (
               <div
@@ -166,6 +184,11 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
                   {stageValue > 0 && (
                     <p className="text-[10px] text-muted-foreground mt-1">
                       {formatCompactCurrency(stageValue)}
+                    </p>
+                  )}
+                  {stageAreasGr > 0 && (
+                    <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                      Σ obszary: {formatCompactCurrency(stageAreasGr / 100)}
                     </p>
                   )}
                 </div>
@@ -212,6 +235,29 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
           contactName={lostDialog.contact?.full_name ?? '—'}
           teamId={teamId}
           setOfferingLost
+        />
+      )}
+      {rollbackDialog && (
+        <StageRollbackDialog
+          open={!!rollbackDialog}
+          onOpenChange={(o) => !o && setRollbackDialog(null)}
+          contactId={rollbackDialog.contact.id}
+          contactName={rollbackDialog.contact.contact?.full_name ?? '—'}
+          teamId={teamId}
+          fromStage={OFFERING_STAGE_LABELS[(rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage] ?? '—'}
+          toCategory="offering"
+          onSuccess={() => {
+            const fromStage = (rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage;
+            updateContact.mutate({
+              id: rollbackDialog.contact.id,
+              teamId,
+              offeringStage: rollbackDialog.toStage,
+              ...(fromStage === 'lost'
+                ? { isLost: false, lostReason: null, lostAt: null }
+                : {}),
+            });
+            setRollbackDialog(null);
+          }}
         />
       )}
     </>

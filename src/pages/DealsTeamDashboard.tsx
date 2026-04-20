@@ -69,7 +69,7 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
       kanban: '/sgu/sprzedaz',
       table: '/sgu/sprzedaz',
       prospecting: '/sgu/sprzedaz',
-      offering: '/sgu/sprzedaz',
+      offering: '/sgu/sprzedaz?filter=offering',
       snoozed: '/sgu/sprzedaz',
       clients: '/sgu/klienci',
       commissions: '/sgu/klienci',
