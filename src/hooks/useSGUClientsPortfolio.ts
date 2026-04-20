@@ -274,6 +274,11 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           company: (c.contact as { full_name?: string; company?: string | null } | null)?.company ?? null,
           representative_user_id: c.representative_user_id,
           expected_annual_premium_gr: c.expected_annual_premium_gr ?? 0,
+          client_status: (c as { client_status?: string | null }).client_status ?? null,
+          potential_property_gr: Number((c as { potential_property_gr?: number }).potential_property_gr ?? 0),
+          potential_financial_gr: Number((c as { potential_financial_gr?: number }).potential_financial_gr ?? 0),
+          potential_communication_gr: Number((c as { potential_communication_gr?: number }).potential_communication_gr ?? 0),
+          potential_life_group_gr: Number((c as { potential_life_group_gr?: number }).potential_life_group_gr ?? 0),
           policies: cps,
           payments: pays,
           bookedPln,
@@ -304,6 +309,16 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
       const totalExpectedGr = rows.reduce((s, r) => s + r.expected_annual_premium_gr, 0);
       const avgPremiumPerClientGr = rows.length > 0 ? Math.round(totalExpectedGr / rows.length) : 0;
 
+      const ambassadorsCount = rows.filter((r) => r.client_status === 'ambassador').length;
+      const complexClientsCount = rows.filter((r) => {
+        const active =
+          (r.potential_property_gr > 0 ? 1 : 0) +
+          (r.potential_financial_gr > 0 ? 1 : 0) +
+          (r.potential_communication_gr > 0 ? 1 : 0) +
+          (r.potential_life_group_gr > 0 ? 1 : 0);
+        return active >= 3;
+      }).length;
+
       return {
         rows: rows.sort((a, b) => b.expected_annual_premium_gr - a.expected_annual_premium_gr),
         totals: {
@@ -316,6 +331,8 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           renewals30dCount,
           commissionMonthGr,
           commissionPrevMonthGr,
+          ambassadorsCount,
+          complexClientsCount,
         },
       };
     },
