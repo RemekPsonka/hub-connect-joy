@@ -46,6 +46,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { DealTeamContact } from '@/types/dealTeam';
+import {
+  TEMPERATURE_LABELS,
+  PROSPECT_SOURCE_LABELS,
+  CLIENT_STATUS_LABELS,
+  OFFERING_STAGE_LABELS,
+} from '@/types/dealTeam';
 import type { TaskWithDetails } from '@/hooks/useTasks';
 
 interface ContactTasksSheetProps {
@@ -76,15 +82,6 @@ const statusLabels: Record<string, string> = {
 const priorityLabels: Record<string, string> = {
   low: 'Niski', medium: 'Średni', high: 'Wysoki', urgent: 'Pilny',
 };
-
-const subStageLabels: Record<string, string> = {
-  handshake: 'Handshake', power_of_attorney: 'Pełnomocnictwo', preparation: 'Przygotowanie',
-  negotiation: 'Negocjacje', accepted: 'Zaakceptowano', lost: 'Przegrano',
-  audit_plan: 'Do zaplanowania', audit_scheduled: 'Zaplanowany', audit_done: 'Odbyty',
-  meeting_plan: 'Zaplanować spotkanie', meeting_scheduled: 'Spotkanie umówione', meeting_done: 'Spotkanie odbyte',
-};
-
-const CATEGORIES_WITH_SUBSTAGES = new Set(['offering', 'audit', 'hot', 'top']);
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string | null | undefined }) {
   if (!value) return null;
