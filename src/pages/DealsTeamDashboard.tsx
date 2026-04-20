@@ -14,14 +14,13 @@ import {
   ProspectingTab,
   ClientsTab,
   MyTeamTasksView,
-  OfferingTab,
 } from '@/components/deals-team';
 import { Button } from '@/components/ui/button';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks' | 'offering';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks';
 
 const STORAGE_KEY = 'deals-team-selected';
-const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks', 'offering'];
+const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks'];
 
 type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
 
