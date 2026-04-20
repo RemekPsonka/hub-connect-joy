@@ -21,6 +21,7 @@ interface Props {
   rows: SGUClientRow[];
   isLoading: boolean;
   teamId: string;
+  onSelectClient?: (id: string) => void;
 }
 
 function policyTypeLabel(t: string | null): string {
@@ -44,7 +45,7 @@ function paymentStatusColor(row: SGUClientRow): string {
   return 'text-emerald-600';
 }
 
-export function ClientPortfolioTab({ rows, isLoading, teamId }: Props) {
+export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient }: Props) {
   const complexityMap = useClientComplexity(rows);
   const updateContact = useUpdateTeamContact();
 
@@ -77,12 +78,16 @@ export function ClientPortfolioTab({ rows, isLoading, teamId }: Props) {
               const types = Array.from(new Set(r.policies.map((p) => policyTypeLabel(p.policy_type))));
               const complexity = complexityMap.get(r.id);
               return (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  className={onSelectClient ? 'cursor-pointer hover:bg-muted/50' : ''}
+                  onClick={onSelectClient ? () => onSelectClient(r.id) : undefined}
+                >
                   <TableCell>
                     <div className="font-medium">{r.full_name}</div>
                     {r.company && <div className="text-xs text-muted-foreground">{r.company}</div>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <StageBadge
                       stage="client"
                       value={(r.client_status ?? 'standard') as 'standard' | 'ambassador' | 'lost'}
@@ -138,7 +143,7 @@ export function ClientPortfolioTab({ rows, isLoading, teamId }: Props) {
                     </span>
                   </TableCell>
                   <TableCell className="text-xs">{fmtDate(r.nextEvent)}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">

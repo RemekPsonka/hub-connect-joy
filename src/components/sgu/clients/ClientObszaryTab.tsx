@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -9,11 +9,22 @@ import type { SGUClientRow } from '@/hooks/useSGUClientsPortfolio';
 interface Props {
   rows: SGUClientRow[];
   teamId: string;
+  selectedClientId?: string | null;
 }
 
-export function ClientObszaryTab({ rows, teamId }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.id ?? null);
+export function ClientObszaryTab({ rows, teamId, selectedClientId }: Props) {
+  const initialId =
+    (selectedClientId && rows.some((r) => r.id === selectedClientId) ? selectedClientId : null) ??
+    rows[0]?.id ??
+    null;
+  const [selectedId, setSelectedId] = useState<string | null>(initialId);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (selectedClientId && rows.some((r) => r.id === selectedClientId)) {
+      setSelectedId(selectedClientId);
+    }
+  }, [selectedClientId, rows]);
 
   const filtered = rows.filter((r) =>
     !search ? true : r.full_name.toLowerCase().includes(search.toLowerCase()),

@@ -15,6 +15,7 @@ import type { SGUClientsPortfolio } from '@/hooks/useSGUClientsPortfolio';
 interface Props {
   data: SGUClientsPortfolio | undefined;
   isLoading: boolean;
+  onCardClick?: (key: string) => void;
 }
 
 function trend(curr: number, prev: number): { pct: number; up: boolean } | null {
