@@ -17,6 +17,7 @@ import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamConta
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
+import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
@@ -107,6 +108,7 @@ function DraggableCard({
   onOfferingWonClick,
   onOfferingLostClick,
   onSubcategoryChange,
+  onMoreClick,
 }: {
   contact: DealTeamContact;
   stage: DealStage;
@@ -116,6 +118,7 @@ function DraggableCard({
   onOfferingWonClick: () => void;
   onOfferingLostClick: () => void;
   onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
+  onMoreClick: () => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -136,6 +139,7 @@ function DraggableCard({
         onOfferingWonClick={onOfferingWonClick}
         onOfferingLostClick={onOfferingLostClick}
         onSubcategoryChange={onSubcategoryChange}
+        onMoreClick={onMoreClick}
         isDragging={isDragging}
       />
     </div>
@@ -152,6 +156,7 @@ function DroppableColumn({
   onOfferingWonClick,
   onOfferingLostClick,
   onSubcategoryChange,
+  onMoreClick,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -162,6 +167,7 @@ function DroppableColumn({
   onOfferingWonClick: (c: DealTeamContact) => void;
   onOfferingLostClick: (c: DealTeamContact) => void;
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
+  onMoreClick: (c: DealTeamContact) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
@@ -186,6 +192,7 @@ function DroppableColumn({
       onOfferingWonClick={() => onOfferingWonClick(c)}
       onOfferingLostClick={() => onOfferingLostClick(c)}
       onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
+      onMoreClick={() => onMoreClick(c)}
     />
   );
 
@@ -262,6 +269,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
+  const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -395,10 +403,18 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
                 setLostContact(c);
               }}
               onSubcategoryChange={handleSubcategoryChange}
+              onMoreClick={(c) => setSheetContact(c)}
             />
           ))}
         </div>
       </DndContext>
+
+      <ContactTasksSheet
+        contact={sheetContact}
+        teamId={teamId}
+        open={sheetContact !== null}
+        onOpenChange={(open) => !open && setSheetContact(null)}
+      />
 
       {convertContact && (
         <ConvertWonToClientDialog
