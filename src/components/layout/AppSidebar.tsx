@@ -80,16 +80,13 @@ const salesItems = [
   { title: 'Spotkania', url: '/meetings', icon: UsersRound, adminOnly: false },
 ];
 
-const funnelSubItems = [
-  { title: 'Dashboard', url: '/deals-team?view=dashboard', icon: PieChart },
-  { title: 'Kanban', url: '/deals-team?view=kanban', icon: LayoutGrid },
-  { title: 'Tabela', url: '/deals-team?view=table', icon: List },
-  { title: 'Prospecting', url: '/deals-team?view=prospecting', icon: Search },
-  { title: 'Klienci', url: '/deals-team?view=clients', icon: UserCheck },
-  { title: 'Ofertowanie', url: '/deals-team?view=offering', icon: Briefcase },
-  { title: 'Zadania', url: '/deals-team?view=tasks', icon: ClipboardList },
-  { title: 'Prowizje', url: '/deals-team?view=commissions', icon: Receipt },
-  { title: 'Odłożone', url: '/deals-team?view=snoozed', icon: Moon },
+// SGU sub-items (post SGU-REFACTOR-IA): 5 etapów zamiast 9
+const sguSubItems = [
+  { title: 'Dashboard', url: '/sgu', icon: PieChart },
+  { title: 'Sprzedaż', url: '/sgu/sprzedaz', icon: Target },
+  { title: 'Klienci', url: '/sgu/klienci', icon: UserCheck },
+  { title: 'Zadania', url: '/sgu/zadania', icon: ClipboardList },
+  { title: 'Raporty', url: '/sgu/raporty', icon: BarChart3 },
 ];
 
 // AI
@@ -166,20 +163,38 @@ function CollapsibleGroupLabel({ children, isCollapsed, isOpen, onToggle }: { ch
 
 function FunnelCollapsible({ isCollapsed }: { isCollapsed: boolean }) {
   const location = useLocation();
-  const isFunnelActive = location.pathname === '/deals-team';
-  const [open, setOpen] = useState(isFunnelActive);
+  const { enabled: sguEnabled } = useSGUTeamId();
+  const isSguActive = location.pathname.startsWith('/sgu');
+  const [open, setOpen] = useState(isSguActive);
 
   const baseClass = "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150";
   const activeClass = "bg-[hsl(263_70%_50%/0.2)] text-[hsl(263_70%_75%)] font-medium border-l-2 border-[hsl(263_70%_60%)] -ml-[2px]";
+
+  // If SGU layout disabled, show legacy funnel deprecation banner instead.
+  if (!sguEnabled) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild tooltip="SGU">
+          <NavLink
+            to="/deals-team?view=dashboard"
+            className={`${baseClass} ${location.pathname === '/deals-team' ? activeClass : ''}`}
+          >
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>Lejek sprzedaży</span>}
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
 
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
-          <button className={`${baseClass} w-full justify-between ${isFunnelActive ? 'text-sidebar-foreground font-medium' : ''}`}>
+          <button className={`${baseClass} w-full justify-between ${isSguActive ? 'text-sidebar-foreground font-medium' : ''}`}>
             <span className="flex items-center gap-3">
               <TrendingUp className="h-4 w-4 shrink-0" />
-              {!isCollapsed && <span>Lejek sprzedaży</span>}
+              {!isCollapsed && <span>SGU</span>}
             </span>
             {!isCollapsed && (
               <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
@@ -189,16 +204,17 @@ function FunnelCollapsible({ isCollapsed }: { isCollapsed: boolean }) {
         {!isCollapsed && (
           <CollapsibleContent>
             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">
-              {funnelSubItems.map((sub) => {
-                const params = new URLSearchParams(sub.url.split('?')[1]);
-                const isActive = location.pathname === '/deals-team' &&
-                  Array.from(params.entries()).every(([k, v]) => new URLSearchParams(location.search).get(k) === v);
+              {sguSubItems.map((sub) => {
+                const isActive =
+                  sub.url === '/sgu'
+                    ? location.pathname === '/sgu'
+                    : location.pathname.startsWith(sub.url);
 
                 return (
                   <SidebarMenuButton key={sub.title} asChild tooltip={sub.title}>
                     <NavLink
                       to={sub.url}
-                      end
+                      end={sub.url === '/sgu'}
                       className={`${baseClass} py-1.5 text-xs ${isActive ? activeClass : ''}`}
                     >
                       <sub.icon className="h-3.5 w-3.5 shrink-0" />

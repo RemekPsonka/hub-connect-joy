@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Users, Plus } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
