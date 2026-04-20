@@ -32,6 +32,11 @@ export interface SGUClientRow {
   company: string | null;
   representative_user_id: string | null;
   expected_annual_premium_gr: number;
+  client_status: string | null;
+  potential_property_gr: number;
+  potential_financial_gr: number;
+  potential_communication_gr: number;
+  potential_life_group_gr: number;
   policies: SGUPolicyLite[];
   payments: SGUPaymentLite[];
   bookedPln: number;
@@ -55,6 +60,8 @@ export interface SGUClientsPortfolio {
     renewals30dCount: number;
     commissionMonthGr: number;
     commissionPrevMonthGr: number;
+    ambassadorsCount: number;
+    complexClientsCount: number;
   };
 }
 
