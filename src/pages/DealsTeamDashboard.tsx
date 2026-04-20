@@ -49,10 +49,6 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showWeeklyStatus, setShowWeeklyStatus] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
-  const [commissionsTab, setCommissionsTab] = useState<'entries' | 'goals'>(() => {
-    if (typeof window === 'undefined') return 'entries';
-    return (window.localStorage.getItem('sgu-commissions-tab') as 'entries' | 'goals') || 'entries';
-  });
 
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
 
@@ -120,9 +116,6 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
   const handleTeamCreated = (teamId: string) => setSelectedTeamId(teamId);
   const handleSettingsClick = () => setShowTeamSettings(true);
 
-  const handleNavigate = (view: string) => {
-    setSearchParams({ view });
-  };
 
   if (teamsLoading && !forcedTeamId) {
     return (
