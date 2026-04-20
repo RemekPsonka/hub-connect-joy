@@ -1,53 +1,62 @@
 
-## Plan: RD-A2 hotfix #2 — TL;DR fix + martwe przyciski headera
+## Plan: RD-A2 hotfix #3 — podpięcia legacy + Sovra drawer
 
-### Recon — sprawdzę przed implementacją
-1. `_shared/llm-provider.ts` — czy `model_hint` jest obsługiwane, jak wygląda `LLMResponse` (czy ma `status`, `provider`, `tokens_in/out`).
-2. `App.tsx` — czy istnieje trasa `/contacts/:id/edit` (decyzja: navigate vs toast).
-3. Grep `SovraChat|SovraDialog|AskSovra` — czy jest gotowy drawer Sovry.
-4. `ContactHeaderTLDR.tsx` i `ActivityComposer.tsx` — obecna struktura propsów dla wire-up tabu.
+### Recon — kluczowe ustalenia
 
-### Zmiany
+1. **`useContactConsultations`** używa tabeli `consultations` z polem **`scheduled_at`** (nie `scheduled_date` jak w prompcie). Render musi czytać `c.scheduled_at`.
+2. **`useContactActivityLog`** zwraca `ContactActivityLog[]` z polami `activity_type`, `created_at`, `description` — OK, dopasowane.
+3. **`ContactModal`** używa propsów **`isOpen` / `onClose`** (nie `open`/`onOpenChange`) i przyjmuje `contact: ContactWithGroup` — wymaga pełnego rekordu kontaktu, nie skleconego literalu. Najprościej: pobrać `ContactWithGroup` z React Query (jest już query w `ContactDetailV2`), rozszerzyć select o brakujące pola lub przekazać `contact as unknown as ContactWithGroup` z minimalną asercją (nieczyste). **Decyzja**: rozszerzę query w `ContactDetailV2` o pola wymagane przez `ContactModal` (first_name, last_name, title, tags, source, city, address, notes itp. — ale realnie modal sam je czyta przez `react-hook-form`, więc wystarczy mu rekord pasujący do `ContactWithGroup`). Bez modyfikacji query — przekażę pełen `contact` z ContactDetailV2 do header, header przekaże do modala. Wymaga to dociągnięcia `*` w select zamiast wyselectowanych pól. **Robię to**: zmienię select na `*, companies(id, name), contact_groups:primary_group_id(id, name, color)`.
+4. **`AddOwnershipModal`** używa `open`/`onOpenChange` — OK, zgodne z promptem.
+5. **`useSovraChat`**: zwraca `messages`, `isStreaming`, `sendMessage` (nie `onSend`), `confirmAction`, `lastError`, `clearError`, `retryLast`. SovraInput oczekuje `onSend: (text) => void` — wire jako `onSend={(t) => chat.sendMessage(t)}`. `SovraMessages` oczekuje `messages, isStreaming, onConfirm`.
+6. **`SovraInput`** ma propsy `onSend, isStreaming, contextLabel?, onClearContext?` — bez problemu.
+7. **Brak usecase dla "Spotkanie"** w "Nowa akcja" — usuwam item zgodnie z promptem.
 
-**1. `supabase/functions/sovra-contact-tldr/index.ts`**
-- Zamiana `JSON.stringify(payload)` na opisowy `userPrompt` w PL (jak w prompcie).
-- Dopisanie do `systemPrompt`: „KRYTYCZNE: Zwróć CZYSTY TEKST. Nie zwracaj JSON, nie używaj cudzysłowów, nie opakowuj odpowiedzi."
-- `callLLM({ model_hint: 'google/gemini-2.5-flash', ... })` — tylko jeśli recon potwierdzi że provider obsługuje to pole. Jeśli nie ma `model_hint` w typie → użyję faktycznego pola (`model` lub `preferred_model`) zgodnie z provider.ts.
-- Dodaję `console.log('[tldr] prompt', ...)` przed i `console.log('[tldr] llmResp', ...)` po wywołaniu.
-- Zachowuję fallback `'Brak podsumowania AI'` i upsert.
-- Deploy edge function po zmianie.
+### Pliki do edycji (4)
+
+**1. `src/pages/ContactDetailV2.tsx`**
+- Zmiana selectu z listy pól na `*, companies(id, name), contact_groups:primary_group_id(id, name, color), directors:director_id(id, full_name)` (żeby `ContactModal` dostał kompletny `ContactWithGroup`).
+- Dodaję `const [historyOpen, setHistoryOpen] = useState(false)` + `historyRef = useRef<HTMLDivElement>(null)`.
+- `handleRequestHistory` → setHistoryOpen + setTimeout scroll.
+- Przekazuję do `ContactHeaderTLDR`: `onRequestHistory={handleRequestHistory}` + nowy prop `fullContact={contact}` (rekord do edycji).
+- Przekazuję do `SectionsAccordion`: `forceOpenHistory={historyOpen}` + `historyRef={historyRef}`.
 
 **2. `src/components/contact-v2/ContactHeaderTLDR.tsx`**
-- Import `useNavigate` z react-router-dom, `toast` z sonner.
-- Nowe propsy: `onSelectAction: (tab: 'note' | 'email' | 'meeting') => void`.
-- Dropdown `...`:
-  - usuwam „Udostępnij"
-  - „Ustaw właściciela" → `toast.info('Zmiana właściciela — wkrótce')`
-  - „Edytuj" → `toast.info('Edycja kontaktu — wkrótce')` (recon `App.tsx` zapewne pokaże brak trasy edit)
-  - „Historia" → `toast.info('Historia zmian — wkrótce')`
-- Dropdown „Nowa akcja":
-  - „Notatka" → `onSelectAction('note')`
-  - „Spotkanie" → `toast.info('Spotkania — wymaga aktualizacji schematu, kolejny sprint')`
-  - „Zadanie" → `toast.info('Zadania — kolejny sprint')`
-- „Zapytaj Sovrę": jeśli recon znajdzie SovraChat → otwórz; inaczej `toast.info` + TODO comment.
+- Importy: `ContactModal`, `AddOwnershipModal`, `Sheet*` z `@/components/ui/sheet`, `useSovraChat`, `SovraMessages`, `SovraInput`, `SovraFallbackBanner`, `ExternalLink`.
+- Nowe stany: `editOpen`, `ownershipOpen`, `sovraDrawerOpen`.
+- Props: dodaję `onRequestHistory?: () => void` + `fullContact?: ContactWithGroup` (do przekazania do ContactModal).
+- Dropdown "Nowa akcja" — usuwam item "📅 Spotkanie" w całości.
+- "Zapytaj Sovrę" `onClick` → `setSovraDrawerOpen(true)` (zostawiam `useNavigate` — używany w SovraContactDrawer dla "Otwórz w pełnej Sovrze").
+- Dropdown "...": Edytuj → setEditOpen, Ustaw właściciela → setOwnershipOpen, Historia → onRequestHistory().
+- Renderuję na końcu (obok `PushToSGUDialog`):
+  - `ContactModal isOpen={editOpen} onClose={() => setEditOpen(false)} contact={fullContact ?? null}`
+  - `AddOwnershipModal open={ownershipOpen} onOpenChange={setOwnershipOpen} contactId={contactId} contactName={contact.full_name}`
+  - `<SovraContactDrawer open={sovraDrawerOpen} onOpenChange={setSovraDrawerOpen} contactId={contactId} contactName={contact.full_name} companyName={contact.companies?.name ?? null} />`
+- Dodaję wewnętrzny komponent `SovraContactDrawer` na końcu pliku z `Sheet` (side="right", w-full sm:max-w-xl), używa `useSovraChat({ contextType: 'contact', contextId })`, renderuje `SovraFallbackBanner` (warunkowo), `SovraMessages messages={chat.messages} isStreaming={chat.isStreaming} onConfirm={chat.confirmAction}`, `SovraInput onSend={(t) => chat.sendMessage(t)} isStreaming={chat.isStreaming}`, plus link "Otwórz w pełnej Sovrze →" → `navigate('/sovra?context=contact&id=...')`.
 
-**3. `src/pages/ContactDetailV2.tsx`**
-- Dodaję `const [composerTab, setComposerTab] = useState<'note' | 'email' | 'meeting'>('note')`.
-- Dodaję `const composerRef = useRef<HTMLDivElement>(null)`.
-- Przekazuję do `ContactHeaderTLDR` prop `onSelectAction={(tab) => { setComposerTab(tab); composerRef.current?.scrollIntoView({behavior:'smooth', block:'start'}); }}`.
-- Owijam `ActivityTimeline` (która zawiera composer) w `<div ref={composerRef}>` lub przekazuję ref bezpośrednio do composer area. **Recon potrzebny** — zobaczę gdzie composer jest renderowany (`ActivityTimeline` czy osobno).
-- Przekazuję `activeTab={composerTab} onTabChange={setComposerTab}` do composera.
+**3. `src/components/contact-v2/SectionsAccordion.tsx`**
+- Props: dodaję `forceOpenHistory?: boolean`, `historyRef?: React.RefObject<HTMLDivElement>`.
+- `useEffect` na zmianę `forceOpenHistory` — dodaje `'history'` do open jeśli nie ma.
+- Owijam ostatni `<Item id="history">` w `<div ref={historyRef}>`.
+- `Item` "history" → `<SectionHistory contactId={contactId} />` (przekazuję contactId).
 
-**4. `src/components/contact-v2/ActivityComposer.tsx`**
-- Nowe propsy `activeTab?: 'note' | 'email' | 'meeting'`, `onTabChange?: (tab: string) => void`.
-- `<Tabs value={activeTab ?? 'note'} onValueChange={onTabChange}>` zamiast `defaultValue`.
-- Reszta bez zmian (Email/Spotkanie nadal disabled).
+**4. `src/components/contact-v2/sections/SectionHistory.tsx`**
+- Przepisuję wg szablonu z promptu, ale:
+  - `c.scheduled_at` zamiast `c.scheduled_date` (recon #1).
+  - Używam `SectionShell` z istniejącym kontraktem (loading/error/empty).
+  - Sortowanie po `scheduled_at` dla konsultacji, `created_at` dla activity.
+  - Empty state: "Brak historii — żadnych konsultacji ani zdarzeń w audycie".
+  - Loading/error przez `SectionShell` (dwa źródła — łączny stan: `isLoading = lc || la`, `isError = ec || ea`).
 
-### Po implementacji
-- Deploy edge function `sovra-contact-tldr`.
+### Co NIE jest ruszane
+- DB / migracje / edge functions
+- `ActivityComposer`, `ActivityTimeline`, pozostałe sekcje (Company/Insurance/Emails/Meetings/Notes/AI)
+- Routing / FeatureFlagGate
+- V1 `ContactDetail`
+
+### Acceptance
+- "..." → Edytuj otwiera `ContactModal` z preloadowanym kontaktem.
+- "..." → Ustaw właściciela otwiera `AddOwnershipModal`.
+- "..." → Historia otwiera sekcję accordion + scroll do niej, sekcja pokazuje konsultacje + audit log.
+- "Zapytaj Sovrę" otwiera prawy `Sheet` z czatem w kontekście kontaktu, z linkiem do pełnej Sovry.
+- "Nowa akcja" — bez "📅 Spotkanie".
 - `tsc --noEmit` → 0 błędów.
-- Test ręczny: F5 na karcie kontaktu, sprawdzenie logów edge w panelu.
-
-### Pliki
-- Edycja: `supabase/functions/sovra-contact-tldr/index.ts`, `src/components/contact-v2/ContactHeaderTLDR.tsx`, `src/components/contact-v2/ActivityComposer.tsx`, `src/pages/ContactDetailV2.tsx`.
-- Bez DB, bez nowych komponentów, bez routingu.
