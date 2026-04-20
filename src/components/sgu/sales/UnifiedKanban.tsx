@@ -203,14 +203,21 @@ function DroppableColumn({
       const k = cfg.getter(c) ?? '__none__';
       (groups[k] ??= []).push(c);
     }
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const ia = cfg.order.indexOf(a);
+      const ib = cfg.order.indexOf(b);
+      const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+      const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+      return ra - rb;
+    });
     body = (
       <div className="space-y-3">
-        {Object.entries(groups).map(([k, list]) => (
+        {sortedKeys.map((k) => (
           <div key={k} className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground px-1">
-              {cfg.labels[k] ?? '(brak)'} ({list.length})
+              {cfg.labels[k] ?? '(brak)'} ({groups[k].length})
             </div>
-            <div className="space-y-2">{list.map(renderCard)}</div>
+            <div className="space-y-2">{groups[k].map(renderCard)}</div>
           </div>
         ))}
       </div>
