@@ -139,14 +139,7 @@ export interface DealTeamContact {
   is_lost?: boolean;
   lost_reason?: string | null;
   lost_at?: string | null;
-  client_complexity?: {
-    property_active: boolean;
-    financial_active: boolean;
-    communication_active: boolean;
-    life_group_active: boolean;
-    referrals_count: number;
-    references_count: number;
-  };
+  client_complexity?: ClientComplexity | Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   // JOIN z contacts
