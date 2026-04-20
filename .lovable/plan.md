@@ -1,60 +1,86 @@
 
 
-## RECON — wynik
+## Plan: KROK 8 — SGUAdminPage 5 zakładek
 
-### MyTeamTasksView.tsx (806 linii)
-- **Plik**: `src/components/deals-team/MyTeamTasksView.tsx`
-- **ViewMode**: `'grouped' | 'list' | 'kanban' | 'team'` (linia 44) — **DO USUNIĘCIA: 'kanban' i 'team'**
-- **Imports do usunięcia**:
-  - linia 54: `import { WORKFLOW_COLUMNS, CATEGORY_OPTIONS, type WorkflowColumn } from '@/config/pipelineStages';`
-  - linia 55: `import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';`
-  - linia 56: `import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';`
-  - linia 33-34: `SnoozeDialog`, `ConvertToClientDialog` (używane tylko w kanban dnd) — **zostawić** (używane też w Workflow Dialogs blok 762-803)
-  - DnD: `DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable, useDraggable, DragStartEvent, DragEndEvent` (linie 4-8) — używane tylko w kanban → DO USUNIĘCIA
-  - `Columns3, Users` (linia 13) — kanban + team toggle → DO USUNIĘCIA
-  - `Progress` (linia 19) — tylko team view → DO USUNIĘCIA
-- **Funkcje do usunięcia**:
-  - `reverseMapColumn` (linie 59-77)
-  - `DroppableWorkflowColumn`, `DraggableWorkflowCard` (linie 80-101)
-- **State do usunięcia**: `activeDragTask`, sensors, DnD handlers (`handleDragStart`, `handleDragEnd`)
-- **Memo do usunięcia**: `workflowKanban`, `funnelStats`, `teamData`, `FUNNEL_CATEGORIES`
-- **JSX do usunięcia**: kanban block (578-689), team block (692-746), 2 ToggleGroupItem (431-438)
-- **`SnoozedTeamView`**: nadal renderowany w `DealsTeamDashboard` jako osobny `viewMode === 'snoozed'` — **NIE TYKAĆ** (osobny widok, nie w MyTeamTasksView)
+### Decyzje vs. spec (rozjazdy)
 
-### useDealsTeamAssignments.ts (`useMyTeamAssignments`)
-- Już zwraca `contact_category` i `contact_offering_stage` przez join `deal_team_contacts(category, offering_stage)`. **Brakuje**: `temperature`, `client_status`. Trzeba rozszerzyć select o te 2 kolumny + dodać do interfejsu `DealTeamAssignment` i mapowania.
+**1. `commission_base_split` schema NIE pasuje do spec**
+Spec chce: `ProductCategory × rate_rep × rate_partner × rate_director`. Realna tabela: `role_key` (text, np. `sgu_company`/`adam`/`paweł`/`remek` lub `rep:<uuid>`), `share_pct`, `active_from/to`. To jest pojedynczy split bazowy (Case A), już obsługiwany w `SGUCommissionsAdmin.tsx`.
 
-### UnifiedTaskRow.tsx
-- Brak propa `dealStageBadge`. Render aktualnie ma `task.deal_team` badge (kolor zespołu). Dodam nowy badge **przed** title, między title a due_date — wg specu "między title a due_date" → wstawić w `<div className="flex items-center shrink-0">` ale przed `getDueDateDisplay()`.
+**Decyzja**: W `CommissionsSplitTab` reuse istniejący `SGUCommissionsAdmin` content (read-only tabela aktywnego splita + historia). Edycja per-row to osobny sprint (SGU-08). Komentarz `// TODO: dodanie inline edit udziałów w SGU-08`. **Nie wymyślam kolumn ProductCategory × rate_*.**
 
-### Plan zmian (3 pliki)
+**2. `sgu_settings` brakuje 2 kolumn (`enable_sgu_prospecting_ai`, `enable_sgu_reports`)**
+**Decyzja**: Migracja DB doda 2 kolumny `boolean DEFAULT false`. Bez archiwizacji (dodanie nullable bool nie niszczy danych).
 
-1. **`src/hooks/useDealsTeamAssignments.ts`**:
-   - Rozszerzyć `DealTeamAssignment` o: `contact_temperature?: string | null`, `contact_client_status?: string | null`
-   - W `useMyTeamAssignments`: select `'id, contact_id, category, offering_stage, temperature, client_status'`
-   - W mapowaniu: `contact_temperature: tc?.temperature || null`, `contact_client_status: tc?.client_status || null`
+**3. `PipelineConfigurator` jest Dialog-em z teamId+tenantId+open**
+**Decyzja**: `PipelineConfigTab` to wrapper z przyciskiem `[Otwórz konfigurator]` → otwiera Dialog. Pobiera `teamId` z `useSGUTeamId`, `tenantId` z `sgu_settings` (rozszerzę `useSGUTeamId`).
 
-2. **`src/components/tasks/UnifiedTaskRow.tsx`**:
-   - Dodać `import { Search, FileText, Handshake, X, Sprout } from 'lucide-react'` — używam emoji w specie więc tylko literały string
-   - Stałe `STAGE_ICON` (emoji), `STAGE_LABEL` (PL), `SUB_LABEL` (PL z emoji)
-   - Nowy prop:
-     ```ts
-     dealStageBadge?: { stage: string; subCategory?: string };
-     ```
-   - Render badge przed `{getDueDateDisplay()}` w sekcji metadata.
+**4. `SGUAdmin.tsx` — refactor czy nowy `SGUAdminPage`?**
+Spec mówi `SGUAdminPage.tsx`. Ale routing w `App.tsx` używa `SGUAdmin`. **Decyzja**: Refactor istniejącego `src/pages/sgu/SGUAdmin.tsx` (zachowuję default export, App.tsx bez zmian). Hub-tile mode + `commissions` legacy → usuwam, zastępuję 5-tabami. `:section` route → mapuję na `defaultValue` Tabs.
 
-3. **`src/components/deals-team/MyTeamTasksView.tsx`**:
-   - `type ViewMode = 'grouped' | 'list'`
-   - Usunąć imports: WORKFLOW_COLUMNS/adapter/pipelineConfig/dnd-kit/Columns3/Users/Progress + `reverseMapColumn` + Droppable/Draggable wrappers
-   - Usunąć stan/memo: activeDragTask, sensors, handleDragStart/End, workflowKanban, funnelStats, teamData, FUNNEL_CATEGORIES, wfPipelineStages/Transitions
-   - Usunąć JSX: ToggleGroupItem kanban+team (431-438), VIEW Kanban (578-689), VIEW Team (692-746)
-   - **NOWY layout `grouped`**: zastąpić obecny "grouped per teamContact" — 4 collapsible sekcje (Dzisiaj/Zaległe/Nadchodzące7d/Wszystkie) wg spec
-   - W `<UnifiedTaskRow>` dodać prop `dealStageBadge={task.contact_category ? { stage: task.contact_category, subCategory: task.contact_temperature ?? task.contact_offering_stage ?? task.contact_client_status ?? undefined } : undefined}`
+**5. Guard partner/director**
+`useSGUAccess()` zwraca `isPartner` i `isRep`. Brak `isDirector`, ale `useAuth().director` daje info. **Decyzja**: dostęp gdy `isPartner || !!director`. Gdy `isRep && !isPartner` → `<Navigate to="/sgu" replace/>`.
 
-### Decyzje
-- **`SnoozeDialog`/`ConvertToClientDialog`** zostają w imports (nadal używane w Workflow Dialogs przy completion)
-- **`STATUS_LABELS`** local const (linia 46-51) nie jest już używany po usunięciu team view — usuwam też
-- **Stara `grouped` per kontakt** vs nowa **per czas** — spec mówi jasno "Collapsible sekcje Dzisiaj/Zaległe/Nadchodzące7d/Wszystkie", więc **zastępuję**, nie dodaję obok. Wpisanie kontaktu jako podgrupy w Wszystkie byłoby zbyt zagnieżdżone — flat lista w każdej sekcji + `dealStageBadge` daje kontekst.
-- **`InlineTaskCreate`** (per kontakt) — używane tylko w starej grouped per kontakt. **Usuwam użycie**, ale komponent zostawiam (może być użyty kiedyś).
-- **TypeScheck** po zmianach — `npx tsc --noEmit`.
+### Migracja DB (1)
+```sql
+ALTER TABLE public.sgu_settings 
+  ADD COLUMN IF NOT EXISTS enable_sgu_prospecting_ai boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS enable_sgu_reports boolean NOT NULL DEFAULT false;
+-- ROLLBACK: ALTER TABLE public.sgu_settings DROP COLUMN enable_sgu_prospecting_ai, DROP COLUMN enable_sgu_reports;
+```
+
+### Pliki
+
+**EDIT (2):**
+1. `src/pages/sgu/SGUAdmin.tsx` — refactor: guard + CommissionsHeader + Tabs (5) + content per tab. Usuwam hub-tile mode i `commissions` lazy. Wsparcie URL `?tab=` dla deep linkowania.
+2. `src/hooks/useSGUTeamId.ts` — rozszerzyć select o `tenant_id, enable_sgu_prospecting_ai, enable_sgu_reports`; zwrócić `tenantId`, `enableProspectingAI`, `enableReports`.
+
+**NEW (6):**
+3. `src/components/sgu/admin/TeamAdminTab.tsx` — `useTeamMembers(sguTeamId)`. Tabela: avatar/nazwa/email/rola/status. Przycisk `[+ Zaproś przedstawiciela]` → `toast.info('Sprint SGU-09')`.
+4. `src/components/sgu/admin/ProductsAdminTab.tsx` — render `<ProductCategoryManager teamId={sguTeamId}/>` bezpośrednio (nie dialog).
+5. `src/components/sgu/admin/CommissionsSplitTab.tsx` — przeniesiona logika z `SGUCommissionsAdmin` (read-only tabela aktywnego splita + historia + sumWarning). Komentarz TODO o edycji.
+6. `src/components/sgu/admin/PipelineConfigTab.tsx` — przycisk + `<PipelineConfigurator teamId tenantId open onOpenChange/>` w state. Gdy brak `teamId/tenantId` → `<Alert>`.
+7. `src/components/sgu/admin/SGUSettingsTab.tsx` — Form z 3 `<Switch>` (enable_sgu_layout/prospecting_ai/reports). Read przez `useSGUSettings()` (nowy hook). Update przez `useUpdateSGUSettings()` (mutation, upsert by tenant_id). Disabled dla `isPartner && !director`. Invalidate `['sgu-settings']`, `['sgu-team-id']`.
+8. `src/hooks/useSGUSettings.ts` — query (full row) + mutation upsert. queryKey `['sgu-settings']`.
+
+**NIE TWORZĘ:**
+- `SGUAdminPage.tsx` (nowy plik) — refactor istniejącego `SGUAdmin.tsx` zamiast.
+- Edycji split per-row (Case D) — TODO SGU-08.
+- Stub `enable_sgu_reports` UI gdy nieaktywny — Switch widoczny ale `SGUReports` route bez gating w tym kroku.
+
+### Struktura `SGUAdmin.tsx`
+```tsx
+const { isPartner } = useSGUAccess();
+const { director } = useAuth();
+const allowed = isPartner || !!director;
+if (!allowed) return <Navigate to="/sgu" replace/>;
+
+const { sguTeamId, tenantId } = useSGUTeamId();
+const [tab, setTab] = useState(searchParams.get('tab') ?? 'zespol');
+
+return (
+  <div className="max-w-6xl mx-auto space-y-4">
+    <CommissionsHeader teamId={sguTeamId ?? undefined}/>
+    <Tabs value={tab} onValueChange={setTab}>
+      <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+        <TabsTrigger value="zespol">Zespół</TabsTrigger>
+        <TabsTrigger value="produkty">Produkty</TabsTrigger>
+        <TabsTrigger value="prowizje">Prowizje</TabsTrigger>
+        <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+        <TabsTrigger value="ustawienia">Ustawienia</TabsTrigger>
+      </TabsList>
+      <TabsContent value="zespol"><TeamAdminTab teamId={sguTeamId}/></TabsContent>
+      <TabsContent value="produkty"><ProductsAdminTab teamId={sguTeamId}/></TabsContent>
+      <TabsContent value="prowizje"><CommissionsSplitTab/></TabsContent>
+      <TabsContent value="pipeline"><PipelineConfigTab teamId={sguTeamId} tenantId={tenantId}/></TabsContent>
+      <TabsContent value="ustawienia"><SGUSettingsTab/></TabsContent>
+    </Tabs>
+  </div>
+);
+```
+
+### Konsekwencje
+- `SGUCommissionsAdmin.tsx` — **zostawiam plik** (route `/sgu/admin/commissions/case-d` go nie używa, ale lazy import w starym SGUAdmin znika; samym pliku może być powołany w przyszłości). Komentarz `// LEGACY: zachowane do referencji, faktyczny widok teraz w CommissionsSplitTab`. Alternatywa: archiwizacja → zostawiam in-place.
+- Routing `App.tsx` bez zmian. Route `/sgu/admin/:section` (catch-all) pokazywał nieistotne sekcje placeholder — po refactorze będzie próbował renderować Tabs z `defaultValue=section`. Mapping `:section` → `tab` (np. `commissions` → `prowizje`, `team` → `zespol`).
+- `SGURepresentatives`/`SGUAssignments`/`SGUCaseD` — dedykowane routes nadal działają niezależnie.
 
