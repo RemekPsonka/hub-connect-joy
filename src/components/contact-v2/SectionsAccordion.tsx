@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Building2, Shield, Mail, Calendar, FileText, Brain, History } from 'lucide-react';
 import {
   Accordion,
@@ -18,11 +18,25 @@ interface SectionsAccordionProps {
   contactId: string;
   companyId: string | null;
   contactEmail: string | null;
+  forceOpenHistory?: boolean;
+  historyRef?: React.RefObject<HTMLDivElement>;
 }
 
-export function SectionsAccordion({ contactId, companyId, contactEmail }: SectionsAccordionProps) {
+export function SectionsAccordion({
+  contactId,
+  companyId,
+  contactEmail,
+  forceOpenHistory,
+  historyRef,
+}: SectionsAccordionProps) {
   const [open, setOpen] = useState<string[]>([]);
   const isOpen = (id: string) => open.includes(id);
+
+  useEffect(() => {
+    if (forceOpenHistory) {
+      setOpen((prev) => (prev.includes('history') ? prev : [...prev, 'history']));
+    }
+  }, [forceOpenHistory]);
 
   return (
     <Accordion
@@ -49,9 +63,11 @@ export function SectionsAccordion({ contactId, companyId, contactEmail }: Sectio
       <Item id="ai" label="Pełne dane AI" icon={Brain}>
         <SectionAI contactId={contactId} enabled={isOpen('ai')} />
       </Item>
-      <Item id="history" label="Historia zmian" icon={History}>
-        <SectionHistory />
-      </Item>
+      <div ref={historyRef}>
+        <Item id="history" label="Historia zmian" icon={History}>
+          <SectionHistory contactId={contactId} />
+        </Item>
+      </div>
     </Accordion>
   );
 }

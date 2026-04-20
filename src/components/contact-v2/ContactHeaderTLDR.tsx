@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { MoreHorizontal, Plus, Sparkles, Building2, Mail, Phone, Linkedin, AlertCircle } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Plus,
+  Sparkles,
+  Building2,
+  Mail,
+  Phone,
+  Linkedin,
+  AlertCircle,
+  ExternalLink,
+} from 'lucide-react';
 import { useContactTldr } from '@/hooks/useContactTldr';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -14,7 +24,20 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
+import { ContactModal } from '@/components/contacts/ContactModal';
+import { AddOwnershipModal } from '@/components/contacts/AddOwnershipModal';
+import { SovraMessages } from '@/components/sovra/SovraMessages';
+import { SovraInput } from '@/components/sovra/SovraInput';
+import { SovraFallbackBanner } from '@/components/sovra/SovraFallbackBanner';
+import { useSovraChat } from '@/hooks/useSovraChat';
+import type { ContactWithGroup } from '@/hooks/useContacts';
 
 interface ContactHeaderTLDRProps {
   contactId: string;
@@ -29,7 +52,9 @@ interface ContactHeaderTLDRProps {
     companies?: { id?: string; name: string } | null;
     director_id?: string | null;
   };
+  fullContact?: ContactWithGroup | null;
   onSelectAction?: (tab: 'note' | 'email' | 'meeting') => void;
+  onRequestHistory?: () => void;
 }
 
 function initials(name: string): string {
@@ -41,10 +66,18 @@ function initials(name: string): string {
     .join('');
 }
 
-export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: ContactHeaderTLDRProps) {
+export function ContactHeaderTLDR({
+  contactId,
+  contact,
+  fullContact,
+  onSelectAction,
+  onRequestHistory,
+}: ContactHeaderTLDRProps) {
   const { data: tldr, isLoading } = useContactTldr(contactId);
   const [sguOpen, setSguOpen] = useState(false);
-  const navigate = useNavigate();
+  const [editOpen, setEditOpen] = useState(false);
+  const [ownershipOpen, setOwnershipOpen] = useState(false);
+  const [sovraDrawerOpen, setSovraDrawerOpen] = useState(false);
 
   const hasContactInfo = contact.email || contact.phone || contact.linkedin_url;
 
@@ -135,9 +168,6 @@ export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: Contac
                   </TooltipTrigger>
                   <TooltipContent>W trakcie naprawy</TooltipContent>
                 </Tooltip>
-                <DropdownMenuItem onSelect={() => toast.info('Spotkania — wymaga aktualizacji schematu, kolejny sprint')}>
-                  📅 Spotkanie
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => toast.info('Zadania — kolejny sprint')}>
                   ✅ Zadanie
                 </DropdownMenuItem>
@@ -150,7 +180,7 @@ export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: Contac
               size="sm"
               variant="secondary"
               className="gap-1.5"
-              onClick={() => navigate(`/sovra?contextType=contact&contextId=${contactId}`)}
+              onClick={() => setSovraDrawerOpen(true)}
             >
               <Sparkles className="h-4 w-4" /> Zapytaj Sovrę
             </Button>
@@ -162,13 +192,21 @@ export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: Contac
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => toast.info('Zmiana właściciela — wkrótce')}>
+                <DropdownMenuItem onSelect={() => setOwnershipOpen(true)}>
                   Ustaw właściciela
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast.info('Edycja kontaktu — wkrótce')}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    if (!fullContact) {
+                      toast.error('Nie udało się załadować danych kontaktu do edycji');
+                      return;
+                    }
+                    setEditOpen(true);
+                  }}
+                >
                   Edytuj
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast.info('Historia zmian — wkrótce')}>
+                <DropdownMenuItem onSelect={() => onRequestHistory?.()}>
                   Historia
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -185,6 +223,93 @@ export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: Contac
         contactId={contactId}
         contactName={contact.full_name}
       />
+
+      {fullContact && (
+        <ContactModal
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          contact={fullContact}
+        />
+      )}
+
+      <AddOwnershipModal
+        open={ownershipOpen}
+        onOpenChange={setOwnershipOpen}
+        contactId={contactId}
+        contactName={contact.full_name}
+      />
+
+      <SovraContactDrawer
+        open={sovraDrawerOpen}
+        onOpenChange={setSovraDrawerOpen}
+        contactId={contactId}
+        contactName={contact.full_name}
+        companyName={contact.companies?.name ?? null}
+      />
     </TooltipProvider>
+  );
+}
+
+function SovraContactDrawer({
+  open,
+  onOpenChange,
+  contactId,
+  contactName,
+  companyName,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  contactId: string;
+  contactName: string;
+  companyName: string | null;
+}) {
+  const navigate = useNavigate();
+  const chat = useSovraChat({ contextType: 'contact', contextId: contactId });
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0">
+        <SheetHeader className="px-6 py-4 border-b">
+          <SheetTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Sovra · {contactName}
+            {companyName ? ` · ${companyName}` : ''}
+          </SheetTitle>
+        </SheetHeader>
+
+        {chat.lastError === 'unavailable' && (
+          <div className="px-4 pt-3">
+            <SovraFallbackBanner onRetry={chat.retryLast} onDismiss={chat.clearError} />
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <SovraMessages
+            messages={chat.messages}
+            isStreaming={chat.isStreaming}
+            onConfirm={chat.confirmAction}
+          />
+        </div>
+
+        <SovraInput
+          onSend={(t) => chat.sendMessage(t)}
+          isStreaming={chat.isStreaming}
+          contextLabel={`Kontakt: ${contactName}`}
+        />
+
+        <div className="px-4 py-2 border-t">
+          <button
+            type="button"
+            onClick={() => {
+              onOpenChange(false);
+              navigate(`/sovra?contextType=contact&contextId=${contactId}`);
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-full justify-end"
+          >
+            Otwórz w pełnej Sovrze <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
