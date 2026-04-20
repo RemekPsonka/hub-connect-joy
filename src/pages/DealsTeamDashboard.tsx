@@ -95,10 +95,10 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
   useEffect(() => {
     if (!forcedTeamId || forcedFilter === undefined) return;
     if (forcedFilter === null) return;
-    const map: Record<SalesFilter, { view: string; filter?: string }> = {
+    const map: Record<SalesFilter, { view: ViewMode; filter?: string }> = {
       prospect: { view: 'kanban', filter: 'prospect' },
       lead: { view: 'kanban', filter: 'lead' },
-      offering: { view: 'offering' },
+      offering: { view: 'kanban', filter: 'offering' },
       today: { view: 'tasks', filter: 'today' },
       overdue: { view: 'tasks', filter: 'overdue' },
     };
