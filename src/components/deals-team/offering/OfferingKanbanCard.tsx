@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import type { DealTeamContact } from '@/types/dealTeam';
 import type { PaymentScheduleEntry } from '@/hooks/usePaymentSchedule';
+import { FourAreasBar } from './FourAreasBar';
 
 interface OfferingKanbanCardProps {
   contact: DealTeamContact;
