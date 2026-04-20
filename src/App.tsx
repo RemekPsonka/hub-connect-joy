@@ -29,6 +29,7 @@ const SGUAssignments = lazy(() => import("./pages/sgu/SGUAssignments"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail"));
+const ContactDetailV2 = lazy(() => import("./pages/ContactDetailV2"));
 const Consultations = lazy(() => import("./pages/Consultations"));
 const ConsultationDetail = lazy(() => import("./pages/ConsultationDetail"));
 const Meetings = lazy(() => import("./pages/Meetings"));
@@ -151,6 +152,7 @@ const App = () => (
                   {/* Routes accessible by both directors and assistants — but blocked for SGU-only users */}
                   <Route path="/contacts" element={<CRMOnlyGuard><Contacts /></CRMOnlyGuard>} />
                   <Route path="/contacts/:id" element={<CRMOnlyGuard><ContactDetail /></CRMOnlyGuard>} />
+                  <Route path="/contacts-v2/:id" element={<CRMOnlyGuard><ContactDetailV2 /></CRMOnlyGuard>} />
                   <Route path="/companies/:id" element={<CRMOnlyGuard><DirectorGuard><CompanyDetail /></DirectorGuard></CRMOnlyGuard>} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
