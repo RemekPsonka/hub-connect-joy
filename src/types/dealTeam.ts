@@ -15,6 +15,15 @@ export type ProspectSource = 'crm_push' | 'cc_meeting' | 'ai_krs' | 'ai_web' | '
 /** Sub-category for CLIENT stage. */
 export type ClientStatus = 'standard' | 'ambassador' | 'lost';
 
+export interface ClientComplexity {
+  property_active: boolean;
+  financial_active: boolean;
+  communication_active: boolean;
+  life_group_active: boolean;
+  referrals_count: number;
+  references_count: number;
+}
+
 /**
  * OFFERING_STAGE — extended after SGU-REFACTOR-IA migration (8 values).
  * Legacy values 'preparation' and 'accepted' have been migrated in DB
