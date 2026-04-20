@@ -264,7 +264,7 @@ function SovraContactDrawer({
   companyName: string | null;
 }) {
   const navigate = useNavigate();
-  const chat = useSovraChat({ contextType: 'contact', contextId });
+  const chat = useSovraChat({ contextType: 'contact', contextId: contactId });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
