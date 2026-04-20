@@ -12,7 +12,7 @@ export function usePriorityColdTopLead() {
       const { data, error } = await supabase
         .from('deal_team_contacts')
         .select(
-          'id, contact_id, last_status_update, contact:contacts(full_name)'
+          'id, contact_id, last_status_update, contact:contacts!deal_team_contacts_contact_id_fkey(full_name)'
         )
         .eq('temperature', 'top')
         .or(

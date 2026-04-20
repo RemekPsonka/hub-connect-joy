@@ -11,7 +11,9 @@ export function usePriorityStuckNegotiation() {
 
       const { data, error } = await supabase
         .from('deal_team_contacts')
-        .select('id, contact_id, updated_at, contact:contacts(full_name)')
+        .select(
+          'id, contact_id, updated_at, contact:contacts!deal_team_contacts_contact_id_fkey(full_name)'
+        )
         .eq('deal_stage', 'offering')
         .eq('offering_stage', 'negotiation')
         .lt('updated_at', cutoff.toISOString())

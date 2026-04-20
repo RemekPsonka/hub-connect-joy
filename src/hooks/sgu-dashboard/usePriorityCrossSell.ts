@@ -17,7 +17,7 @@ export function usePriorityCrossSell() {
       const { data, error } = await supabase
         .from('deal_team_contacts')
         .select(
-          'id, contact_id, potential_property_gr, potential_life_group_gr, potential_communication_gr, potential_financial_gr, contact:contacts(full_name)'
+          'id, contact_id, potential_property_gr, potential_life_group_gr, potential_communication_gr, potential_financial_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name)'
         )
         .eq('client_status', 'standard')
         .or(
@@ -30,12 +30,9 @@ export function usePriorityCrossSell() {
       if (error) throw error;
       if (!data) return null;
 
+      const row = data as unknown as Record<string, number | null>;
       const missing = Object.entries(AREA_LABELS)
-        .filter(
-          ([k]) =>
-            (data as Record<string, number | null>)[k] === 0 ||
-            (data as Record<string, number | null>)[k] == null
-        )
+        .filter(([k]) => row[k] === 0 || row[k] == null)
         .map(([, label]) => label);
 
       const name =
