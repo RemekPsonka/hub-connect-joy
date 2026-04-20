@@ -21,6 +21,7 @@ type Filter = 'all' | 'overdue' | 'this_month' | 'upcoming_30d';
 interface Props {
   rows: SGUClientRow[];
   teamId: string;
+  filter?: string | null;
 }
 
 interface FlatPayment {
@@ -39,8 +40,9 @@ function fmtDate(d: string | null): string {
   return `${day}.${m}.${y}`;
 }
 
-export function ClientPaymentsTab({ rows, teamId }: Props) {
-  const [filter, setFilter] = useState<Filter>('overdue');
+export function ClientPaymentsTab({ rows, teamId, filter: urlFilter }: Props) {
+  const initial: Filter = urlFilter === 'overdue30' ? 'overdue' : 'overdue';
+  const [filter, setFilter] = useState<Filter>(initial);
   const qc = useQueryClient();
   const { isPartner } = useSGUAccess();
   const { isAdmin } = useOwnerPanel();

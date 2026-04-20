@@ -24,17 +24,20 @@ export function SGUClientsView({ teamId }: Props) {
   const rawTab = searchParams.get('tab') as Tab | null;
   const tab: Tab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'portfolio';
   const selectedClientId = searchParams.get('clientId');
+  const filter = searchParams.get('filter');
 
-  const updateParams = (next: { tab?: Tab; clientId?: string | null }) => {
+  const updateParams = (next: { tab?: Tab; clientId?: string | null; filter?: string | null }) => {
     const params = new URLSearchParams(searchParams);
     if (next.tab) params.set('tab', next.tab);
     if (next.clientId === null) params.delete('clientId');
     else if (next.clientId) params.set('clientId', next.clientId);
+    if (next.filter === null) params.delete('filter');
+    else if (next.filter) params.set('filter', next.filter);
     setSearchParams(params, { replace: true });
   };
 
   const onTabChange = (v: string) => {
-    updateParams({ tab: v as Tab, clientId: null });
+    updateParams({ tab: v as Tab, clientId: null, filter: null });
   };
 
   const onSelectClient = (id: string) => {
@@ -42,17 +45,17 @@ export function SGUClientsView({ teamId }: Props) {
   };
 
   const onHeaderCardClick = (key: string) => {
-    const map: Record<string, Tab> = {
-      active: 'portfolio',
-      portfolio: 'portfolio',
-      ambassadors: 'portfolio',
-      complex: 'obszary',
-      renewals: 'renewals',
-      overdue: 'payments',
-      commission: 'commissions',
+    const map: Record<string, { tab: Tab; filter: string | null }> = {
+      active:      { tab: 'portfolio',   filter: null },
+      portfolio:   { tab: 'portfolio',   filter: null },
+      ambassadors: { tab: 'portfolio',   filter: 'ambassadors' },
+      complex:     { tab: 'obszary',     filter: null },
+      renewals:    { tab: 'renewals',    filter: 'lt14' },
+      overdue:     { tab: 'payments',    filter: 'overdue30' },
+      commission:  { tab: 'commissions', filter: null },
     };
-    const target = map[key];
-    if (target) updateParams({ tab: target, clientId: null });
+    const m = map[key];
+    if (m) updateParams({ tab: m.tab, clientId: null, filter: m.filter });
   };
 
   const rows = data?.rows ?? [];
@@ -71,10 +74,10 @@ export function SGUClientsView({ teamId }: Props) {
           <TabsTrigger value="commissions">Prowizje</TabsTrigger>
         </TabsList>
         <TabsContent value="portfolio" className="mt-4">
-          <ClientPortfolioTab rows={rows} isLoading={isLoading} teamId={teamId} onSelectClient={onSelectClient} />
+          <ClientPortfolioTab rows={rows} isLoading={isLoading} teamId={teamId} onSelectClient={onSelectClient} filter={filter} />
         </TabsContent>
         <TabsContent value="payments" className="mt-4">
-          <ClientPaymentsTab rows={rows} teamId={teamId} />
+          <ClientPaymentsTab rows={rows} teamId={teamId} filter={filter} />
         </TabsContent>
         <TabsContent value="obszary" className="mt-4">
           <ClientObszaryTab rows={rows} teamId={teamId} selectedClientId={selectedClientId} />
@@ -83,7 +86,7 @@ export function SGUClientsView({ teamId }: Props) {
           <ClientReferralsTab rows={rows} teamId={teamId} />
         </TabsContent>
         <TabsContent value="renewals" className="mt-4">
-          <ClientRenewalsTab rows={rows} teamId={teamId} />
+          <ClientRenewalsTab rows={rows} teamId={teamId} filter={filter} />
         </TabsContent>
         <TabsContent value="commissions" className="mt-4">
           <ClientCommissionsTab teamId={teamId} />
