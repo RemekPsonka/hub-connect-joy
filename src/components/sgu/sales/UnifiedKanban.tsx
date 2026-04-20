@@ -86,6 +86,7 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
 function DraggableCard({
   contact,
   stage,
+  teamId,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -94,6 +95,7 @@ function DraggableCard({
 }: {
   contact: DealTeamContact;
   stage: DealStage;
+  teamId: string;
   onLostClick: () => void;
   onOfferingStageChange: (next: string) => void;
   onOfferingWonClick: () => void;
@@ -113,6 +115,7 @@ function DraggableCard({
       <UnifiedKanbanCard
         contact={contact}
         stage={stage}
+        teamId={teamId}
         onLostClick={onLostClick}
         onOfferingStageChange={onOfferingStageChange}
         onOfferingWonClick={onOfferingWonClick}
@@ -128,6 +131,7 @@ function DroppableColumn({
   col,
   contacts,
   groupBy,
+  teamId,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -137,6 +141,7 @@ function DroppableColumn({
   col: ColumnDef;
   contacts: DealTeamContact[];
   groupBy: boolean;
+  teamId: string;
   onLostClick: (c: DealTeamContact) => void;
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
@@ -160,6 +165,7 @@ function DroppableColumn({
       key={c.id}
       contact={c}
       stage={col.stage}
+      teamId={teamId}
       onLostClick={() => onLostClick(c)}
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
       onOfferingWonClick={() => onOfferingWonClick(c)}
