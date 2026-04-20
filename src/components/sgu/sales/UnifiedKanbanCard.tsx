@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
@@ -22,6 +22,7 @@ interface UnifiedKanbanCardProps {
   onOfferingWonClick: () => void;
   onOfferingLostClick: () => void;
   onSubcategoryChange: (field: SubcategoryField, value: string) => void;
+  onMoreClick: () => void;
   isDragging?: boolean;
 }
 
@@ -34,6 +35,7 @@ export function UnifiedKanbanCard({
   onOfferingWonClick,
   onOfferingLostClick,
   onSubcategoryChange,
+  onMoreClick,
   isDragging,
 }: UnifiedKanbanCardProps) {
   const navigate = useNavigate();
@@ -125,8 +127,18 @@ export function UnifiedKanbanCard({
         />
       </div>
 
-      {/* Lost button */}
-      <div className="pt-1 border-t flex justify-end" onClick={(e) => e.stopPropagation()}>
+      {/* Footer: More + Lost */}
+      <div className="pt-1 border-t flex justify-end items-center" onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-[10px] gap-1 mr-auto"
+          onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="h-3 w-3" />
+          Więcej
+        </Button>
         <Button
           variant="ghost"
           size="sm"
