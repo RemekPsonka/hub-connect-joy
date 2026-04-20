@@ -361,6 +361,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               col={col}
               contacts={grouped[col.stage]}
               groupBy={groupBySubcategory}
+              teamId={teamId}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);
