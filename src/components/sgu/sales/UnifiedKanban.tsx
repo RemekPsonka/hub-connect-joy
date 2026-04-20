@@ -58,28 +58,43 @@ export function deriveStage(c: DealTeamContact): DealStage {
 interface SubgroupConfig {
   getter: (c: DealTeamContact) => string | null | undefined;
   labels: Record<string, string>;
+  order: string[];
 }
 
 const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
   prospect: {
     getter: (c) => c.prospect_source,
     labels: PROSPECT_SOURCE_LABELS as Record<string, string>,
+    order: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
   },
   lead: {
     getter: (c) => c.temperature,
     labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
   },
   offering: {
     getter: (c) => c.offering_stage,
     labels: OFFERING_STAGE_LABELS as Record<string, string>,
+    order: [
+      'decision_meeting',
+      'handshake',
+      'power_of_attorney',
+      'audit',
+      'offer_sent',
+      'negotiation',
+      'won',
+      'lost',
+    ],
   },
   client: {
     getter: (c) => c.client_status,
     labels: CLIENT_STATUS_LABELS as Record<string, string>,
+    order: ['ambassador', 'standard', 'lost'],
   },
   lost: {
     getter: () => null,
     labels: {},
+    order: [],
   },
 };
 
