@@ -258,6 +258,7 @@ export function useUpdateTeamContact() {
       isLost,
       lostReason,
       lostAt,
+      expectedAnnualPremiumGr,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -305,6 +306,7 @@ export function useUpdateTeamContact() {
       }
       if (lostReason !== undefined) updates.lost_reason = lostReason;
       if (lostAt !== undefined && isLost === undefined) updates.lost_at = lostAt;
+      if (expectedAnnualPremiumGr !== undefined) updates.expected_annual_premium_gr = expectedAnnualPremiumGr;
 
       const { error } = await supabase
         .from('deal_team_contacts')
