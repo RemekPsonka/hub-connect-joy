@@ -317,6 +317,7 @@ export function useUpdateTeamContact() {
       queryClient.invalidateQueries({ queryKey: ['deal-team-assignments-all'] });
       queryClient.invalidateQueries({ queryKey: ['contact-deal-teams'] });
       queryClient.invalidateQueries({ queryKey: ['contact-deal-teams-bulk'] });
+      queryClient.invalidateQueries({ queryKey: ['sgu-clients-portfolio'] });
       toast.success('Kontakt został zaktualizowany');
     },
     onError: (error: Error) => {
