@@ -17,6 +17,7 @@ import { SGULayout } from "@/components/layout/SGULayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoadingFallback } from "@/components/PageLoadingFallback";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { FeatureFlagGate } from "@/components/common/FeatureFlagGate";
 
 // Static imports (login page - fast loading)
 import Login from "./pages/Login";
