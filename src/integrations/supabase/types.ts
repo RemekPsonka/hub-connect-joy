@@ -2614,6 +2614,64 @@ export type Database = {
           },
         ]
       }
+      contact_ai_cache: {
+        Row: {
+          contact_id: string
+          cost_cents: number | null
+          generated_at: string
+          id: string
+          invalidated_at: string | null
+          model: string | null
+          summary_json: Json | null
+          tenant_id: string
+          tldr: string | null
+        }
+        Insert: {
+          contact_id: string
+          cost_cents?: number | null
+          generated_at?: string
+          id?: string
+          invalidated_at?: string | null
+          model?: string | null
+          summary_json?: Json | null
+          tenant_id: string
+          tldr?: string | null
+        }
+        Update: {
+          contact_id?: string
+          cost_cents?: number | null
+          generated_at?: string
+          id?: string
+          invalidated_at?: string | null
+          model?: string | null
+          summary_json?: Json | null
+          tenant_id?: string
+          tldr?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_ai_cache_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: true
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_ai_cache_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "contact_ai_cache_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_bi: {
         Row: {
           ai_summary: string | null
@@ -2776,6 +2834,65 @@ export type Database = {
           },
           {
             foreignKeyName: "contact_groups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_notes: {
+        Row: {
+          contact_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          contact_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          contact_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_notes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "contact_notes_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -4407,6 +4524,7 @@ export type Database = {
         Row: {
           created_at: string | null
           email: string
+          feature_flags: Json
           full_name: string
           id: string
           role: string | null
@@ -4416,6 +4534,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           email: string
+          feature_flags?: Json
           full_name: string
           id?: string
           role?: string | null
@@ -4425,6 +4544,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           email?: string
+          feature_flags?: Json
           full_name?: string
           id?: string
           role?: string | null
@@ -9879,6 +9999,10 @@ export type Database = {
       }
       has_sgu_access: { Args: never; Returns: boolean }
       immutable_unaccent: { Args: { "": string }; Returns: string }
+      invalidate_contact_ai_cache: {
+        Args: { p_contact_id: string }
+        Returns: undefined
+      }
       is_admin_anywhere: { Args: { _user_id: string }; Returns: boolean }
       is_assistant: { Args: { _user_id: string }; Returns: boolean }
       is_contact_in_my_deal_team: {
