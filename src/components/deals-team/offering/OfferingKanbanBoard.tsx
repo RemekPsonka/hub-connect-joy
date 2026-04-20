@@ -237,6 +237,29 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
           setOfferingLost
         />
       )}
+      {rollbackDialog && (
+        <StageRollbackDialog
+          open={!!rollbackDialog}
+          onOpenChange={(o) => !o && setRollbackDialog(null)}
+          contactId={rollbackDialog.contact.id}
+          contactName={rollbackDialog.contact.contact?.full_name ?? '—'}
+          teamId={teamId}
+          fromStage={OFFERING_STAGE_LABELS[(rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage]}
+          toCategory="offering"
+          onSuccess={() => {
+            const fromStage = (rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage;
+            updateContact.mutate({
+              id: rollbackDialog.contact.id,
+              teamId,
+              offeringStage: rollbackDialog.toStage,
+              ...(fromStage === 'lost'
+                ? { isLost: false, lostReason: null, lostAt: null }
+                : {}),
+            });
+            setRollbackDialog(null);
+          }}
+        />
+      )}
     </>
   );
 }
