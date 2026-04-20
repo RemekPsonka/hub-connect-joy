@@ -1,49 +1,35 @@
 
-## Plan: Sprint RD-A2 — Edge functions + RPC dla Contact V2
+## Plan: Sprint RD-A1 FE — Contact Detail V2 (10 plików)
 
-W READ-ONLY mode nie mogę tworzyć plików. Po akceptacji w default mode wykonam recon + utworzę 3 pliki.
+### Recon przed kodem
+Sprawdzę:
+1. Czy istnieje `useContact` hook (pkt 8 odwołuje się).
+2. Tabela dla spotkań — `consultation_meetings` vs `gcal_events` vs `meetings`.
+3. `useSGUTeamId` — czy jest.
+4. `directors.user_id` vs `directors.auth_user_id` — pkt 1 używa `user_id`.
+5. Czy `contact_groups` ma `color`.
+6. `last_contact_date` w `contacts` — czy istnieje.
+7. Format invoke edge function: `'sovra/contact-tldr'` (z slashem) vs `'sovra-contact-tldr'` (sprint poprzedni utworzył funkcje z myślnikiem). **To jest błąd w Twoim kodzie hooków** — w poprzednim sprincie utworzyliśmy `sovra-contact-tldr` i `sovra-contact-activity-timeline`, więc invoke musi używać myślnika.
 
-### Recon przed kodem (musi przejść)
-Twój kod referuje obiekty których nazwy mogę zweryfikować przed zapisem (uniknę crashy):
+### Korekty wobec instrukcji
+- `useContactTldr.ts` i `useContactTimeline.ts` → invoke `'sovra-contact-tldr'` i `'sovra-contact-activity-timeline'` (myślnik), nie slash. Zgodnie z faktycznymi nazwami funkcji deployowanych w poprzednim sprincie.
+- Routing dla `/contact-v2/:id` lub `/contacts/:id` → **nie tworzę nowej trasy** chyba że user prosi. Strona jest tworzona jako plik, ale do `App.tsx` dodam route tylko jeśli go znajdę i będzie miało sens (sprawdzę). Jeśli już istnieje `/contacts/:id` to użyję `FeatureFlagGate` żeby przełączać V1↔V2 — ale to wymagałoby instrukcji od usera. Bez instrukcji: **utworzę tylko plik strony**, route doda user osobno (lub w następnym sprincie).
+- `ContactDetailV2.tsx` — kod w instrukcji ma w return uciętą strukturę JSX (HTML rozjazd w paste). Odbuduję sensowny grid: 2-kolumnowy layout (lewa: timeline, prawa: CRM card), header na górze, accordion na dole.
 
-1. **`_shared/auth.ts`**: nie ma `requireAuth` — jest `verifyAuth(req, supabase)`. Muszę albo dodać alias, albo użyć istniejącego `verifyAuth` (już go widziałem w recon — zwraca `AuthResult | AuthError`).
-2. **`_shared/llm-provider.ts`**: muszę sprawdzić czy istnieje i jaki ma kontrakt (`callLLM` może mieć inną sygnaturę niż w Twoim kodzie — `max_tokens` vs `maxTokens`, return shape `.content` vs `.text`).
-3. **`_shared/cors.ts`**: sprawdzę czy istnieje plik czy każda funkcja ma własne `corsHeaders` inline.
-4. **Kolumny `contacts.tenant_id`**: w jednym z poprzednich planów było „single-tenant", ale FK w `contact_ai_cache` wymaga tego pola. Sprawdzę.
-5. **`gmail_messages`**: brak kolumny `contact_id` (potwierdzone w poprzedniej migracji). Sekcja UNION musi pójść przez join `gmail_threads.contact_id` ALBO usunąć całkiem. Sprawdzę schemat.
-6. **`gcal_events` / `gcal_event_links`**: sprawdzę czy `gcal_event_links` istnieje. Jeśli nie — usunę sekcję meetings z RPC (zgodnie z Twoją instrukcją „nie może paść").
-7. **`ai_messages.scope_type`/`scope_id`**: w poprzedniej migracji okazało się że scope jest w `ai_conversations`, nie w `ai_messages`. Muszę join'ować przez `am.conversation_id`.
-8. **`pipeline_stages`**: project knowledge mówi „NIE używaj pipeline_stages — wygaszane". Lepiej join przez `deal_team_stages` albo trzymać samo `status`. Sprawdzę.
-9. **`expected_annual_premium_gr`** w `deal_team_contacts`: sprawdzę nazwę pola.
+### Wykonanie po recon
+1. `src/hooks/useFeatureFlag.ts` — z poprawką na faktyczną kolumnę (`user_id` lub inna).
+2. `src/hooks/useContactTldr.ts` — invoke `sovra-contact-tldr`.
+3. `src/hooks/useContactTimeline.ts` — invoke `sovra-contact-activity-timeline`.
+4. `src/components/common/FeatureFlagGate.tsx` — bez zmian.
+5. `src/components/contact-v2/ContactHeaderTLDR.tsx` — Avatar shadcn, H1, chip firmy, TL;DR z skeleton, dropdown akcji (Email disabled + tooltip), reuse `PushToSGUDialog`.
+6. `src/components/contact-v2/ActivityComposer.tsx` — Tabs shadcn (Notatka active, Email disabled, Spotkanie basic). INSERT do `contact_notes` z `tenant_id` z `directors`. Spotkanie do tabeli wybranej po recon.
+7. `src/components/contact-v2/ActivityTimeline.tsx` — composer + filtr pill bar + lista grupowana per dzień (`date-fns` lokalnie) + IntersectionObserver dla infinite scroll.
+8. `src/components/contact-v2/ContactCRMCard.tsx` — query deal_team_contacts + tasks + group + owner. Reuse PushToSGUDialog. Placeholder dla "Wykonaj" (Next Action) — tylko UI.
+9. `src/components/contact-v2/SectionsAccordion.tsx` — shadcn Accordion z 7 sekcjami stub.
+10. `src/pages/ContactDetailV2.tsx` — query kontaktu, layout 2-kolumnowy z headerem i accordion.
 
-### Wykonanie (po recon)
+### Po wszystkim
+- Lista utworzonych plików.
+- `tsc --noEmit` + liczba błędów.
 
-**Plik 1**: `supabase/functions/sovra/contact-tldr/index.ts`
-- Użyję faktycznego API z `_shared/auth.ts` i `_shared/llm-provider.ts` (po recon dostosuję import + sygnaturę).
-- Cache check (24h, `invalidated_at IS NULL`) → fetch contact + deals → LLM call → upsert do `contact_ai_cache`.
-- Jeśli `pipeline_stages` jest wygaszone, zamienię join na `deal_team_stages` lub samo `stage_id`.
-
-**Plik 2**: `supabase/functions/sovra/contact-activity-timeline/index.ts`
-- Cienki wrapper na RPC `rpc_contact_timeline`. Bez logiki — RPC robi UNION.
-
-**Plik 3**: `supabase/migrations/20260420100100_rpc_contact_timeline.sql`
-- RPC `rpc_contact_timeline(contact_id, filter, limit, before)` zwracające unified timeline.
-- Sekcje UNION: `note` (zawsze, mamy `contact_notes`), `ai_signal` (z join przez `ai_conversations` na scope), `email` (przez join `gmail_threads.contact_id` LUB skip jeśli nie ma związku), `meeting` (przez `gcal_event_links` LUB skip).
-- `SECURITY INVOKER` + `search_path` + `GRANT EXECUTE TO authenticated` + komentarz `-- ROLLBACK: DROP FUNCTION ...`.
-- **Twarda zasada**: każda sekcja UNION którą recon zweryfikuje jako rozjazd → wyrzucam całkowicie, żeby migracja przeszła.
-
-**config.toml**: edge functions w sub-folderze `sovra/contact-tldr` / `sovra/contact-activity-timeline` — muszę sprawdzić czy `config.toml` wspiera nested ścieżki funkcji w tym projekcie. Standardowo Supabase CLI bierze nazwę z folderu top-level. Może trzeba spłaszczyć do `sovra-contact-tldr` i `sovra-contact-activity-timeline`. Sprawdzę istniejące funkcje w `supabase/functions/`.
-
-**Po wszystkim**: deploy obu funkcji + wypiszę `[OK] Edge fn + RPC timeline gotowe`.
-
-### Konflikt z project-knowledge
-Project knowledge mówi: *„nie buduj feature flag systemu — skala 1-2 tenantów nie uzasadnia"*. Poprzednia migracja dodała `feature_flags` do `directors`. Idziemy dalej zgodnie z Twoim kierunkiem (sprint Contact V2 wymaga flagi do gradual rollout). Zaznaczam tylko, nie blokuję.
-
-Project knowledge mówi też: *„NIE używaj `pipeline_stages` — wygaszane"*. Twój TL;DR kod join'uje `pipeline_stages(name)`. Zamienię na `deal_team_stages` (lub samo `status`/`stage_id` jako fallback) po recon.
-
-### Pliki
-- `supabase/functions/sovra-contact-tldr/index.ts` lub `sovra/contact-tldr/index.ts` (decyzja po recon config.toml)
-- `supabase/functions/sovra-contact-activity-timeline/index.ts` (analogicznie)
-- `supabase/migrations/20260420100100_rpc_contact_timeline.sql` (z rollback)
-
-### Bez zmian FE w tym kroku.
+### Bez zmian DB. Bez zmian routingu (chyba że recon pokaże że trzeba).
