@@ -189,47 +189,12 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
 
       {/* TeamStats removed in SGU-REFACTOR-IA-2 — replaced by context-aware headers per route */}
 
-      {/* Content */}
-      {selectedTeamId && viewMode === 'dashboard' && (
-        <SalesFunnelDashboard teamId={selectedTeamId} onNavigate={handleNavigate} />
-      )}
+      {/* Content — SGU-REFACTOR-IA-3: cleanup; dashboard/snoozed/entries/commissions usunięte z routera */}
       {selectedTeamId && viewMode === 'kanban' && <KanbanBoard teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'table' && <TableView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'prospecting' && <ProspectingTab teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'clients' && (
-        forcedTeamId ? (
-          <SGUClientsView teamId={selectedTeamId} />
-        ) : (
-          <ClientsTab teamId={selectedTeamId} />
-        )
-      )}
+      {selectedTeamId && viewMode === 'clients' && <ClientsTab teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'tasks' && <MyTeamTasksView teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'commissions' && forcedTeamId && (
-        <Tabs
-          value={commissionsTab}
-          onValueChange={(v) => {
-            const next = v as 'entries' | 'goals';
-            setCommissionsTab(next);
-            if (typeof window !== 'undefined') {
-              window.localStorage.setItem('sgu-commissions-tab', next);
-            }
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="entries">Wpisy</TabsTrigger>
-            <TabsTrigger value="goals">Cele</TabsTrigger>
-          </TabsList>
-          <TabsContent value="entries" className="mt-4">
-            <CommissionsTable teamId={selectedTeamId} />
-          </TabsContent>
-          <TabsContent value="goals" className="mt-4">
-            <CommissionsTab teamId={selectedTeamId} />
-          </TabsContent>
-        </Tabs>
-      )}
-      {selectedTeamId && viewMode === 'commissions' && !forcedTeamId && <CommissionsTab teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'entries' && <CommissionsTable teamId={selectedTeamId} />}
-      {selectedTeamId && viewMode === 'snoozed' && <SnoozedTeamView teamId={selectedTeamId} />}
       {selectedTeamId && viewMode === 'offering' && <OfferingTab teamId={selectedTeamId} />}
 
       <CreateTeamDialog open={showCreateTeam} onOpenChange={setShowCreateTeam} onTeamCreated={handleTeamCreated} />
