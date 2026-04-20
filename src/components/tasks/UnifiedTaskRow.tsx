@@ -64,6 +64,29 @@ function SubtaskIndicator({ taskId }: { taskId: string }) {
 
 // ─── Props ────────────────────────────────────────
 
+// ─── Deal stage badge config ────────────────────────────────
+const STAGE_ICON: Record<string, string> = {
+  lead: '🔍', hot: '🔥', top: '⭐', cold: '❄️',
+  offering: '📄', audit: '🔎',
+  client: '🤝', lost: '❌', prospect: '🌱',
+};
+const STAGE_LABEL: Record<string, string> = {
+  lead: 'Lead', hot: 'HOT', top: 'TOP', cold: 'COLD',
+  offering: 'Ofertowanie', audit: 'Audyt',
+  client: 'Klient', lost: 'Utracony', prospect: 'Prospekt',
+};
+const SUB_LABEL: Record<string, string> = {
+  hot: '🔥 HOT', top: '⭐ TOP', cold: '❄️ COLD', '10x': '💎 10x',
+  // offering_stage values
+  handshake: 'Handshake', power_of_attorney: 'Pełnomocnictwo',
+  preparation: 'Przygotowanie', negotiation: 'Negocjacje',
+  accepted: 'Zaakceptowane', lost: 'Utracone',
+  meeting_plan: 'Plan spotkania', meeting_scheduled: 'Spotkanie umówione', meeting_done: 'Po spotkaniu',
+  audit_plan: 'Plan audytu', audit_scheduled: 'Audyt umówiony', audit_done: 'Po audycie',
+  // client_status values
+  standard: 'Standard', ambassador: 'Ambasador',
+};
+
 export interface UnifiedTaskRowProps {
   task: {
     id: string;
@@ -86,6 +109,7 @@ export interface UnifiedTaskRowProps {
   }>;
   contactName?: string;
   companyName?: string;
+  dealStageBadge?: { stage: string; subCategory?: string };
   onStatusChange: (taskId: string, newStatus: string) => void;
   onPriorityChange?: (taskId: string, newPriority: string) => void;
   onAssigneeChange?: (taskId: string, newAssigneeId: string) => void;
