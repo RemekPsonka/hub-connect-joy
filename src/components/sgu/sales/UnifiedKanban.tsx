@@ -58,28 +58,43 @@ export function deriveStage(c: DealTeamContact): DealStage {
 interface SubgroupConfig {
   getter: (c: DealTeamContact) => string | null | undefined;
   labels: Record<string, string>;
+  order: string[];
 }
 
 const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
   prospect: {
     getter: (c) => c.prospect_source,
     labels: PROSPECT_SOURCE_LABELS as Record<string, string>,
+    order: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
   },
   lead: {
     getter: (c) => c.temperature,
     labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
   },
   offering: {
     getter: (c) => c.offering_stage,
     labels: OFFERING_STAGE_LABELS as Record<string, string>,
+    order: [
+      'decision_meeting',
+      'handshake',
+      'power_of_attorney',
+      'audit',
+      'offer_sent',
+      'negotiation',
+      'won',
+      'lost',
+    ],
   },
   client: {
     getter: (c) => c.client_status,
     labels: CLIENT_STATUS_LABELS as Record<string, string>,
+    order: ['ambassador', 'standard', 'lost'],
   },
   lost: {
     getter: () => null,
     labels: {},
+    order: [],
   },
 };
 
@@ -188,14 +203,21 @@ function DroppableColumn({
       const k = cfg.getter(c) ?? '__none__';
       (groups[k] ??= []).push(c);
     }
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const ia = cfg.order.indexOf(a);
+      const ib = cfg.order.indexOf(b);
+      const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+      const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+      return ra - rb;
+    });
     body = (
       <div className="space-y-3">
-        {Object.entries(groups).map(([k, list]) => (
+        {sortedKeys.map((k) => (
           <div key={k} className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground px-1">
-              {cfg.labels[k] ?? '(brak)'} ({list.length})
+              {cfg.labels[k] ?? '(brak)'} ({groups[k].length})
             </div>
-            <div className="space-y-2">{list.map(renderCard)}</div>
+            <div className="space-y-2">{groups[k].map(renderCard)}</div>
           </div>
         ))}
       </div>
