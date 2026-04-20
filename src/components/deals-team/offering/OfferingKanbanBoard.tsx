@@ -10,7 +10,6 @@ import { OfferingKanbanCard } from './OfferingKanbanCard';
 import { ConvertWonToClientDialog } from '@/components/sgu/sales/ConvertWonToClientDialog';
 import { LostReasonDialog } from '@/components/sgu/sales/LostReasonDialog';
 import { StageRollbackDialog } from '@/components/sgu/sales/StageRollbackDialog';
-import { formatCompactCurrency as fmtPLN } from '@/lib/formatCurrency';
 import {
   OFFERING_STAGE_LABELS,
   OFFERING_STAGE_ORDER,
