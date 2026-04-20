@@ -1,15 +1,12 @@
 import { useMemo, useState } from 'react';
-import { format, isPast, parseISO, addMonths, startOfMonth } from 'date-fns';
-import { pl } from 'date-fns/locale';
+import { isPast, parseISO } from 'date-fns';
 import {
   Briefcase, CheckCircle2, Clock, DollarSign,
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { useTeamPaymentSchedule } from '@/hooks/usePaymentSchedule';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { OfferingKanbanBoard } from './offering/OfferingKanbanBoard';
 import { OfferingContactCard } from './offering/OfferingContactCard';
 import type { DealTeamContact } from '@/types/dealTeam';
