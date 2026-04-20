@@ -7997,6 +7997,8 @@ export type Database = {
           default_handling_pct: number
           default_rep_commission_pct: number
           enable_sgu_layout: boolean
+          enable_sgu_prospecting_ai: boolean
+          enable_sgu_reports: boolean
           notes: string | null
           sgu_team_id: string | null
           tenant_id: string
@@ -8010,6 +8012,8 @@ export type Database = {
           default_handling_pct?: number
           default_rep_commission_pct?: number
           enable_sgu_layout?: boolean
+          enable_sgu_prospecting_ai?: boolean
+          enable_sgu_reports?: boolean
           notes?: string | null
           sgu_team_id?: string | null
           tenant_id: string
@@ -8023,6 +8027,8 @@ export type Database = {
           default_handling_pct?: number
           default_rep_commission_pct?: number
           enable_sgu_layout?: boolean
+          enable_sgu_prospecting_ai?: boolean
+          enable_sgu_reports?: boolean
           notes?: string | null
           sgu_team_id?: string | null
           tenant_id?: string
