@@ -72,24 +72,32 @@ export function UnifiedKanbanCard({
         {isOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
       </div>
 
-      {/* Sub-category badges (always visible on every card) */}
-      <div
-        className="flex items-center gap-1 flex-wrap"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <TemperatureBadge
-          value={contact.temperature}
-          onChange={(v) => onSubcategoryChange('temperature', v)}
-        />
-        <SourceBadge
-          value={contact.prospect_source}
-          onChange={(v) => onSubcategoryChange('prospect_source', v)}
-        />
-        <ClientStatusBadge
-          value={contact.client_status}
-          onChange={(v) => onSubcategoryChange('client_status', v)}
-        />
-      </div>
+      {/* Sub-category badge — only for the matching stage */}
+      {(stage === 'lead' || stage === 'prospect' || stage === 'client') && (
+        <div
+          className="flex items-center gap-1 flex-wrap"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {stage === 'lead' && (
+            <TemperatureBadge
+              value={contact.temperature}
+              onChange={(v) => onSubcategoryChange('temperature', v)}
+            />
+          )}
+          {stage === 'prospect' && (
+            <SourceBadge
+              value={contact.prospect_source}
+              onChange={(v) => onSubcategoryChange('prospect_source', v)}
+            />
+          )}
+          {stage === 'client' && (
+            <ClientStatusBadge
+              value={contact.client_status}
+              onChange={(v) => onSubcategoryChange('client_status', v)}
+            />
+          )}
+        </div>
+      )}
 
       {/* Offering stage badge */}
       {stage === 'offering' && (
