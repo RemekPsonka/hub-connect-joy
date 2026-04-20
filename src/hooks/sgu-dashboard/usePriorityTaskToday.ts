@@ -35,7 +35,7 @@ export function usePriorityTaskToday() {
         id: data.id,
         title: data.title,
         meta: `Termin dziś ${time}`,
-        navigateTo: '/sgu/zadania?filter=today&priority=high',
+        navigateTo: `/sgu/zadania?taskId=${data.id}`,
       };
     },
     staleTime: 60_000,

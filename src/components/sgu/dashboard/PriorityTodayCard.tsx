@@ -5,6 +5,7 @@ import {
   CalendarClock,
   Snowflake,
   Sparkles,
+  Target,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -90,7 +91,10 @@ export function PriorityTodayCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Priorytety na dziś</CardTitle>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary" />
+          Co dziś
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <PriorityRow

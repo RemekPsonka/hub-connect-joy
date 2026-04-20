@@ -47,7 +47,7 @@ export function usePriorityCrossSell() {
           missing.length > 0
             ? `Brak obszarów: ${missing.join(', ')}`
             : 'Brak obszarów',
-        navigateTo: `/sgu/klienci?contact=${data.id}&tab=obszary`,
+        navigateTo: `/sgu/klienci?contactId=${data.id}&tab=obszary`,
       };
     },
     staleTime: 60_000,
