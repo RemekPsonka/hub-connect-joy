@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+export type SalesArea = 'property' | 'financial' | 'communication' | 'life_group';
+
 export interface ProductCategory {
   id: string;
   team_id: string;
@@ -12,6 +14,7 @@ export interface ProductCategory {
   default_commission_percent: number;
   sort_order: number;
   is_active: boolean;
+  sales_area: SalesArea | null;
   created_at: string;
 }
 
