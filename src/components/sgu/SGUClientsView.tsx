@@ -5,14 +5,16 @@ import { ClientsKPI } from './clients/ClientsKPI';
 import { ClientPortfolioTab } from './clients/ClientPortfolioTab';
 import { ClientPaymentsTab } from './clients/ClientPaymentsTab';
 import { ClientRenewalsTab } from './clients/ClientRenewalsTab';
-import { ClientCrossSellTab } from './clients/ClientCrossSellTab';
+import { ClientObszaryTab } from './clients/ClientObszaryTab';
+import { ClientReferralsTab } from './clients/ClientReferralsTab';
+import { ClientCommissionsTab } from './clients/ClientCommissionsTab';
 
 interface Props {
   teamId: string;
 }
 
 const TAB_KEY = 'sgu-clients-tab';
-type Tab = 'portfolio' | 'payments' | 'renewals' | 'crosssell';
+type Tab = 'portfolio' | 'payments' | 'obszary' | 'referrals' | 'renewals' | 'commissions';
 
 export function SGUClientsView({ teamId }: Props) {
   const { data, isLoading } = useSGUClientsPortfolio(teamId);
@@ -37,8 +39,10 @@ export function SGUClientsView({ teamId }: Props) {
         <TabsList>
           <TabsTrigger value="portfolio">Portfel</TabsTrigger>
           <TabsTrigger value="payments">Raty</TabsTrigger>
+          <TabsTrigger value="obszary">Obszary</TabsTrigger>
+          <TabsTrigger value="referrals">Polecenia</TabsTrigger>
           <TabsTrigger value="renewals">Odnowienia</TabsTrigger>
-          <TabsTrigger value="crosssell">Cross-sell</TabsTrigger>
+          <TabsTrigger value="commissions">Prowizje</TabsTrigger>
         </TabsList>
         <TabsContent value="portfolio" className="mt-4">
           <ClientPortfolioTab rows={rows} isLoading={isLoading} />
@@ -46,11 +50,17 @@ export function SGUClientsView({ teamId }: Props) {
         <TabsContent value="payments" className="mt-4">
           <ClientPaymentsTab rows={rows} teamId={teamId} />
         </TabsContent>
+        <TabsContent value="obszary" className="mt-4">
+          <ClientObszaryTab rows={rows} teamId={teamId} />
+        </TabsContent>
+        <TabsContent value="referrals" className="mt-4">
+          <ClientReferralsTab rows={rows} teamId={teamId} />
+        </TabsContent>
         <TabsContent value="renewals" className="mt-4">
           <ClientRenewalsTab rows={rows} teamId={teamId} />
         </TabsContent>
-        <TabsContent value="crosssell" className="mt-4">
-          <ClientCrossSellTab rows={rows} teamId={teamId} />
+        <TabsContent value="commissions" className="mt-4">
+          <ClientCommissionsTab teamId={teamId} />
         </TabsContent>
       </Tabs>
     </div>
