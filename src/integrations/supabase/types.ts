@@ -10081,6 +10081,23 @@ export type Database = {
           strength: number
         }[]
       }
+      rpc_contact_timeline: {
+        Args: {
+          p_before?: string
+          p_contact_id: string
+          p_filter?: string
+          p_limit?: number
+        }
+        Returns: {
+          author: string
+          id: string
+          kind: string
+          meta: Json
+          preview: string
+          title: string
+          ts: string
+        }[]
+      }
       rpc_dashboard_myday: { Args: never; Returns: Json }
       rpc_mark_commission_paid_out: {
         Args: { p_entry_ids: string[] }
