@@ -24,6 +24,8 @@ export function OfferingKanbanCard({ contact, payments, onClick, onDragStart }: 
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
+      data-testid="kanban-card"
+      data-contact-id={contact.id}
       className="bg-card border rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow group"
     >
       <div className="flex items-start gap-2">
