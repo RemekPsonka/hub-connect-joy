@@ -31,7 +31,7 @@ export function EditableSubcategoryBadge({
 
   const triggerClassName = current?.className
     ? current.className
-    : 'bg-muted text-muted-foreground border-dashed';
+    : 'bg-background text-foreground border-dashed border-foreground/40 hover:border-foreground/70';
   const triggerLabel = current?.label ?? emptyLabel;
   const triggerIcon = current?.icon ?? null;
 
