@@ -13,22 +13,15 @@ import {
   TeamSettings,
   ProspectingTab,
   ClientsTab,
-  CommissionsTab,
   MyTeamTasksView,
-  SnoozedTeamView,
   OfferingTab,
-  SalesFunnelDashboard,
 } from '@/components/deals-team';
-import { CommissionsTable } from '@/components/sgu/CommissionsTable';
-import { SGUClientsView } from '@/components/sgu/SGUClientsView';
-import { useLayoutMode } from '@/store/layoutMode';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'commissions' | 'entries' | 'tasks' | 'snoozed' | 'offering' | 'dashboard';
+type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks' | 'offering';
 
 const STORAGE_KEY = 'deals-team-selected';
-const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'commissions', 'entries', 'tasks', 'snoozed', 'offering', 'dashboard'];
+const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks', 'offering'];
 
 type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
 
