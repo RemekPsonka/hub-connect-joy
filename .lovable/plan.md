@@ -1,28 +1,68 @@
 
-## Plan: RD-A1 FE — Routing flag-gated dla Contact V2
+## Plan: RD-A1 hotfix + RD-A2 wire-up — REV po feedbacku
 
-### Stan obecny
-- `ContactDetailV2`, `FeatureFlagGate` istnieją.
-- W `App.tsx` jest już dodana osobna trasa `/contacts-v2/:id` (z poprzedniego sprintu, wariant 1). Trasa `/contacts/:id` nadal pokazuje stary `ContactDetail`.
-- Flaga `contact_detail_v2` jest włączona dla Remka w `directors.feature_flags`.
+Akceptuję wszystkie 5 uwag. Aktualizacja oryginalnego planu poniżej, tylko zmiany.
 
-### Zmiana
-W `src/App.tsx`:
-1. Dodać importy `ContactDetailV2` (już lazy-loaded) i `FeatureFlagGate`.
-2. Owinąć element trasy `/contacts/:id` w `FeatureFlagGate flag="contact_detail_v2" fallback={<ContactDetail />}` z `<ContactDetailV2 />` jako children.
-3. Usunąć (lub zostawić) drugą trasę `/contacts-v2/:id` — proponuję **zostawić** jako bezpośredni dostęp do V2 niezależny od flagi (przydatne do testów A/B). Bez ruszania.
+### Zmiany vs poprzedni plan
 
-### Uwaga: SSR FeatureFlagGate vs Suspense
-`ContactDetailV2` jest lazy. `FeatureFlagGate` zwraca children gdy flaga `true`, fallback gdy `false`. Oba elementy są tworzone jako JSX upfront — lazy chunk dla V2 będzie pobierany tylko gdy faktycznie wyrenderowany (React lazy). Działa OK, bo `<Suspense>` jest na poziomie Routes w App. Bez dodatkowych zmian.
+**1. TL;DR diagnostyka (uwaga #1)**
+W `useContactTldr.ts` dodaję pełen dump po invoke:
+```ts
+const { data, error } = await supabase.functions.invoke('sovra-contact-tldr', { body: { contact_id: contactId } });
+console.log('[tldr]', { data, error, contact_id: contactId });
+if (error) throw error;
+```
+Plus w `ContactHeaderTLDR.tsx` rozróżnienie 3 stanów:
+- `data?.error === true` → "⚠️ TL;DR: błąd generowania (sprawdź logi funkcji)"
+- `!data?.tldr || data.tldr === 'Brak podsumowania AI'` → "Brak podsumowania AI" + przycisk "Wygeneruj"
+- inaczej → tekst.
 
-Pierwszy render dla usera bez wczytanej flagi (data === undefined) → `useFeatureFlag` zwraca `false` → fallback (ContactDetail V1) → po ms flaga się ładuje → re-render z V2. Krótki flash V1. **Akceptowalne** dla wewnętrznego narzędzia 1-2 userów. Jeśli chcesz uniknąć — trzeba by dodać loading state w gate, ale to nadkomplikacja na ten use case.
+**2. SectionMeetings — TODO comment (uwaga #2)**
+Na górze pliku:
+```ts
+// TODO: rozszerzyć o gcal_events filtered po attendees jsonb (email kontaktu).
+// Obecnie pokazuje tylko consultation_meetings via consultation_guests — niepełne źródło.
+// Większość spotkań Remka leci przez Google Calendar.
+```
+Empty state copy zaktualizowany: „Brak konsultacji powiązanych z kontaktem (spotkania z kalendarza Google trafią tu w kolejnym sprincie)."
 
-### Po zmianie
-- `npm run build` (tsc + vite).
-- Raport: liczba zmodyfikowanych plików (1: App.tsx), liczba błędów tsc, grepy na `ContactDetailV2` i `console.log` w plikach V2.
-- Smoke test wymaga aktywnej sesji w przeglądarce — wykonam tylko build + grepy. Smoke test interakcyjny zostawiam Tobie (tool browser--act mogę użyć ale wymaga zalogowania jako Remek przez OAuth, czego nie zrobię).
+**3. SectionNotes — decyzja: tylko DELETE w tym sprincie, BEZ edit (uwaga #3)**
+Świadome odłożenie. Przycisk „Edytuj" pomijam całkowicie (zero niedokończonego UI). W komentarzu pliku:
+```ts
+// TODO: edycja notatki — modal z formularzem (osobny sprint).
+```
+Tylko delete + AlertDialog jak w pierwotnym planie.
+
+**4. Tab Spotkanie — wytnij cały kod (uwaga #4)**
+W `ActivityComposer.tsx`:
+- Usuwam `useState` dla meeting form fields (title, date, duration).
+- Usuwam cały JSX `<TabsContent value="meeting">`.
+- Zostaje tylko `<TabsTrigger value="meeting" disabled>` owinięty w Tooltip "Wkrótce — wymaga aktualizacji schematu".
+- Defaultowy tab po usunięciu meeting form: nadal Notatka.
+
+**5. SectionEmails — TODO comment (uwaga #5)**
+Na górze pliku:
+```ts
+// TODO: trigram GIN index on gmail_messages(from, to) — performance dla większych tenantów.
+// Obecnie ILIKE '%email%' = full scan, OK dla 1-2 tenantów.
+```
+Bez zmiany logiki query.
+
+### Reszta planu bez zmian
+- 8 nowych plików sekcji + SectionShell.
+- 4 edycje (ContactDetailV2, ContactHeaderTLDR, SectionsAccordion, ActivityComposer).
+- Bez zmian DB / edge functions / routingu.
 
 ### Pliki
-- `src/App.tsx` (edycja: import + owinięcie 1 Route)
 
-Bez DB, bez nowych plików.
+**Nowe (8)**: `sections/SectionShell.tsx`, `sections/SectionCompany.tsx`, `sections/SectionInsurance.tsx`, `sections/SectionEmails.tsx`, `sections/SectionMeetings.tsx`, `sections/SectionNotes.tsx`, `sections/SectionAI.tsx`, `sections/SectionHistory.tsx`
+
+**Edycje (5)**: `pages/ContactDetailV2.tsx`, `contact-v2/ContactHeaderTLDR.tsx`, `contact-v2/SectionsAccordion.tsx`, `contact-v2/ActivityComposer.tsx`, `hooks/useContactTldr.ts`
+
+### Acceptance po implementacji
+- Header: mailto / tel / linkedin (z guardami na null).
+- 7 sekcji: realne dane lub jasny empty state. Zero „Sprint RD-A2".
+- Tab Spotkanie: tylko `<TabsTrigger disabled>` + tooltip, zero martwego JSX/state.
+- Konsola przy wejściu na kontakt: `[tldr] { data: {...}, error: ..., contact_id: ... }`.
+- SectionAI: JSON pretty-print + Refresh button.
+- SectionNotes: delete działa, edit pominięty świadomie.
