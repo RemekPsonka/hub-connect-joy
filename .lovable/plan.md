@@ -1,91 +1,156 @@
 
 
-## BLOK SGU-IA-FIX-1 — SGUSidebar 6 pozycji
+## BLOK B — UnifiedKanban + repipe SGUPipelineRoute
 
 ### Cel
+Zastąpić w `/sgu/sprzedaz` 10-kolumnowy `DealsTeamDashboard` nowym 4-kolumnowym `UnifiedKanban` (Prospekt / Lead / Ofertowanie / Klient). Filtry `today/overdue` z SalesHeader → redirect do `/sgu/zadania`.
 
-Zastąpić aktualny `SGUSidebar.tsx` (4 grupy collapsible × ~10 pozycji) prostą płaską listą 6 pozycji z gatingiem dla Raporty/Admin.
+### Pliki
 
-### Plik do edycji
+| Plik | Akcja | Rola |
+|---|---|---|
+| `src/components/sgu/sales/UnifiedKanban.tsx` | CREATE | 4-kolumnowy kanban z dnd-kit |
+| `src/components/sgu/sales/UnifiedKanbanCard.tsx` | CREATE | Karta z badge'ami (temperature / offering_stage / ambasador / obszary) |
+| `src/pages/sgu/SGUPipelineRoute.tsx` | EDIT | Wymiana `DealsTeamDashboard` → `UnifiedKanban` + redirect today/overdue |
+| `docs/qa/sgu-refactor-ia-blokB.md` | CREATE | Manual smoke checklist |
 
-`src/components/layout/SGUSidebar.tsx` — pełna podmiana zawartości.
+### 1. `UnifiedKanban.tsx` — projekt
 
-### Nowa struktura
+**Props:** `{ teamId: string; filter?: 'prospect'|'lead'|'offering'|null }`
 
-**Importy (ikony):** `LayoutDashboard, LayoutGrid, UserCheck, ClipboardList, BarChart3, Settings, ArrowRightLeft`
+**Dane:** `useTeamContacts(teamId)` z `@/hooks/useDealsTeamContacts` (NIE nowy hook).
 
-**Hooki gatingu:**
-- `useSGUAccess()` → `isPartner`
-- `useOwnerPanel()` → `isAdmin`
-- `useSuperadmin()` → `isSuperadmin`
-- `useSGUTeamId()` → `enableReports`
-
-**Logika widoczności:**
+**Filtrowanie w pamięci** (po pobraniu z cache):
 ```ts
-const showAdmin = isPartner || isAdmin || isSuperadmin;
-const showReports = enableReports;
-
-const items = [
-  { title: 'Dashboard', url: '/sgu',          icon: LayoutDashboard, show: true },
-  { title: 'Sprzedaż',  url: '/sgu/sprzedaz', icon: LayoutGrid,      show: true },
-  { title: 'Klienci',   url: '/sgu/klienci',  icon: UserCheck,       show: true },
-  { title: 'Zadania',   url: '/sgu/zadania',  icon: ClipboardList,   show: true },
-  { title: 'Raporty',   url: '/sgu/raporty',  icon: BarChart3,       show: showReports },
-  { title: 'Admin',     url: '/sgu/admin',    icon: Settings,        show: showAdmin },
-].filter(i => i.show);
+const visible = contacts.filter(c =>
+  !c.is_lost &&
+  (!c.snoozed_until || c.snoozed_until < new Date().toISOString())
+);
 ```
 
-**Render:** jeden `SidebarGroup` → `SidebarMenu` → mapowanie 6 (lub mniej) `NavItem`. Bez `GroupLabel`, bez collapsible state, bez `localStorage`.
+**Grupowanie po `deal_stage`:**
+- `prospect` → kolumna Prospekt (icon 🔍, slate)
+- `lead` → kolumna Lead (icon 🔥, amber) — obejmuje `category` ∈ {lead,hot,top,cold,10x}
+- `offering` → kolumna Ofertowanie (icon 💼, blue) — obejmuje `category` ∈ {offering,audit}
+- `client` → kolumna Klient (icon ⭐, emerald)
 
-**Zachowane:**
-- `SidebarHeader` (SGULogo + "CRM SGU Brokers", `isCollapsed` handling)
-- `SidebarFooter` (NavLink "Wróć do CRM" → `/`)
-- `NavItem` helper (active state przez `useLocation`, ale uproszczony — bez query params, bo nowe URL nie używają `?view=`)
-- `isCollapsed` tooltip przez `SidebarMenuButton tooltip={item.title}`
+**Filtr z SalesHeader** — gdy `filter !== null`, pokazuj tylko jedną kolumnę (3 pozostałe wyrenderowane jako wąskie szare kolumny `opacity-50` lub całkiem schowane — wybór: schowane, czystszy UX).
 
-**Usunięte (per brief):**
-- `salesItems`, `analyticsItemsBase`, `reportsItem`, `adminItems`, `systemItems`
-- `groups`, `openGroups`, `toggleGroup`, `readGroupOpen`, `writeGroupOpen`, `STORAGE_PREFIX`
-- `GroupLabel` komponent
-- Importy ikon: `Users, UserPlus, UserCog, Search, Briefcase, Receipt, Moon, Calculator, Package, DollarSign, List, ChevronDown, Moon`
-- `useState` (już niepotrzebny)
+**Drag & Drop** — `@dnd-kit/core` (`DndContext` + `useDraggable` na kartach, `useDroppable` na kolumnach):
 
-### NavItem — uproszczenie
+| From → To | Akcja |
+|---|---|
+| `prospect → lead` | `updateContact({ category: 'lead', category_changed_at: now })` |
+| `lead → offering` | `updateContact({ category: 'offering', offering_stage: 'decision_meeting', category_changed_at: now })` |
+| `offering → client` | **Otwórz `ConvertWonToClientDialog`** (NIE direct UPDATE) |
+| pozostałe transitions (np. cofnięcia) | `toast.info('Przejście niedostępne — użyj akcji na karcie')` |
 
-Stary `NavItem` obsługiwał query params (`?view=...`). Nowe URL są czyste (`/sgu/sprzedaz`), więc:
+Mutacja przez `useUpdateTeamContact()` (już istnieje w `useDealsTeamContacts.ts`). Po sukcesie hook sam invaliduje `['deal-team-contacts', teamId]`.
+
+**State lokalny:**
+- `convertDialogOpen: boolean` + `convertContact: DealTeamContact | null`
+- `lostDialogOpen: boolean` + `lostContact: DealTeamContact | null`
+
+### 2. `UnifiedKanbanCard.tsx` — projekt
+
+**Props:** `{ contact: DealTeamContact; onLostClick: () => void }`
+
+**Layout:**
+```
+┌─────────────────────────────────────┐
+│ Imię Nazwisko        [HOT] [⭐]     │ ← header + badges (temperature, ambasador)
+│ Firma · Stanowisko                   │
+│                                      │
+│ [💼 Decision meeting ▾]              │ ← StageBadge tylko dla offering
+│                                      │
+│ 🏠 Majątek · 💰 Finanse · 📞 Komun. │ ← chipy obszarów (jeśli active)
+│                                      │
+│              [Oznacz jako lost]      │ ← przycisk → onLostClick
+└─────────────────────────────────────┘
+```
+
+**Badges:**
+- `temperature`: `hot`=red, `top`=violet, `cold`=slate, `10x`=amber-gold
+- `client_status === 'ambassador'` → `<Star className="text-amber-500" /> Ambasador`
+- `deal_stage === 'offering'` → `<StageBadge stage="offering" value={offering_stage} mode="compact" onChange={...} onWonClick={...} onLostClick={...} />`
+
+**Obszary** (chipy z `client_complexity` jsonb):
+```ts
+const areas = [
+  { key: 'property_active', label: 'Majątek', icon: '🏠' },
+  { key: 'financial_active', label: 'Finansowe', icon: '💰' },
+  { key: 'communication_active', label: 'Komunikacja', icon: '📞' },
+  { key: 'life_group_active', label: 'Grupowe/Życie', icon: '🏥' },
+].filter(a => (contact.client_complexity as any)?.[a.key]);
+```
+
+**Stan overdue** — czerwona obwódka (`ring-2 ring-destructive`):
+```ts
+const isOverdue = contact.status_overdue ||
+  (contact.next_action_date && new Date(contact.next_action_date) < new Date());
+```
+
+**Klik karty (poza badge/przyciskami):** `navigate('/sgu/klienci?contactId=' + contact.contact_id)`
+
+**Przycisk "Oznacz jako lost":** wywołuje `onLostClick()` — parent otwiera `LostReasonDialog`.
+
+### 3. `SGUPipelineRoute.tsx` — repipe
+
 ```tsx
-function NavItem({ item }: { item: NavItemDef }) {
-  const location = useLocation();
-  const isActive = item.url === '/sgu'
-    ? location.pathname === '/sgu'
-    : location.pathname.startsWith(item.url);
-  // ... NavLink z classami active/inactive
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
+import { PageLoadingFallback } from '@/components/PageLoadingFallback';
+import { SalesHeader } from '@/components/sgu/headers/SalesHeader';
+import { UnifiedKanban } from '@/components/sgu/sales/UnifiedKanban';
+
+type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
+
+export default function SGUPipelineRoute() {
+  const { sguTeamId, isLoading } = useSGUTeamId();
+  const [filter, setFilter] = useState<SalesFilter | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (filter === 'today' || filter === 'overdue') {
+      navigate(`/sgu/zadania?filter=${filter}`, { replace: true });
+    }
+  }, [filter, navigate]);
+
+  if (isLoading) return <PageLoadingFallback />;
+  if (!sguTeamId) return <div className="p-6 text-sm text-muted-foreground">Brak skonfigurowanego zespołu SGU.</div>;
+
+  const kanbanFilter = filter === 'today' || filter === 'overdue' ? null : filter;
+
+  return (
+    <div className="space-y-4">
+      <SalesHeader teamId={sguTeamId} activeKey={filter} onCardClick={(k) => setFilter(prev => prev === k ? null : k)} />
+      <UnifiedKanban teamId={sguTeamId} filter={kanbanFilter} />
+    </div>
+  );
 }
 ```
 
-Uwaga: dla `/sgu` używamy exact match (żeby nie podświetlało się przy `/sgu/sprzedaz`), dla pozostałych `startsWith` (żeby `/sgu/klienci?tab=portfel` też podświetlał Klienci).
+### 4. Smoke checklist `docs/qa/sgu-refactor-ia-blokB.md`
 
-### Weryfikacje po edycji (default mode)
-
-1. `npx tsc --noEmit` — exit 0
-2. `grep -E "/sgu/pipeline|/sgu/dashboard|/sgu/reports|/sgu/tasks" src/components/layout/SGUSidebar.tsx` → 0 dopasowań
-3. `grep -E "/sgu/sprzedaz|/sgu/klienci|/sgu/zadania|/sgu/raporty" src/components/layout/SGUSidebar.tsx` → 4 dopasowania
+12 punktów per brief — bez modyfikacji.
 
 ### Świadome odstępstwa
 
-1. **Brak `useState` / `localStorage`** — per brief, 6 pozycji w jednej grupie nie wymaga collapsible.
-2. **`NavLink end` prop** — używamy tylko dla `/sgu` (Dashboard), żeby uniknąć match na sub-routes.
-3. **Brak grupy/labela** — wszystko w jednym `SidebarGroup` bez `GroupLabel`.
-4. **Sidebar elementy nawigacyjne dla legacy URL** (`/sgu/pipeline?view=...`) z poprzedniego stanu znikają — to było out-of-scope FIX-2, teraz domknięte przy okazji.
+1. **Filtr kolumny**: gdy `filter !== null`, pozostałe kolumny **schowane** (nie szare), bo wąskie szare kolumny są mylące — UX czystszy.
+2. **`StageBadge.onWonClick/onLostClick`** dla offering_stage przekazujemy z karty (otwiera istniejące dialogi) — istniejący komponent obsługuje to natywnie.
+3. **Brak `StageRollbackDialog`** w BLOK B — cofnięcia offering_stage poprzez StageBadge popover (już ma logikę). Rollback dialog poza zakresem.
+4. **`useUpdateTeamContact()`** używamy zamiast bezpośredniego `supabase.from(...).update(...)` — zgodnie z regułą projektu "API tylko przez hooki".
+5. **Klik na karcie** → `/sgu/klienci?contactId=...` per brief, choć kontakt może być prospect/lead (nie klient). Jeśli `/sgu/klienci` nie obsłuży tego, fix w osobnym BLOK C.
 
-### DoD
+### Weryfikacja po implementacji
 
-| Check | Po patchu |
-|---|---|
-| Liczba pozycji w sidebar (partner+reports on) | 6 |
-| Liczba pozycji (seller, reports off) | 4 (Dashboard/Sprzedaż/Klienci/Zadania) |
-| `tsc --noEmit` | 0 errors |
-| Grep legacy URL | 0 |
-| Grep nowe URL | 4 |
-| `localStorage` użycie | usunięte |
+```bash
+npx tsc --noEmit 2>&1 | tail -10
+grep -nE "DealsTeamDashboard" src/pages/sgu/SGUPipelineRoute.tsx       # 0
+grep -nE "UnifiedKanban" src/pages/sgu/SGUPipelineRoute.tsx            # >=1
+grep -E "@dnd-kit" package.json                                        # 3 hits
+```
+
+Oczekiwane: 0 błędów TS, 0 trafień legacy, ≥1 trafienie nowe, dnd-kit obecny.
 
