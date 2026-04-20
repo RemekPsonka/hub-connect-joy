@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { MoreHorizontal, Plus, Sparkles, Building2, Mail, Phone, Linkedin, AlertCircle } from 'lucide-react';
 import { useContactTldr } from '@/hooks/useContactTldr';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -28,6 +29,7 @@ interface ContactHeaderTLDRProps {
     companies?: { id?: string; name: string } | null;
     director_id?: string | null;
   };
+  onSelectAction?: (tab: 'note' | 'email' | 'meeting') => void;
 }
 
 function initials(name: string): string {
@@ -39,9 +41,10 @@ function initials(name: string): string {
     .join('');
 }
 
-export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps) {
+export function ContactHeaderTLDR({ contactId, contact, onSelectAction }: ContactHeaderTLDRProps) {
   const { data: tldr, isLoading } = useContactTldr(contactId);
   const [sguOpen, setSguOpen] = useState(false);
+  const navigate = useNavigate();
 
   const hasContactInfo = contact.email || contact.phone || contact.linkedin_url;
 
@@ -121,7 +124,9 @@ export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem>📝 Notatka</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onSelectAction?.('note')}>
+                  📝 Notatka
+                </DropdownMenuItem>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
@@ -130,14 +135,23 @@ export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps
                   </TooltipTrigger>
                   <TooltipContent>W trakcie naprawy</TooltipContent>
                 </Tooltip>
-                <DropdownMenuItem>📅 Spotkanie</DropdownMenuItem>
-                <DropdownMenuItem>✅ Zadanie</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => toast.info('Spotkania — wymaga aktualizacji schematu, kolejny sprint')}>
+                  📅 Spotkanie
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => toast.info('Zadania — kolejny sprint')}>
+                  ✅ Zadanie
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setSguOpen(true)}>⭐ Przekaż do SGU</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button size="sm" variant="secondary" className="gap-1.5">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-1.5"
+              onClick={() => navigate(`/sovra?contextType=contact&contextId=${contactId}`)}
+            >
               <Sparkles className="h-4 w-4" /> Zapytaj Sovrę
             </Button>
 
@@ -148,10 +162,15 @@ export function ContactHeaderTLDR({ contactId, contact }: ContactHeaderTLDRProps
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Udostępnij</DropdownMenuItem>
-                <DropdownMenuItem>Ustaw właściciela</DropdownMenuItem>
-                <DropdownMenuItem>Edytuj</DropdownMenuItem>
-                <DropdownMenuItem>Historia</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => toast.info('Zmiana właściciela — wkrótce')}>
+                  Ustaw właściciela
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => toast.info('Edycja kontaktu — wkrótce')}>
+                  Edytuj
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => toast.info('Historia zmian — wkrótce')}>
+                  Historia
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
