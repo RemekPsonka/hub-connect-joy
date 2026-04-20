@@ -1,68 +1,67 @@
 
 
-# BLOK B-FIX.4 — badges sub-kategorii na każdej karcie
+# BLOK B-FIX.6 — TemperatureBadge tylko dla LEAD
 
 ## Problem
-Obecnie karta kontaktu pokazuje tylko jeden badge zależnie od kolumny (`stage`):
-- Lead → tylko `TemperatureBadge`
-- Prospekt → tylko `SourceBadge`
-- Klient → tylko `ClientStatusBadge`
-- Ofertowanie → żadnego z powyższych (tylko `StageBadge` dla offering)
-
-Skutek: kontakt w Ofertowaniu nie ma widocznej temperatury, kontakt w Prospekcie nie ma temperatury, itd. User chce widzieć **wszystkie** wypełnione (lub klikalne, jeśli puste) sub-kategorie na każdej karcie.
+Po B-FIX.4 wszystkie 3 sub-badges (Temperature, Source, ClientStatus) renderują się na każdej karcie. To błąd domenowy:
+- **Temperature (HOT/TOP/10x/COLD)** to etapy LEADA — nie dotyczą kontaktu w Ofertowaniu (tam mamy `offering_stage`: handshake → wygrana/przegrana) ani Klienta.
+- **Source (CRM_PUSH/CC/AI_KRS/...)** to skąd przyszedł prospekt — sensowne tylko dla Prospekta (i ewentualnie Lead jako historia).
+- **ClientStatus (standard/ambassador/...)** dotyczy tylko Klienta.
 
 ## Rozwiązanie
-Wszystkie 3 badges (Temperature, Source, ClientStatus) renderowane na **każdej karcie** niezależnie od kolumny. Każdy badge nadal klikalny (popover z opcjami), z `e.stopPropagation()` na wrapperze. Layout: badges w wierszu pod nagłówkiem karty (zamiast obok nazwiska, bo zrobi się ciasno przy 3 badgeach + ikona overdue + nazwisko).
+Każdy sub-badge widoczny tylko w „swojej" kolumnie. Mapowanie:
+
+| Badge | Widoczny w `stage` |
+|---|---|
+| `TemperatureBadge` | `lead` |
+| `SourceBadge` | `prospect` |
+| `ClientStatusBadge` | `client` |
+| `StageBadge` (offering) | `offering` (już działa) |
+
+W kolumnie Ofertowanie pokazuje się tylko `StageBadge` z `offering_stage` — bez Temperature/Source/ClientStatus. Source pozostaje tylko w Prospekt (zgodnie z domeną — to atrybut źródła pozyskania).
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — wyrenderuj wszystkie 3 badge zawsze, przeniesione do osobnego rzędu pod nagłówkiem |
+| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — warunkowy render każdego sub-badge per `stage` |
 
-## Szczegóły zmiany w `UnifiedKanbanCard.tsx`
+## Szczegóły zmiany
 
-### Obecny header (linie 62–93)
-Po prawej obok nazwiska: jeden warunkowy badge + ikona overdue.
+W `UnifiedKanbanCard.tsx` rząd badges (obecnie zawsze 3) zamienić na warunkowy render:
 
-### Nowy układ
-**Header** (linie 62–71): tylko nazwisko/firma/pozycja po lewej + `AlertTriangle` po prawej.
-
-**Nowy rząd badges** (nowy blok, przed `ComplexityChips`):
 ```tsx
 <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-  <TemperatureBadge
-    value={contact.temperature}
-    onChange={(v) => onSubcategoryChange('temperature', v)}
-  />
-  <SourceBadge
-    value={contact.prospect_source}
-    onChange={(v) => onSubcategoryChange('prospect_source', v)}
-  />
-  <ClientStatusBadge
-    value={contact.client_status}
-    onChange={(v) => onSubcategoryChange('client_status', v)}
-  />
+  {stage === 'lead' && (
+    <TemperatureBadge
+      value={contact.temperature}
+      onChange={(v) => onSubcategoryChange('temperature', v)}
+    />
+  )}
+  {stage === 'prospect' && (
+    <SourceBadge
+      value={contact.prospect_source}
+      onChange={(v) => onSubcategoryChange('prospect_source', v)}
+    />
+  )}
+  {stage === 'client' && (
+    <ClientStatusBadge
+      value={contact.client_status}
+      onChange={(v) => onSubcategoryChange('client_status', v)}
+    />
+  )}
 </div>
 ```
 
-Wszystkie 3 widoczne zawsze. `EditableSubcategoryBadge` już obsługuje stan pusty (`(brak)` z dashed border po B-FIX.3+5), więc kontakt bez wartości pokaże klikalny placeholder.
+Dla `stage === 'offering'` wrapper pozostaje pusty (cały blok można dodatkowo opakować w `{(stage === 'lead' || stage === 'prospect' || stage === 'client') && ...}` żeby nie renderować pustego diva — drobna optymalizacja).
 
-### Pozostałe sekcje karty bez zmian
-- `StageBadge` dla `offering` — zostaje (to inny mechanizm, kontroluje pod-etap ofertowania).
-- `ComplexityChips` — zostaje.
-- `PremiumQuickEdit` — zostaje.
-- Footer z „Oznacz jako lost" — zostaje.
+`StageBadge` dla offering — bez zmian (już warunkowy `stage === 'offering'`).
 
-## Ryzyka / decyzje
+## Świadome decyzje
 
-1. **Wizualny ciężar karty.** 3 badges + ComplexityChips + PremiumQuickEdit + offering badge (gdy aktywny) = sporo elementów. Decyzja: `flex-wrap`, kompaktowe `text-[10px]` (badges już to mają), w razie ścisku zawiną się do 2 linii. Akceptowalne, bo karta i tak ma min ~140px wysokości.
-
-2. **Czy ukrywać badge gdy pusty?** NIE — user ma móc kliknąć i ustawić temperaturę nawet na karcie w kolumnie Prospekt. Pusty badge = `(brak)` z dashed border (już zaimplementowane).
-
-3. **`onSubcategoryChange` handler.** Już istnieje w `UnifiedKanban` i obsługuje wszystkie 3 fieldy (`temperature` / `prospect_source` / `client_status`) — bez zmian w hooku, bez zmian w `UnifiedKanban.tsx`.
-
-4. **Grupowanie „wg sub-kategorii".** Nadal grupuje per kolumna wg `SUBGROUP_CONFIG` (lead → temperature, prospect → source, client → client_status). Bez zmian — to feature niezależny od wyświetlania badge'a.
+1. **Source tylko w Prospekt** — nie duplikujemy w Lead. Source jest atrybutem pozyskania; po awansie do Lead temperatura niesie informację, source nie jest już akcjonowalny.
+2. **Brak fallback "(brak)" w innych kolumnach** — jeśli badge nie należy do kolumny, w ogóle go nie ma. User nie powinien móc ustawić temperatury klientowi.
+3. **Dane w DB nie są usuwane** — `temperature`/`prospect_source`/`client_status` w `deal_team_contacts` zostają, po prostu nie renderujemy badge'a poza właściwą kolumną. Gdy kontakt wraca z Ofertowania do Leada, zachowuje swoją starą temperaturę.
 
 ## Weryfikacja
 
@@ -70,21 +69,22 @@ Wszystkie 3 widoczne zawsze. `EditableSubcategoryBadge` już obsługuje stan pus
 npx tsc --noEmit          # 0 errors
 ```
 
-Manualne (po deploy):
-- Karta w kolumnie **Prospekt** → widać badges: `(brak)` lub wartość dla Temperature, wartość dla Source, `(brak)` dla ClientStatus. Wszystkie klikalne.
-- Karta w kolumnie **Ofertowanie** → widać 3 badges + offering stage badge. Klik w Temperature → popover, wybór HOT → badge zmienia się na HOT, count w nagłówku grupy (jeśli grupowanie wg sub) NIE zmienia się (bo to kolumna offering, grupowana inaczej).
-- Karta w kolumnie **Klient** → widać 3 badges (Temperature i Source typowo `(brak)` jeśli kontakt poszedł od razu jako klient).
-- Klik w dowolny badge nie nawiguje do `/sgu/klienci` (stopPropagation działa).
-- Drag&drop działa.
+Manualne:
+- Karta **Prospekt** → tylko `SourceBadge`.
+- Karta **Lead** → tylko `TemperatureBadge` (HOT/TOP/10x/COLD).
+- Karta **Ofertowanie** → tylko `StageBadge` z offering stage (handshake → wygrana/przegrana). Brak Temperature/Source/ClientStatus.
+- Karta **Klient** → tylko `ClientStatusBadge`.
+- Drag karty Lead → Ofertowanie: TemperatureBadge znika, pojawia się StageBadge.
+- Drag z powrotem Ofertowanie → Lead: TemperatureBadge wraca z poprzednią wartością.
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Każda karta pokazuje 3 badges (Temperature, Source, ClientStatus) | ✅ |
-| Puste badges → `(brak)` z dashed border, klikalne | ✅ |
-| Klik w badge otwiera popover, NIE nawiguje | ✅ |
-| Mutacja działa dla każdej kolumny (nie tylko „matching stage") | ✅ |
-| Drag&drop nadal działa | ✅ |
+| Temperature widoczne tylko w kolumnie Lead | ✅ |
+| Source widoczne tylko w kolumnie Prospekt | ✅ |
+| ClientStatus widoczne tylko w kolumnie Klient | ✅ |
+| Ofertowanie ma tylko StageBadge | ✅ |
+| Drag między kolumnami przełącza badges poprawnie | ✅ |
 | `tsc --noEmit` 0 błędów | ✅ |
 
