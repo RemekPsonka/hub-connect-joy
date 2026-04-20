@@ -38,34 +38,6 @@ export function OfferingTab({ teamId }: OfferingTabProps) {
     [payments]
   );
 
-  // Payment timeline chart data (24 months)
-  const timelineData = useMemo(() => {
-    const now = startOfMonth(new Date());
-    const months = Array.from({ length: 24 }, (_, i) => {
-      const d = addMonths(now, i);
-      return {
-        month: format(d, 'LLL yy', { locale: pl }),
-        recurring: 0,
-        one_time: 0,
-        lump_sum: 0,
-      };
-    });
-    payments.forEach((p) => {
-      const pDate = startOfMonth(parseISO(p.scheduled_date));
-      const diff = Math.round((pDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
-      if (diff >= 0 && diff < 24) {
-        months[diff][p.payment_type] += p.amount;
-      }
-    });
-    return months;
-  }, [payments]);
-
-  const timelineChartConfig: ChartConfig = {
-    recurring: { label: 'Cykliczne', color: '#3b82f6' },
-    one_time: { label: 'Jednorazowe', color: '#8b5cf6' },
-    lump_sum: { label: 'Dodatkowe', color: '#eab308' },
-  };
-
   if (contactsLoading || paymentsLoading) {
     return (
       <div className="space-y-4">
@@ -76,27 +48,6 @@ export function OfferingTab({ teamId }: OfferingTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Payment timeline chart */}
-      {payments.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Timeline płatności (24 miesiące)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={timelineChartConfig} className="h-[220px] w-full aspect-auto">
-              <AreaChart data={timelineData} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} interval={2} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area type="monotone" dataKey="recurring" stackId="1" fill="#3b82f6" stroke="#3b82f6" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="one_time" stackId="1" fill="#8b5cf6" stroke="#8b5cf6" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="lump_sum" stackId="1" fill="#eab308" stroke="#eab308" fillOpacity={0.6} />
-              </AreaChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>

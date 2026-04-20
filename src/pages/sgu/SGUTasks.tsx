@@ -7,6 +7,7 @@ import { TaskRow } from '@/components/sgu/TaskRow';
 import { MyKanban } from '@/components/sgu/MyKanban';
 import { CalendarDays, AlertCircle, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { TasksHeader } from '@/components/sgu/headers/TasksHeader';
 
 function TaskSection({
   filter,
@@ -58,6 +59,8 @@ export default function SGUTasks() {
         <h1 className="text-2xl font-bold">Dziennik</h1>
         <p className="text-sm text-muted-foreground">Twoje zadania i tablica klientów.</p>
       </div>
+
+      <TasksHeader />
 
       <Tabs defaultValue="list">
         <TabsList>
