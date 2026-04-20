@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,13 +51,33 @@ export default function ContactDetailV2() {
     director_id: contact.director_id,
   };
 
+  return <ContactDetailV2Content id={id} headerContact={headerContact} contact={contact} />;
+}
+
+function ContactDetailV2Content({
+  id,
+  headerContact,
+  contact,
+}: {
+  id: string;
+  headerContact: ContactHeaderTLDRProps['contact'];
+  contact: { company_id: string | null; email: string | null };
+}) {
+  const [composerTab, setComposerTab] = useState<'note' | 'email' | 'meeting'>('note');
+  const composerRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectAction = (tab: 'note' | 'email' | 'meeting') => {
+    setComposerTab(tab);
+    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
   return (
     <div className="container mx-auto max-w-7xl p-6 space-y-6">
-      <ContactHeaderTLDR contactId={id} contact={headerContact} />
+      <ContactHeaderTLDR contactId={id} contact={headerContact} onSelectAction={handleSelectAction} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <ActivityTimeline contactId={id} />
+        <div className="lg:col-span-2" ref={composerRef}>
+          <ActivityTimeline contactId={id} composerTab={composerTab} onComposerTabChange={(t) => setComposerTab(t as 'note' | 'email' | 'meeting')} />
         </div>
         <div>
           <ContactCRMCard contactId={id} />

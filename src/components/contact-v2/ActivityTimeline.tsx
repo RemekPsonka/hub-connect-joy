@@ -37,9 +37,11 @@ function dayLabel(d: Date): string {
 
 interface ActivityTimelineProps {
   contactId: string;
+  composerTab?: 'note' | 'email' | 'meeting';
+  onComposerTabChange?: (tab: string) => void;
 }
 
-export function ActivityTimeline({ contactId }: ActivityTimelineProps) {
+export function ActivityTimeline({ contactId, composerTab, onComposerTabChange }: ActivityTimelineProps) {
   const [filter, setFilter] = useState('all');
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useContactTimeline(
     contactId,
@@ -73,7 +75,7 @@ export function ActivityTimeline({ contactId }: ActivityTimelineProps) {
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-4">
-        <ActivityComposer contactId={contactId} />
+        <ActivityComposer contactId={contactId} activeTab={composerTab} onTabChange={onComposerTabChange} />
 
         <div className="flex flex-wrap gap-1.5">
           {FILTERS.map((f) => (
