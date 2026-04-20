@@ -34,7 +34,7 @@ export function usePriorityOverduePayment() {
         id: data.id,
         title: `Zaległa rata: ${formatPLN(Number(data.amount ?? 0))}`,
         meta: `Termin: ${dueDate}`,
-        navigateTo: `/sgu/klienci?tab=raty&contactId=${data.team_contact_id}`,
+        navigateTo: `/sgu/klienci?tab=payments&contactId=${data.team_contact_id}`,
       };
     },
     staleTime: 60_000,
