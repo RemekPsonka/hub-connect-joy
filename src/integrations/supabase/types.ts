@@ -4090,6 +4090,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          sales_area: string | null
           sort_order: number
           team_id: string
           tenant_id: string
@@ -4101,6 +4102,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          sales_area?: string | null
           sort_order?: number
           team_id: string
           tenant_id: string
@@ -4112,6 +4114,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          sales_area?: string | null
           sort_order?: number
           team_id?: string
           tenant_id?: string

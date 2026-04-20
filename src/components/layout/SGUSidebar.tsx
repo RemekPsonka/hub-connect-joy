@@ -24,6 +24,7 @@ import {
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
 import { useSGUAccess } from '@/hooks/useSGUAccess';
+import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -57,11 +58,12 @@ const salesItems: NavItemDef[] = [
   { title: 'Odłożone', url: '/sgu/pipeline?view=snoozed', icon: Moon },
 ];
 
-const analyticsItems: NavItemDef[] = [
+const analyticsItemsBase: NavItemDef[] = [
   { title: 'Dashboard', url: '/sgu/dashboard', icon: LayoutDashboard },
   { title: 'Tabela', url: '/sgu/pipeline?view=table', icon: List },
-  { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 },
 ];
+
+const reportsItem: NavItemDef = { title: 'Raporty', url: '/sgu/reports', icon: BarChart3 };
 
 const adminItems: NavItemDef[] = [
   { title: 'Zespół', url: '/sgu/admin/team', icon: Users },
@@ -155,8 +157,12 @@ export function SGUSidebar() {
   const { isPartner } = useSGUAccess();
   const { isAdmin } = useOwnerPanel();
   const { isSuperadmin } = useSuperadmin();
+  const { enableReports } = useSGUTeamId();
 
   const showAdmin = isPartner || isAdmin || isSuperadmin;
+  const analyticsItems: NavItemDef[] = enableReports
+    ? [...analyticsItemsBase, reportsItem]
+    : analyticsItemsBase;
 
   const groups: Array<{ label: string; items: NavItemDef[]; defaultOpen: boolean }> = [
     { label: 'Sprzedaż', items: salesItems, defaultOpen: true },

@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+export type SalesArea = 'property' | 'financial' | 'communication' | 'life_group';
+
 export interface ProductCategory {
   id: string;
   team_id: string;
@@ -12,6 +14,7 @@ export interface ProductCategory {
   default_commission_percent: number;
   sort_order: number;
   is_active: boolean;
+  sales_area: SalesArea | null;
   created_at: string;
 }
 
@@ -64,12 +67,13 @@ export function useCreateProductCategory() {
 export function useUpdateProductCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; teamId: string; name?: string; color?: string; defaultCommissionPercent?: number; isActive?: boolean }) => {
+    mutationFn: async (input: { id: string; teamId: string; name?: string; color?: string; defaultCommissionPercent?: number; isActive?: boolean; salesArea?: SalesArea | null }) => {
       const updates: Record<string, unknown> = {};
       if (input.name !== undefined) updates.name = input.name;
       if (input.color !== undefined) updates.color = input.color;
       if (input.defaultCommissionPercent !== undefined) updates.default_commission_percent = input.defaultCommissionPercent;
       if (input.isActive !== undefined) updates.is_active = input.isActive;
+      if (input.salesArea !== undefined) updates.sales_area = input.salesArea;
       const { error } = await (supabase as any)
         .from('deal_team_product_categories')
         .update(updates)
