@@ -269,6 +269,20 @@ export function UnifiedTaskRow({
         {/* Subtasks */}
         {showSubtasks && <SubtaskIndicator taskId={task.id} />}
 
+        {/* Deal stage badge (between title and due date) */}
+        {dealStageBadge && (
+          <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal">
+            <span>{STAGE_ICON[dealStageBadge.stage] ?? '📋'}</span>
+            <span>{STAGE_LABEL[dealStageBadge.stage] ?? dealStageBadge.stage}</span>
+            {dealStageBadge.subCategory && (
+              <>
+                <span className="text-muted-foreground/60">·</span>
+                <span>{SUB_LABEL[dealStageBadge.subCategory] ?? dealStageBadge.subCategory}</span>
+              </>
+            )}
+          </Badge>
+        )}
+
         {/* Due date */}
         {getDueDateDisplay()}
 
