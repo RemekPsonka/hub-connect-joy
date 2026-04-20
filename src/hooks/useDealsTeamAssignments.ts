@@ -26,6 +26,8 @@ export interface DealTeamAssignment {
   contact_company?: string | null;
   contact_category?: string | null;
   contact_offering_stage?: string | null;
+  contact_temperature?: string | null;
+  contact_client_status?: string | null;
   contact_id?: string | null;
 }
 
