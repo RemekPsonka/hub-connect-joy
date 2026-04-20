@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 interface SalesHeaderProps {
   teamId: string;
   onCardClick?: (key: 'prospect' | 'lead' | 'offering' | 'today' | 'overdue') => void;
+  activeKey?: 'prospect' | 'lead' | 'offering' | 'today' | 'overdue' | null;
 }
 
-export function SalesHeader({ teamId, onCardClick }: SalesHeaderProps) {
+export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps) {
   const { data: contacts = [] } = useTeamContacts(teamId);
   const { data: today = [] } = useSGUTasks('today');
   const { data: overdue = [] } = useSGUTasks('overdue');
@@ -39,6 +40,7 @@ export function SalesHeader({ teamId, onCardClick }: SalesHeaderProps) {
           className={cn(
             'cursor-pointer transition-shadow hover:shadow-md',
             it.key === 'overdue' && counts.overdue > 0 && 'border-destructive/50',
+            activeKey === it.key && 'ring-2 ring-primary',
           )}
         >
           <CardContent className="p-3 space-y-1">
