@@ -67,12 +67,13 @@ export function useCreateProductCategory() {
 export function useUpdateProductCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; teamId: string; name?: string; color?: string; defaultCommissionPercent?: number; isActive?: boolean }) => {
+    mutationFn: async (input: { id: string; teamId: string; name?: string; color?: string; defaultCommissionPercent?: number; isActive?: boolean; salesArea?: SalesArea | null }) => {
       const updates: Record<string, unknown> = {};
       if (input.name !== undefined) updates.name = input.name;
       if (input.color !== undefined) updates.color = input.color;
       if (input.defaultCommissionPercent !== undefined) updates.default_commission_percent = input.defaultCommissionPercent;
       if (input.isActive !== undefined) updates.is_active = input.isActive;
+      if (input.salesArea !== undefined) updates.sales_area = input.salesArea;
       const { error } = await (supabase as any)
         .from('deal_team_product_categories')
         .update(updates)
