@@ -1,116 +1,168 @@
 
 
-## BLOK B-FIX — dokończenie kanbana do SPEC-IA-v2-FINAL
+## BLOK B-FIX.2 — edytowalne badges sub-kategorii + counts parity
+
+### Cel
+1. Wyrównać filtr `visibleContacts` w `SalesHeader` z `UnifiedKanban` (uwzględnić `snoozed_until`).
+2. Zamienić read-only badges (Temperature/Source) na klikalne popovery z RadioGroup-style listą opcji. Dodać analogiczny `ClientStatusBadge` dla kolumny Klient.
 
 ### Pliki
 
 | Plik | Akcja |
 |---|---|
-| `src/components/sgu/sales/TemperatureBadge.tsx` | CREATE |
-| `src/components/sgu/sales/SourceBadge.tsx` | CREATE |
-| `src/components/sgu/sales/ComplexityChips.tsx` | CREATE |
-| `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — podmiana inline temperature/areas na nowe komponenty + dodanie SourceBadge dla prospect |
-| `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — toggle Wariant A + Σ PLN w nagłówku kolumny |
-| `src/components/sgu/headers/SalesHeader.tsx` | EDIT — counts liczone z `deal_stage` (przez `deriveStage`) zamiast surowego `category` |
-| `docs/qa/sgu-refactor-ia-blokB.md` | EDIT — dopisać sekcję `## BLOK B-FIX` |
+| `src/components/sgu/headers/SalesHeader.tsx` | EDIT — `visibleContacts` z filtrem `snoozed_until` |
+| `src/components/sgu/sales/EditableSubcategoryBadge.tsx` | CREATE — generyczny badge+popover |
+| `src/components/sgu/sales/TemperatureBadge.tsx` | EDIT — wrapper na `EditableSubcategoryBadge` z `onChange` |
+| `src/components/sgu/sales/SourceBadge.tsx` | EDIT — wrapper na `EditableSubcategoryBadge` z `onChange` |
+| `src/components/sgu/sales/ClientStatusBadge.tsx` | CREATE — wrapper z opcjami `standard`/`ambassador` |
+| `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — nowy prop `onSubcategoryChange`, usunięcie osobnego badge'a Ambasador |
+| `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — handler `handleSubcategoryChange`, przekazanie do karty |
+| `src/hooks/useDealsTeamContacts.ts` | EDIT (warunkowo) — dodanie pól `temperature`/`prospect_source`/`client_status` w sygnaturze `useUpdateTeamContact`, jeśli brak |
 
-### 1. Nowe atomowe komponenty
+### 1. `SalesHeader.tsx` — counts parity
 
-**`TemperatureBadge.tsx`** — `{value: Temperature | string | null}` → `Badge` z kolorem per HOT/TOP/COLD/10x. Zwraca `null` gdy brak. Używa `Badge` z `@/components/ui/badge` + `cn` dla styli (spójnie z resztą projektu — nie inline klas).
-
-**`SourceBadge.tsx`** — `{value: ProspectSource | string | null}` → `Badge` z labelem CRM PUSH / CC / AI KRS / AI WEB / CSV / Ręczne. Zwraca `null` gdy brak. Używa `PROSPECT_SOURCE_LABELS` z `@/types/dealTeam` (DRY).
-
-**`ComplexityChips.tsx`** — `{complexity: ClientComplexity | Record<string, unknown> | null | undefined}` → flex-wrap chipów (🏠/💰/📞/🏥) tylko dla aktywnych obszarów. Zwraca `null` gdy brak aktywnych.
-
-Wszystkie z named export, bez `any` (typy z `@/types/dealTeam`).
-
-### 2. `UnifiedKanbanCard.tsx` — refactor
-
-- Usunąć lokalne stałe `TEMP_CLASSES`, `TEMP_LABELS`, `AREAS` (przeniesione do nowych komponentów).
-- Usunąć fallback `temperature` z `category` — używać tylko `contact.temperature` (nowa taksonomia).
-- Header (prawy górny róg) — render warunkowy wg `stage` (prop już przekazywany):
-  - `stage === 'lead'` → `<TemperatureBadge value={contact.temperature} />`
-  - `stage === 'prospect'` → `<SourceBadge value={contact.prospect_source} />`
-  - `stage === 'client' && client_status === 'ambassador'` → istniejący badge "Ambasador" z gwiazdką
-  - `stage === 'offering'` → `StageBadge` (zostaje jak jest, w sekcji pod headerem)
-- Sekcja obszarów — wymiana inline mapowania na `<ComplexityChips complexity={contact.client_complexity} />`.
-- Pozostałe elementy (overdue ring, click navigate, lost button, isDragging) bez zmian.
-
-### 3. `UnifiedKanban.tsx` — Σ PLN + toggle Wariant A
-
-**3.1 Toggle nad gridem:**
-```tsx
-const [groupBySubcategory, setGroupBySubcategory] = useState(false);
+Zamiana lokalnego `visible` (filtr tylko `!c.is_lost`) na:
+```ts
+const nowIso = new Date().toISOString();
+const visibleContacts = contacts.filter(
+  (c) => !c.is_lost && (!c.snoozed_until || c.snoozed_until < nowIso),
+);
 ```
-Renderowany jako `<label>` z `<Checkbox>` z `@/components/ui/checkbox` (shadcn — spójne z resztą; nie raw `input`).
+Counts (`prospect/lead/offering`) liczone z `visibleContacts` przez `deriveStage` (bez zmiany pozostałej logiki). `today`/`overdue` bez zmian.
 
-**3.2 Σ wartości w `DroppableColumn` header:**
-```tsx
-const sumPLN = contacts.reduce((acc, c) => acc + (c.estimated_value ?? 0), 0);
-```
-Render: `· {Math.round(sumPLN/1000)}k PLN` jako `<span className="text-xs text-muted-foreground">` obok badge'a z liczbą. Renderowane tylko gdy `sumPLN > 0`.
+### 2. `EditableSubcategoryBadge.tsx` — generyk
 
-**3.3 Wariant A — sub-grupowanie:**
-Mapa konfigu per-stage (`SUBGROUP_CONFIG: Record<DealStage, {getter, labels}>`) używająca `TEMPERATURE_LABELS` / `PROSPECT_SOURCE_LABELS` / `CLIENT_STATUS_LABELS` / `OFFERING_STAGE_LABELS` z `@/types/dealTeam` (zamiast duplikować labele).
-
-`DroppableColumn` przyjmuje nowy prop `groupBy: boolean`. Gdy `true`, body kolumny renderuje sekcje accordion-style:
-- Klucz grupy = `cfg.getter(c) ?? '__none__'`
-- Każda sekcja: nagłówek `text-xs font-medium text-muted-foreground` z labelem + count, pod spodem karty.
-- Karty pozostają draggable wewnątrz sekcji.
-
-Gdy `groupBy === false`, render dotychczasowy (płaska lista).
-
-### 4. `SalesHeader.tsx` — fix rozjazdu counts
-
-Aktualnie counts liczy się surowo po `category` (10 wartości legacy). Po BLOK B kanban grupuje po `deal_stage` (`deriveStage`). To powoduje rozjazd np. `category='audit'` → kanban: kolumna `offering`, header: nigdzie (audit nie jest w `['hot','top','lead','10x']`).
-
-Fix: zaimportować `deriveStage` z `UnifiedKanban` (lub przenieść do `@/types/dealTeam` jako helper — czystsza opcja, ale poza scope FIX-a; tymczasowo eksport z `UnifiedKanban`). Counts:
-```tsx
-const visible = contacts.filter((c) => !c.is_lost);
-const counts = {
-  prospect: visible.filter((c) => deriveStage(c) === 'prospect').length,
-  lead:     visible.filter((c) => deriveStage(c) === 'lead').length,
-  offering: visible.filter((c) => deriveStage(c) === 'offering').length,
-  today: today.length,
-  overdue: overdue.length,
-};
+API:
+```ts
+interface Option { value: string; label: string; className?: string; icon?: ReactNode; }
+interface Props {
+  value: string | null | undefined;
+  options: Option[];
+  emptyLabel?: string; // default "(brak)"
+  onSelect: (value: string) => void;
+  ariaLabel: string;
+}
 ```
 
-**Świadome odstępstwo od briefu:** brief proponował `c.deal_stage === 'prospect'` bezpośrednio. Ale `deal_stage` jest opcjonalny w typie (`DealStage | undefined`) i niektóre rekordy mogą go nie mieć w cache (zależy od zwracanej projekcji w `useTeamContacts`). `deriveStage(c)` = bezpieczny fallback z `category` — identyczna logika jak w kanbanie → gwarantowany match counts ↔ kolumny.
+Render:
+- `Popover` (shadcn). `PopoverTrigger asChild` → `<button onClick={(e) => e.stopPropagation()}>` z `Badge variant="outline"` w środku (Badge jest `<div>`, nie nadaje się jako trigger sam w sobie).
+- Trigger label: jeśli `value` ma match → `option.label` + `option.className`. W przeciwnym razie `emptyLabel` z klasą `bg-muted text-muted-foreground border-dashed`.
+- Wewnątrz `PopoverContent` (`className="w-44 p-1"`, `onClick={(e) => e.stopPropagation()}`): lista przycisków `<button className="w-full text-left flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted">`. Active option ma `<Check className="h-3.5 w-3.5" />`, pozostałe placeholder `<span className="w-3.5" />` żeby zachować alignment.
+- Wybór: jeśli `value === current` → tylko `setOpen(false)`. W innym wypadku `onSelect(value)` + `setOpen(false)`.
+- `text-[10px]` dla triggera (zgodnie z resztą badges).
 
-### 5. Smoke checklist
+### 3. `TemperatureBadge.tsx` — refactor (breaking change props)
 
-Dopisać do `docs/qa/sgu-refactor-ia-blokB.md` sekcję `## BLOK B-FIX` z 7 punktami z briefu (1:1).
+Nowe API:
+```ts
+interface TemperatureBadgeProps {
+  value: Temperature | string | null | undefined;
+  onChange: (next: Temperature) => void;
+}
+```
 
-### 6. Świadome odstępstwa (zbiorczo)
+Wewnątrz `OPTIONS: Option[]` (HOT/TOP/COLD/10x z istniejącymi klasami) → render `<EditableSubcategoryBadge ariaLabel="Temperatura" value={value} options={OPTIONS} onSelect={(v) => onChange(v as Temperature)} />`.
 
-1. **Toggle: `Checkbox` zamiast `<input type="checkbox">`** — zgodność z shadcn/ui (zasada „Tailwind only, shadcn primitives", nie raw HTML form controls).
-2. **Labele sub-grup z istniejących stałych** (`TEMPERATURE_LABELS` etc.) — DRY, nie hardkodować.
-3. **`SalesHeader` używa `deriveStage`** — patrz pkt 4 wyżej.
-4. **Bez `any`** — typy z `@/types/dealTeam` (project rule "TypeScript strict, never any").
-5. **`PROSPECT_SOURCE_LABELS`** używa wartości "CRM push" / "Spotkanie CC". Brief w `SourceBadge` proponował UPPERCASE "CRM PUSH" / "CC". Trzymam się stałej z `dealTeam.ts` (single source of truth) — jeśli Remek chce UPPERCASE, zmieniamy w jednym miejscu.
+### 4. `SourceBadge.tsx` — refactor (breaking change props)
 
-### 7. Weryfikacja po edycji
+```ts
+interface SourceBadgeProps {
+  value: ProspectSource | string | null | undefined;
+  onChange: (next: ProspectSource) => void;
+}
+```
+
+`OPTIONS` budowane z `PROSPECT_SOURCE_LABELS` (wszystkie 6) z jednolitym `className: 'bg-sky-500/10 text-sky-700 border-sky-300'`.
+
+### 5. `ClientStatusBadge.tsx` — CREATE
+
+```ts
+interface ClientStatusBadgeProps {
+  value: ClientStatus | string | null | undefined;
+  onChange: (next: 'standard' | 'ambassador') => void;
+}
+```
+
+`OPTIONS`:
+- `standard` → label z `CLIENT_STATUS_LABELS.standard`, `className: 'bg-emerald-500/15 text-emerald-700 border-emerald-300'`
+- `ambassador` → label z `CLIENT_STATUS_LABELS.ambassador`, `className: 'bg-amber-500/15 text-amber-700 border-amber-300'`, `icon: <Star className="h-3 w-3 fill-current" />`
+
+`lost` celowo pominięte (obsługiwane przez „Oznacz jako lost"). `emptyLabel="Status"` (gdy `value=null`, choć nowy klient zwykle ma `standard` z konwersji).
+
+### 6. `UnifiedKanbanCard.tsx` — wpięcie
+
+Dodanie propa `onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void`.
+
+Header (zamiana 3 obecnych ifów na):
+```tsx
+{stage === 'lead' && (
+  <TemperatureBadge value={contact.temperature} onChange={(v) => onSubcategoryChange('temperature', v)} />
+)}
+{stage === 'prospect' && (
+  <SourceBadge value={contact.prospect_source} onChange={(v) => onSubcategoryChange('prospect_source', v)} />
+)}
+{stage === 'client' && (
+  <ClientStatusBadge value={contact.client_status} onChange={(v) => onSubcategoryChange('client_status', v)} />
+)}
+```
+
+Usunięcie osobnego `Badge` „Ambasador" (zastąpiony przez `ClientStatusBadge` z ikoną gwiazdki w opcji).
+
+### 7. `UnifiedKanban.tsx` — handler
+
+```tsx
+function handleSubcategoryChange(
+  c: DealTeamContact,
+  field: 'temperature' | 'prospect_source' | 'client_status',
+  value: string,
+) {
+  updateContact.mutate({ id: c.id, teamId, [field]: value });
+}
+```
+
+W `DroppableColumn.renderCard` / `DraggableCard` przekazać:
+```tsx
+onSubcategoryChange={(field, value) => handleSubcategoryChange(c, field, value)}
+```
+
+(propagacja przez `DroppableColumn` props → `DraggableCard` props → `UnifiedKanbanCard`).
+
+### 8. `useDealsTeamContacts.ts` — sygnatura mutacji
+
+Sprawdzę aktualne pola payloadu w `useUpdateTeamContact`. Jeśli `temperature`/`prospect_source`/`client_status` nie są jeszcze w typie `UpdateTeamContactInput`, dodaję je jako opcjonalne (`Temperature | null`, `ProspectSource | null`, `ClientStatus | null`) i mapuję 1:1 do `update({...})`. Bez `any`.
+
+### Świadome odstępstwa / decyzje
+
+1. **`Badge` jako element wewnątrz `<button>`** zamiast `Badge` jako trigger — bo shadcn `Badge` to `<div>`, a `Radix Popover.Trigger asChild` wymaga interaktywnego elementu z handlerem. Rozwiązanie: `<button type="button" onClick={stopPropagation}><Badge .../></button>`. Wizualnie identyczne, semantycznie poprawne.
+2. **`stopPropagation` na trigger I content** — karta ma `onClick={navigate}`, popover nie może go odpalać.
+3. **`emptyLabel` z `border-dashed`** — wizualna sygnalizacja „kliknij, żeby ustawić" zgodnie z briefem.
+4. **`ClientStatusBadge` bez opcji `lost`** — per brief, lost przez przycisk „Oznacz jako lost" + `LostReasonDialog`.
+5. **Usuwam ⭐ Ambasador jako osobny badge** — zastąpiony ikoną w opcji `ambassador` w `ClientStatusBadge`. Jeden source of truth dla statusu klienta.
+6. **`SalesHeader` — `visibleContacts` z `deriveStage`** — utrzymuję dotychczasowe użycie `deriveStage` z BLOK B-FIX (counts liczone bezpiecznie, bez polegania na `deal_stage` z cache).
+7. **Brak `RadioGroup` shadcn** — używam zwykłych `<button>` z checkmarkiem. `RadioGroup` wymaga form context i jest cięższy; tutaj to lista wyboru jednokrotnego z natychmiastowym commit, nie formularz. Wizualnie spójne, lżejsze.
+8. **Breaking change w `TemperatureBadge`/`SourceBadge` props** (dodanie wymaganego `onChange`) — komponenty są używane tylko w `UnifiedKanbanCard`, sprawdzę grep przed implementacją; gdyby były inne callsites, zaadaptuję je w tym samym commicie.
+
+### Weryfikacja po implementacji
 
 ```bash
 npx tsc --noEmit 2>&1 | tail -10
-grep -nE "TemperatureBadge|SourceBadge|ComplexityChips" src/components/sgu/sales/UnifiedKanbanCard.tsx
-grep -nE "groupBySubcategory" src/components/sgu/sales/UnifiedKanban.tsx
-grep -nE "estimated_value.*reduce|sumPLN" src/components/sgu/sales/UnifiedKanban.tsx
-grep -nE "deriveStage|deal_stage === 'prospect'" src/components/sgu/headers/SalesHeader.tsx
+grep -rn "TemperatureBadge\|SourceBadge\|ClientStatusBadge" src/                         # ujawni wszystkie callsites
+grep -n "snoozed_until" src/components/sgu/headers/SalesHeader.tsx                       # ≥1
+grep -n "EditableSubcategoryBadge" src/components/sgu/sales/                             # ≥3 (Temperature/Source/ClientStatus)
+grep -n "onSubcategoryChange" src/components/sgu/sales/UnifiedKanban*.tsx                # ≥3
 ```
-Oczekiwane: 0 TS errors, każdy grep ≥1 trafienie.
+
+Oczekiwane: 0 błędów TS, każdy grep zwraca trafienia, `TemperatureBadge`/`SourceBadge` nigdzie poza `UnifiedKanbanCard.tsx` (lub adaptacja innych callsites w tym samym commicie).
 
 ### DoD
 
 | Check | Stan po patchu |
 |---|---|
-| Karta LEAD ma TemperatureBadge | ✅ |
-| Karta PROSPECT ma SourceBadge | ✅ |
-| Karta CLIENT (ambassador) ma gwiazdkę | ✅ (zachowane) |
-| `ComplexityChips` na każdej karcie z aktywnymi obszarami | ✅ |
-| Σ PLN w nagłówku kolumny | ✅ |
-| Toggle Wariant A działa | ✅ |
-| `SalesHeader` counts == kolumny kanbana | ✅ (przez `deriveStage`) |
-| `tsc` 0 błędów | ✅ |
+| KPI „Leady" w SalesHeader == count kolumny Lead | ✅ (snoozed parity) |
+| Karta w Lead bez `temperature` ma klikalny `(brak)` | ✅ |
+| Klik w badge otwiera popover, NIE nawiguje | ✅ (stopPropagation) |
+| Wybór opcji: mutacja DB + optimistic refetch | ✅ (`updateContact.mutate` + invalidate w hooku) |
+| To samo dla Prospekt (6 opcji) i Klient (2 opcje) | ✅ |
+| Drag&drop nadal działa | ✅ (popover trigger to button, nie cała karta) |
+| `tsc --noEmit` 0 błędów | ✅ |
 
