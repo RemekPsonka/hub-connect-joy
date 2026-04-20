@@ -1,14 +1,16 @@
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Star, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
 import { TemperatureBadge } from './TemperatureBadge';
 import { SourceBadge } from './SourceBadge';
+import { ClientStatusBadge } from './ClientStatusBadge';
 import { ComplexityChips } from './ComplexityChips';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
+
+export type SubcategoryField = 'temperature' | 'prospect_source' | 'client_status';
 
 interface UnifiedKanbanCardProps {
   contact: DealTeamContact;
@@ -17,6 +19,7 @@ interface UnifiedKanbanCardProps {
   onOfferingStageChange: (next: string) => void;
   onOfferingWonClick: () => void;
   onOfferingLostClick: () => void;
+  onSubcategoryChange: (field: SubcategoryField, value: string) => void;
   isDragging?: boolean;
 }
 
@@ -27,6 +30,7 @@ export function UnifiedKanbanCard({
   onOfferingStageChange,
   onOfferingWonClick,
   onOfferingLostClick,
+  onSubcategoryChange,
   isDragging,
 }: UnifiedKanbanCardProps) {
   const navigate = useNavigate();
@@ -34,8 +38,6 @@ export function UnifiedKanbanCard({
   const isOverdue =
     contact.status_overdue ||
     (!!contact.next_action_date && new Date(contact.next_action_date) < new Date());
-
-  const isAmbassador = contact.client_status === 'ambassador';
 
   const fullName = contact.contact?.full_name ?? 'Bez nazwy';
   const company = contact.contact?.company;
@@ -65,16 +67,23 @@ export function UnifiedKanbanCard({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {stage === 'lead' && <TemperatureBadge value={contact.temperature} />}
-          {stage === 'prospect' && <SourceBadge value={contact.prospect_source} />}
-          {stage === 'client' && isAmbassador && (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 border-amber-300 gap-0.5"
-            >
-              <Star className="h-3 w-3 fill-current" />
-              Ambasador
-            </Badge>
+          {stage === 'lead' && (
+            <TemperatureBadge
+              value={contact.temperature}
+              onChange={(v) => onSubcategoryChange('temperature', v)}
+            />
+          )}
+          {stage === 'prospect' && (
+            <SourceBadge
+              value={contact.prospect_source}
+              onChange={(v) => onSubcategoryChange('prospect_source', v)}
+            />
+          )}
+          {stage === 'client' && (
+            <ClientStatusBadge
+              value={contact.client_status}
+              onChange={(v) => onSubcategoryChange('client_status', v)}
+            />
           )}
           {isOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
         </div>

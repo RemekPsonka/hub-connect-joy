@@ -328,6 +328,8 @@ export interface UpdateTeamContactInput {
   snoozeReason?: string | null;
   snoozedFromCategory?: string | null;
   clientStatus?: ClientStatus | string;
+  temperature?: Temperature | null;
+  prospectSource?: ProspectSource | null;
   isLost?: boolean;
   lostReason?: string | null;
   lostAt?: string | null;

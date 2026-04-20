@@ -16,7 +16,10 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
   const { data: today = [] } = useSGUTasks('today');
   const { data: overdue = [] } = useSGUTasks('overdue');
 
-  const visibleContacts = contacts.filter((c) => !c.is_lost);
+  const nowIso = new Date().toISOString();
+  const visibleContacts = contacts.filter(
+    (c) => !c.is_lost && (!c.snoozed_until || c.snoozed_until < nowIso),
+  );
   const counts = {
     prospect: visibleContacts.filter((c) => deriveStage(c) === 'prospect').length,
     lead: visibleContacts.filter((c) => deriveStage(c) === 'lead').length,
