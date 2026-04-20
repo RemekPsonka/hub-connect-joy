@@ -161,6 +161,7 @@ function DroppableColumn({
   onOfferingLostClick,
   onSubcategoryChange,
   onMoreClick,
+  taskInfoMap,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -172,6 +173,7 @@ function DroppableColumn({
   onOfferingLostClick: (c: DealTeamContact) => void;
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: (c: DealTeamContact) => void;
+  taskInfoMap?: Map<string, TaskContactInfo>;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
@@ -197,6 +199,7 @@ function DroppableColumn({
       onOfferingLostClick={() => onOfferingLostClick(c)}
       onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
       onMoreClick={() => onMoreClick(c)}
+      taskInfo={taskInfoMap?.get(c.contact_id)}
     />
   );
 
@@ -268,6 +271,7 @@ function DroppableColumn({
 export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
+  const { data: taskInfoMap } = useActiveTaskContacts(teamId);
 
   const [convertContact, setConvertContact] = useState<DealTeamContact | null>(null);
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
@@ -408,6 +412,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               }}
               onSubcategoryChange={handleSubcategoryChange}
               onMoreClick={(c) => setSheetContact(c)}
+              taskInfoMap={taskInfoMap}
             />
           ))}
         </div>
