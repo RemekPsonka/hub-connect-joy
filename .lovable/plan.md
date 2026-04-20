@@ -1,34 +1,49 @@
 
-## Plan: Sprint RD-A1 — Contact V2 (feature flag + notes + AI cache)
+## Plan: Sprint RD-A2 — Edge functions + RPC dla Contact V2
 
-W READ-ONLY mode nie mogę utworzyć pliku migracji. Po Twojej akceptacji w default mode wykonam recon + utworzę migrację.
+W READ-ONLY mode nie mogę tworzyć plików. Po akceptacji w default mode wykonam recon + utworzę 3 pliki.
 
-### Recon przed migracją (musi przejść)
-Twój SQL używa kilku obiektów których muszę zweryfikować że istnieją z tymi nazwami:
-1. `public.tenants(id)` — sprawdzę czy tabela się tak nazywa (możliwe że to `directors` jako tenant proxy w single-tenant setup).
-2. `public.get_current_tenant_id()` — funkcja musi istnieć (RLS innych tabel powinno to ujawnić).
-3. `public.get_current_director_id()` — j.w.
-4. `directors.email` + rekord `remek@ideecom.pl` — sprawdzę.
-5. `ai_messages.scope_type`/`scope_id` — sprawdzę kolumny.
-6. `gmail_messages` ma kolumnę `contact_id`? (z pamięci: tabela istnieje, ale link do kontaktu może być przez `gmail_threads`). Jeśli nie ma — trigger `trg_inv_cache_on_email` użyje `NEW.contact_id` które będzie NULL → no-op (bezpieczne, ale warto wiedzieć).
-7. `gcal_events.contact_id` — analogicznie.
+### Recon przed kodem (musi przejść)
+Twój kod referuje obiekty których nazwy mogę zweryfikować przed zapisem (uniknę crashy):
 
-Jeśli któryś obiekt ma inną nazwę → dostosuję SQL przed zapisem migracji (np. `tenants` → `directors`, helper funkcje → faktyczne nazwy z bazy). Bez wymyślania — sprawdzę read query.
+1. **`_shared/auth.ts`**: nie ma `requireAuth` — jest `verifyAuth(req, supabase)`. Muszę albo dodać alias, albo użyć istniejącego `verifyAuth` (już go widziałem w recon — zwraca `AuthResult | AuthError`).
+2. **`_shared/llm-provider.ts`**: muszę sprawdzić czy istnieje i jaki ma kontrakt (`callLLM` może mieć inną sygnaturę niż w Twoim kodzie — `max_tokens` vs `maxTokens`, return shape `.content` vs `.text`).
+3. **`_shared/cors.ts`**: sprawdzę czy istnieje plik czy każda funkcja ma własne `corsHeaders` inline.
+4. **Kolumny `contacts.tenant_id`**: w jednym z poprzednich planów było „single-tenant", ale FK w `contact_ai_cache` wymaga tego pola. Sprawdzę.
+5. **`gmail_messages`**: brak kolumny `contact_id` (potwierdzone w poprzedniej migracji). Sekcja UNION musi pójść przez join `gmail_threads.contact_id` ALBO usunąć całkiem. Sprawdzę schemat.
+6. **`gcal_events` / `gcal_event_links`**: sprawdzę czy `gcal_event_links` istnieje. Jeśli nie — usunę sekcję meetings z RPC (zgodnie z Twoją instrukcją „nie może paść").
+7. **`ai_messages.scope_type`/`scope_id`**: w poprzedniej migracji okazało się że scope jest w `ai_conversations`, nie w `ai_messages`. Muszę join'ować przez `am.conversation_id`.
+8. **`pipeline_stages`**: project knowledge mówi „NIE używaj pipeline_stages — wygaszane". Lepiej join przez `deal_team_stages` albo trzymać samo `status`. Sprawdzę.
+9. **`expected_annual_premium_gr`** w `deal_team_contacts`: sprawdzę nazwę pola.
 
 ### Wykonanie (po recon)
-1. Utworzę plik `supabase/migrations/20260420100000_sprint_rd_a1_contact_v2.sql` z Twoim SQL (z poprawkami nazw jeśli recon wykryje rozjazdy).
-2. Migracja zawiera: `feature_flags` jsonb na `directors` + flaga dla Remka, tabela `contact_notes` z RLS, tabela `contact_ai_cache` z RLS i unique per contact, funkcja `invalidate_contact_ai_cache`, dwa trigger helpers (`trg_inv_cache_direct`, `trg_inv_cache_from_ai`), 4 triggery invalidujące cache (notes/gmail/gcal/ai).
-3. Uruchomię migrację przez tool migracji (auto-approval).
-4. Wypiszę: `[OK] Migracja 20260420100000 przeszła. flag+notes+cache+triggery`.
 
-### Brak ROLLBACK w pliku
-Twój SQL nie zawiera komentarza `-- ROLLBACK:`. Project knowledge wymaga rollback w każdej migracji. Dorzucę go na końcu pliku jako komentarz (DROP triggers/functions/tables/column/index — w odwrotnej kolejności). Bez wpływu na exec.
+**Plik 1**: `supabase/functions/sovra/contact-tldr/index.ts`
+- Użyję faktycznego API z `_shared/auth.ts` i `_shared/llm-provider.ts` (po recon dostosuję import + sygnaturę).
+- Cache check (24h, `invalidated_at IS NULL`) → fetch contact + deals → LLM call → upsert do `contact_ai_cache`.
+- Jeśli `pipeline_stages` jest wygaszone, zamienię join na `deal_team_stages` lub samo `stage_id`.
 
-### Ryzyka
-- Jeśli `tenants` nie istnieje jako tabela — RLS się wywali na FK. Recon to wykryje.
-- Triggery na `gmail_messages`/`gcal_events` — jeśli te tabele nie mają `contact_id`, trigger będzie no-op (NEW.contact_id IS NULL → return). Bezpieczne, ale warto rozważyć join przez `gmail_threads` w osobnym sprincie.
+**Plik 2**: `supabase/functions/sovra/contact-activity-timeline/index.ts`
+- Cienki wrapper na RPC `rpc_contact_timeline`. Bez logiki — RPC robi UNION.
+
+**Plik 3**: `supabase/migrations/20260420100100_rpc_contact_timeline.sql`
+- RPC `rpc_contact_timeline(contact_id, filter, limit, before)` zwracające unified timeline.
+- Sekcje UNION: `note` (zawsze, mamy `contact_notes`), `ai_signal` (z join przez `ai_conversations` na scope), `email` (przez join `gmail_threads.contact_id` LUB skip jeśli nie ma związku), `meeting` (przez `gcal_event_links` LUB skip).
+- `SECURITY INVOKER` + `search_path` + `GRANT EXECUTE TO authenticated` + komentarz `-- ROLLBACK: DROP FUNCTION ...`.
+- **Twarda zasada**: każda sekcja UNION którą recon zweryfikuje jako rozjazd → wyrzucam całkowicie, żeby migracja przeszła.
+
+**config.toml**: edge functions w sub-folderze `sovra/contact-tldr` / `sovra/contact-activity-timeline` — muszę sprawdzić czy `config.toml` wspiera nested ścieżki funkcji w tym projekcie. Standardowo Supabase CLI bierze nazwę z folderu top-level. Może trzeba spłaszczyć do `sovra-contact-tldr` i `sovra-contact-activity-timeline`. Sprawdzę istniejące funkcje w `supabase/functions/`.
+
+**Po wszystkim**: deploy obu funkcji + wypiszę `[OK] Edge fn + RPC timeline gotowe`.
+
+### Konflikt z project-knowledge
+Project knowledge mówi: *„nie buduj feature flag systemu — skala 1-2 tenantów nie uzasadnia"*. Poprzednia migracja dodała `feature_flags` do `directors`. Idziemy dalej zgodnie z Twoim kierunkiem (sprint Contact V2 wymaga flagi do gradual rollout). Zaznaczam tylko, nie blokuję.
+
+Project knowledge mówi też: *„NIE używaj `pipeline_stages` — wygaszane"*. Twój TL;DR kod join'uje `pipeline_stages(name)`. Zamienię na `deal_team_stages` (lub samo `status`/`stage_id` jako fallback) po recon.
 
 ### Pliki
-- `supabase/migrations/20260420100000_sprint_rd_a1_contact_v2.sql` (nowy)
+- `supabase/functions/sovra-contact-tldr/index.ts` lub `sovra/contact-tldr/index.ts` (decyzja po recon config.toml)
+- `supabase/functions/sovra-contact-activity-timeline/index.ts` (analogicznie)
+- `supabase/migrations/20260420100100_rpc_contact_timeline.sql` (z rollback)
 
-### Bez zmian FE w tym kroku. Tylko DB.
+### Bez zmian FE w tym kroku.
