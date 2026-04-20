@@ -65,7 +65,7 @@ export default function DealsTeamDashboard({ forcedTeamId, forcedFilter }: Deals
       snoozed: '/sgu/sprzedaz',
       clients: '/sgu/klienci',
       commissions: '/sgu/klienci?tab=prowizje',
-      entries: '/sgu/klienci?tab=raty',
+      entries: '/sgu/klienci?tab=payments',
       tasks: '/sgu/zadania',
     };
     const target = map[view];

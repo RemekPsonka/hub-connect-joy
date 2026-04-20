@@ -29,7 +29,7 @@ export function DashboardHeader() {
 
   const items = [
     { label: 'Nowe polisy', value: isLoading ? '—' : String(policies), trend: policiesT, icon: FileCheck, tone: 'text-emerald-600' },
-    { label: 'Collected', value: isLoading ? '—' : formatCompactCurrency(collected / 100), trend: collectedT, icon: Wallet, tone: 'text-violet-600' },
+    { label: 'Zainkasowane', value: isLoading ? '—' : formatCompactCurrency(collected / 100), trend: collectedT, icon: Wallet, tone: 'text-violet-600' },
     { label: 'Prowizja', value: isLoading ? '—' : formatCompactCurrency(commission / 100), trend: commissionT, icon: Coins, tone: 'text-amber-600' },
   ];
 
