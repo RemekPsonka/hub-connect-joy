@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
@@ -9,7 +9,10 @@ import { SourceBadge } from './SourceBadge';
 import { ClientStatusBadge } from './ClientStatusBadge';
 import { ComplexityChips } from './ComplexityChips';
 import { PremiumQuickEdit } from './PremiumQuickEdit';
+import { TaskStatusPill } from './TaskStatusPill';
+import { AssigneeAvatars } from './AssigneeAvatars';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
+import type { TaskContactInfo, TaskStatus } from '@/hooks/useActiveTaskContacts';
 
 export type SubcategoryField = 'temperature' | 'prospect_source' | 'client_status';
 
@@ -24,7 +27,16 @@ interface UnifiedKanbanCardProps {
   onSubcategoryChange: (field: SubcategoryField, value: string) => void;
   onMoreClick: () => void;
   isDragging?: boolean;
+  taskInfo?: TaskContactInfo;
 }
+
+const borderClass: Record<TaskStatus, string> = {
+  overdue: 'border-l-destructive',
+  today: 'border-l-amber-500',
+  active: 'border-l-emerald-500',
+  done: 'border-l-emerald-500/40',
+  none: 'border-l-muted',
+};
 
 export function UnifiedKanbanCard({
   contact,
@@ -37,12 +49,11 @@ export function UnifiedKanbanCard({
   onSubcategoryChange,
   onMoreClick,
   isDragging,
+  taskInfo,
 }: UnifiedKanbanCardProps) {
   const navigate = useNavigate();
 
-  const isOverdue =
-    contact.status_overdue ||
-    (!!contact.next_action_date && new Date(contact.next_action_date) < new Date());
+  const status: TaskStatus = taskInfo?.status ?? 'none';
 
   const fullName = contact.contact?.full_name ?? 'Bez nazwy';
   const company = contact.contact?.company;
@@ -56,8 +67,8 @@ export function UnifiedKanbanCard({
     <Card
       onClick={handleCardClick}
       className={cn(
-        'p-3 cursor-pointer hover:shadow-md transition-all space-y-2',
-        isOverdue && 'ring-2 ring-destructive',
+        'p-3 cursor-pointer hover:shadow-md transition-all space-y-2 border-l-4',
+        borderClass[status],
         isDragging && 'opacity-50',
       )}
     >
@@ -71,7 +82,10 @@ export function UnifiedKanbanCard({
             </div>
           )}
         </div>
-        {isOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
+          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+        </div>
       </div>
 
       {/* Sub-category badge — only for the matching stage */}
@@ -126,6 +140,20 @@ export function UnifiedKanbanCard({
           valueGr={contact.expected_annual_premium_gr ?? null}
         />
       </div>
+
+      {/* Mini-banner: oldest overdue task */}
+      {taskInfo?.oldestOverdue && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="w-full text-left text-[11px] px-2 py-1 rounded bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition truncate"
+        >
+          {taskInfo.oldestOverdue.days_ago === 0
+            ? `Dziś: ${taskInfo.oldestOverdue.title}`
+            : `${taskInfo.oldestOverdue.days_ago} dni temu: ${taskInfo.oldestOverdue.title}`}
+        </button>
+      )}
 
       {/* Footer: More + Lost */}
       <div className="pt-1 border-t flex justify-end items-center" onClick={(e) => e.stopPropagation()}>
