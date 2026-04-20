@@ -37,6 +37,14 @@ export function OfferingKanbanCard({ contact, payments, onClick, onDragStart }: 
         </div>
       </div>
 
+      <FourAreasBar
+        propertyGr={contact.potential_property_gr}
+        financialGr={contact.potential_financial_gr}
+        communicationGr={contact.potential_communication_gr}
+        lifeGroupGr={contact.potential_life_group_gr}
+        className="mt-2"
+      />
+
       {totalValue > 0 && (
         <div className="flex items-center gap-1 mt-2 text-xs">
           <DollarSign className="h-3 w-3 text-muted-foreground" />
