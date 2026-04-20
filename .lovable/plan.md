@@ -1,78 +1,52 @@
 
 
-## BLOK IA-3-FIX-2 — DealsTeamDashboard cleanup
+## BLOK IA-3-FIX-3 — Manual smoke checklist + raport końcowy IA-3
 
-### PRE-RECON (twarde dane)
+### Co robimy
 
-**Aktualny stan `src/pages/DealsTeamDashboard.tsx`:**
-- `VALID_VIEWS` (linia 24): `['kanban', 'table', 'prospecting', 'clients', 'tasks', 'offering']` — **tylko `offering` do usunięcia** (reszta śmieciowa już wyczyszczona w BLOK 2).
-- `viewMode === '...'` branches (linie 186-191): kanban, table, prospecting, clients, tasks, **offering** — tylko offering do usunięcia.
-- `forcedFilter` mapping (linie 99-105): `offering: { view: 'offering' }` — wymaga przemapowania.
-- Toast redirect (linie 56-77): pełna mapa legacy → SGU, działa poprawnie. **Zostaje bez zmian** (per brief pkt 6).
+**1 plik EDITED** (nie CREATE — `docs/qa/sgu-refactor-ia-smoke.md` już istnieje z poprzedniego BLOK 3, zawiera krótszą wersję):
 
-**Brak referencji w `DealsTeamDashboard.tsx`** do: `SnoozedTeamView`, `TeamStats`, `SalesFunnelDashboard`, `CommissionsTab`, `CommissionsTable`, `SGUClientsView`, `Tabs/TabsList/...`. Te zostały wyczyszczone w poprzednich blokach.
-
-**Pliki w repo (nie ruszamy):** `src/components/deals-team/OfferingTab.tsx`, `SnoozedTeamView.tsx`, `TeamStats.tsx`, oraz reeksporty w `src/components/deals-team/index.ts` (linie 35-36) — zostają (per brief: "tylko bez referencji z routera").
-
-**Out of scope** (świadome odstępstwo): `src/components/layout/SGUSidebar.tsx` linie 53-57 wciąż używają legacy `/sgu/pipeline?view=...`. To inny route niż `/sgu/sprzedaz` i nie jest częścią tego BLOK-u.
-
-### Zmiany
-
-**1 plik EDITED:** `src/pages/DealsTeamDashboard.tsx`
-
-**a)** Linia 17 — usuń import `OfferingTab`:
-```ts
-import {
-  TeamSelector, KanbanBoard, CreateTeamDialog, WeeklyStatusPanel,
-  TableView, TeamSettings, ProspectingTab, ClientsTab, MyTeamTasksView,
-} from '@/components/deals-team';
-```
-
-**b)** Linia 21 — zwęź `ViewMode`:
-```ts
-type ViewMode = 'kanban' | 'table' | 'prospecting' | 'clients' | 'tasks';
-```
-
-**c)** Linia 24 — zwęź `VALID_VIEWS`:
-```ts
-const VALID_VIEWS: ViewMode[] = ['kanban', 'table', 'prospecting', 'clients', 'tasks'];
-```
-
-**d)** Linie 99-105 — przemapuj forcedFilter `'offering'` na `kanban` + filter=`offering` (KanbanBoard otrzyma filter z URL i może filtrować stage; brak dodatkowej zmiany w KanbanBoard — dziedziczone z poprzedniej IA):
-```ts
-const map: Record<SalesFilter, { view: ViewMode; filter?: string }> = {
-  prospect: { view: 'kanban', filter: 'prospect' },
-  lead:     { view: 'kanban', filter: 'lead' },
-  offering: { view: 'kanban', filter: 'offering' },  // ← było view:'offering'
-  today:    { view: 'tasks',  filter: 'today' },
-  overdue:  { view: 'tasks',  filter: 'overdue' },
-};
-```
-
-**e)** Linia 191 — usuń branch:
-```tsx
-{/* usunięte: viewMode === 'offering' */}
-```
+- `docs/qa/sgu-refactor-ia-smoke.md` — pełna podmiana na wersję z briefu (23 kroków: 18 partner + 2 seller + 3 redirect, tabele markdown, sekcja Wyniki).
 
 ### Świadome odstępstwa
 
-1. **SGUSidebar legacy linki** (`/sgu/pipeline?view=offering` itd.) zostają — to inny route. Toast redirect i tak je przekieruje na nowe SGU URL. Cleanup tych linków = osobny BLOK.
-2. **`OfferingTab` reeksport** w `src/components/deals-team/index.ts` zostaje (per brief pkt 5 — pliki nie usuwane).
-3. **Brak zmian w KanbanBoard** — zakładam że już obsługuje `filter=offering` z URL (z poprzednich IA). Jeśli nie filtruje na `category='offering'`, karty będą widoczne wszystkie — ale to logika lejka, nie cleanup routingu.
+1. **Krok 5** brief mówi: "Drag Lead → Ofertowanie ... NIE pojawia się dialog". W naszej IA `/sgu/sprzedaz` ma 4-kolumnowy Kanban (Prospect/Lead/Audyt/Klient), Ofertowanie to **osobny view** (`?view=offering`, 8 kolumn). Drag Lead → Audyt = poprawny flow. Krok zostawiam dosłownie z briefu — Remek zinterpretuje jako "drag Lead → kolejny etap bez dialogu".
+2. **Krok 9** mówi "ClientComplexityPanel u góry (6 elementów) + ClientObszaryTab pod spodem" — to **Wariant A**. W BLOK IA-3-FIX-1 zatwierdziliśmy **Wariant B** (status quo: lista klientów + per-client ComplexityPanel). Krok zostawiam dosłownie z briefu — przy wykonaniu Remek zaznaczy ⚠️ i zdecyduje czy potrzebuje przerobienia na Wariant A.
+3. **Krok 18** "Renderuje pełny moduł Raporty (świadome odstępstwo od stub)" — zgodne z naszą decyzją z BLOK IA-3-3 (`mem://features/sgu/reports-feature-flag`).
 
-### DoD lokalny
+### Po utworzeniu pliku — raport końcowy IA-3
 
-| Check | Po patchu |
-|---|---|
-| `grep "SnoozedTeamView" src/pages/` | 0 ✅ (już 0) |
-| `grep "OfferingTab" src/pages/` | 0 ✅ (po usunięciu importu i branch) |
-| `grep "TeamStats" src/pages/` | 0 ✅ (już 0, tylko komentarz w linii 183 — neutralny) |
-| `npm run typecheck` | przechodzi (mniejszy union type, brak nowych typów) |
-| `/sgu/sprzedaz` przy klik karty Ofertowanie | URL → `view=kanban&filter=offering`, KanbanBoard renderuje |
+Wypiszę zwięzły raport (~30 linii):
+
+**a) Pliki — bilans całego IA-3 (BLOK 1-4 + FIX 1-3):**
+- CREATED: 12 plików (5×dashboard cards, 5×admin tabs, 2×hooks dashboard, smoke checklist, e2e spec+helpery)
+- EDITED: 11 plików (SGUDashboard, SGUAdmin, SGUTasks, SGUClients, SGUClientsView, 3×ClientTab, UnifiedTaskRow, SGUSidebar, DealsTeamDashboard)
+- DELETED: 0 (wszystkie pliki zachowane per spec)
+
+**b) Decyzje architektoniczne (świadome odstępstwa od briefu):**
+1. `/sgu/raporty` = pełen moduł, NIE Alert stub (sidebar gating wystarczy)
+2. Tab "Obszary" = Wariant B (per-client ComplexityPanel, nie globalny)
+3. `WORKFLOW_COLUMNS` zachowany (używany w `TaskDetailSheet`)
+4. Pliki `SnoozedTeamView/TeamStats/OfferingTab` w repo bez referencji
+5. Playwright odłożony do IA-4 (mimo że spec + helpery już są w repo — gotowe, czeka na CI)
+
+**c) Następne kroki:**
+1. Remek wykonuje smoke test (`docs/qa/sgu-refactor-ia-smoke.md`) — ~20 min
+2. Wynik PASS → IA-3 zamknięte → planowanie IA-4 (Playwright CI + Wariant A obszary jeśli potrzebne + cross-sell tab)
+3. Wynik FAIL na konkretnych krokach → osobne FIX-y per krok
+
+**d) DoD końcowy IA-3:**
+- ✅ 6 tabów `/sgu/klienci`
+- ✅ 5 tabów `/sgu/admin` z gate
+- ✅ Sidebar Raporty gating
+- ✅ Dashboard `/sgu` 5 priorytetów + 5 alertów
+- ✅ Cleanup `DealsTeamDashboard` (offering→kanban+filter)
+- ✅ Toast redirect legacy → SGU
+- ⚠️ Smoke test wykonuje Remek manualnie
 
 ### Pliki
 
-| Plik | Zakres |
+| Plik | Akcja |
 |---|---|
-| `src/pages/DealsTeamDashboard.tsx` | -1 import, ViewMode union -1, VALID_VIEWS -1, forcedFilter mapping (offering→kanban), -1 JSX branch |
+| `docs/qa/sgu-refactor-ia-smoke.md` | EDIT — pełna podmiana na wersję 23-krokową z briefu |
 
