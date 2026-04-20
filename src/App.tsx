@@ -68,6 +68,8 @@ const SGUSettings = lazy(() => import("./pages/sgu/SGUSettings"));
 const SGUCaseD = lazy(() => import("./pages/sgu/SGUCaseD"));
 const SGUPipelineRoute = lazy(() => import("./pages/sgu/SGUPipelineRoute"));
 const SGUTasks = lazy(() => import("./pages/sgu/SGUTasks"));
+const SGUClients = lazy(() => import("./pages/sgu/SGUClients"));
+const SGURedirect = lazy(() => import("./pages/sgu/SGURedirect"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -160,18 +162,27 @@ const App = () => (
 
                 {/* SGU routes — separate layout, gated by SGUAccessGuard */}
                 <Route element={<AuthGuard><SGUAccessGuard><SGULayout /></SGUAccessGuard></AuthGuard>}>
-                  <Route path="/sgu/dashboard" element={<SGUDashboard />} />
+                  {/* New Polish-named routes (SGU-REFACTOR-IA) */}
+                  <Route path="/sgu" element={<SGUDashboard />} />
+                  <Route path="/sgu/sprzedaz" element={<SGUPipelineRoute />} />
+                  <Route path="/sgu/klienci" element={<SGUClients />} />
+                  <Route path="/sgu/zadania" element={<SGUTasks />} />
+                  <Route path="/sgu/raporty" element={<SGUReports />} />
+                  <Route path="/sgu/raporty/:period" element={<SGUReports />} />
                   <Route path="/sgu/team" element={<SGUTeam />} />
-                  <Route path="/sgu/pipeline" element={<SGUPipelineRoute />} />
-                  <Route path="/sgu/tasks" element={<SGUTasks />} />
-                  <Route path="/sgu/reports" element={<SGUReports />} />
-                  <Route path="/sgu/reports/:period" element={<SGUReports />} />
                   <Route path="/sgu/admin" element={<SGUAdmin />} />
                   <Route path="/sgu/admin/representatives" element={<SGURepresentatives />} />
                   <Route path="/sgu/admin/assignments" element={<SGUAssignments />} />
                   <Route path="/sgu/admin/commissions/case-d" element={<SGUCaseD />} />
                   <Route path="/sgu/admin/:section" element={<SGUAdmin />} />
                   <Route path="/sgu/settings" element={<SGUSettings />} />
+
+                  {/* Legacy redirects (rename) */}
+                  <Route path="/sgu/dashboard" element={<SGURedirect to="/sgu" message="Dashboard SGU ma nowy adres" />} />
+                  <Route path="/sgu/pipeline" element={<SGURedirect to="/sgu/sprzedaz" message="Lejek przeniesiony do /sgu/sprzedaz" />} />
+                  <Route path="/sgu/tasks" element={<SGURedirect to="/sgu/zadania" message="Zadania przeniesione do /sgu/zadania" />} />
+                  <Route path="/sgu/reports" element={<SGURedirect to="/sgu/raporty" message="Raporty przeniesione do /sgu/raporty" />} />
+                  <Route path="/sgu/reports/:period" element={<SGURedirect to="/sgu/raporty" message="Raporty przeniesione do /sgu/raporty" />} />
                 </Route>
                 
                 {/* Catch-all */}

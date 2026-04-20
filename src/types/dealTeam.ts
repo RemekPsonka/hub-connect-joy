@@ -4,29 +4,75 @@ export type DealTeamRole = 'leader' | 'member' | 'viewer';
 export type DealCategory = 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type OfferingStage = 'handshake' | 'power_of_attorney' | 'preparation' | 'negotiation' | 'accepted' | 'lost' | 'audit_plan' | 'audit_scheduled' | 'audit_done' | 'meeting_plan' | 'meeting_scheduled' | 'meeting_done';
-export type ProspectStatus = 
-  | 'searching' 
-  | 'found_connection' 
-  | 'intro_sent' 
-  | 'meeting_scheduled' 
-  | 'converted' 
+
+// ===== SGU REFACTOR IA — new unified taxonomy =====
+/** High-level deal pipeline stage (DB: GENERATED ALWAYS AS from category). */
+export type DealStage = 'prospect' | 'lead' | 'offering' | 'client' | 'lost';
+/** Sub-category for LEAD stage. */
+export type Temperature = 'hot' | 'top' | 'cold' | '10x';
+/** Sub-category for PROSPECT stage. */
+export type ProspectSource = 'crm_push' | 'cc_meeting' | 'ai_krs' | 'ai_web' | 'csv' | 'manual';
+/** Sub-category for CLIENT stage. */
+export type ClientStatus = 'standard' | 'ambassador' | 'lost';
+
+export interface ClientComplexity {
+  property_active: boolean;
+  financial_active: boolean;
+  communication_active: boolean;
+  life_group_active: boolean;
+  referrals_count: number;
+  references_count: number;
+}
+
+/**
+ * OFFERING_STAGE — extended after SGU-REFACTOR-IA migration (8 values).
+ * Legacy values 'preparation' and 'accepted' have been migrated in DB
+ * to 'offer_sent' / 'won' but are kept in the type for backward-compat
+ * with any in-flight code paths. UI must use the 8 new values only.
+ */
+export type OfferingStage =
+  | 'decision_meeting'
+  | 'handshake'
+  | 'power_of_attorney'
+  | 'audit'
+  | 'offer_sent'
+  | 'negotiation'
+  | 'won'
+  | 'lost'
+  // legacy aliases (deprecated — do not use in new UI)
+  | 'preparation'
+  | 'accepted'
+  | 'audit_plan'
+  | 'audit_scheduled'
+  | 'audit_done'
+  | 'meeting_plan'
+  | 'meeting_scheduled'
+  | 'meeting_done';
+
+export type ProspectStatus =
+  | 'searching'
+  | 'found_connection'
+  | 'intro_sent'
+  | 'meeting_scheduled'
+  | 'converted'
   | 'cancelled';
 export type AssignmentStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 export type CategoryRecommendation = 'keep' | 'promote' | 'demote' | 'close_won' | 'close_lost';
-export type ActivityAction = 
-  | 'category_changed' 
-  | 'status_changed' 
+export type ActivityAction =
+  | 'category_changed'
+  | 'status_changed'
   | 'assigned'
-  | 'meeting_scheduled' 
-  | 'weekly_status' 
+  | 'meeting_scheduled'
+  | 'weekly_status'
   | 'prospect_converted'
-  | 'note_added' 
-  | 'assignment_created' 
+  | 'note_added'
+  | 'assignment_created'
   | 'assignment_completed'
-  | 'contact_added' 
-  | 'contact_removed' 
-  | 'prospect_created';
+  | 'contact_added'
+  | 'contact_removed'
+  | 'prospect_created'
+  | 'stage_convert'
+  | 'stage_rollback';
 
 // ===== INTERFACES =====
 
@@ -90,6 +136,19 @@ export interface DealTeamContact {
   snooze_reason: string | null;
   snoozed_from_category: string | null;
   offering_stage: OfferingStage;
+  // SGU-REFACTOR-IA fields
+  deal_stage?: DealStage;
+  temperature?: Temperature | null;
+  prospect_source?: ProspectSource | null;
+  client_status?: ClientStatus;
+  potential_property_gr?: number;
+  potential_financial_gr?: number;
+  potential_communication_gr?: number;
+  potential_life_group_gr?: number;
+  is_lost?: boolean;
+  lost_reason?: string | null;
+  lost_at?: string | null;
+  client_complexity?: ClientComplexity | Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   // JOIN z contacts
@@ -275,3 +334,58 @@ export interface PromoteContactInput {
   teamId: string;
   newCategory: DealCategory;
 }
+
+// ===== SGU-REFACTOR-IA — labels for UI =====
+
+export const STAGE_LABELS: Record<DealStage, string> = {
+  prospect: 'Prospekt',
+  lead: 'Lead',
+  offering: 'Ofertowanie',
+  client: 'Klient',
+  lost: 'Przegrane',
+};
+
+export const TEMPERATURE_LABELS: Record<Temperature, string> = {
+  hot: '🔥 HOT',
+  top: '⭐ TOP',
+  cold: '❄️ COLD',
+  '10x': '🔄 10x',
+};
+
+export const PROSPECT_SOURCE_LABELS: Record<ProspectSource, string> = {
+  crm_push: 'CRM push',
+  cc_meeting: 'Spotkanie CC',
+  ai_krs: 'AI KRS',
+  ai_web: 'AI WWW',
+  csv: 'Import CSV',
+  manual: 'Ręcznie',
+};
+
+export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
+  standard: 'Standard',
+  ambassador: '🏆 Ambasador',
+  lost: 'Utracony',
+};
+
+export const OFFERING_STAGE_LABELS: Partial<Record<OfferingStage, string>> = {
+  decision_meeting: 'Spotkanie decyzyjne',
+  handshake: 'Handshake',
+  power_of_attorney: 'Pełnomocnictwo',
+  audit: 'Audyt',
+  offer_sent: 'Złożona oferta',
+  negotiation: 'Negocjacje',
+  won: 'Wygrana',
+  lost: 'Przegrana',
+};
+
+/** Order of offering stages used by UI popover. */
+export const OFFERING_STAGE_ORDER: OfferingStage[] = [
+  'decision_meeting',
+  'handshake',
+  'power_of_attorney',
+  'audit',
+  'offer_sent',
+  'negotiation',
+  'won',
+  'lost',
+];

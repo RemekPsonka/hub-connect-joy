@@ -1631,6 +1631,77 @@ export type Database = {
           },
         ]
       }
+      client_referrals: {
+        Row: {
+          created_at: string | null
+          created_by_user_id: string | null
+          id: string
+          notes: string | null
+          referred_deal_team_contact_id: string | null
+          referred_email: string | null
+          referred_name: string
+          referred_phone: string | null
+          referrer_deal_team_contact_id: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          referred_deal_team_contact_id?: string | null
+          referred_email?: string | null
+          referred_name: string
+          referred_phone?: string | null
+          referrer_deal_team_contact_id: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          referred_deal_team_contact_id?: string | null
+          referred_email?: string | null
+          referred_name?: string
+          referred_phone?: string | null
+          referrer_deal_team_contact_id?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_referrals_referred_deal_team_contact_id_fkey"
+            columns: ["referred_deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_referrals_referrer_deal_team_contact_id_fkey"
+            columns: ["referrer_deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_referrals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "client_referrals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commission_base_split: {
         Row: {
           active_from: string
@@ -3706,13 +3777,19 @@ export type Database = {
           assigned_to: string | null
           category: string
           category_changed_at: string | null
+          client_complexity: Json | null
+          client_status: string | null
           contact_id: string
           created_at: string | null
           deal_id: string | null
+          deal_stage: string | null
           estimated_value: number | null
           expected_annual_premium_gr: number | null
           id: string
+          is_lost: boolean | null
           last_status_update: string | null
+          lost_at: string | null
+          lost_reason: string | null
           next_action: string | null
           next_action_date: string | null
           next_action_owner: string | null
@@ -3720,7 +3797,12 @@ export type Database = {
           next_meeting_with: string | null
           notes: string | null
           offering_stage: string | null
+          potential_communication_gr: number | null
+          potential_financial_gr: number | null
+          potential_life_group_gr: number | null
+          potential_property_gr: number | null
           priority: string | null
+          prospect_source: string | null
           representative_user_id: string | null
           review_frequency: string | null
           snooze_reason: string | null
@@ -3730,6 +3812,7 @@ export type Database = {
           status: string
           status_overdue: boolean | null
           team_id: string
+          temperature: string | null
           tenant_id: string
           updated_at: string | null
           value_currency: string | null
@@ -3740,13 +3823,19 @@ export type Database = {
           assigned_to?: string | null
           category?: string
           category_changed_at?: string | null
+          client_complexity?: Json | null
+          client_status?: string | null
           contact_id: string
           created_at?: string | null
           deal_id?: string | null
+          deal_stage?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           id?: string
+          is_lost?: boolean | null
           last_status_update?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
           next_action?: string | null
           next_action_date?: string | null
           next_action_owner?: string | null
@@ -3754,7 +3843,12 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           offering_stage?: string | null
+          potential_communication_gr?: number | null
+          potential_financial_gr?: number | null
+          potential_life_group_gr?: number | null
+          potential_property_gr?: number | null
           priority?: string | null
+          prospect_source?: string | null
           representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
@@ -3764,6 +3858,7 @@ export type Database = {
           status?: string
           status_overdue?: boolean | null
           team_id: string
+          temperature?: string | null
           tenant_id: string
           updated_at?: string | null
           value_currency?: string | null
@@ -3774,13 +3869,19 @@ export type Database = {
           assigned_to?: string | null
           category?: string
           category_changed_at?: string | null
+          client_complexity?: Json | null
+          client_status?: string | null
           contact_id?: string
           created_at?: string | null
           deal_id?: string | null
+          deal_stage?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           id?: string
+          is_lost?: boolean | null
           last_status_update?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
           next_action?: string | null
           next_action_date?: string | null
           next_action_owner?: string | null
@@ -3788,7 +3889,12 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           offering_stage?: string | null
+          potential_communication_gr?: number | null
+          potential_financial_gr?: number | null
+          potential_life_group_gr?: number | null
+          potential_property_gr?: number | null
           priority?: string | null
+          prospect_source?: string | null
           representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
@@ -3798,6 +3904,7 @@ export type Database = {
           status?: string
           status_overdue?: boolean | null
           team_id?: string
+          temperature?: string | null
           tenant_id?: string
           updated_at?: string | null
           value_currency?: string | null

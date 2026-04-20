@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Users, Plus } from 'lucide-react';
 import { useMyDealTeams } from '@/hooks/useDealTeams';
 import { useTeamContactStats } from '@/hooks/useDealsTeamContacts';
@@ -58,6 +59,30 @@ export default function DealsTeamDashboard({ forcedTeamId }: DealsTeamDashboardP
   });
 
   const contactStats = useTeamContactStats(selectedTeamId || undefined);
+
+  // SGU-REFACTOR-IA: redirect old ?view= URLs to /sgu/* (only when NOT in forced/SGU embed mode)
+  useEffect(() => {
+    if (forcedTeamId) return;
+    const view = searchParams.get('view');
+    if (!view) return;
+    const map: Record<string, string> = {
+      dashboard: '/sgu',
+      kanban: '/sgu/sprzedaz',
+      table: '/sgu/sprzedaz',
+      prospecting: '/sgu/sprzedaz',
+      offering: '/sgu/sprzedaz',
+      snoozed: '/sgu/sprzedaz',
+      clients: '/sgu/klienci',
+      commissions: '/sgu/klienci',
+      entries: '/sgu/klienci',
+      tasks: '/sgu/zadania',
+    };
+    const target = map[view];
+    if (target) {
+      toast.info('Ten widok jest teraz w SGU', { description: `Przekierowuje do ${target}` });
+      navigate(target, { replace: true });
+    }
+  }, [searchParams, navigate, forcedTeamId]);
 
   useEffect(() => {
     if (forcedTeamId) return;
