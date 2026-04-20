@@ -57,6 +57,7 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
   const [showLost, setShowLost] = useState(false);
   const [wonDialog, setWonDialog] = useState<DealTeamContact | null>(null);
   const [lostDialog, setLostDialog] = useState<DealTeamContact | null>(null);
+  const [rollbackDialog, setRollbackDialog] = useState<{ contact: DealTeamContact; toStage: OfferingStage } | null>(null);
 
   const visibleStages = useMemo(
     () => OFFERING_STAGE_ORDER.filter((s) => showLost || s !== 'lost'),
