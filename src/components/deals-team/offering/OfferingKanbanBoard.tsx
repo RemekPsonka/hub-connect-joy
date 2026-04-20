@@ -188,7 +188,7 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
                   )}
                   {stageAreasGr > 0 && (
                     <p className="text-[10px] text-muted-foreground/80 mt-0.5">
-                      Σ obszary: {fmtPLN(stageAreasGr / 100)}
+                      Σ obszary: {formatCompactCurrency(stageAreasGr / 100)}
                     </p>
                   )}
                 </div>
