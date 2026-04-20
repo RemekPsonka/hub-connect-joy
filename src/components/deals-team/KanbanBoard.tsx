@@ -100,7 +100,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     }
     const targetId = filterMember === 'mine' ? currentDirector?.id : filterMember;
     if (!targetId) return [];
-    return searchFilteredContacts.filter(c => activeTaskMap?.get(c.id)?.assignedTo === targetId);
+    return searchFilteredContacts.filter(c => activeTaskMap?.get(c.id)?.assignees.some((a) => a.id === targetId));
   }, [searchFilteredContacts, filterMember, activeTaskMap, currentDirector]);
 
   const hotContacts = useMemo(

@@ -57,7 +57,7 @@ export function SubKanbanView({
     }
     const targetId = localFilterMember === 'mine' ? currentDirectorId : localFilterMember;
     if (!targetId) return [];
-    return contacts.filter(c => activeTaskMap?.get(c.id)?.assignedTo === targetId);
+    return contacts.filter(c => activeTaskMap?.get(c.id)?.assignees.some((a) => a.id === targetId));
   }, [contacts, localFilterMember, activeTaskMap, currentDirectorId]);
 
   const contactsByStage = useMemo(() => {
