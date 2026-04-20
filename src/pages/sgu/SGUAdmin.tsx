@@ -32,7 +32,7 @@ export default function SGUAdmin({ section }: SGUAdminProps = {}) {
   const params = useParams<{ section?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isPartner, isLoading: accessLoading } = useSGUAccess();
-  const { director, isLoading: authLoading } = useAuth();
+  const { director, loading: authLoading } = useAuth();
   const { sguTeamId, tenantId, isLoading: teamLoading } = useSGUTeamId();
 
   const initialTab = useMemo<AdminTab>(() => {
