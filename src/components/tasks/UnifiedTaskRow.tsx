@@ -66,9 +66,9 @@ function SubtaskIndicator({ taskId }: { taskId: string }) {
 
 // ─── Deal stage badge config ────────────────────────────────
 const STAGE_ICON: Record<string, string> = {
-  lead: '🔍', hot: '🔥', top: '⭐', cold: '❄️',
-  offering: '📄', audit: '🔎',
-  client: '🤝', lost: '❌', prospect: '🌱',
+  prospect: '🎯', lead: '🔥', hot: '🔥', top: '⭐', cold: '❄️',
+  offering: '📋', audit: '🔎',
+  client: '✅', lost: '❌',
 };
 const STAGE_LABEL: Record<string, string> = {
   lead: 'Lead', hot: 'HOT', top: 'TOP', cold: 'COLD',
