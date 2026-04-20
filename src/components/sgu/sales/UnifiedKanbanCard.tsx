@@ -8,6 +8,7 @@ import { TemperatureBadge } from './TemperatureBadge';
 import { SourceBadge } from './SourceBadge';
 import { ClientStatusBadge } from './ClientStatusBadge';
 import { ComplexityChips } from './ComplexityChips';
+import { PremiumQuickEdit } from './PremiumQuickEdit';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
 
 export type SubcategoryField = 'temperature' | 'prospect_source' | 'client_status';
@@ -15,6 +16,7 @@ export type SubcategoryField = 'temperature' | 'prospect_source' | 'client_statu
 interface UnifiedKanbanCardProps {
   contact: DealTeamContact;
   stage: DealStage;
+  teamId: string;
   onLostClick: () => void;
   onOfferingStageChange: (next: string) => void;
   onOfferingWonClick: () => void;
@@ -26,6 +28,7 @@ interface UnifiedKanbanCardProps {
 export function UnifiedKanbanCard({
   contact,
   stage,
+  teamId,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -105,6 +108,15 @@ export function UnifiedKanbanCard({
 
       {/* Areas */}
       <ComplexityChips complexity={contact.client_complexity} />
+
+      {/* Premium quick edit */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <PremiumQuickEdit
+          contactId={contact.id}
+          teamId={teamId}
+          valueGr={contact.expected_annual_premium_gr ?? null}
+        />
+      </div>
 
       {/* Lost button */}
       <div className="pt-1 border-t flex justify-end" onClick={(e) => e.stopPropagation()}>

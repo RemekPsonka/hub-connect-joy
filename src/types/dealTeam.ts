@@ -333,6 +333,7 @@ export interface UpdateTeamContactInput {
   isLost?: boolean;
   lostReason?: string | null;
   lostAt?: string | null;
+  expectedAnnualPremiumGr?: number | null;
 }
 
 export interface PromoteContactInput {

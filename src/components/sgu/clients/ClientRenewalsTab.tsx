@@ -38,11 +38,20 @@ export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
   const qc = useQueryClient();
   const maxDays = filter === 'lt14' ? 14 : 90;
 
+  const filteredRows = useMemo(() => {
+    if (filter === 'near_ambassador') {
+      return rows.filter(
+        (r) => (r.client_status ?? 'standard') === 'standard' && r.policies.length >= 2,
+      );
+    }
+    return rows;
+  }, [rows, filter]);
+
   const groups = useMemo(() => {
     const g30: RenewalItem[] = [];
     const g60: RenewalItem[] = [];
     const g90: RenewalItem[] = [];
-    for (const r of rows) {
+    for (const r of filteredRows) {
       for (const p of r.policies) {
         if (!p.end_date) continue;
         const d = daysUntil(p.end_date);
@@ -63,7 +72,7 @@ export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
     }
     const sortFn = (a: RenewalItem, b: RenewalItem) => a.endDate.localeCompare(b.endDate);
     return { g30: g30.sort(sortFn), g60: g60.sort(sortFn), g90: g90.sort(sortFn) };
-  }, [rows]);
+  }, [filteredRows, maxDays]);
 
   const createTask = useMutation({
     mutationFn: async (item: RenewalItem) => {

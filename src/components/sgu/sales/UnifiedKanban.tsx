@@ -86,6 +86,7 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
 function DraggableCard({
   contact,
   stage,
+  teamId,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -94,6 +95,7 @@ function DraggableCard({
 }: {
   contact: DealTeamContact;
   stage: DealStage;
+  teamId: string;
   onLostClick: () => void;
   onOfferingStageChange: (next: string) => void;
   onOfferingWonClick: () => void;
@@ -113,6 +115,7 @@ function DraggableCard({
       <UnifiedKanbanCard
         contact={contact}
         stage={stage}
+        teamId={teamId}
         onLostClick={onLostClick}
         onOfferingStageChange={onOfferingStageChange}
         onOfferingWonClick={onOfferingWonClick}
@@ -128,6 +131,7 @@ function DroppableColumn({
   col,
   contacts,
   groupBy,
+  teamId,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -137,6 +141,7 @@ function DroppableColumn({
   col: ColumnDef;
   contacts: DealTeamContact[];
   groupBy: boolean;
+  teamId: string;
   onLostClick: (c: DealTeamContact) => void;
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
@@ -145,13 +150,22 @@ function DroppableColumn({
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
-  const sumPLN = contacts.reduce((acc, c) => acc + (c.estimated_value ?? 0), 0);
+  const sumPLN = contacts.reduce(
+    (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
+    0,
+  );
+  const plnFormatter = new Intl.NumberFormat('pl-PL', {
+    style: 'currency',
+    currency: 'PLN',
+    maximumFractionDigits: 0,
+  });
 
   const renderCard = (c: DealTeamContact) => (
     <DraggableCard
       key={c.id}
       contact={c}
       stage={col.stage}
+      teamId={teamId}
       onLostClick={() => onLostClick(c)}
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
       onOfferingWonClick={() => onOfferingWonClick(c)}
@@ -208,7 +222,7 @@ function DroppableColumn({
           </Badge>
           {sumPLN > 0 && (
             <span className="text-xs text-muted-foreground">
-              · Σ {Math.round(sumPLN / 1000)}k PLN
+              · Σ {plnFormatter.format(sumPLN)}
             </span>
           )}
         </div>
@@ -347,6 +361,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               col={col}
               contacts={grouped[col.stage]}
               groupBy={groupBySubcategory}
+              teamId={teamId}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);

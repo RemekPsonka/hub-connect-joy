@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,8 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { cn } from '@/lib/utils';
 import type { SGUClientRow } from '@/hooks/useSGUClientsPortfolio';
+import { ClientDetailsDialog } from './ClientDetailsDialog';
+import { AddClientTaskDialog } from './AddClientTaskDialog';
 
 interface Props {
   rows: SGUClientRow[];
@@ -41,19 +44,31 @@ function fmtDate(d: string | null): string {
   return `${day}.${m}.${y}`;
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 function paymentStatusColor(row: SGUClientRow): string {
   if (!row.lastPayment) return 'text-muted-foreground';
+  if (row.nextPaymentDate && row.nextPaymentDate < TODAY) {
+    return 'text-destructive';
+  }
   return 'text-emerald-600';
 }
 
 export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient, filter }: Props) {
   const complexityMap = useClientComplexity(rows);
   const updateContact = useUpdateTeamContact();
+  const [detailsClient, setDetailsClient] = useState<SGUClientRow | null>(null);
+  const [taskClient, setTaskClient] = useState<SGUClientRow | null>(null);
 
-  const visibleRows =
-    filter === 'ambassadors'
-      ? rows.filter((r) => (r.client_status ?? '') === 'ambassador')
-      : rows;
+  let visibleRows = rows;
+  if (filter === 'ambassadors') {
+    visibleRows = rows.filter((r) => (r.client_status ?? '') === 'ambassador');
+  } else if (filter === 'stale') {
+    // No interaction marker on row → sort by next event ascending (oldest first)
+    visibleRows = [...rows].sort((a, b) =>
+      (a.nextEvent ?? '9999').localeCompare(b.nextEvent ?? '9999'),
+    );
+  }
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground p-8 text-center">Ładowanie portfela…</div>;
@@ -157,20 +172,64 @@ export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient, fi
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-56 p-1">
-                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-start gap-2"
+                          onClick={() => setDetailsClient(r)}
+                        >
                           <Eye className="h-4 w-4" /> Szczegóły
                         </Button>
-                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2" asChild>
-                          <a href={`tel:`}>
-                            <Phone className="h-4 w-4" /> Zadzwoń
-                          </a>
-                        </Button>
-                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2" asChild>
-                          <a href={`mailto:`}>
-                            <Mail className="h-4 w-4" /> Wyślij e-mail
-                          </a>
-                        </Button>
-                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
+                        {r.phone ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2"
+                            asChild
+                          >
+                            <a href={`tel:${r.phone}`}>
+                              <Phone className="h-4 w-4" /> Zadzwoń
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2 opacity-50 cursor-not-allowed"
+                            disabled
+                            aria-disabled="true"
+                          >
+                            <Phone className="h-4 w-4" /> Brak telefonu
+                          </Button>
+                        )}
+                        {r.email ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2"
+                            asChild
+                          >
+                            <a href={`mailto:${r.email}`}>
+                              <Mail className="h-4 w-4" /> Wyślij e-mail
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2 opacity-50 cursor-not-allowed"
+                            disabled
+                            aria-disabled="true"
+                          >
+                            <Mail className="h-4 w-4" /> Brak e-maila
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-start gap-2"
+                          onClick={() => setTaskClient(r)}
+                        >
                           <ListChecks className="h-4 w-4" /> Dodaj zadanie
                         </Button>
                       </PopoverContent>
@@ -182,6 +241,19 @@ export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient, fi
           </TableBody>
         </Table>
       </div>
+
+      <ClientDetailsDialog
+        client={detailsClient}
+        open={!!detailsClient}
+        onOpenChange={(o) => !o && setDetailsClient(null)}
+      />
+      <AddClientTaskDialog
+        open={!!taskClient}
+        onOpenChange={(o) => !o && setTaskClient(null)}
+        clientId={taskClient?.id ?? null}
+        clientName={taskClient?.full_name}
+        teamId={teamId}
+      />
     </TooltipProvider>
   );
 }

@@ -30,6 +30,8 @@ export interface SGUClientRow {
   source_contact_id: string | null;
   full_name: string;
   company: string | null;
+  phone: string | null;
+  email: string | null;
   representative_user_id: string | null;
   expected_annual_premium_gr: number;
   client_status: string | null;
@@ -112,7 +114,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
       let clientsQuery = supabase
         .from('deal_team_contacts')
         .select(
-          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, client_status, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company)'
+          'id, contact_id, source_contact_id, representative_user_id, expected_annual_premium_gr, client_status, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company, phone, email)'
         )
         .eq('team_id', teamId)
         .eq('category', 'client');
@@ -270,8 +272,10 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           id: c.id,
           contact_id: c.contact_id,
           source_contact_id: c.source_contact_id,
-          full_name: (c.contact as { full_name?: string; company?: string | null } | null)?.full_name ?? '—',
-          company: (c.contact as { full_name?: string; company?: string | null } | null)?.company ?? null,
+          full_name: (c.contact as { full_name?: string; company?: string | null; phone?: string | null; email?: string | null } | null)?.full_name ?? '—',
+          company: (c.contact as { full_name?: string; company?: string | null; phone?: string | null; email?: string | null } | null)?.company ?? null,
+          phone: (c.contact as { phone?: string | null } | null)?.phone ?? null,
+          email: (c.contact as { email?: string | null } | null)?.email ?? null,
           representative_user_id: c.representative_user_id,
           expected_annual_premium_gr: c.expected_annual_premium_gr ?? 0,
           client_status: (c as { client_status?: string | null }).client_status ?? null,
