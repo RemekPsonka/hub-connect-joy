@@ -30,7 +30,7 @@ function fmtPLN(gr: number | null | undefined) {
 }
 
 export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
-  const sguTeamId = useSGUTeamId();
+  const { sguTeamId } = useSGUTeamId();
   const [sguOpen, setSguOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
