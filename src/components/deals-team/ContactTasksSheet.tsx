@@ -279,14 +279,36 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
                       <Target className="h-3.5 w-3.5" /> Status w lejku
                     </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline">{stageLabels[deriveStage(contact)] || contact.category}</Badge>
-                      <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
-                      <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
-                      {contact.offering_stage && CATEGORIES_WITH_SUBSTAGES.has(contact.category) && (
-                        <Badge variant="secondary">{subStageLabels[contact.offering_stage] || contact.offering_stage}</Badge>
-                      )}
-                    </div>
+                    {(() => {
+                      const stage = deriveStage(contact);
+                      let subStageBadge: string | null = null;
+                      if (stage === 'lead' && contact.temperature) {
+                        subStageBadge = TEMPERATURE_LABELS[contact.temperature] ?? contact.temperature;
+                      } else if (stage === 'prospect' && contact.prospect_source) {
+                        subStageBadge = PROSPECT_SOURCE_LABELS[contact.prospect_source] ?? contact.prospect_source;
+                      } else if (stage === 'client' && contact.client_status) {
+                        subStageBadge = CLIENT_STATUS_LABELS[contact.client_status] ?? contact.client_status;
+                      } else if (stage === 'offering' && contact.offering_stage) {
+                        subStageBadge = OFFERING_STAGE_LABELS[contact.offering_stage] ?? contact.offering_stage;
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="outline">{stageLabels[stage] || contact.category}</Badge>
+                          {subStageBadge && <Badge variant="secondary">{subStageBadge}</Badge>}
+                          <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
+                          <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
+                        </div>
+                      );
+                    })()}
+                    {contact.expected_annual_premium_gr != null && contact.expected_annual_premium_gr > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Potencjał składki: {new Intl.NumberFormat('pl-PL', {
+                          style: 'currency',
+                          currency: 'PLN',
+                          maximumFractionDigits: 0,
+                        }).format(contact.expected_annual_premium_gr / 100)} / rok
+                      </p>
+                    )}
                     {contact.estimated_value != null && contact.estimated_value > 0 && (
                       <p className="text-xs text-muted-foreground mt-1.5">
                         Wartość: {contact.estimated_value.toLocaleString('pl-PL')} {contact.value_currency}
