@@ -1,83 +1,76 @@
 
 
-# B-FIX.4 — Badge "Więcej" → ContactTasksSheet w UnifiedKanban
+# B-FIX.7 — Spójny status w lejku (Kanban ↔ Sheet)
 
-## Cel
-Dodać do każdej karty w `UnifiedKanban` przycisk "Więcej", który otwiera reusowalny `ContactTasksSheet` (boczny panel z pełnymi danymi kontaktu, taskami i quick actions). Reuse 1:1 — bez modyfikacji `ContactTasksSheet.tsx`.
+## Problem
 
-## Pliki
+Kanban używa `deriveStage()` do mapowania raw `category` na 4 kolumny:
+- `hot`, `top`, `10x`, `cold` → **Lead**
+- `audit`, `offering` → **Ofertowanie**
+- `client` → **Klient**
+- reszta → **Prospekt**
+
+Ale "STATUS W LEJKU" w `ContactTasksSheet` (linia 277) wyświetla surowy `contact.category` (`categoryLabels[contact.category]`), np. "Audyt", "Hot". Stąd rozbieżność — kontakt jest w kolumnie "Ofertowanie" na Kanbanie, ale Sheet pokazuje "Audyt".
+
+## Rozwiązanie
+
+W sekcji "STATUS W LEJKU" w `ContactTasksSheet.tsx` zamienić badge `categoryLabels[contact.category]` na badge pokazujący **derived stage** (etap kolumny Kanbana) + opcjonalnie sub-kategorię (temperature / source / client_status / offering_stage).
+
+### Szczegóły zmiany
+
+**Plik: `src/components/deals-team/ContactTasksSheet.tsx`**
+
+1. Import `deriveStage` z `../sgu/sales/UnifiedKanban` (już eksportowana).
+2. Dodać mapę etykiet dla derived stage:
+   ```tsx
+   const stageLabels: Record<string, string> = {
+     prospect: 'Prospekt',
+     lead: 'Lead',
+     offering: 'Ofertowanie',
+     client: 'Klient',
+     lost: 'Utracony',
+   };
+   ```
+3. W sekcji "STATUS W LEJKU" (linia ~276-283) zamienić badge'e na:
+   ```tsx
+   <Badge variant="outline">
+     {stageLabels[deriveStage(contact)] || contact.category}
+   </Badge>
+   <Badge variant="secondary">
+     {statusLabels[contact.status] || contact.status}
+   </Badge>
+   <Badge variant="secondary">
+     {priorityLabels[contact.priority] || contact.priority}
+   </Badge>
+   {/* Sub-stage badge — temperatura, source, offering_stage */}
+   {contact.offering_stage && CATEGORIES_WITH_SUBSTAGES.has(contact.category) && (
+     <Badge variant="secondary">
+       {subStageLabels[contact.offering_stage] || contact.offering_stage}
+     </Badge>
+   )}
+   ```
+
+Jedyna zmiana to linia 277: `categoryLabels[contact.category]` → `stageLabels[deriveStage(contact)]`.
+
+### Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — prop `onMoreClick`, button "Więcej" w stopce |
-| 2 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — stan `sheetContact`, render `<ContactTasksSheet>`, prop drilling |
+| 1 | `src/components/deals-team/ContactTasksSheet.tsx` | EDIT — import `deriveStage`, dodać `stageLabels`, zamienić badge etapu |
 
-## Szczegóły
+### Efekt
 
-### 1. `UnifiedKanbanCard.tsx`
-- Dodać `onMoreClick: () => void` do `UnifiedKanbanCardProps`
-- Import `MoreHorizontal` z `lucide-react`
-- W stopce (`<div className="pt-1 border-t flex justify-end" ...>`) **na lewo** od buttona "Oznacz jako lost" wstawić:
-  ```tsx
-  <Button
-    variant="outline"
-    size="sm"
-    className="h-6 px-2 text-[10px] gap-1 mr-auto"
-    onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
-  >
-    <MoreHorizontal className="h-3 w-3" />
-    Więcej
-  </Button>
-  ```
-- Klik karty (poza badgem/buttonem) bez zmian → nawigacja do `/sgu/klienci?contactId=...`
+- Kontakt z `category='audit'` → Sheet pokaże "Ofertowanie" (zgodnie z Kanbanem) + "Handshake" (offering_stage)
+- Kontakt z `category='hot'` → Sheet pokaże "Lead" (zgodnie z Kanbanem)
+- Kontakt z `category='client'` → Sheet pokaże "Klient" (bez zmian — tu było spójne)
 
-### 2. `UnifiedKanban.tsx`
-- Import: `import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';`
-- Stan: `const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);`
-- Rozszerzyć propsy `DraggableCard` i `DroppableColumn` o `onMoreClick: (c: DealTeamContact) => void`
-- Prop drilling: `UnifiedKanban` → `DroppableColumn` (`onMoreClick={onMoreClick}`) → `DraggableCard` (`onMoreClick={() => onMoreClick(contact)}`) → `UnifiedKanbanCard` (`onMoreClick={onMoreClick}`)
-- W `UnifiedKanban` przekazać `onMoreClick={(c) => setSheetContact(c)}` do każdego `DroppableColumn`
-- Pod `<DndContext>` (obok istniejących dialogów Convert/Lost) dorenderować:
-  ```tsx
-  <ContactTasksSheet
-    contact={sheetContact}
-    teamId={teamId}
-    open={sheetContact !== null}
-    onOpenChange={(open) => !open && setSheetContact(null)}
-  />
-  ```
-
-### 3. Drag & drop hardening
-Button ma już `onClick` z `e.stopPropagation()`. dnd-kit nasłuchuje na `onPointerDown` z `useDraggable.listeners`. Jeśli klik buttona zostałby przechwycony przez sensor (PointerSensor ma `activationConstraint.distance: 6` — kliknięcie bez ruchu nie aktywuje draggu, więc powinno działać). Jeśli w testach okaże się problem → dodać `onPointerDown={(e) => e.stopPropagation()}` na buttonie. W planie: zostawiamy tylko `onClick stopPropagation` zgodnie z briefem; wariant `onPointerDown` trzymamy w odwodzie.
-
-## Świadome decyzje
-1. **Brak modyfikacji `ContactTasksSheet`** — komponent już akceptuje `contact: DealTeamContact | null` + `teamId` + `open/onOpenChange`. Reuse 1:1.
-2. **Pojedynczy stan `sheetContact`** w `UnifiedKanban` — nie per-column. Tylko jeden Sheet otwarty naraz.
-3. **`mr-auto`** na buttonie "Więcej" — wypycha go do lewej, zachowując "Oznacz jako lost" po prawej (stopka używa `flex justify-end`).
-4. **Bez zmian w hookach** — `ContactTasksSheet` sam używa `useCreateTask`, `useUpdateTeamContact` itd.
-
-## Weryfikacja
+### Weryfikacja
 
 ```bash
-grep -n "Więcej" src/components/sgu/sales/UnifiedKanbanCard.tsx   # 1 wynik
-npx tsc --noEmit                                                   # exit 0
+npx tsc --noEmit   # 0 errors
 ```
 
-Manual smoke (po stronie usera, nie smokuję sam zgodnie z konwencją):
-- Każda karta ma badge "Więcej" w stopce (po lewej)
-- Klik "Więcej" → otwiera Sheet z prawej; klik karty (poza buttonami/badge) → nadal nawigacja do `/sgu/klienci?contactId=...`
-- Quick actions w Sheet (Umów spotkanie / Zadzwoń / Wyślij ofertę / Wyślij mail) tworzą task widoczny w liście
-- "Umów spotkanie" na kontakcie `category=hot|top` → auto `offering_stage='meeting_plan'`
-- Drag & drop dalej działa
-
-## DoD
-
-| Check | Stan |
-|---|---|
-| Każda karta ma button "Więcej" | ✅ |
-| Klik "Więcej" otwiera `ContactTasksSheet` | ✅ |
-| Klik karty nadal nawiguje | ✅ |
-| Drag & drop działa | ✅ |
-| `ContactTasksSheet` niezmodyfikowany | ✅ |
-| `tsc --noEmit` exit 0 | ✅ |
+Manual smoke:
+- Otwórz Sheet kontaktu z kolumny Ofertowanie → "STATUS W LEJKU" pokazuje "Ofertowanie", nie "Audyt"
+- Otwórz Sheet kontaktu z kolumny Lead → pokazuje "Lead", nie "Hot"/"Top"
 
