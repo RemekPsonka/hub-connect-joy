@@ -1,26 +1,17 @@
-import { useMemo, useState, useRef, useCallback } from 'react';
-import { toast } from 'sonner';
-import { isPast, isToday, format } from 'date-fns';
+import { useMemo, useState, useCallback } from 'react';
+import { isPast, isToday, isTomorrow, addDays, startOfDay } from 'date-fns';
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
-  useDroppable, useDraggable,
-  type DragStartEvent, type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  CheckCircle2, User, Building2,
-  Plus, Search,
-  ChevronDown, ChevronRight, Filter, AlertTriangle, Circle,
-  List, LayoutGrid, Users, Columns3,
+  CheckCircle2, Plus, Search, ChevronDown, ChevronRight, Filter, AlertTriangle,
+  List, LayoutGrid,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { useMyTeamAssignments, useUpdateAssignment, useCreateAssignment } from '@/hooks/useDealsTeamAssignments';
+import { useMyTeamAssignments, useUpdateAssignment } from '@/hooks/useDealsTeamAssignments';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
-import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
+import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DealTeamAssignment } from '@/hooks/useDealsTeamAssignments';
 import {
@@ -32,7 +23,7 @@ import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
 import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
 import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
-import { UnifiedTaskRow, STATUS_CYCLE, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
+import { UnifiedTaskRow, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
@@ -41,124 +32,21 @@ interface MyTeamTasksViewProps {
   teamId: string;
 }
 
-type ViewMode = 'grouped' | 'list' | 'kanban' | 'team';
+type ViewMode = 'grouped' | 'list';
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  todo: { label: 'Do zrobienia', color: 'bg-muted' },
-  in_progress: { label: 'W trakcie', color: 'bg-blue-500/10' },
-  completed: { label: 'Zakończone', color: 'bg-green-500/10' },
-  cancelled: { label: 'Anulowane', color: 'bg-muted/50' },
-};
+// ─── Time bucket helper ─────────────────────────────────────
+type Bucket = 'today' | 'overdue' | 'upcoming' | 'rest';
 
-// ─── Workflow Column Configuration (from central config) ────
-import { WORKFLOW_COLUMNS, CATEGORY_OPTIONS, type WorkflowColumn } from '@/config/pipelineStages';
-import { usePipelineStages, usePipelineTransitions } from '@/hooks/usePipelineConfig';
-import { isTransitionAllowed } from '@/config/pipelineStagesAdapter';
-
-// ─── Reverse-mapping: workflow column → (category, offering_stage) ──
-function reverseMapColumn(colId: string, currentCategory: string | null): { category: string; offeringStage?: string } {
-  const meetingStages = ['meeting_plan', 'meeting_scheduled', 'meeting_done'];
-  if (meetingStages.includes(colId)) {
-    // Keep hot/top if already one of them, otherwise default to hot
-    const cat = (currentCategory === 'hot' || currentCategory === 'top') ? currentCategory : 'hot';
-    return { category: cat, offeringStage: colId };
-  }
-  const offeringStages: Record<string, string> = {
-    handshake: 'handshake', power_of_attorney: 'power_of_attorney',
-    preparation: 'preparation', negotiation: 'negotiation',
-    accepted: 'accepted', offering_lost: 'lost',
-  };
-  if (offeringStages[colId]) return { category: 'offering', offeringStage: offeringStages[colId] };
-  const auditStages = ['audit_plan', 'audit_scheduled', 'audit_done'];
-  if (auditStages.includes(colId)) return { category: 'audit', offeringStage: colId };
-  if (colId === 'client') return { category: 'client' };
-  if (colId === 'lost') return { category: 'lost' };
-  return { category: 'lead' };
-}
-
-// ─── DnD Wrappers ────────────────────────────────────────────
-function DroppableWorkflowColumn({ colId, children, className }: { colId: string; children: React.ReactNode; className?: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id: colId });
-  return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'ring-2 ring-primary/50 bg-primary/5')}>
-      {children}
-    </div>
-  );
-}
-
-function DraggableWorkflowCard({ taskId, children }: { taskId: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: taskId });
-  const style: React.CSSProperties = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    opacity: isDragging ? 0.4 : undefined,
-    cursor: 'grab',
-  };
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      {children}
-    </div>
-  );
-}
-
-// ─── Inline Quick-Add ────────────────────────────────────────
-function InlineTaskCreate({ teamId, teamContactId, assignedTo, onCreated }: {
-  teamId: string;
-  teamContactId: string;
-  assignedTo: string;
-  onCreated?: () => void;
-}) {
-  const [value, setValue] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const createAssignment = useCreateAssignment();
-
-  const handleSubmit = async () => {
-    if (!value.trim()) return;
-    try {
-      await createAssignment.mutateAsync({
-        teamContactId,
-        teamId,
-        assignedTo,
-        title: value.trim(),
-      });
-      setValue('');
-      setIsAdding(false);
-      onCreated?.();
-    } catch { /* toast handled in hook */ }
-  };
-
-  if (!isAdding) {
-    return (
-      <button
-        onClick={() => { setIsAdding(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-        className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex items-center gap-2 rounded-b-lg"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Dodaj zadanie...
-      </button>
-    );
-  }
-
-  return (
-    <div className="px-3 py-2 flex items-center gap-2 bg-muted/30">
-      <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
-      <Input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit();
-          if (e.key === 'Escape') { setIsAdding(false); setValue(''); }
-        }}
-        placeholder="Wpisz tytuł i naciśnij Enter"
-        className="h-7 text-sm border-0 bg-transparent shadow-none focus-visible:ring-0 px-0"
-        autoFocus
-      />
-      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setIsAdding(false); setValue(''); }}>
-        Esc
-      </Button>
-    </div>
-  );
+function bucketOf(task: DealTeamAssignment): Bucket {
+  const isDone = task.status === 'completed' || task.status === 'cancelled';
+  if (!task.due_date) return 'rest';
+  const d = new Date(task.due_date);
+  if (isToday(d)) return 'today';
+  if (isPast(d) && !isDone) return 'overdue';
+  const tomorrow = startOfDay(addDays(new Date(), 1));
+  const in7d = startOfDay(addDays(new Date(), 8));
+  if (d >= tomorrow && d < in7d) return 'upcoming';
+  return 'rest';
 }
 
 // ─── Main View ────────────────────────────────────────
@@ -168,20 +56,13 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: members = [] } = useTeamMembers(teamId);
   const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
-  const updateTeamContact = useUpdateTeamContact();
-  const { data: wfPipelineStages = [] } = usePipelineStages(teamId, 'workflow');
-  const { data: wfPipelineTransitions = [] } = usePipelineTransitions(teamId, 'workflow');
-
-  // DnD sensors & state
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-  const [activeDragTask, setActiveDragTask] = useState<DealTeamAssignment | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [filterMember, setFilterMember] = useState<string>('mine');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [restOpen, setRestOpen] = useState(false);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -194,14 +75,6 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const [workflowContact, setWorkflowContact] = useState<{
     contactName: string; contactId: string; teamContactId: string; category: string;
   } | null>(null);
-
-  const toggleGroup = (key: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
 
   const filtered = useMemo(() => {
     let result = [...assignments];
@@ -230,117 +103,23 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     return result;
   }, [assignments, filterMember, filterStatus, filterPriority, searchQuery, director?.id]);
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const task = filtered.find(t => t.id === event.active.id);
-    setActiveDragTask(task || null);
+  // Time-based grouping
+  const buckets = useMemo(() => {
+    const today: DealTeamAssignment[] = [];
+    const overdue: DealTeamAssignment[] = [];
+    const upcoming: DealTeamAssignment[] = [];
+    const rest: DealTeamAssignment[] = [];
+    for (const t of filtered) {
+      const b = bucketOf(t);
+      if (b === 'today') today.push(t);
+      else if (b === 'overdue') overdue.push(t);
+      else if (b === 'upcoming') upcoming.push(t);
+      else rest.push(t);
+    }
+    return { today, overdue, upcoming, rest };
   }, [filtered]);
-
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    setActiveDragTask(null);
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const taskId = active.id as string;
-    const colId = over.id as string;
-    const task = filtered.find(t => t.id === taskId);
-    if (!task || !task.deal_team_contact_id) return;
-
-    const targetCol = WORKFLOW_COLUMNS.find(c => c.id === colId);
-    if (!targetCol) return;
-    if (targetCol.match(task.contact_category ?? null, task.contact_offering_stage ?? null)) return;
-
-    // Check workflow transition
-    const currentColId = WORKFLOW_COLUMNS.find(c => c.match(task.contact_category ?? null, task.contact_offering_stage ?? null))?.id;
-    if (currentColId && !isTransitionAllowed(wfPipelineTransitions, wfPipelineStages, currentColId, colId, 'workflow')) {
-      toast.error('To przejście nie jest dozwolone w konfiguracji przepływu');
-      return;
-    }
-
-    // Special case: dropping on KLIENT requires financial data via ConvertToClientDialog
-    if (colId === 'client') {
-      const tc = teamContacts.find(c => c.id === task.deal_team_contact_id);
-      setWorkflowTask(task);
-      setWorkflowContact({
-        contactName: tc?.contact?.full_name || task.contact_name || '',
-        contactId: tc?.contact_id || task.contact_id || '',
-        teamContactId: task.deal_team_contact_id,
-        category: tc?.category || task.contact_category || '',
-      });
-      setShowConvert(true);
-      return;
-    }
-
-    const { category, offeringStage } = reverseMapColumn(colId, task.contact_category ?? null);
-
-    updateTeamContact.mutate({
-      id: task.deal_team_contact_id,
-      teamId,
-      category: category as any,
-      offeringStage: offeringStage as any,
-    });
-
-    updateAssignment.mutate({
-      id: taskId,
-      teamContactId: task.deal_team_contact_id,
-      title: targetCol.label,
-    });
-  }, [filtered, teamId, teamContacts, updateTeamContact, updateAssignment, wfPipelineStages, wfPipelineTransitions]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, { contactName: string; company: string | null; teamContactId: string; tasks: DealTeamAssignment[] }>();
-    for (const a of filtered) {
-      const key = a.deal_team_contact_id || 'unknown';
-      if (!map.has(key)) {
-        map.set(key, { contactName: a.contact_name || 'Kontakt', company: a.contact_company || null, teamContactId: key, tasks: [] });
-      }
-      map.get(key)!.tasks.push(a);
-    }
-    return Array.from(map.values());
-  }, [filtered]);
-
-  // Workflow Kanban columns
-  const workflowKanban = useMemo(() => {
-    const cols = new Map<string, DealTeamAssignment[]>();
-    for (const col of WORKFLOW_COLUMNS) cols.set(col.id, []);
-    for (const a of filtered) {
-      const cat = a.contact_category;
-      const stage = a.contact_offering_stage;
-      const matchedCol = WORKFLOW_COLUMNS.find(c => c.match(cat, stage));
-      const colId = matchedCol?.id || 'other';
-      cols.get(colId)!.push(a);
-    }
-    return cols;
-  }, [filtered]);
-
-  // Funnel stats per category
-  const FUNNEL_CATEGORIES = useMemo(() => ['hot', 'top', 'offering', 'audit', 'client', 'lost'], []);
-  const funnelStats = useMemo(() => {
-    return FUNNEL_CATEGORIES.map(catValue => {
-      const cfg = CATEGORY_OPTIONS.find(c => c.value === catValue);
-      const count = filtered.filter(t => t.contact_category === catValue).length;
-      return { value: catValue, label: cfg?.label ?? catValue, icon: cfg?.icon ?? '📋', color: cfg?.color ?? '', count };
-    });
-  }, [filtered, FUNNEL_CATEGORIES]);
-
-  // Team view data
-  const teamData = useMemo(() => {
-    const map = new Map<string, { name: string; tasks: DealTeamAssignment[] }>();
-    for (const a of filtered) {
-      const key = a.assigned_to || 'unassigned';
-      if (!map.has(key)) {
-        const member = members.find(m => m.director_id === key);
-        map.set(key, { name: member?.director?.full_name || 'Nieprzypisane', tasks: [] });
-      }
-      map.get(key)!.tasks.push(a);
-    }
-    return Array.from(map.entries()).map(([id, data]) => {
-      const completed = data.tasks.filter(t => t.status === 'completed').length;
-      return { id, ...data, completed, total: data.tasks.length, progress: data.tasks.length > 0 ? Math.round((completed / data.tasks.length) * 100) : 0 };
-    });
-  }, [filtered, members]);
 
   const handleStatusChange = useCallback((taskId: string, task: DealTeamAssignment, newStatus: string) => {
-    // ALL completed pipeline tasks → open universal NextActionDialog
     if (newStatus === 'completed' && task.deal_team_contact_id) {
       const tc = teamContacts.find(c => c.id === task.deal_team_contact_id);
       if (tc) {
@@ -372,9 +151,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     setSelectedTaskId(task.id);
   };
 
-  const overdueCount = assignments.filter(
-    (a) => a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)) && a.status !== 'completed' && a.status !== 'cancelled'
-  ).length;
+  const overdueCount = buckets.overdue.length;
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
@@ -398,6 +175,75 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       cross_tasks: [], parent_task_id: null, estimated_hours: null,
     } as any;
   }, [selectedTaskId, assignments]);
+
+  const buildBadge = (task: DealTeamAssignment) => {
+    if (!task.contact_category) return undefined;
+    return {
+      stage: task.contact_category,
+      subCategory:
+        task.contact_temperature ??
+        task.contact_offering_stage ??
+        task.contact_client_status ??
+        undefined,
+    };
+  };
+
+  const renderTaskRow = (task: DealTeamAssignment) => (
+    <UnifiedTaskRow
+      key={task.id}
+      task={task}
+      contactName={task.contact_name || undefined}
+      companyName={task.contact_company || undefined}
+      members={members}
+      showAssignee
+      dealStageBadge={buildBadge(task)}
+      onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
+      onPriorityChange={(taskId, newPriority) => handleQuickUpdate(task, 'priority', newPriority)}
+      onAssigneeChange={(taskId, newAssigneeId) => handleQuickUpdate(task, 'assignedTo', newAssigneeId)}
+      onTitleChange={(taskId, newTitle) => {
+        updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
+      }}
+      onClick={() => handleOpenDetail(task)}
+    />
+  );
+
+  const renderSection = (
+    title: string,
+    tasks: DealTeamAssignment[],
+    defaultOpen: boolean,
+    variant: 'today' | 'overdue' | 'upcoming' | 'rest',
+    lazy = false,
+  ) => {
+    const headerColor =
+      variant === 'overdue' ? 'text-destructive'
+      : variant === 'today' ? 'text-foreground'
+      : 'text-muted-foreground';
+    const badgeVariant = variant === 'overdue' && tasks.length > 0 ? 'destructive' : 'secondary';
+
+    return (
+      <Collapsible defaultOpen={defaultOpen}>
+        <Card className="overflow-hidden">
+          <CollapsibleTrigger asChild>
+            <button className="w-full px-3 py-2 bg-muted/50 border-b flex items-center gap-2 hover:bg-muted/70 transition-colors text-left group">
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+              <span className={cn('text-sm font-medium', headerColor)}>{title}</span>
+              <Badge variant={badgeVariant} className="text-xs ml-auto">{tasks.length}</Badge>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {tasks.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-muted-foreground text-center">Brak zadań</p>
+            ) : (
+              <div>
+                {/* Lazy = render only when open via CollapsibleContent's mount-on-open behavior */}
+                {tasks.map(renderTaskRow)}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -427,14 +273,6 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           <ToggleGroupItem value="list" aria-label="Lista" className="h-8 px-2.5 text-xs gap-1">
             <List className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Lista</span>
-          </ToggleGroupItem>
-          <ToggleGroupItem value="kanban" aria-label="Kanban" className="h-8 px-2.5 text-xs gap-1">
-            <Columns3 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Kanban</span>
-          </ToggleGroupItem>
-          <ToggleGroupItem value="team" aria-label="Zespół" className="h-8 px-2.5 text-xs gap-1">
-            <Users className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Zespół</span>
           </ToggleGroupItem>
         </ToggleGroup>
 
@@ -505,244 +343,41 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         </div>
       )}
 
-      {/* ─── VIEW: Grouped ────────────────────────────── */}
-      {filtered.length > 0 && viewMode === 'grouped' && grouped.map((group) => {
-        const isCollapsed = collapsedGroups.has(group.teamContactId);
-        return (
-          <Card key={group.teamContactId} className="overflow-hidden">
-            <button
-              onClick={() => toggleGroup(group.teamContactId)}
-              className="w-full px-3 py-2 bg-muted/50 border-b flex items-center gap-2 hover:bg-muted/70 transition-colors text-left"
-            >
-              {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-              <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-sm font-medium">{group.contactName}</span>
-              {group.company && (
-                <>
-                  <span className="text-muted-foreground text-xs">·</span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />{group.company}</span>
-                </>
-              )}
-              <Badge variant="secondary" className="text-xs ml-auto">{group.tasks.length}</Badge>
-            </button>
-            {!isCollapsed && (
-              <div>
-                {group.tasks.map((task) => (
-                  <UnifiedTaskRow
-                    key={task.id}
-                    task={task}
-                    contactName={task.contact_name || undefined}
-                    companyName={task.contact_company || undefined}
-                    members={members}
-                    showAssignee
-                    onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
-                    onPriorityChange={(taskId, newPriority) => handleQuickUpdate(task, 'priority', newPriority)}
-                    onAssigneeChange={(taskId, newAssigneeId) => handleQuickUpdate(task, 'assignedTo', newAssigneeId)}
-                    onTitleChange={(taskId, newTitle) => {
-                      updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
-                    }}
-                    onClick={() => handleOpenDetail(task)}
-                  />
-                ))}
-                <InlineTaskCreate teamId={teamId} teamContactId={group.teamContactId} assignedTo={director?.id || ''} />
-              </div>
-            )}
-          </Card>
-        );
-      })}
+      {/* ─── VIEW: Grouped (4 time buckets) ────────────── */}
+      {filtered.length > 0 && viewMode === 'grouped' && (
+        <div className="space-y-3">
+          {renderSection('Dzisiaj', buckets.today, true, 'today')}
+          {renderSection('Zaległe', buckets.overdue, buckets.overdue.length > 0, 'overdue')}
+          {renderSection('Nadchodzące 7 dni', buckets.upcoming, false, 'upcoming')}
+          {/* Rest: lazy — only render rows when section opened */}
+          <Collapsible open={restOpen} onOpenChange={setRestOpen}>
+            <Card className="overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <button className="w-full px-3 py-2 bg-muted/50 border-b flex items-center gap-2 hover:bg-muted/70 transition-colors text-left">
+                  {restOpen
+                    ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                  <span className="text-sm font-medium text-muted-foreground">Wszystkie</span>
+                  <Badge variant="secondary" className="text-xs ml-auto">{buckets.rest.length}</Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                {restOpen && (
+                  buckets.rest.length === 0
+                    ? <p className="px-3 py-4 text-xs text-muted-foreground text-center">Brak zadań</p>
+                    : <div>{buckets.rest.map(renderTaskRow)}</div>
+                )}
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        </div>
+      )}
 
       {/* ─── VIEW: Flat List ──────────────────────────── */}
       {filtered.length > 0 && viewMode === 'list' && (
         <Card className="overflow-hidden">
-          {filtered.map((task) => (
-            <UnifiedTaskRow
-              key={task.id}
-              task={task}
-              contactName={task.contact_name || undefined}
-              companyName={task.contact_company || undefined}
-              members={members}
-              showAssignee
-              onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
-              onPriorityChange={(taskId, newPriority) => handleQuickUpdate(task, 'priority', newPriority)}
-              onAssigneeChange={(taskId, newAssigneeId) => handleQuickUpdate(task, 'assignedTo', newAssigneeId)}
-              onTitleChange={(taskId, newTitle) => {
-                updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
-              }}
-              onClick={() => handleOpenDetail(task)}
-            />
-          ))}
+          {filtered.map(renderTaskRow)}
         </Card>
-      )}
-
-      {/* ─── VIEW: Workflow Kanban ─────────────────────── */}
-      {filtered.length > 0 && viewMode === 'kanban' && (
-        <>
-        {/* Pipeline Funnel Indicator */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-2">
-          {funnelStats.map((stage, idx) => (
-            <div key={stage.value} className="flex items-center shrink-0">
-              {idx > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5 shrink-0" />}
-              <div className={cn(
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-opacity',
-                stage.color,
-                stage.count === 0 && 'opacity-40'
-              )}>
-                <span>{stage.icon}</span>
-                <span>{stage.label}</span>
-                <span className="font-bold">({stage.count})</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="overflow-x-auto -mx-4 px-4 pb-4">
-            <div className="flex gap-3 min-w-max">
-              {WORKFLOW_COLUMNS.map((col) => {
-                const tasks = workflowKanban.get(col.id) || [];
-                const colorMap: Record<string, string> = {
-                  red: 'border-t-red-500', amber: 'border-t-amber-500', blue: 'border-t-blue-500',
-                  purple: 'border-t-purple-500', slate: 'border-t-slate-400', emerald: 'border-t-emerald-500',
-                  cyan: 'border-t-cyan-500', gray: 'border-t-gray-400',
-                };
-                return (
-                  <DroppableWorkflowColumn
-                    key={col.id}
-                    colId={col.id}
-                    className={cn(
-                      'w-[220px] shrink-0 bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-300px)] transition-all',
-                      colorMap[col.color] || 'border-t-primary'
-                    )}
-                  >
-                    {/* Header */}
-                    <div className="p-2.5 border-b bg-muted/50">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-base">{col.icon}</span>
-                        <h3 className="font-semibold text-xs truncate">{col.label}</h3>
-                        <Badge variant="secondary" className="text-[10px] ml-auto">{tasks.length}</Badge>
-                      </div>
-                    </div>
-                    {/* Cards */}
-                    <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
-                      {tasks.length === 0 && (
-                        <p className="text-[11px] text-muted-foreground text-center py-8">Brak zadań</p>
-                      )}
-                      {tasks.map((task: DealTeamAssignment) => (
-                        <DraggableWorkflowCard key={task.id} taskId={task.id}>
-                          <Card
-                            className="p-2 cursor-grab hover:shadow-md transition-shadow"
-                            onClick={() => handleOpenDetail(task)}
-                          >
-                            <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{task.title}</p>
-                            {task.contact_name && (
-                              <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
-                                <User className="h-2.5 w-2.5 shrink-0" />
-                                <span className="truncate">{task.contact_name}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {task.priority && task.priority !== 'medium' && (
-                                <Badge variant="outline" className={cn("text-[9px] px-1 py-0", PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.badgeClass)}>
-                                  {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
-                                </Badge>
-                              )}
-                              {task.due_date && (
-                                <span className={cn(
-                                  "text-[10px]",
-                                  isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && task.status !== 'completed'
-                                    ? 'text-destructive font-medium' : 'text-muted-foreground'
-                                )}>
-                                  {format(new Date(task.due_date), 'dd.MM')}
-                                </span>
-                              )}
-                              <Button
-                                size="sm" variant="ghost"
-                                className="h-4 px-1 text-[9px] ml-auto"
-                                onClick={(e) => { e.stopPropagation(); handleStatusChange(task.id, task, task.status === 'todo' ? 'in_progress' : 'completed'); }}
-                              >
-                                {task.status === 'todo' ? '→' : '✓'}
-                              </Button>
-                            </div>
-                          </Card>
-                        </DraggableWorkflowCard>
-                      ))}
-                    </div>
-                  </DroppableWorkflowColumn>
-                );
-              })}
-            </div>
-          </div>
-          <DragOverlay>
-            {activeDragTask && (
-              <Card className="p-2 w-[220px] shadow-lg rotate-2 opacity-90">
-                <p className="text-xs font-medium leading-tight mb-1 line-clamp-2">{activeDragTask.title}</p>
-                {activeDragTask.contact_name && (
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <User className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{activeDragTask.contact_name}</span>
-                  </div>
-                )}
-              </Card>
-            )}
-          </DragOverlay>
-        </DndContext>
-        </>
-      )}
-
-      {/* ─── VIEW: Team ───────────────────────────────── */}
-      {filtered.length > 0 && viewMode === 'team' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {teamData.map((member) => (
-            <Card key={member.id} className="overflow-hidden">
-              <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{member.name}</p>
-                    <p className="text-xs text-muted-foreground">{member.completed}/{member.total} zakończonych</p>
-                  </div>
-                </div>
-                <Progress value={member.progress} className="h-2" />
-                <div className="flex gap-2 text-xs text-muted-foreground">
-                  {(['todo', 'in_progress', 'completed'] as const).map((s) => {
-                    const count = member.tasks.filter(t => t.status === s).length;
-                    if (count === 0) return null;
-                    return (
-                      <Badge key={s} variant="outline" className="text-[10px]">
-                        {STATUS_LABELS[s]?.label}: {count}
-                      </Badge>
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Collapsible task list */}
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <button className="w-full px-4 py-2 text-xs text-muted-foreground hover:bg-muted/50 border-t flex items-center gap-1">
-                    <ChevronDown className="h-3 w-3" />
-                    Pokaż zadania
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="border-t">
-                    {member.tasks.map((task) => (
-                      <UnifiedTaskRow
-                        key={task.id}
-                        task={task}
-                        contactName={task.contact_name || undefined}
-                        companyName={task.contact_company || undefined}
-                        compact
-                        onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, task, newStatus)}
-                        onClick={() => handleOpenDetail(task)}
-                      />
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-          ))}
-        </div>
       )}
 
       {/* ─── Task Detail Sheet ────────────────────────── */}
@@ -778,23 +413,14 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             open={showSnooze}
             onOpenChange={setShowSnooze}
             contactName={workflowContact.contactName}
-            onSnooze={async (until, reason) => {
-              try {
-                updateAssignment.mutate({
-                  id: workflowTask.id,
-                  teamContactId: workflowContact.teamContactId,
-                  status: 'completed',
-                });
-                toast.success('Kontakt odłożony');
-                setShowSnooze(false);
-                setWorkflowTask(null);
-                setWorkflowContact(null);
-              } catch { toast.error('Wystąpił błąd'); }
-            }}
+            onSnooze={() => { setShowSnooze(false); setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }}
           />
           <ConvertToClientDialog
             open={showConvert}
-            onOpenChange={setShowConvert}
+            onOpenChange={(open) => {
+              setShowConvert(open);
+              if (!open) { setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }
+            }}
             teamContactId={workflowContact.teamContactId}
             teamId={teamId}
             contactName={workflowContact.contactName}

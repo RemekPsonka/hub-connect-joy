@@ -26,6 +26,8 @@ export interface DealTeamAssignment {
   contact_company?: string | null;
   contact_category?: string | null;
   contact_offering_stage?: string | null;
+  contact_temperature?: string | null;
+  contact_client_status?: string | null;
   contact_id?: string | null;
 }
 
@@ -195,7 +197,7 @@ export function useMyTeamAssignments(teamId: string | undefined) {
 
       const { data: teamContacts } = await supabase
         .from('deal_team_contacts')
-        .select('id, contact_id, category, offering_stage')
+        .select('id, contact_id, category, offering_stage, temperature, client_status')
         .in('id', teamContactIds);
 
       const contactIds = [...new Set((teamContacts || []).map((tc: any) => tc.contact_id))];
@@ -208,7 +210,7 @@ export function useMyTeamAssignments(teamId: string | undefined) {
       const tcMap = new Map((teamContacts || []).map((tc: any) => [tc.id, tc]));
 
       return tasks.map((t: any) => {
-        const tc = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
+        const tc: any = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
         const contact = tc?.contact_id ? contactMap.get(tc.contact_id) : null;
         return {
           ...t,
@@ -216,6 +218,8 @@ export function useMyTeamAssignments(teamId: string | undefined) {
           contact_company: contact?.company || null,
           contact_category: tc?.category || null,
           contact_offering_stage: tc?.offering_stage || null,
+          contact_temperature: tc?.temperature || null,
+          contact_client_status: tc?.client_status || null,
           contact_id: tc?.contact_id || null,
         };
       }) as DealTeamAssignment[];

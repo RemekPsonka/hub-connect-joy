@@ -64,6 +64,29 @@ function SubtaskIndicator({ taskId }: { taskId: string }) {
 
 // ─── Props ────────────────────────────────────────
 
+// ─── Deal stage badge config ────────────────────────────────
+const STAGE_ICON: Record<string, string> = {
+  lead: '🔍', hot: '🔥', top: '⭐', cold: '❄️',
+  offering: '📄', audit: '🔎',
+  client: '🤝', lost: '❌', prospect: '🌱',
+};
+const STAGE_LABEL: Record<string, string> = {
+  lead: 'Lead', hot: 'HOT', top: 'TOP', cold: 'COLD',
+  offering: 'Ofertowanie', audit: 'Audyt',
+  client: 'Klient', lost: 'Utracony', prospect: 'Prospekt',
+};
+const SUB_LABEL: Record<string, string> = {
+  hot: '🔥 HOT', top: '⭐ TOP', cold: '❄️ COLD', '10x': '💎 10x',
+  // offering_stage values
+  handshake: 'Handshake', power_of_attorney: 'Pełnomocnictwo',
+  preparation: 'Przygotowanie', negotiation: 'Negocjacje',
+  accepted: 'Zaakceptowane', lost: 'Utracone',
+  meeting_plan: 'Plan spotkania', meeting_scheduled: 'Spotkanie umówione', meeting_done: 'Po spotkaniu',
+  audit_plan: 'Plan audytu', audit_scheduled: 'Audyt umówiony', audit_done: 'Po audycie',
+  // client_status values
+  standard: 'Standard', ambassador: 'Ambasador',
+};
+
 export interface UnifiedTaskRowProps {
   task: {
     id: string;
@@ -86,6 +109,7 @@ export interface UnifiedTaskRowProps {
   }>;
   contactName?: string;
   companyName?: string;
+  dealStageBadge?: { stage: string; subCategory?: string };
   onStatusChange: (taskId: string, newStatus: string) => void;
   onPriorityChange?: (taskId: string, newPriority: string) => void;
   onAssigneeChange?: (taskId: string, newAssigneeId: string) => void;
@@ -104,6 +128,7 @@ export function UnifiedTaskRow({
   members,
   contactName,
   companyName,
+  dealStageBadge,
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
@@ -243,6 +268,20 @@ export function UnifiedTaskRow({
       <div className={cn('flex items-center shrink-0', compact ? 'gap-1.5' : 'gap-2')}>
         {/* Subtasks */}
         {showSubtasks && <SubtaskIndicator taskId={task.id} />}
+
+        {/* Deal stage badge (between title and due date) */}
+        {dealStageBadge && (
+          <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal">
+            <span>{STAGE_ICON[dealStageBadge.stage] ?? '📋'}</span>
+            <span>{STAGE_LABEL[dealStageBadge.stage] ?? dealStageBadge.stage}</span>
+            {dealStageBadge.subCategory && (
+              <>
+                <span className="text-muted-foreground/60">·</span>
+                <span>{SUB_LABEL[dealStageBadge.subCategory] ?? dealStageBadge.subCategory}</span>
+              </>
+            )}
+          </Badge>
+        )}
 
         {/* Due date */}
         {getDueDateDisplay()}
