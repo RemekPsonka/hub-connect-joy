@@ -244,7 +244,7 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
           contactId={rollbackDialog.contact.id}
           contactName={rollbackDialog.contact.contact?.full_name ?? '—'}
           teamId={teamId}
-          fromStage={OFFERING_STAGE_LABELS[(rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage]}
+          fromStage={OFFERING_STAGE_LABELS[(rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage] ?? '—'}
           toCategory="offering"
           onSuccess={() => {
             const fromStage = (rollbackDialog.contact.offering_stage || 'handshake') as OfferingStage;
