@@ -81,7 +81,7 @@ export function useSaveTeamMeeting() {
     mutationFn: async ({ teamId, notes, snapshot }: SaveMeetingArgs) => {
       const { data, error } = await supabase.rpc('create_team_meeting', {
         p_team_id: teamId,
-        p_notes: notes || null,
+        p_notes: notes || undefined,
         p_snapshot: snapshot as unknown as never,
       });
       if (error) throw error;
