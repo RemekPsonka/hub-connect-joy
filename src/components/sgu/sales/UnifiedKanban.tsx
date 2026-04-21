@@ -132,7 +132,7 @@ function DraggableCard({
     : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="min-w-0">
       <UnifiedKanbanCard
         contact={contact}
         stage={stage}
@@ -244,7 +244,7 @@ function DroppableColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        'bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-320px)] transition-colors',
+        'bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-320px)] min-w-0 transition-colors',
         col.borderClass,
         isOver && 'ring-2 ring-primary/50 bg-primary/5',
       )}
