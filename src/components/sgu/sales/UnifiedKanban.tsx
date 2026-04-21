@@ -9,10 +9,13 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Toggle } from '@/components/ui/toggle';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,10 +26,20 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
-import { ArrowUpDown, Filter, Search, X } from 'lucide-react';
+import { AlertCircle, ArrowUpDown, Filter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { useCurrentDirector } from '@/hooks/useDirectors';
+import {
+  useLastTeamMeeting,
+  useMeetingProgress,
+  useSaveTeamMeeting,
+  useTeamMeetingStreak,
+  useOpenTasksSnapshot,
+} from '@/hooks/useTeamMeetings';
+import { MeetingProgressBar } from './MeetingProgressBar';
+import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
