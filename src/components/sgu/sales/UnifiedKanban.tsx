@@ -630,6 +630,11 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <SnoozedContactsBar
+          snoozedContacts={snoozedActive}
+          teamId={teamId}
+          onContactClick={(c) => setSheetContact(c)}
+        />
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
             <DroppableColumn
