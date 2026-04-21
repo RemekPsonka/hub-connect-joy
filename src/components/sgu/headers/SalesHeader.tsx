@@ -1,24 +1,24 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, Flame, Briefcase, CalendarCheck, AlertTriangle } from 'lucide-react';
+import { Users, Flame, Briefcase, Moon } from 'lucide-react';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
-import { useSGUTasks } from '@/hooks/useSGUTasks';
 import { cn } from '@/lib/utils';
 import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
 
 interface SalesHeaderProps {
   teamId: string;
-  onCardClick?: (key: 'prospect' | 'lead' | 'offering' | 'today' | 'overdue') => void;
-  activeKey?: 'prospect' | 'lead' | 'offering' | 'today' | 'overdue' | null;
+  onCardClick?: (key: 'prospect' | 'lead' | 'offering' | 'snoozed') => void;
+  activeKey?: 'prospect' | 'lead' | 'offering' | 'snoozed' | null;
 }
 
 export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps) {
   const { data: contacts = [] } = useTeamContacts(teamId);
-  const { data: today = [] } = useSGUTasks('today');
-  const { data: overdue = [] } = useSGUTasks('overdue');
 
   const nowIso = new Date().toISOString();
   const visibleContacts = contacts.filter(
     (c) => !c.is_lost && (!c.snoozed_until || c.snoozed_until < nowIso),
+  );
+  const snoozedContacts = contacts.filter(
+    (c) => !c.is_lost && c.snoozed_until && c.snoozed_until >= nowIso,
   );
 
   const tempBreakdown = (stage: 'prospect' | 'lead' | 'offering') => {
@@ -40,35 +40,31 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
     prospect: prospectStats.total,
     lead: leadStats.total,
     offering: offeringStats.total,
-    today: today.length,
-    overdue: overdue.length,
+    snoozed: snoozedContacts.length,
   };
 
   const breakdownByKey: Record<string, ReturnType<typeof tempBreakdown> | null> = {
     prospect: prospectStats,
     lead: leadStats,
     offering: offeringStats,
-    today: null,
-    overdue: null,
+    snoozed: null,
   };
 
   const items = [
     { key: 'prospect', label: 'Prospekci', value: counts.prospect, icon: Users, tone: 'text-sky-600' },
     { key: 'lead', label: 'Leady', value: counts.lead, icon: Flame, tone: 'text-amber-600' },
     { key: 'offering', label: 'Ofertowanie', value: counts.offering, icon: Briefcase, tone: 'text-violet-600' },
-    { key: 'today', label: 'Dziś', value: counts.today, icon: CalendarCheck, tone: 'text-emerald-600' },
-    { key: 'overdue', label: 'Zaległe', value: counts.overdue, icon: AlertTriangle, tone: counts.overdue > 0 ? 'text-destructive' : 'text-muted-foreground' },
+    { key: 'snoozed', label: 'Odłożone', value: counts.snoozed, icon: Moon, tone: 'text-indigo-600' },
   ] as const;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {items.map((it) => (
         <Card
           key={it.key}
           onClick={() => onCardClick?.(it.key)}
           className={cn(
             'cursor-pointer transition-shadow hover:shadow-md',
-            it.key === 'overdue' && counts.overdue > 0 && 'border-destructive/50',
             activeKey === it.key && 'ring-2 ring-primary',
           )}
         >
