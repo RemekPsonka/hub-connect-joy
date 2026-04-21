@@ -43,7 +43,7 @@ import {
 
 interface UnifiedKanbanProps {
   teamId: string;
-  filter?: 'prospect' | 'lead' | 'offering' | null;
+  filter?: 'prospect' | 'lead' | 'offering' | 'client' | null;
   openSnoozedSignal?: number;
 }
 
