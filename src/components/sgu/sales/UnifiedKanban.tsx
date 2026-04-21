@@ -111,6 +111,41 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
   },
 };
 
+type SortKey = 'name_asc' | 'name_desc' | 'value_desc' | 'recent';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  name_asc: 'Nazwa A→Z',
+  name_desc: 'Nazwa Z→A',
+  value_desc: 'Wartość ↓',
+  recent: 'Najnowsze',
+};
+
+const NONE_KEY = '__none__';
+
+function sortContacts(list: DealTeamContact[], sort: SortKey): DealTeamContact[] {
+  const arr = [...list];
+  switch (sort) {
+    case 'name_asc':
+      return arr.sort((a, b) =>
+        (a.contact?.full_name ?? '').localeCompare(b.contact?.full_name ?? '', 'pl'),
+      );
+    case 'name_desc':
+      return arr.sort((a, b) =>
+        (b.contact?.full_name ?? '').localeCompare(a.contact?.full_name ?? '', 'pl'),
+      );
+    case 'value_desc':
+      return arr.sort(
+        (a, b) => (b.expected_annual_premium_gr ?? 0) - (a.expected_annual_premium_gr ?? 0),
+      );
+    case 'recent':
+      return arr.sort((a, b) => {
+        const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return tb - ta;
+      });
+  }
+}
+
 function DraggableCard({
   contact,
   stage,
