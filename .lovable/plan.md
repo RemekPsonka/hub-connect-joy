@@ -1,72 +1,126 @@
+# Część A — Recon report (read-only): root cause „Odłóż" zlokalizowany
 
+Data: 2026-04-21. Źródło: live DB query (Supabase).
 
-# B-FIX.5-overflow v2 — ScrollArea swap, defensywny truncate na bannerach, hotfix `pending`
+## 🔴 ROOT CAUSE — POTWIERDZONY
 
-## Diagnoza
+**Tabela `public.deal_team_activity_log` NIE ISTNIEJE w bazie**, a trigger `log_deal_category_change` na `deal_team_contacts` próbuje do niej `INSERT` przy każdej zmianie `category`. Każdy UPDATE zmieniający kategorię (np. `'audit' → '10x'` przy snooze) **rolluje się** z błędem `relation "public.deal_team_activity_log" does not exist`.
 
-Trzy niezależne rzeczy w jednym sprincie:
+To wyjaśnia 100% objawów:
+- Bogdan Pietrzak: `category=audit, snoozed_until=NULL, updated_at=2026-04-20 18:11:09` (sprzed dnia kliku „Odłóż").
+- Każdy klik „Odłóż" → mutacja → Postgres rzuca błąd → React Query `onError` → toast „Błąd aktualizacji…".
+- Wszystkie inne UPDATE na `deal_team_contacts` które NIE zmieniają `category` (np. „Wyślij ofertę" gdy contact już ma `category='offering'`, „Zadzwoń" bez update, „Spotkanie umówione" gdy kategoria bez zmian) — przechodzą OK.
 
-1. **Kolumny kanbana nadal rosną poziomo** — Radix `ScrollArea` Viewport dodaje wewnętrznie `display:table; min-width:100%`, co omija `min-w-0` rodzica i pozwala dziecku z długim tekstem rozpychać kolumnę. Naprawione tylko częściowo w B-FIX.5-overflow (poprzedni sprint zamienił `<ScrollArea>` na `<div>`, ale wg user-briefu trzeba zweryfikować ostateczny render w `DroppableColumn` i finalnie usunąć import).
-2. **Buttony mini-bannera** mogą nie obcinać tekstu w kontekście flex/grid bez `min-w-0` na buttonie + `<span class="block truncate">` na tekście (poprzedni sprint to wprowadził, ale brief v2 chce potwierdzić wszystkie 3 buttony pod jeden wzorzec).
-3. **Hotfix dla `useActiveTaskContacts`** — w repo współistnieją dwie konwencje statusu zadania: `'todo'` (w `useTasks`, `ContactTasksSheet`) i `'pending'` (w `AddClientTaskDialog`, `ClientRenewalsTab`, `ClientComplexityPanel`, `useSovraDebrief`). Hook filtruje tylko `['todo','in_progress','completed']`, więc kontakty z zadaniami dodanymi z dialogów `pending` nie pokazują:
-   - `TaskStatusPill` (bo brak rekordów),
-   - bannera overdue,
-   - awatarów assignee z zadań,
-   - banneru next-task.
+## 1. Trigger `log_deal_category_change`
 
-To wyjaśnia, czemu Lead/Klient po B-FIX.16 nadal wyglądają jak „puste" mimo dodanych zadań z UI.
+```sql
+CREATE OR REPLACE FUNCTION public.log_deal_category_change()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF OLD.category IS DISTINCT FROM NEW.category THEN
+    INSERT INTO public.deal_team_activity_log
+      (team_id, tenant_id, team_contact_id, actor_id, action, old_value, new_value)
+    VALUES
+      (NEW.team_id, NEW.tenant_id, NEW.id,
+       get_current_director_id(), 'category_changed',
+       jsonb_build_object('category', OLD.category),
+       jsonb_build_object('category', NEW.category));
+    NEW.category_changed_at = now();
+  END IF;
+  RETURN NEW;
+END;
+$function$
+```
 
-## Rozwiązanie
+**Tabela docelowa:**
+```sql
+SELECT column_name, data_type, is_nullable FROM information_schema.columns
+WHERE table_schema='public' AND table_name='deal_team_activity_log';
+-- → 0 wierszy. Tabela nie istnieje.
+```
 
-### 1. `UnifiedKanban.tsx` — finalnie wyrwać `ScrollArea`
-Plik: `src/components/sgu/sales/UnifiedKanban.tsx`
+`get_current_director_id()` jest poprawna i dla Remka zwraca `98a271e8-d923-49cb-a6aa-45f3ac0064d8`:
+```sql
+SELECT id FROM public.directors WHERE user_id = auth.uid() LIMIT 1
+```
+Remek istnieje: `Remigiusz Psonka` / `remek@ideecom.pl` / director_id `98a271e8-...`.
 
-- Zweryfikować, że `<ScrollArea>` nie jest już używany w `DroppableColumn` (po B-FIX.5-overflow powinien być natywny `<div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">`).
-- Jeśli jeszcze gdziekolwiek pozostał `ScrollArea` — wymienić na ten sam wzorzec.
-- Usunąć import `import { ScrollArea } from '@/components/ui/scroll-area';` jeśli nieużywany w pliku.
+→ Problem **NIE** jest w `actor_id NULL`. Problem to brakująca tabela.
 
-### 2. `UnifiedKanbanCard.tsx` — ujednolicić 3 buttony mini-bannera
-Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+## 2. CHECK na `deal_team_contacts.offering_stage`
 
-Dla każdego z trzech buttonów (overdue / next / placeholder):
-- W `className` buttona: usunąć ewentualne `truncate`, zapewnić `w-full min-w-0 block overflow-hidden`.
-- Treść tekstową opakować w `<span className="block truncate">…</span>`.
-- Zachować dynamiczny `cn(...)` z kolorami (amber/emerald) dla wariantu `nextTask`.
-- Placeholder „+ Zaplanuj następne zadanie" — dla spójności także tekst w `<span class="block truncate">`.
+```sql
+CHECK (offering_stage IS NULL OR offering_stage = ANY (ARRAY[
+  'decision_meeting','handshake','power_of_attorney','audit',
+  'offer_sent','negotiation','won','lost'
+]))
+```
 
-(W bieżącym pliku po B-FIX.5-overflow wzorzec już jest zastosowany — krok służy weryfikacji i ewentualnym poprawkom, jeśli któryś button odbiega.)
+**Diff TS vs DB vs hook:**
 
-### 3. `useActiveTaskContacts.ts` — uznać `pending` za otwarte zadanie
-Plik: `src/hooks/useActiveTaskContacts.ts`
+| Wartość | TS `OfferingStage` | DB CHECK | Hook `defaultSubStages` |
+|---|---|---|---|
+| `decision_meeting` | ✅ | ✅ | — |
+| `handshake` | ✅ | ✅ | offering→ |
+| `power_of_attorney` | ✅ | ✅ | — |
+| `audit` | ✅ | ✅ | — |
+| `offer_sent` | ✅ | ✅ | — |
+| `negotiation` | ✅ | ✅ | — |
+| `won` | ✅ | ✅ | — |
+| `lost` | ✅ | ✅ | — |
+| `preparation`, `accepted` | ✅ legacy | ❌ | — |
+| `audit_plan` | ✅ legacy | ❌ | **audit→** ⚠️ |
+| `audit_scheduled`, `audit_done` | ✅ legacy | ❌ | — |
+| `meeting_plan` | ✅ legacy | ❌ | **hot→, top→** ⚠️ |
+| `meeting_scheduled`, `meeting_done` | ✅ legacy | ❌ | — |
 
-- Linia ~54 (`select(...).in('status', [...])`):
-  ```ts
-  .in('status', ['todo', 'pending', 'in_progress', 'completed'])
-  ```
-- Linia ~95 (`isOpen`):
-  ```ts
-  const isOpen = t.status === 'todo' || t.status === 'pending' || t.status === 'in_progress';
-  ```
+**Bomby zegarowe** (`useDealsTeamContacts.ts:296-304`):
+- `category:'audit'` bez jawnego `offeringStage` → hook ustawia `'audit_plan'` → CHECK violation → UPDATE rollback.
+- `category:'hot'` lub `'top'` → hook ustawia `'meeting_plan'` → CHECK violation → UPDATE rollback.
+- `category:'10x'` → brak w `defaultSubStages` → `offering_stage` zostaje (`handshake`) → OK ze strony CHECK, ale i tak rolluje się przez brakującą tabelę z punktu 1.
 
-Reszta logiki (overdue / today / active / done, klasyfikacja typu, agregacja po kontakcie) pozostaje bez zmian — nowy status wpada do tej samej gałęzi `isOpen`, więc liczniki i bannery zaczną działać dla zadań `pending`.
+## 3. Stan rekordu Bogdana
 
-## Pliki
+```sql
+SELECT dtc.id, c.full_name, dtc.category, dtc.offering_stage, dtc.snoozed_until,
+       dtc.snooze_reason, dtc.snoozed_from_category, dtc.updated_at, dtc.category_changed_at
+FROM deal_team_contacts dtc JOIN contacts c ON c.id=dtc.contact_id
+WHERE c.full_name ILIKE '%Bogdan%Pietrzak%';
+```
+| pole | wartość |
+|---|---|
+| id | `ff95fb46-90a4-4097-a964-14dd7fdd193b` |
+| category | `audit` |
+| offering_stage | `handshake` |
+| snoozed_until | **NULL** |
+| snooze_reason | NULL |
+| snoozed_from_category | NULL |
+| updated_at | 2026-04-20 18:11:09 (wczoraj) |
+| category_changed_at | 2026-02-14 09:26:38 |
 
-| # | Plik | Akcja |
-|---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — potwierdzić brak `<ScrollArea>` w `DroppableColumn`; usunąć nieużywany import |
-| 2 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — ujednolicić 3 buttony mini-bannera (`min-w-0 block overflow-hidden` + `<span class="block truncate">`) |
-| 3 | `src/hooks/useActiveTaskContacts.ts` | EDIT — dodać `'pending'` do filtru zapytania i do warunku `isOpen` |
+→ Ani jeden klik „Odłóż" z 2026-04-21 nie dotarł do bazy.
 
-## DoD
+## DoD Część A
 
 | Check | Stan |
 |---|---|
-| Żadna kolumna w `/sgu/sprzedaz` nie wystaje poziomo poza grid przy długich tytułach zadań | ✅ |
-| Brak importu `ScrollArea` w `UnifiedKanban.tsx` | ✅ |
-| 3 buttony mini-bannera obcinają tekst elipsą w granicach kolumny | ✅ |
-| Karty kontaktów z zadaniami `pending` (dodanymi z `AddClientTaskDialog`, `ClientRenewalsTab`, `ClientComplexityPanel`, `useSovraDebrief`) pokazują `TaskStatusPill`, awatary assignees, banner overdue/next | ✅ |
-| Karty z zadaniami `todo`/`in_progress` działają jak dotąd (brak regresji) | ✅ |
-| Pionowy scroll i DnD między kolumnami nadal działają | ✅ |
-| `npx tsc --noEmit` exit 0 | ✅ |
+| Pełna definicja `log_deal_category_change` | ✅ |
+| Lista kolumn `deal_team_activity_log` | ✅ tabela nie istnieje (0 wierszy) |
+| Definicja `get_current_director_id()` + sprawdzenie dla Remka | ✅ zwraca director_id, NIE NULL |
+| Pełny CHECK na `offering_stage` z listą wartości | ✅ 8 wartości, brak `*_plan/scheduled/done`, `preparation`, `accepted` |
+| Diff TS vs hook vs DB | ✅ tabela powyżej |
+| Stan rekordu Bogdana | ✅ snoozed_until NULL, updated_at sprzed kliku |
+| Zero edycji kodu/DB | ✅ |
+
+## Część B (do osobnego sprintu — propozycja po wynikach A)
+
+**B.1 (priorytet 0 — odblokowuje „Odłóż" i każdą zmianę kategorii):**
+Migracja tworząca tabelę `public.deal_team_activity_log` z kolumnami z INSERT triggera (`team_id, tenant_id, team_contact_id, actor_id, action, old_value, new_value, created_at`), `actor_id` **nullable** (bo `get_current_director_id()` ze service_role/cron może być NULL), RLS read-only dla członków zespołu, FK na `deal_teams/tenants/deal_team_contacts` z `ON DELETE CASCADE`. Z rollbackiem (DROP TABLE).
+
+**B.2 (priorytet 1 — usuwa bomby zegarowe na `audit/hot/top`):**
+Edytować `useDealsTeamContacts.ts:296-304` — usunąć `audit:'audit_plan'`, `hot:'meeting_plan'`, `top:'meeting_plan'` z `defaultSubStages`. Zostawić tylko `offering:'handshake'` (jedyne legalne). UI dialogi które chcą ustawić `audit` powinny same przekazać legalne `offeringStage` (`'audit'` z nowej listy 8, nie legacy `audit_plan`).
+
+**B.3 (opcjonalnie, niski priorytet):**
+Wyczyścić legacy z `OfferingStage` w `src/types/dealTeam.ts` (linie 42-50) po sweep'ie kodu. Osobny ADR.
 
