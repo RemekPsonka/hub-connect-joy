@@ -6,7 +6,7 @@ import { SalesHeader } from '@/components/sgu/headers/SalesHeader';
 import { UnifiedKanban } from '@/components/sgu/sales/UnifiedKanban';
 import { AddLeadDialog } from '@/components/sgu/AddLeadDialog';
 
-type SalesFilter = 'prospect' | 'lead' | 'offering' | 'snoozed';
+type SalesFilter = 'prospect' | 'lead' | 'offering' | 'client' | 'snoozed';
 
 export default function SGUPipelineRoute() {
   const { sguTeamId, isLoading } = useSGUTeamId();
