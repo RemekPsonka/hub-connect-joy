@@ -3911,6 +3911,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "deal_team_contacts_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "deal_team_contacts_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false

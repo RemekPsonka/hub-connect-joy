@@ -76,11 +76,27 @@ export function useTeamContacts(
 
       // Mapuj kontakty do deal contacts
       const contactMap = new Map(contacts?.map(c => [c.id, c]) || []);
-      
+
+      // Pobierz opiekunów (directors) po assigned_to
+      const directorIds = [
+        ...new Set(dealContacts.map(dc => dc.assigned_to).filter((v): v is string => !!v)),
+      ];
+      const directorMap = new Map<string, { id: string; full_name: string }>();
+      if (directorIds.length > 0) {
+        const { data: directors } = await supabase
+          .from('directors')
+          .select('id, full_name')
+          .in('id', directorIds);
+        for (const d of directors || []) {
+          directorMap.set(d.id, { id: d.id, full_name: d.full_name });
+        }
+      }
+
       return dealContacts
         .map(dc => ({
           ...dc,
           contact: contactMap.get(dc.contact_id),
+          assigned_director: dc.assigned_to ? directorMap.get(dc.assigned_to) ?? null : null,
         }))
         .filter(dc => dc.contact !== undefined) as DealTeamContact[];
     },
@@ -127,9 +143,21 @@ export function useTeamContact(contactId: string | undefined) {
         }
       }
 
+      // Pobierz opiekuna (director) po assigned_to
+      let assignedDirector: { id: string; full_name: string } | null = null;
+      if (dealContact.assigned_to) {
+        const { data: dir } = await supabase
+          .from('directors')
+          .select('id, full_name')
+          .eq('id', dealContact.assigned_to)
+          .maybeSingle();
+        if (dir) assignedDirector = { id: dir.id, full_name: dir.full_name };
+      }
+
       return {
         ...dealContact,
         contact: contact || undefined,
+        assigned_director: assignedDirector,
       } as DealTeamContact;
     },
     enabled: !!contactId,
