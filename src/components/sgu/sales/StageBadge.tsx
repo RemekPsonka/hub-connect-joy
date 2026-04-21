@@ -101,9 +101,9 @@ export function StageBadge({ stage, value, mode = 'compact', onChange, onWonClic
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium hover:opacity-80',
+            'inline-flex items-center rounded-md border px-1.5 py-0 h-5 text-[10px] font-medium hover:opacity-80 shrink-0 whitespace-nowrap',
             cls,
-            mode === 'full' && 'text-xs px-2.5 py-1',
+            mode === 'full' && 'text-xs px-2.5 py-1 h-auto',
           )}
         >
           {label}

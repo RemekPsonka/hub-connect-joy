@@ -42,12 +42,12 @@ export function EditableSubcategoryBadge({
           type="button"
           aria-label={ariaLabel}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex"
+          className="inline-flex shrink-0 max-w-full"
         >
           <Badge
             variant="outline"
             className={cn(
-              'text-[10px] px-1.5 py-0 gap-0.5 cursor-pointer hover:opacity-80 transition-opacity',
+              'text-[10px] px-1.5 py-0 h-5 gap-0.5 cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap',
               triggerClassName,
             )}
           >

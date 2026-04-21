@@ -44,7 +44,7 @@ export function TaskStatusPill({ info, onClick }: Props) {
             onClick={(e) => { handle(e); onClick(); }}
             onPointerDown={handle}
             className={cn(
-              'inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[10px] font-medium',
+              'inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[10px] font-medium shrink-0 whitespace-nowrap',
               STATUS_CLS.none,
               'hover:bg-muted/80 transition',
             )}
@@ -77,7 +77,7 @@ export function TaskStatusPill({ info, onClick }: Props) {
                 onClick={(e) => { handle(e); onClick(); }}
                 onPointerDown={handle}
                 className={cn(
-                  'inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[10px] font-semibold',
+                  'inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[10px] font-semibold shrink-0 whitespace-nowrap',
                   STATUS_CLS[tt.status],
                   'transition',
                 )}
