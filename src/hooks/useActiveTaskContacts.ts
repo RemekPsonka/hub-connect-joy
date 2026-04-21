@@ -116,9 +116,29 @@ export function useActiveTaskContacts(teamId: string | undefined) {
             info.todayCount++;
             tt.today++;
             tt.open++;
+            if (!info.nextTask || info.nextTask.status === 'active') {
+              info.nextTask = {
+                title: (t as any).title || 'Zadanie',
+                due_date: t.due_date,
+                status: 'today',
+              };
+            }
           } else {
             info.activeCount++;
             tt.open++;
+            if (!info.nextTask) {
+              info.nextTask = {
+                title: (t as any).title || 'Zadanie',
+                due_date: t.due_date ?? null,
+                status: 'active',
+              };
+            } else if (info.nextTask.status === 'active' && t.due_date && info.nextTask.due_date && t.due_date < info.nextTask.due_date) {
+              info.nextTask = {
+                title: (t as any).title || 'Zadanie',
+                due_date: t.due_date,
+                status: 'active',
+              };
+            }
           }
         }
 
