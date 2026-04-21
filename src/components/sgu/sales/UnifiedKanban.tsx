@@ -272,17 +272,18 @@ function DroppableColumn({
   );
 
   let body: JSX.Element;
-  if (contacts.length === 0) {
+  if (sorted.length === 0) {
     body = (
       <div className="flex items-center justify-center h-full min-h-[200px] text-center p-4">
-        <p className="text-sm text-muted-foreground">Brak kontaktów</p>
+        <p className="text-sm text-muted-foreground">
+          {contacts.length === 0 ? 'Brak kontaktów' : 'Brak wyników dla filtra'}
+        </p>
       </div>
     );
   } else if (groupBy) {
-    const cfg = SUBGROUP_CONFIG[col.stage];
     const groups: Record<string, DealTeamContact[]> = {};
-    for (const c of contacts) {
-      const k = cfg.getter(c) ?? '__none__';
+    for (const c of sorted) {
+      const k = cfg.getter(c) ?? NONE_KEY;
       (groups[k] ??= []).push(c);
     }
     const sortedKeys = Object.keys(groups).sort((a, b) => {
@@ -305,7 +306,7 @@ function DroppableColumn({
       </div>
     );
   } else {
-    body = <div className="space-y-2">{contacts.map(renderCard)}</div>;
+    body = <div className="space-y-2">{sorted.map(renderCard)}</div>;
   }
 
   return (
