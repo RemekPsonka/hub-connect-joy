@@ -21,7 +21,7 @@ export function ComplexityChips({ complexity }: ComplexityChipsProps) {
       {active.map((a) => (
         <span
           key={a.key}
-          className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+          className="inline-flex items-center gap-0.5 text-[10px] h-5 px-1.5 rounded bg-muted text-muted-foreground whitespace-nowrap shrink-0"
         >
           <span>{a.icon}</span>
           <span>{a.label}</span>
