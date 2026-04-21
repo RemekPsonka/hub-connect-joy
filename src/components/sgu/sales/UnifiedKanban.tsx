@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +23,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
-import { ArrowUpDown, Filter } from 'lucide-react';
+import { ArrowUpDown, Filter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
@@ -437,6 +438,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
     prospect: 'recent',
     lead: 'recent',
@@ -470,12 +472,29 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
 
   const visible = useMemo(() => {
     const nowIso = new Date().toISOString();
-    return contacts.filter(
+    const baseList = contacts.filter(
       (c) =>
         !c.is_lost &&
         (!c.snoozed_until || c.snoozed_until < nowIso),
     );
-  }, [contacts]);
+    const q = search.trim().toLowerCase();
+    if (!q) return baseList;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return baseList.filter((c) => {
+      const haystack = [
+        c.contact?.full_name,
+        c.contact?.company,
+        c.contact?.position,
+        c.contact?.email,
+        c.contact?.phone,
+        c.notes,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
+  }, [contacts, search]);
 
   const grouped = useMemo(() => {
     const map: Record<DealStage, DealTeamContact[]> = {
@@ -566,14 +585,42 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
 
   return (
     <>
-      <div className="flex items-center justify-end">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-          <Checkbox
-            checked={groupBySubcategory}
-            onCheckedChange={(v) => setGroupBySubcategory(v === true)}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Szukaj: nazwisko, firma, stanowisko, email…"
+            className="h-8 pl-8 pr-8 text-sm"
+            aria-label="Szukaj w lejkach"
           />
-          Grupuj wg sub-kategorii
-        </label>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Wyczyść wyszukiwanie"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded-sm text-muted-foreground hover:bg-accent"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {search.trim() && (
+            <span className="text-xs text-muted-foreground">
+              Znaleziono: {visible.length}
+            </span>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <Checkbox
+              checked={groupBySubcategory}
+              onCheckedChange={(v) => setGroupBySubcategory(v === true)}
+            />
+            Grupuj wg sub-kategorii
+          </label>
+        </div>
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
