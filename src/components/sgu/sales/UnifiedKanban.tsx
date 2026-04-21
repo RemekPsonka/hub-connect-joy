@@ -438,6 +438,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
     prospect: 'recent',
     lead: 'recent',
