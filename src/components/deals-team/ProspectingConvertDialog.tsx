@@ -258,14 +258,14 @@ export function ProspectingConvertDialog({
             team_id: effectiveTeamId,
             contact_id: contactId,
             tenant_id: tenantId,
-            category,
+            // NULL category → generated deal_stage = 'prospect'
+            // (chyba że konwertujemy bezpośrednio do klienta — wtedy zostawiamy 'client')
+            category: category === 'client' ? 'client' : null,
             priority: 'medium',
             status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
             ai_brief_generated_at: prospect.ai_brief_generated_at || null,
-            // Map prospecting source → deal_stage + prospect_source
-            // so CC-meeting prospects show up in the Prospekt column with CC badge.
-            deal_stage: category === 'client' ? 'client' : 'prospect',
+            // Mapuj źródło prospektingu → prospect_source (badge CC w kafelku Prospekci).
             prospect_source:
               category === 'client'
                 ? null
