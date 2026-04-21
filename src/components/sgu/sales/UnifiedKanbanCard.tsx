@@ -148,11 +148,13 @@ export function UnifiedKanbanCard({
           type="button"
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="w-full text-left text-[10px] px-2 py-0.5 rounded-sm bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition truncate"
+          className="w-full min-w-0 block text-left text-[10px] px-2 py-0.5 rounded-sm bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition overflow-hidden"
         >
-          {taskInfo.oldestOverdue.days_ago === 0
-            ? `Dziś: ${taskInfo.oldestOverdue.title}`
-            : `${taskInfo.oldestOverdue.days_ago} dni temu: ${taskInfo.oldestOverdue.title}`}
+          <span className="block truncate">
+            {taskInfo.oldestOverdue.days_ago === 0
+              ? `Dziś: ${taskInfo.oldestOverdue.title}`
+              : `${taskInfo.oldestOverdue.days_ago} dni temu: ${taskInfo.oldestOverdue.title}`}
+          </span>
         </button>
       ) : taskInfo?.nextTask ? (
         <button
@@ -160,26 +162,28 @@ export function UnifiedKanbanCard({
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
-            'w-full text-left text-[10px] px-2 py-0.5 rounded-sm border transition truncate',
+            'w-full min-w-0 block text-left text-[10px] px-2 py-0.5 rounded-sm border transition overflow-hidden',
             taskInfo.nextTask.status === 'today'
               ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/15'
               : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15',
           )}
         >
-          {taskInfo.nextTask.status === 'today'
-            ? `Dziś: ${taskInfo.nextTask.title}`
-            : taskInfo.nextTask.due_date
-              ? `${taskInfo.nextTask.due_date}: ${taskInfo.nextTask.title}`
-              : taskInfo.nextTask.title}
+          <span className="block truncate">
+            {taskInfo.nextTask.status === 'today'
+              ? `Dziś: ${taskInfo.nextTask.title}`
+              : taskInfo.nextTask.due_date
+                ? `${taskInfo.nextTask.due_date}: ${taskInfo.nextTask.title}`
+                : taskInfo.nextTask.title}
+          </span>
         </button>
       ) : (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="w-full text-left text-[10px] px-2 py-0.5 rounded-sm border border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50 transition truncate"
+          className="w-full min-w-0 block text-left text-[10px] px-2 py-0.5 rounded-sm border border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50 transition overflow-hidden"
         >
-          + Zaplanuj następne zadanie
+          <span className="block truncate">+ Zaplanuj następne zadanie</span>
         </button>
       )}
 
