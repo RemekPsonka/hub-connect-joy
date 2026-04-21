@@ -103,6 +103,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           commissionPrevMonthGr: 0,
           ambassadorsCount: 0,
           complexClientsCount: 0,
+          expectedPortfolioGr: 0,
         },
       };
       if (!teamId) return empty;
