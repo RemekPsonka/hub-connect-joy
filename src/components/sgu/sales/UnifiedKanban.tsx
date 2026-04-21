@@ -244,6 +244,7 @@ function DroppableColumn({
   onSubcategoryChange,
   onMoreClick,
   taskInfoMap,
+  columnProgress,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -261,6 +262,7 @@ function DroppableColumn({
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: (c: DealTeamContact) => void;
   taskInfoMap?: Map<string, TaskContactInfo>;
+  columnProgress?: { total: number; done: number };
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
