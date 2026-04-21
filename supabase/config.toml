@@ -29,3 +29,7 @@ verify_jwt = false
 # Sprint 14: cron-triggered sync (validates service_role bearer in code)
 [functions.gcal-sync-events]
 verify_jwt = false
+
+# B-FIX.5-snooze-ux: cron-triggered (validates service_role bearer in code)
+[functions.return-snoozed-contacts]
+verify_jwt = false

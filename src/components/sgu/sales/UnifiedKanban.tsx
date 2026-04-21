@@ -31,6 +31,7 @@ import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
@@ -470,17 +471,21 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const visible = useMemo(() => {
+  const { visible, snoozedActive } = useMemo(() => {
     const nowIso = new Date().toISOString();
+    // Aktualnie odłożone (przyszłość lub dziś — czekają na crona auto-powrotu)
+    const snoozed = contacts.filter(
+      (c) => !c.is_lost && c.snoozed_until && c.snoozed_until >= nowIso,
+    );
     const baseList = contacts.filter(
       (c) =>
         !c.is_lost &&
         (!c.snoozed_until || c.snoozed_until < nowIso),
     );
     const q = search.trim().toLowerCase();
-    if (!q) return baseList;
+    if (!q) return { visible: baseList, snoozedActive: snoozed };
     const tokens = q.split(/\s+/).filter(Boolean);
-    return baseList.filter((c) => {
+    const filtered = baseList.filter((c) => {
       const haystack = [
         c.contact?.full_name,
         c.contact?.company,
@@ -494,6 +499,7 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
         .toLowerCase();
       return tokens.every((t) => haystack.includes(t));
     });
+    return { visible: filtered, snoozedActive: snoozed };
   }, [contacts, search]);
 
   const grouped = useMemo(() => {
@@ -624,6 +630,11 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <SnoozedContactsBar
+          snoozedContacts={snoozedActive}
+          teamId={teamId}
+          onContactClick={(c) => setSheetContact(c)}
+        />
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
             <DroppableColumn
