@@ -9,10 +9,13 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Toggle } from '@/components/ui/toggle';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,10 +26,20 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
-import { ArrowUpDown, Filter, Search, X } from 'lucide-react';
+import { AlertCircle, ArrowUpDown, Filter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { useCurrentDirector } from '@/hooks/useDirectors';
+import {
+  useLastTeamMeeting,
+  useMeetingProgress,
+  useSaveTeamMeeting,
+  useTeamMeetingStreak,
+  useOpenTasksSnapshot,
+} from '@/hooks/useTeamMeetings';
+import { MeetingProgressBar } from './MeetingProgressBar';
+import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
@@ -231,6 +244,7 @@ function DroppableColumn({
   onSubcategoryChange,
   onMoreClick,
   taskInfoMap,
+  columnProgress,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -248,6 +262,7 @@ function DroppableColumn({
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: (c: DealTeamContact) => void;
   taskInfoMap?: Map<string, TaskContactInfo>;
+  columnProgress?: { total: number; done: number };
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
@@ -448,6 +463,25 @@ function DroppableColumn({
             </DropdownMenu>
           </div>
         </div>
+        {columnProgress && columnProgress.total > 0 && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Od odprawy</span>
+              <span>
+                {columnProgress.done}/{columnProgress.total}
+              </span>
+            </div>
+            <Progress
+              value={Math.round((columnProgress.done / columnProgress.total) * 100)}
+              className={cn(
+                'h-1',
+                columnProgress.done === columnProgress.total
+                  ? '[&>div]:bg-emerald-500'
+                  : '[&>div]:bg-amber-500',
+              )}
+            />
+          </div>
+        )}
       </div>
       <div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
         <div className="min-w-0">{body}</div>
@@ -469,6 +503,15 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   }, [openSnoozedSignal]);
   const { data: taskInfoMap } = useActiveTaskContacts(teamId);
+  const { data: currentDirector } = useCurrentDirector();
+  const { data: lastMeeting } = useLastTeamMeeting(teamId);
+  const { data: meetingProgress } = useMeetingProgress(lastMeeting?.id);
+  const { data: streak = 0 } = useTeamMeetingStreak(teamId);
+  const { data: openTasks = [] } = useOpenTasksSnapshot(teamId);
+  const saveMeeting = useSaveTeamMeeting();
+  const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+  const [myOverdueOnly, setMyOverdueOnly] = useState(false);
+  const prevOverdueCountRef = useRef<number>(0);
 
   const [convertContact, setConvertContact] = useState<DealTeamContact | null>(null);
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
@@ -519,9 +562,10 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         (!c.snoozed_until || c.snoozed_until < nowIso),
     );
     const q = search.trim().toLowerCase();
-    if (!q) return { visible: baseList, snoozedActive: snoozed };
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const filtered = baseList.filter((c) => {
+    let filtered = baseList;
+    if (q) {
+      const tokens = q.split(/\s+/).filter(Boolean);
+      filtered = baseList.filter((c) => {
       const haystack = [
         c.contact?.full_name,
         c.contact?.company,
@@ -534,9 +578,17 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         .join(' ')
         .toLowerCase();
       return tokens.every((t) => haystack.includes(t));
-    });
+      });
+    }
+    if (myOverdueOnly && currentDirector?.id && taskInfoMap) {
+      filtered = filtered.filter((c) => {
+        const info = taskInfoMap.get(c.id);
+        if (!info || info.overdueCount === 0) return false;
+        return info.assignees.some((a) => a.id === currentDirector.id);
+      });
+    }
     return { visible: filtered, snoozedActive: snoozed };
-  }, [contacts, search]);
+  }, [contacts, search, myOverdueOnly, currentDirector?.id, taskInfoMap]);
 
   const grouped = useMemo(() => {
     const map: Record<DealStage, DealTeamContact[]> = {
@@ -557,6 +609,56 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     () => (filter ? COLUMNS.filter((c) => c.stage === filter) : COLUMNS),
     [filter],
   );
+
+  // Confetti when overdue drops from >0 to 0
+  const overdueCount = useMemo(() => {
+    if (!taskInfoMap) return 0;
+    let sum = 0;
+    for (const info of taskInfoMap.values()) sum += info.overdueCount;
+    return sum;
+  }, [taskInfoMap]);
+
+  useEffect(() => {
+    const prev = prevOverdueCountRef.current;
+    if (prev > 0 && overdueCount === 0) {
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      toast.success('🎉 Wszystkie overdue domknięte!');
+    }
+    prevOverdueCountRef.current = overdueCount;
+  }, [overdueCount]);
+
+  // Build snapshot of currently open tasks for the team, with column_key derived from contact stage
+  const contactById = useMemo(() => {
+    const m = new Map<string, DealTeamContact>();
+    for (const c of contacts) m.set(c.id, c);
+    return m;
+  }, [contacts]);
+
+  const openTasksSnapshot = useMemo(
+    () =>
+      openTasks
+        .map((t) => {
+          const c = contactById.get(t.deal_team_contact_id);
+          if (!c) return null;
+          return {
+            task_id: t.id,
+            team_contact_id: t.deal_team_contact_id,
+            column_key: deriveStage(c),
+            task_status_at_snapshot: t.status,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
+    [openTasks, contactById],
+  );
+
+  const handleSaveMeeting = async (notes: string) => {
+    try {
+      await saveMeeting.mutateAsync({ teamId, notes, snapshot: openTasksSnapshot });
+      setShowMeetingDialog(false);
+    } catch {
+      // toast handled in hook
+    }
+  };
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -662,8 +764,27 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
             />
             Grupuj wg sub-kategorii
           </label>
+          <Toggle
+            pressed={myOverdueOnly}
+            onPressedChange={setMyOverdueOnly}
+            size="sm"
+            aria-label="Pokaż tylko moje overdue"
+            className="h-8 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
+          >
+            <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
+            Moje overdue
+          </Toggle>
         </div>
       </div>
+
+      <MeetingProgressBar
+        progress={meetingProgress}
+        lastMeetingAt={lastMeeting?.meeting_at ?? null}
+        openTasksCount={openTasksSnapshot.length}
+        streak={streak}
+        onSaveMeeting={() => setShowMeetingDialog(true)}
+        isPending={saveMeeting.isPending}
+      />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div ref={snoozedRef}>
@@ -701,6 +822,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
               onSubcategoryChange={handleSubcategoryChange}
               onMoreClick={(c) => setSheetContact(c)}
               taskInfoMap={taskInfoMap}
+              columnProgress={meetingProgress?.by_column[col.stage]}
             />
           ))}
         </div>
@@ -735,6 +857,14 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           onSuccess={() => setLostContact(null)}
         />
       )}
+
+      <SaveMeetingDialog
+        open={showMeetingDialog}
+        onOpenChange={setShowMeetingDialog}
+        openTasksCount={openTasksSnapshot.length}
+        onConfirm={handleSaveMeeting}
+        isPending={saveMeeting.isPending}
+      />
     </>
   );
 }
