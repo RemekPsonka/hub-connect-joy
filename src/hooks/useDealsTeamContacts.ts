@@ -292,15 +292,12 @@ export function useUpdateTeamContact() {
 
       if (category !== undefined) {
         updates.category = category;
-        // Reset offering_stage to default for category with sub-kanbans
-        const defaultSubStages: Record<string, string> = {
-          offering: 'handshake',
-          audit: 'audit_plan',
-          hot: 'meeting_plan',
-          top: 'meeting_plan',
-        };
-        if (defaultSubStages[category]) {
-          updates.offering_stage = defaultSubStages[category];
+        // CHECK constraint na offering_stage dopuszcza tylko: decision_meeting, handshake,
+        // power_of_attorney, audit, offer_sent, negotiation, won, lost.
+        // Dla audit/hot/top wartość zostaje bez zmian — UI musi przekazać offeringStage jawnie.
+        // Dla offering ustawiamy domyślny start (handshake), o ile UI nie podał własnej wartości.
+        if (category === 'offering' && offeringStage === undefined) {
+          updates.offering_stage = 'handshake';
         }
       }
       if (status !== undefined) {
