@@ -144,6 +144,12 @@ Deno.serve(async (req) => {
     // 6. mapowanie stage → category/status
     const status = stage === 'client' ? 'won' : 'new';
 
+    // mapowanie substage → 4 osobne kolumny
+    const prospect_source = stage === 'prospect' ? substage : 'crm_push';
+    const temperature = stage === 'lead' ? substage : null;
+    const offering_stage = stage === 'offering' ? substage : null;
+    const client_status = stage === 'client' ? substage : null;
+
     const { data: inserted, error: insertErr } = await supabase
       .from('deal_team_contacts')
       .insert({
@@ -153,7 +159,10 @@ Deno.serve(async (req) => {
         source_contact_id: contact_id,
         category: stage,
         status,
-        prospect_source: 'crm_push',
+        prospect_source,
+        temperature,
+        offering_stage,
+        client_status,
         expected_annual_premium_gr,
         notes,
       })
@@ -169,12 +178,12 @@ Deno.serve(async (req) => {
           .eq('team_id', team_id)
           .eq('source_contact_id', contact_id)
           .maybeSingle();
-        if (raceRow) return json({ deal_team_contact_id: raceRow.id, team_id, stage, created: false });
+        if (raceRow) return json({ deal_team_contact_id: raceRow.id, team_id, stage, substage, created: false });
       }
       return json({ error: 'insert_failed', details: insertErr.message }, 500);
     }
 
-    return json({ deal_team_contact_id: inserted.id, team_id, stage, created: true });
+    return json({ deal_team_contact_id: inserted.id, team_id, stage, substage, created: true });
   } catch (e) {
     return json({ error: 'internal', details: e instanceof Error ? e.message : String(e) }, 500);
   }
