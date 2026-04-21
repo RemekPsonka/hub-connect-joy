@@ -120,7 +120,7 @@ export function UnifiedKanbanCard({
           />
         )}
         <ComplexityChips complexity={contact.client_complexity} />
-        <div className="ml-auto">
+        <div className="ml-auto shrink-0">
         <PremiumQuickEdit
           contactId={contact.id}
           teamId={teamId}
