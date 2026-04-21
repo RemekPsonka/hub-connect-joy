@@ -472,12 +472,29 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
 
   const visible = useMemo(() => {
     const nowIso = new Date().toISOString();
-    return contacts.filter(
+    const baseList = contacts.filter(
       (c) =>
         !c.is_lost &&
         (!c.snoozed_until || c.snoozed_until < nowIso),
     );
-  }, [contacts]);
+    const q = search.trim().toLowerCase();
+    if (!q) return baseList;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return baseList.filter((c) => {
+      const haystack = [
+        c.contact?.full_name,
+        c.contact?.company,
+        c.contact?.position,
+        c.contact?.email,
+        c.contact?.phone,
+        c.notes,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
+  }, [contacts, search]);
 
   const grouped = useMemo(() => {
     const map: Record<DealStage, DealTeamContact[]> = {
