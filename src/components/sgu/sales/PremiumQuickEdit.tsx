@@ -27,9 +27,8 @@ export function PremiumQuickEdit({ contactId, teamId, valueGr }: Props) {
     if (open) setDraft(String((valueGr ?? 0) / 100));
   }, [open, valueGr]);
 
-  const display = valueGr != null && valueGr > 0
-    ? formatter.format(valueGr / 100)
-    : '— PLN';
+  const hasValue = valueGr != null && valueGr > 0;
+  const display = hasValue ? formatter.format((valueGr as number) / 100) : '+ składka';
 
   const handleSave = () => {
     const pln = Number(draft);
@@ -49,13 +48,14 @@ export function PremiumQuickEdit({ contactId, teamId, valueGr }: Props) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Edytuj prognozę składki"
+          aria-label={hasValue ? 'Edytuj prognozę składki' : 'Dodaj prognozę składki'}
+          title={hasValue ? 'Edytuj prognozę składki' : 'Dodaj prognozę składki'}
           onClick={(e) => e.stopPropagation()}
           className="inline-flex"
         >
           <Badge
-            variant="outline"
-            className="text-[10px] px-1.5 py-0 cursor-pointer hover:opacity-80 tabular-nums"
+            variant={hasValue ? 'outline' : 'secondary'}
+            className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:opacity-80 tabular-nums"
           >
             💰 {display}
           </Badge>
