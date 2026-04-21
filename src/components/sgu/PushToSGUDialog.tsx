@@ -119,6 +119,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
     defaultValues: {
       team_id: defaultTeamId,
       stage: 'lead',
+      substage: SUBSTAGE_DEFAULTS.lead,
       expected_annual_premium_pln: 0,
       notes: '',
     },
@@ -133,7 +134,15 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
 
   const stage = form.watch('stage');
   const teamId = form.watch('team_id');
+  const substage = form.watch('substage');
   const showPremium = stage !== 'prospect';
+
+  // Reset sub-etap przy zmianie etapu głównego
+  useEffect(() => {
+    form.setValue('substage', SUBSTAGE_DEFAULTS[stage], { shouldValidate: false });
+  }, [stage, form]);
+
+  const subOptions = useMemo(() => optionsForStage(stage), [stage]);
 
   const onSubmit = async (values: FormData) => {
     setSubmitting(true);
@@ -143,6 +152,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
           contact_id: contactId,
           team_id: values.team_id,
           stage: values.stage,
+          substage: values.substage ?? SUBSTAGE_DEFAULTS[values.stage],
           expected_annual_premium_gr: showPremium
             ? Math.round(values.expected_annual_premium_pln * 100)
             : 0,
@@ -161,9 +171,12 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
 
       setCreatedId(result.deal_team_contact_id);
       setCreatedTeamId(result.team_id);
+      const stageLabel = STAGE_OPTIONS.find((s) => s.value === values.stage)?.label ?? values.stage;
+      const subLabel =
+        subOptions.find((o) => o.value === (values.substage ?? SUBSTAGE_DEFAULTS[values.stage]))?.label ?? '';
       toast.success(
         result.created
-          ? 'Kontakt przekazany do lejka'
+          ? `Kontakt przekazany jako ${stageLabel}${subLabel ? ` · ${subLabel}` : ''}`
           : 'Kontakt już był w tym lejku — pokazuję istniejący'
       );
       queryClient.invalidateQueries({ queryKey: ['deals-team-contacts'] });
