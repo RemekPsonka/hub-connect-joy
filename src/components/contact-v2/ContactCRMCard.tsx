@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Wallet, Zap, CheckSquare, Clock, Tag, User, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -30,7 +29,6 @@ function fmtPLN(gr: number | null | undefined) {
 }
 
 export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
-  const { sguTeamId } = useSGUTeamId();
   const [sguOpen, setSguOpen] = useState(false);
 
   const { data, isLoading } = useQuery({

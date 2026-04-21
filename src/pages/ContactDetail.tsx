@@ -37,7 +37,7 @@ import { ContactWantedTab } from '@/components/contacts/ContactWantedTab';
 import { ContactEmailsTab } from '@/components/contacts/ContactEmailsTab';
 import { ContactDealsPanel } from '@/components/contacts/ContactDealsPanel';
 import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
-import { useSGUTeamId } from '@/hooks/useSGUTeamId';
+import { useAvailableDealTeams } from '@/hooks/useAvailableDealTeams';
 
 // List of public email domains that should not enable company view
 const PUBLIC_EMAIL_DOMAINS = [
