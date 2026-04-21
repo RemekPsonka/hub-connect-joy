@@ -201,6 +201,11 @@ function DroppableColumn({
   contacts,
   groupBy,
   teamId,
+  sort,
+  onSortChange,
+  statusFilter,
+  onStatusFilterToggle,
+  onStatusFilterClear,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -213,6 +218,11 @@ function DroppableColumn({
   contacts: DealTeamContact[];
   groupBy: boolean;
   teamId: string;
+  sort: SortKey;
+  onSortChange: (s: SortKey) => void;
+  statusFilter: Set<string>;
+  onStatusFilterToggle: (key: string) => void;
+  onStatusFilterClear: () => void;
   onLostClick: (c: DealTeamContact) => void;
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
@@ -223,7 +233,19 @@ function DroppableColumn({
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
-  const sumPLN = contacts.reduce(
+  const cfg = SUBGROUP_CONFIG[col.stage];
+
+  const filtered = useMemo(() => {
+    if (statusFilter.size === 0) return contacts;
+    return contacts.filter((c) => {
+      const v = cfg.getter(c) ?? NONE_KEY;
+      return statusFilter.has(v);
+    });
+  }, [contacts, statusFilter, cfg]);
+
+  const sorted = useMemo(() => sortContacts(filtered, sort), [filtered, sort]);
+
+  const sumPLN = sorted.reduce(
     (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
     0,
   );
