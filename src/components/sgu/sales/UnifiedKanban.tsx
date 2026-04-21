@@ -541,9 +541,10 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         (!c.snoozed_until || c.snoozed_until < nowIso),
     );
     const q = search.trim().toLowerCase();
-    if (!q) return { visible: baseList, snoozedActive: snoozed };
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const filtered = baseList.filter((c) => {
+    let filtered = baseList;
+    if (q) {
+      const tokens = q.split(/\s+/).filter(Boolean);
+      filtered = baseList.filter((c) => {
       const haystack = [
         c.contact?.full_name,
         c.contact?.company,
@@ -556,9 +557,17 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         .join(' ')
         .toLowerCase();
       return tokens.every((t) => haystack.includes(t));
-    });
+      });
+    }
+    if (myOverdueOnly && currentDirector?.id && taskInfoMap) {
+      filtered = filtered.filter((c) => {
+        const info = taskInfoMap.get(c.id);
+        if (!info || info.overdueCount === 0) return false;
+        return info.assignees.some((a) => a.id === currentDirector.id);
+      });
+    }
     return { visible: filtered, snoozedActive: snoozed };
-  }, [contacts, search]);
+  }, [contacts, search, myOverdueOnly, currentDirector?.id, taskInfoMap]);
 
   const grouped = useMemo(() => {
     const map: Record<DealStage, DealTeamContact[]> = {
