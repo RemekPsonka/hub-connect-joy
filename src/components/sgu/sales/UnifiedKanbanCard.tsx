@@ -73,8 +73,8 @@ export function UnifiedKanbanCard({
       )}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-1.5">
+        <div className="min-w-0">
           <div className="text-sm font-semibold truncate">{fullName}</div>
           {(company || position) && (
             <div className="text-xs text-muted-foreground truncate">
@@ -82,9 +82,11 @@ export function UnifiedKanbanCard({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 flex-wrap">
           <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
-          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+          <div className="ml-auto">
+            <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+          </div>
         </div>
       </div>
 
