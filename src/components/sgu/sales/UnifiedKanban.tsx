@@ -437,6 +437,32 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
+    prospect: 'recent',
+    lead: 'recent',
+    offering: 'recent',
+    client: 'recent',
+    lost: 'recent',
+  });
+  const [filterByStage, setFilterByStage] = useState<Record<DealStage, Set<string>>>({
+    prospect: new Set(),
+    lead: new Set(),
+    offering: new Set(),
+    client: new Set(),
+    lost: new Set(),
+  });
+
+  const setSortFor = (stage: DealStage, s: SortKey) =>
+    setSortByStage((prev) => ({ ...prev, [stage]: s }));
+  const toggleFilterFor = (stage: DealStage, key: string) =>
+    setFilterByStage((prev) => {
+      const next = new Set(prev[stage]);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return { ...prev, [stage]: next };
+    });
+  const clearFilterFor = (stage: DealStage) =>
+    setFilterByStage((prev) => ({ ...prev, [stage]: new Set() }));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
