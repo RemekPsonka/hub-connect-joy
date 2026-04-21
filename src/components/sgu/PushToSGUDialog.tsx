@@ -27,6 +27,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAvailableDealTeams } from '@/hooks/useAvailableDealTeams';
+import {
+  TEMPERATURE_LABELS,
+  PROSPECT_SOURCE_LABELS,
+  CLIENT_STATUS_LABELS,
+  OFFERING_STAGE_LABELS,
+  OFFERING_STAGE_ORDER,
+} from '@/types/dealTeam';
 
 const STAGE_OPTIONS = [
   { value: 'prospect', label: 'Prospekt' },
@@ -37,9 +44,46 @@ const STAGE_OPTIONS = [
 
 type Stage = (typeof STAGE_OPTIONS)[number]['value'];
 
+const SUBSTAGE_DEFAULTS: Record<Stage, string> = {
+  prospect: 'crm_push',
+  lead: 'cold',
+  offering: 'decision_meeting',
+  client: 'standard',
+};
+
+const SUBSTAGE_LABEL: Record<Stage, string> = {
+  prospect: 'Źródło',
+  lead: 'Temperatura',
+  offering: 'Etap ofertowania',
+  client: 'Status klienta',
+};
+
+function optionsForStage(stage: Stage): { value: string; label: string }[] {
+  switch (stage) {
+    case 'prospect':
+      return (['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'] as const).map((v) => ({
+        value: v,
+        label: PROSPECT_SOURCE_LABELS[v] ?? v,
+      }));
+    case 'lead':
+      return (['hot', 'top', '10x', 'cold'] as const).map((v) => ({
+        value: v,
+        label: TEMPERATURE_LABELS[v] ?? v,
+      }));
+    case 'offering':
+      return OFFERING_STAGE_ORDER.map((v) => ({ value: v, label: OFFERING_STAGE_LABELS[v] ?? v }));
+    case 'client':
+      return (['standard', 'ambassador'] as const).map((v) => ({
+        value: v,
+        label: CLIENT_STATUS_LABELS[v] ?? v,
+      }));
+  }
+}
+
 const schema = z.object({
   team_id: z.string().uuid('Wybierz lejek'),
   stage: z.enum(['prospect', 'lead', 'offering', 'client']),
+  substage: z.string().optional(),
   expected_annual_premium_pln: z
     .number({ invalid_type_error: 'Podaj liczbę' })
     .min(0, 'Wartość nie może być ujemna')
@@ -75,6 +119,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
     defaultValues: {
       team_id: defaultTeamId,
       stage: 'lead',
+      substage: SUBSTAGE_DEFAULTS.lead,
       expected_annual_premium_pln: 0,
       notes: '',
     },
@@ -89,7 +134,15 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
 
   const stage = form.watch('stage');
   const teamId = form.watch('team_id');
+  const substage = form.watch('substage');
   const showPremium = stage !== 'prospect';
+
+  // Reset sub-etap przy zmianie etapu głównego
+  useEffect(() => {
+    form.setValue('substage', SUBSTAGE_DEFAULTS[stage], { shouldValidate: false });
+  }, [stage, form]);
+
+  const subOptions = useMemo(() => optionsForStage(stage), [stage]);
 
   const onSubmit = async (values: FormData) => {
     setSubmitting(true);
@@ -99,6 +152,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
           contact_id: contactId,
           team_id: values.team_id,
           stage: values.stage,
+          substage: values.substage ?? SUBSTAGE_DEFAULTS[values.stage],
           expected_annual_premium_gr: showPremium
             ? Math.round(values.expected_annual_premium_pln * 100)
             : 0,
@@ -117,9 +171,12 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
 
       setCreatedId(result.deal_team_contact_id);
       setCreatedTeamId(result.team_id);
+      const stageLabel = STAGE_OPTIONS.find((s) => s.value === values.stage)?.label ?? values.stage;
+      const subLabel =
+        subOptions.find((o) => o.value === (values.substage ?? SUBSTAGE_DEFAULTS[values.stage]))?.label ?? '';
       toast.success(
         result.created
-          ? 'Kontakt przekazany do lejka'
+          ? `Kontakt przekazany jako ${stageLabel}${subLabel ? ` · ${subLabel}` : ''}`
           : 'Kontakt już był w tym lejku — pokazuję istniejący'
       );
       queryClient.invalidateQueries({ queryKey: ['deals-team-contacts'] });
@@ -137,6 +194,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
       form.reset({
         team_id: defaultTeamId,
         stage: 'lead',
+        substage: SUBSTAGE_DEFAULTS.lead,
         expected_annual_premium_pln: 0,
         notes: '',
       });
@@ -224,6 +282,26 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
                 </SelectTrigger>
                 <SelectContent>
                   {STAGE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="substage">{SUBSTAGE_LABEL[stage]}</Label>
+              <Select
+                value={substage ?? SUBSTAGE_DEFAULTS[stage]}
+                onValueChange={(v) => form.setValue('substage', v, { shouldValidate: false })}
+                disabled={submitting}
+              >
+                <SelectTrigger id="substage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {subOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>

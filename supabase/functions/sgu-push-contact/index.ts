@@ -9,10 +9,34 @@ const corsHeaders = {
 type Stage = 'prospect' | 'lead' | 'offering' | 'client';
 const ALLOWED_STAGES: Stage[] = ['prospect', 'lead', 'offering', 'client'];
 
+const SUBSTAGE_WHITELIST: Record<Stage, readonly string[]> = {
+  prospect: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
+  lead: ['hot', 'top', 'cold', '10x'],
+  offering: [
+    'decision_meeting',
+    'handshake',
+    'power_of_attorney',
+    'audit',
+    'offer_sent',
+    'negotiation',
+    'won',
+    'lost',
+  ],
+  client: ['standard', 'ambassador'],
+};
+
+const SUBSTAGE_DEFAULTS: Record<Stage, string> = {
+  prospect: 'crm_push',
+  lead: 'cold',
+  offering: 'decision_meeting',
+  client: 'standard',
+};
+
 interface PushBody {
   contact_id: string;
   team_id?: string;
   stage?: Stage;
+  substage?: string;
   expected_annual_premium_gr?: number;
   notes?: string | null;
 }
@@ -49,6 +73,14 @@ Deno.serve(async (req) => {
 
     const stage: Stage =
       body.stage && ALLOWED_STAGES.includes(body.stage) ? body.stage : 'lead';
+
+    // Walidacja substage (cicho ignorowany jeśli nie pasuje → fallback do defaulta)
+    const candidateSub =
+      typeof body.substage === 'string' && body.substage.length > 0 ? body.substage : null;
+    const substage =
+      candidateSub && SUBSTAGE_WHITELIST[stage].includes(candidateSub)
+        ? candidateSub
+        : SUBSTAGE_DEFAULTS[stage];
 
     const expected_annual_premium_gr =
       typeof body.expected_annual_premium_gr === 'number' && body.expected_annual_premium_gr >= 0
@@ -112,6 +144,13 @@ Deno.serve(async (req) => {
     // 6. mapowanie stage → category/status
     const status = stage === 'client' ? 'won' : 'new';
 
+    // mapowanie substage → 4 osobne kolumny
+    // prospect_source semantycznie należy tylko do stage='prospect' — dla innych NULL
+    const prospect_source = stage === 'prospect' ? substage : null;
+    const temperature = stage === 'lead' ? substage : null;
+    const offering_stage = stage === 'offering' ? substage : null;
+    const client_status = stage === 'client' ? substage : null;
+
     const { data: inserted, error: insertErr } = await supabase
       .from('deal_team_contacts')
       .insert({
@@ -121,7 +160,10 @@ Deno.serve(async (req) => {
         source_contact_id: contact_id,
         category: stage,
         status,
-        prospect_source: 'crm_push',
+        prospect_source,
+        temperature,
+        offering_stage,
+        client_status,
         expected_annual_premium_gr,
         notes,
       })
@@ -137,12 +179,12 @@ Deno.serve(async (req) => {
           .eq('team_id', team_id)
           .eq('source_contact_id', contact_id)
           .maybeSingle();
-        if (raceRow) return json({ deal_team_contact_id: raceRow.id, team_id, stage, created: false });
+        if (raceRow) return json({ deal_team_contact_id: raceRow.id, team_id, stage, substage, created: false });
       }
       return json({ error: 'insert_failed', details: insertErr.message }, 500);
     }
 
-    return json({ deal_team_contact_id: inserted.id, team_id, stage, created: true });
+    return json({ deal_team_contact_id: inserted.id, team_id, stage, substage, created: true });
   } catch (e) {
     return json({ error: 'internal', details: e instanceof Error ? e.message : String(e) }, 500);
   }
