@@ -1,72 +1,90 @@
 
 
-# B-FIX.5-overflow v2 — ScrollArea swap, defensywny truncate na bannerach, hotfix `pending`
+# Część A — Recon read-only (bez edycji): trigger `log_deal_category_change`, CHECK na `offering_stage`, fallback `actor_id`
 
-## Diagnoza
+## Cel
 
-Trzy niezależne rzeczy w jednym sprincie:
+Zebrać twarde dowody z bazy, żeby móc zaplanować Część B (fix migracja). Zero zmian w kodzie ani DB. Wyniki spiszemy w `.lovable/plan.md` jako recon-report.
 
-1. **Kolumny kanbana nadal rosną poziomo** — Radix `ScrollArea` Viewport dodaje wewnętrznie `display:table; min-width:100%`, co omija `min-w-0` rodzica i pozwala dziecku z długim tekstem rozpychać kolumnę. Naprawione tylko częściowo w B-FIX.5-overflow (poprzedni sprint zamienił `<ScrollArea>` na `<div>`, ale wg user-briefu trzeba zweryfikować ostateczny render w `DroppableColumn` i finalnie usunąć import).
-2. **Buttony mini-bannera** mogą nie obcinać tekstu w kontekście flex/grid bez `min-w-0` na buttonie + `<span class="block truncate">` na tekście (poprzedni sprint to wprowadził, ale brief v2 chce potwierdzić wszystkie 3 buttony pod jeden wzorzec).
-3. **Hotfix dla `useActiveTaskContacts`** — w repo współistnieją dwie konwencje statusu zadania: `'todo'` (w `useTasks`, `ContactTasksSheet`) i `'pending'` (w `AddClientTaskDialog`, `ClientRenewalsTab`, `ClientComplexityPanel`, `useSovraDebrief`). Hook filtruje tylko `['todo','in_progress','completed']`, więc kontakty z zadaniami dodanymi z dialogów `pending` nie pokazują:
-   - `TaskStatusPill` (bo brak rekordów),
-   - bannera overdue,
-   - awatarów assignee z zadań,
-   - banneru next-task.
+## Co sprawdzimy (3 obszary)
 
-To wyjaśnia, czemu Lead/Klient po B-FIX.16 nadal wyglądają jak „puste" mimo dodanych zadań z UI.
+### 1. Trigger `log_deal_category_change` + tabela activity log
 
-## Rozwiązanie
+Sprawdzić w Supabase:
 
-### 1. `UnifiedKanban.tsx` — finalnie wyrwać `ScrollArea`
-Plik: `src/components/sgu/sales/UnifiedKanban.tsx`
+```sql
+-- definicja funkcji triggera
+SELECT pg_get_functiondef(p.oid)
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'log_deal_category_change';
 
-- Zweryfikować, że `<ScrollArea>` nie jest już używany w `DroppableColumn` (po B-FIX.5-overflow powinien być natywny `<div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">`).
-- Jeśli jeszcze gdziekolwiek pozostał `ScrollArea` — wymienić na ten sam wzorzec.
-- Usunąć import `import { ScrollArea } from '@/components/ui/scroll-area';` jeśli nieużywany w pliku.
+-- kolumny i NOT NULL w activity log
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'deal_team_activity_log'
+ORDER BY ordinal_position;
 
-### 2. `UnifiedKanbanCard.tsx` — ujednolicić 3 buttony mini-bannera
-Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+-- definicja get_current_director_id()
+SELECT pg_get_functiondef(p.oid)
+FROM pg_proc p WHERE p.proname = 'get_current_director_id';
+```
 
-Dla każdego z trzech buttonów (overdue / next / placeholder):
-- W `className` buttona: usunąć ewentualne `truncate`, zapewnić `w-full min-w-0 block overflow-hidden`.
-- Treść tekstową opakować w `<span className="block truncate">…</span>`.
-- Zachować dynamiczny `cn(...)` z kolorami (amber/emerald) dla wariantu `nextTask`.
-- Placeholder „+ Zaplanuj następne zadanie" — dla spójności także tekst w `<span class="block truncate">`.
+Cel: potwierdzić czy `actor_id` jest `NOT NULL` i czy `get_current_director_id()` może zwrócić NULL → wtedy trigger blokuje cały UPDATE.
 
-(W bieżącym pliku po B-FIX.5-overflow wzorzec już jest zastosowany — krok służy weryfikacji i ewentualnym poprawkom, jeśli któryś button odbiega.)
+### 2. CHECK constraint na `deal_team_contacts.offering_stage`
 
-### 3. `useActiveTaskContacts.ts` — uznać `pending` za otwarte zadanie
-Plik: `src/hooks/useActiveTaskContacts.ts`
+```sql
+SELECT conname, pg_get_constraintdef(c.oid)
+FROM pg_constraint c
+JOIN pg_class t ON t.oid = c.conrelid
+WHERE t.relname = 'deal_team_contacts' AND c.contype = 'c';
+```
 
-- Linia ~54 (`select(...).in('status', [...])`):
-  ```ts
-  .in('status', ['todo', 'pending', 'in_progress', 'completed'])
-  ```
-- Linia ~95 (`isOpen`):
-  ```ts
-  const isOpen = t.status === 'todo' || t.status === 'pending' || t.status === 'in_progress';
-  ```
+Cel: pełna lista dozwolonych wartości. Porównać z `OfferingStage` w `src/types/dealTeam.ts` i z `defaultSubStages` w `src/hooks/useDealsTeamContacts.ts:296–304`. Wytypować brakujące (`audit_plan`, `audit_scheduled`, `meeting_plan`, `meeting_scheduled`).
 
-Reszta logiki (overdue / today / active / done, klasyfikacja typu, agregacja po kontakcie) pozostaje bez zmian — nowy status wpada do tej samej gałęzi `isOpen`, więc liczniki i bannery zaczną działać dla zadań `pending`.
+### 3. Stan rekordu Bogdana + Postgres logs z ostatnich 24h
+
+```sql
+-- stan rekordu
+SELECT id, name, category, offering_stage, snoozed_until, snooze_reason,
+       snoozed_from_category, updated_at
+FROM deal_team_contacts
+WHERE name ILIKE '%Bogdan%Pietrzak%';
+
+-- czy Remek ma director?
+SELECT d.id, d.full_name, d.user_id
+FROM directors d
+WHERE d.user_id IN (SELECT id FROM auth.users WHERE email ILIKE '%remek%');
+```
+
+I logi z `analytics_query` (postgres_logs) z grepem po `deal_team_contacts` / `actor_id` / `offering_stage` / `violates` z ostatnich 24h.
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — potwierdzić brak `<ScrollArea>` w `DroppableColumn`; usunąć nieużywany import |
-| 2 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — ujednolicić 3 buttony mini-bannera (`min-w-0 block overflow-hidden` + `<span class="block truncate">`) |
-| 3 | `src/hooks/useActiveTaskContacts.ts` | EDIT — dodać `'pending'` do filtru zapytania i do warunku `isOpen` |
+| 1 | `.lovable/plan.md` | EDIT — zastąpić aktualny plan recon-reportem (3 sekcje: trigger, CHECK, stan Bogdana + logs) |
 
-## DoD
+## DoD Część A
 
 | Check | Stan |
 |---|---|
-| Żadna kolumna w `/sgu/sprzedaz` nie wystaje poziomo poza grid przy długich tytułach zadań | ✅ |
-| Brak importu `ScrollArea` w `UnifiedKanban.tsx` | ✅ |
-| 3 buttony mini-bannera obcinają tekst elipsą w granicach kolumny | ✅ |
-| Karty kontaktów z zadaniami `pending` (dodanymi z `AddClientTaskDialog`, `ClientRenewalsTab`, `ClientComplexityPanel`, `useSovraDebrief`) pokazują `TaskStatusPill`, awatary assignees, banner overdue/next | ✅ |
-| Karty z zadaniami `todo`/`in_progress` działają jak dotąd (brak regresji) | ✅ |
-| Pionowy scroll i DnD między kolumnami nadal działają | ✅ |
-| `npx tsc --noEmit` exit 0 | ✅ |
+| Pełna definicja `log_deal_category_change` zacytowana w raporcie | ⬜ |
+| Lista kolumn `deal_team_activity_log` z `is_nullable` | ⬜ |
+| Definicja `get_current_director_id()` + odpowiedź czy zwraca NULL dla Remka | ⬜ |
+| Pełny CHECK constraint na `offering_stage` z listą wartości | ⬜ |
+| Diff: `OfferingStage` (TS) vs `defaultSubStages` (hook) vs CHECK (DB) | ⬜ |
+| Stan rekordu Bogdana po próbie snooze + ewentualne błędy z postgres_logs | ⬜ |
+| Zero edycji kodu/DB | ✅ |
+
+## Część B (zarys, do oddzielnego sprintu po wynikach A)
+
+Trzy gałęzie zależne od wyników:
+
+- **B.1 (jeśli `actor_id NOT NULL` + NULL z `get_current_director_id`):** migracja patchująca `log_deal_category_change` — `IF NEW.actor_id IS NULL THEN RETURN NEW;` lub `COALESCE(get_current_director_id(), (SELECT id FROM directors WHERE tenant_id = NEW.tenant_id LIMIT 1))`. Z rollbackiem.
+- **B.2 (jeśli CHECK nie zawiera `audit_plan/audit_scheduled/meeting_plan/meeting_scheduled`):** migracja `DROP CONSTRAINT ... ADD CONSTRAINT ...` z pełną listą wyciągniętą z `OfferingStage` w `types/dealTeam.ts`. Z rollbackiem.
+- **B.3 spójność hooka:** edytować `useDealsTeamContacts.ts:296–304` — albo usunąć `audit:'audit_plan'` z `defaultSubStages`, albo zmienić na `audit_scheduled` (decyzja po review screenu „Audyt").
+
+Część B osobnym planem po zatwierdzeniu wyników recon.
 
