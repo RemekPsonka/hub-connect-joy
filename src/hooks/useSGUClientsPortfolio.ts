@@ -64,6 +64,7 @@ export interface SGUClientsPortfolio {
     commissionPrevMonthGr: number;
     ambassadorsCount: number;
     complexClientsCount: number;
+    expectedPortfolioGr: number;
   };
 }
 
