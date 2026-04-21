@@ -1,68 +1,88 @@
 
 
-# B-FIX.5-snooze Część B — fix tabela activity_log + sweep legacy sub-stages
+# B-FIX.5-snooze-ux — pasek "Odłożone" w SGU + auto-powrót cron
 
-## Diagnoza (z Części A)
+## Diagnoza stanu obecnego
 
-Tabela `public.deal_team_activity_log` nie istnieje. Trigger `log_deal_category_change` na `deal_team_contacts` próbuje do niej `INSERT` przy każdej zmianie `category` → cały UPDATE rolluje się z `relation does not exist`. Blokuje: Odłóż, Audyt, Wyślij ofertę, Klient, Utracony.
+W `src/components/sgu/sales/UnifiedKanban.tsx` filtr `snoozed_until` **już istnieje** (linie 473–479) — odłożone kontakty są wykluczane z grida. Czego brakuje:
+1. Brak ekspozycji `snoozedContacts` jako osobnej listy → nie da się ich pokazać w pasku.
+2. Brak komponentu `SnoozedContactsBar` nad gridem (jest gotowy w `src/components/deals-team/SnoozedContactsBar.tsx`, używany tylko w legacy `KanbanBoard`).
+3. Brak edge function `return-snoozed-contacts` ani crona — odłożone nie wracają automatycznie po `snoozed_until`.
 
-Drugi bug pasywny: `defaultSubStages` w `useUpdateTeamContact` ustawia `offering_stage` na wartości spoza CHECK constraint (`audit_plan`, `meeting_plan`). Po fixie B.1 wyjdzie na pierwszy klik „Audyt".
+## Rozwiązanie — 1 PR, 3 zmiany
 
-## Rozwiązanie — jeden PR, dwie zmiany
+### Zmiana 1 — wydziel `snoozedContacts` w UnifiedKanban
 
-### B.1 (P0) — migracja: utwórz `deal_team_activity_log` + RLS
+**Plik:** `src/components/sgu/sales/UnifiedKanban.tsx` (linie 473–497)
 
-Nowa migracja `supabase/migrations/<timestamp>_create_deal_team_activity_log.sql`:
+Refactor `visible` → zwraca `{ activeForGrid, snoozedActive }`:
+- `snoozedActive` = `!is_lost && snoozed_until && snoozed_until >= nowIso` (przyszłe i dzisiejsze odłożenia)
+- `activeForGrid` = `!is_lost && (!snoozed_until || snoozed_until < nowIso)` + filtr search (jak teraz)
+- Komentarz: dziś odłożone czekają na crona — pokazuje je pasek z badge "Czas wrócić".
 
-- Tabela z kolumnami zgodnymi z INSERT triggera: `id`, `team_id` (FK→`deal_teams` CASCADE), `tenant_id` (FK→`tenants` CASCADE), `team_contact_id` (FK→`deal_team_contacts` CASCADE), `actor_id` (FK→`directors` SET NULL, **nullable** — dla cron/service_role), `action`, `old_value jsonb`, `new_value jsonb`, `created_at`.
-- 3 indeksy: `(team_contact_id, created_at DESC)`, `(team_id, created_at DESC)`, `(actor_id)`.
-- `ENABLE ROW LEVEL SECURITY`.
-- Policy `dtal_select` — SELECT dla `is_deal_team_member(team_id)`. Brak INSERT/UPDATE/DELETE policy (pisane wyłącznie z triggera SECURITY DEFINER).
-- `COMMENT ON TABLE` z opisem kontraktu.
-- `-- ROLLBACK:` `DROP TABLE public.deal_team_activity_log CASCADE;`
+`grouped` używa `activeForGrid` (bez zmian semantyki).
 
-Trigger `log_deal_category_change` zostaje bez zmian — jest poprawny, brakowało tylko tabeli docelowej.
+### Zmiana 2 — wpięcie `SnoozedContactsBar` nad gridem
 
-### B.2 (P1) — edycja `src/hooks/useDealsTeamContacts.ts`
-
-W `useUpdateTeamContact` (~linia 296–304) — usunąć z `defaultSubStages` mapowania `audit:'audit_plan'`, `hot:'meeting_plan'`, `top:'meeting_plan'`. Zostawić tylko `offering:'handshake'` jako domyślny start, gdy `offeringStage` nie został przekazany jawnie:
-
-```ts
-if (category !== undefined) {
-  updates.category = category;
-  // CHECK na offering_stage dopuszcza tylko: decision_meeting, handshake,
-  // power_of_attorney, audit, offer_sent, negotiation, won, lost.
-  // Dla audit/hot/top wartość zostaje bez zmian — UI musi przekazać offeringStage jawnie.
-  if (category === 'offering' && offeringStage === undefined) {
-    updates.offering_stage = 'handshake';
-  }
-}
+Ten sam plik. Import:
+```tsx
+import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 ```
+
+Wpięcie tuż przed `<DndContext>` (linia 626):
+```tsx
+<SnoozedContactsBar
+  snoozedContacts={snoozedActive}
+  teamId={teamId}
+  onContactClick={(c) => setSheetContact(c)}
+/>
+```
+
+Komponent `SnoozedContactsBar` jest gotowy: collapsible header z liczbą, grid kart z przyciskiem "Obudź" (czyści `snoozed_until/snooze_reason/snoozed_from_category` przez `supabase.from('deal_team_contacts').update`). Działa out-of-the-box z naszym schematem.
+
+### Zmiana 3 — edge function `return-snoozed-contacts` + cron
+
+**3a) Nowy plik:** `supabase/functions/return-snoozed-contacts/index.ts`
+
+Service-role client. SELECT z `deal_team_contacts` gdzie `snoozed_until <= today` AND `snoozed_until IS NOT NULL`. Dla każdego rekordu UPDATE: `category = COALESCE(snoozed_from_category, '10x')`, `snoozed_until=NULL`, `snooze_reason=NULL`, `snoozed_from_category=NULL`. Zwraca `{ processed, results }`. CORS headers, brak JWT (cron-only).
+
+**3b) Konfiguracja `verify_jwt = false`** w `supabase/config.toml` dla tej funkcji (cron wywołuje bez user JWT).
+
+**3c) Cron** — wstawienie przez `supabase--read_query`/insert (zgodnie z mem `Scheduling pg_cron` używamy helpera `schedule_edge_function` z Vault):
+```sql
+SELECT public.schedule_edge_function(
+  job_name => 'return-snoozed-contacts-daily',
+  schedule => '0 6 * * *',  -- 06:00 UTC = 07:00/08:00 PL
+  function_name => 'return-snoozed-contacts',
+  body => '{}'::jsonb
+);
+```
+Jeśli helper nie istnieje — fallback na klasyczny `cron.schedule` z `net.http_post` + `current_setting('app.settings.service_role_key')` (bez hardkodowania klucza w migracji).
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `supabase/migrations/<timestamp>_create_deal_team_activity_log.sql` | NEW — tabela + 3 indeksy + RLS + 1 policy SELECT + komentarz + ROLLBACK |
-| 2 | `src/hooks/useDealsTeamContacts.ts` | EDIT — uprościć `defaultSubStages` w `useUpdateTeamContact` (~linia 296–304) |
+| 1 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — split visible→{activeForGrid, snoozedActive}, render `<SnoozedContactsBar>` nad gridem |
+| 2 | `supabase/functions/return-snoozed-contacts/index.ts` | NEW — service-role worker przywracający kategorię |
+| 3 | `supabase/config.toml` | EDIT — `[functions.return-snoozed-contacts]` `verify_jwt = false` |
+| 4 | (cron) | INSERT przez insert-tool (nie migracja — zawiera service-role key) |
 
-## Poza zakresem (świadomie)
+## Poza zakresem
 
-- **B.3** — sweep legacy w `OfferingStage` (`src/types/dealTeam.ts`: `audit_plan/audit_scheduled/audit_done/meeting_plan/meeting_scheduled/meeting_done/preparation/accepted`) — osobny sprint porządkowy.
-- Edge function `return-snoozed-contacts` (powrót po `snoozed_until`) — osobny sprint, weryfikujemy tylko że `snoozed_from_category` się zapisuje.
-- Trigger `log_deal_category_change` — bez zmian.
+- Port `SnoozedTeamView` (pełna tabela odłożonych) — pasek wystarczy.
+- Zmiany w `deriveStage` ani w legacy `KanbanBoard.tsx`.
+- Notyfikacje "X kontaktów wróciło dziś" — osobny sprint.
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Migracja utworzona z rollbackiem, deployed | ⬜ |
-| `to_regclass('public.deal_team_activity_log')` zwraca nazwę | ⬜ |
-| `relrowsecurity = true`, policy `dtal_select` na SELECT | ⬜ |
-| `useDealsTeamContacts.ts:296–304` uproszczone — diff before/after | ⬜ |
-| Klik „Odłóż" na Bogdanie → toast sukces, karta znika z kanbana | ⬜ |
-| `deal_team_contacts` Bogdana: `category='10x'`, `snoozed_until='2026-05-21'`, `snoozed_from_category='audit'` | ⬜ |
-| `deal_team_activity_log`: nowy wiersz `action='category_changed'`, `old.category='audit'`, `new.category='10x'`, `actor_id='98a271e8-...'` | ⬜ |
-| Regresja 8 przycisków (Wyślij ofertę / Audyt / Klient / Utracony / Umów / Spotkanie / Zadzwoń / Mail) — działa bez błędów | ⬜ |
+| `snoozedActive` wydzielone, grid używa `activeForGrid` | ⬜ |
+| `SnoozedContactsBar` widoczny nad kolumnami w `/sgu/sprzedaz` gdy są odłożone | ⬜ |
+| Klik "Obudź" na pasku → kontakt wraca do kanbana (existing logic) | ⬜ |
+| Edge function `return-snoozed-contacts` wdrożona, manual curl zwraca `{processed:N}` | ⬜ |
+| Cron `return-snoozed-contacts-daily` w `cron.job` (schedule `0 6 * * *`) | ⬜ |
+| Smoke: `UPDATE ... SET snoozed_until=current_date WHERE id='ff95fb46…'` → trigger funkcji → Bogdan: `category='audit'`, `snoozed_until=NULL`, `snoozed_from_category=NULL` | ⬜ |
 | `npx tsc --noEmit` exit 0 | ⬜ |
 
