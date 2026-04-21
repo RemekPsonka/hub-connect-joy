@@ -458,7 +458,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                                 await updateContact.mutateAsync({
                                   id: contact.id,
                                   teamId,
-                                  offeringStage: 'meeting_plan',
+                                   offeringStage: 'decision_meeting',
                                 });
                               }
                               toast.success(`Zadanie dodane: ${tpl.title}`);

@@ -199,7 +199,7 @@ function DroppableColumn({
       onOfferingLostClick={() => onOfferingLostClick(c)}
       onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
       onMoreClick={() => onMoreClick(c)}
-      taskInfo={taskInfoMap?.get(c.contact_id)}
+      taskInfo={taskInfoMap?.get(c.id)}
     />
   );
 

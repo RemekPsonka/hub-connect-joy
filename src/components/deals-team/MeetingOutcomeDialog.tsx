@@ -71,7 +71,7 @@ export function MeetingOutcomeDialog({
       await updateContact.mutateAsync({
         id: teamContactId,
         teamId,
-        offeringStage: 'meeting_done',
+        offeringStage: 'decision_meeting',
         ...(note ? { notes: note } : {}),
       });
 
@@ -90,7 +90,7 @@ export function MeetingOutcomeDialog({
           await updateContact.mutateAsync({
             id: teamContactId,
             teamId,
-            offeringStage: 'meeting_plan',
+            offeringStage: 'decision_meeting',
           });
           await createTask.mutateAsync({
             task: {
