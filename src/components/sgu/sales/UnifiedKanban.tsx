@@ -589,6 +589,56 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     [filter],
   );
 
+  // Confetti when overdue drops from >0 to 0
+  const overdueCount = useMemo(() => {
+    if (!taskInfoMap) return 0;
+    let sum = 0;
+    for (const info of taskInfoMap.values()) sum += info.overdueCount;
+    return sum;
+  }, [taskInfoMap]);
+
+  useEffect(() => {
+    const prev = prevOverdueCountRef.current;
+    if (prev > 0 && overdueCount === 0) {
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      toast.success('🎉 Wszystkie overdue domknięte!');
+    }
+    prevOverdueCountRef.current = overdueCount;
+  }, [overdueCount]);
+
+  // Build snapshot of currently open tasks for the team, with column_key derived from contact stage
+  const contactById = useMemo(() => {
+    const m = new Map<string, DealTeamContact>();
+    for (const c of contacts) m.set(c.id, c);
+    return m;
+  }, [contacts]);
+
+  const openTasksSnapshot = useMemo(
+    () =>
+      openTasks
+        .map((t) => {
+          const c = contactById.get(t.deal_team_contact_id);
+          if (!c) return null;
+          return {
+            task_id: t.id,
+            team_contact_id: t.deal_team_contact_id,
+            column_key: deriveStage(c),
+            task_status_at_snapshot: t.status,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
+    [openTasks, contactById],
+  );
+
+  const handleSaveMeeting = async (notes: string) => {
+    try {
+      await saveMeeting.mutateAsync({ teamId, notes, snapshot: openTasksSnapshot });
+      setShowMeetingDialog(false);
+    } catch {
+      // toast handled in hook
+    }
+  };
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
