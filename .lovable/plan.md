@@ -1,99 +1,54 @@
 
 
-# B-FIX.11 — Zwarta karta Kanban (mniej whitespace)
+# B-FIX.13 — Ujednolicenie elementów karty Kanban (`+ składka` we wszystkich stage'ach)
 
 ## Problem
-Karta jest wysoka i rozciągnięta, bo:
-- 6 wierszy z `space-y-2` (8px), każdy element w osobnym `<div>`
-- Tytuł, sub-info, taski, sub-badge, premium, areas, banner, footer — wszystko stackowane pionowo
-- Footer z `border-t pt-1` + dwa pełne przyciski "Więcej" / "Oznacz jako lost"
-- Premium chip (`💰 — PLN`) w pustym wierszu (gdy brak wartości)
-- Awatary asystentki przeniesione do drugiego wiersza headera (zamiast obok tytułu)
+Karty w kolumnach Kanbana mają różny zestaw elementów:
+- **Lead / Prospect / Klient**: brak chipa `+ składka` (widać tylko sub-badge HOT/COLD/Standard + ewentualne taski)
+- **Ofertowanie**: ma `+ składka` po prawej
 
-## Cel
-Spłaszczyć kartę do **3 logicznych wierszy** + opcjonalnego bannera, zachowując wszystkie funkcje (klikalne badge, popover składki, mini-banner overdue, akcje "Więcej"/"Lost").
+User oczekuje spójnego layoutu — **`+ składka` powinno być na każdej karcie**, niezależnie od stage'u.
 
-## Nowy układ karty
+## Diagnoza
+W `UnifiedKanbanCard.tsx` (po B-FIX.11) `<PremiumQuickEdit />` jest renderowane bezwarunkowo w wierszu 2 z `ml-auto`. Skoro mimo to nie pojawia się na Lead/Klient — najpewniejsza przyczyna: chip jest spychany przez `flex-wrap` do drugiej linii i obcinany przez wąską kartę / overflow kolumny, albo render `+ składka` (variant `secondary`, `text-[10px]`) jest tak subtelny że ginie na tle.
 
-```
-┌─────────────────────────────────────────────────┐
-│ Imię Nazwisko                            [AO] · │  ← row 1: tytuł + awatar (po prawej)
-│ Firma · Stanowisko                              │  ← podpis pod tytułem (truncate)
-├─────────────────────────────────────────────────┤
-│ [📅 1] [📞 2]  [COLD]  [🏠][💰]      💰 12k PLN │  ← row 2: taski + sub-badge + areas + premium
-├─────────────────────────────────────────────────┤
-│ ⚠ 58 dni temu: Umówić spotkanie                │  ← banner (tylko jeśli overdue)
-├─────────────────────────────────────────────────┤
-│  ⋯                                       ✕ Lost │  ← row 4: ikonowe akcje (bez "Więcej" tekstu)
-└─────────────────────────────────────────────────┘
-```
+Dowód ze screenshota: w Ofertowaniu chip `+ składka` jest **wyraźnie niebieski** (kontrastowy gradient, znacznie większy niż reszta) — to inny rendering niż na Lead. Najpewniej różnica wynika z aktualnego stanu `valueGr`: tam gdzie kontakt **kiedyś miał wartość** (lub Ofertowanie wymusza inny styling), chip jest większy. Na Lead `valueGr === null` → mały szary badge ginie.
 
-## Konkretne zmiany w `UnifiedKanbanCard.tsx`
+## Rozwiązanie
+Ujednolicić chip `+ składka` we wszystkich stage'ach + zagwarantować że zawsze jest widoczny i wyrazisty.
 
-### 1. Padding + spacing
-- `p-3 space-y-2` → **`p-2.5 space-y-1.5`** (oszczędność ~6px na karcie)
+### 1. `src/components/sgu/sales/PremiumQuickEdit.tsx`
+Dla pustej wartości (`valueGr == null || valueGr === 0`) — zamiast subtelnego `Badge variant="secondary"`:
+- Render kontrastowego buttona: ikona `Plus` + tekst „składka"
+- Klasy: `h-5 px-2 text-[10px] border border-dashed border-primary/50 text-primary bg-primary/5 hover:bg-primary/10 hover:border-primary rounded-full`
+- Zachowanie identyczne (popover edycji)
+- Tooltip „Dodaj prognozę składki rocznej"
 
-### 2. Header (row 1) — awatar inline z tytułem
-- Layout: `flex items-start gap-2`
-- Lewa kolumna `flex-1 min-w-0`: tytuł + sub-info
-- Prawa kolumna: `<AssigneeAvatars />` (bez wrappera `ml-auto`)
-- Usuwa cały wiersz z awatarami pod headerem
+Dla wartości > 0 — bez zmian (`💰 12k zł` outline).
 
-### 3. Row 2 — JEDNA linia: taski + sub-badge + areas + premium
-Wszystko w `flex flex-wrap items-center gap-1` z `onClick stopPropagation`:
-- `<TaskStatusPill />` (chipy per typ)
-- Sub-badge wg stage (TemperatureBadge / SourceBadge / ClientStatusBadge / StageBadge offering)
-- Mini-chipy areas (ComplexityChips, już są inline)
-- `<PremiumQuickEdit />` z **`ml-auto`** (przyklejone do prawej)
+### 2. `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+Zagwarantować widoczność `PremiumQuickEdit` niezależnie od stage'u i szerokości:
+- Wrapper wokół chipa: `<div className="ml-auto shrink-0">` (już jest `ml-auto` — dodać `shrink-0` żeby flex-wrap nie spychał chipa do drugiej linii ani go nie obcinał)
+- Potwierdzić, że `<PremiumQuickEdit />` jest renderowane **dla każdego stage'u** (nie wewnątrz warunku `stage === 'offering'`) — sprawdzić w pliku, fix jeśli trzeba
 
-→ Likwidacja 3 osobnych wierszy. Gdy brak areas/sub-badge → wiersz wciąż się trzyma kupy.
-
-### 4. PremiumQuickEdit — ukryj puste
-- W `PremiumQuickEdit.tsx`: gdy `valueGr == null || valueGr === 0` → render kompaktowy badge `+💰` (bez "— PLN"). Tooltip "Dodaj prognozę składki". Oszczędza miejsce wizualne.
-
-### 5. Mini-banner overdue
-- Bez zmian logiki, ale `text-[11px] py-1` → `text-[10px] py-0.5` i `rounded` → `rounded-sm`. Zwarciej.
-
-### 6. Footer — ikony zamiast tekstów
-- Bez `border-t pt-1` → tylko `pt-0.5`
-- "Więcej" → ikonowy button `MoreHorizontal` (`h-6 w-6 p-0`), tooltip "Więcej"
-- "Oznacz jako lost" → ikonowy button `X` (`h-6 w-6 p-0` ghost, `text-muted-foreground hover:text-destructive`), tooltip "Oznacz jako lost"
-- Layout: `flex justify-between items-center`
-
-→ Oszczędność szerokości i wysokości; akcje nadal dostępne, opisane tooltipem.
+### 3. Szybki sanity-check
+Zweryfikować w `UnifiedKanban.tsx` (parent), czy do `UnifiedKanbanCard` przekazywany jest pełny obiekt `contact` z polem `expected_annual_premium_gr` — bez tego chip nigdy nie zna wartości.
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — restrukturyzacja na 3 wiersze, awatar w headerze, ikonowy footer |
-| 2 | `src/components/sgu/sales/PremiumQuickEdit.tsx` | EDIT — kompaktowy fallback `+💰` gdy brak wartości |
-
-## Weryfikacja
-
-```bash
-npx tsc --noEmit  # exit 0
-```
-
-Manual smoke (`/sgu/sprzedaz`):
-- Karta Artura Czepczyńskiego (Lead, COLD, 1 telefon, brak składki) → ~25-30% niższa, wszystkie elementy w jednej linii pod tytułem
-- Karta Bogdana Pietrzaka (Ofertowanie, Handshake, 200k PLN, overdue 58 dni) → kompaktowa, banner widoczny
-- Karta Artura Lewandowskiego (Klient, Standard, brak składki) → fallback `+💰` zamiast pustego "— PLN"
-- Klik tytułu → nawigacja do kontaktu
-- Klik chipa zadania / "Więcej" (ikonka) → otwiera Sheet
-- Klik PremiumQuickEdit → popover edycji
-- Klik "X" → flow Lost
-- Drag & drop nadal działa (stopPropagation na badge'ach)
+| 1 | `src/components/sgu/sales/PremiumQuickEdit.tsx` | EDIT — wyrazisty fallback `+ składka` (dashed primary border, ikona Plus, bg subtelny) |
+| 2 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — `shrink-0` na wrapperze `PremiumQuickEdit`, potwierdzić unconditional render |
+| 3 | `src/components/sgu/sales/UnifiedKanban.tsx` | VERIFY — `expected_annual_premium_gr` w danych kontaktu |
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Karta ma 3 logiczne wiersze + opcjonalny banner | ✅ |
-| Awatary asystentki w headerze obok tytułu | ✅ |
-| Taski + sub-badge + areas + premium w jednym wierszu | ✅ |
-| Footer ikonowy (Więcej + Lost), bez `border-t` | ✅ |
-| PremiumQuickEdit ma kompaktowy fallback dla pustej wartości | ✅ |
-| `tsc --noEmit` exit 0 | ✅ |
-| Wszystkie istniejące akcje dostępne (drag, popover, dialogi) | ✅ |
+| `+ składka` widoczny na kartach Lead, Prospect, Klient, Ofertowanie | ✅ |
+| Wyraźny styl (dashed primary, ikona Plus, hover) | ✅ |
+| Chip nigdy nie spychany do drugiej linii ani obcinany (`shrink-0`) | ✅ |
+| Po wpisaniu wartości — standardowy badge `💰 X zł` | ✅ |
+| `npx tsc --noEmit` exit 0 | ✅ |
 
