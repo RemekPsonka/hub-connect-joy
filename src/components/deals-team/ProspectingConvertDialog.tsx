@@ -269,15 +269,15 @@ export function ProspectingConvertDialog({
             prospect_source:
               category === 'client'
                 ? null
-                : prospect.source_type === 'meeting'
-                  ? 'cc_meeting'
-                  : prospect.source_type === 'csv'
-                    ? 'csv'
-                    : prospect.source_type === 'krs'
-                      ? 'ai_krs'
-                      : prospect.source_type === 'web'
-                        ? 'ai_web'
-                        : 'manual',
+                : (() => {
+                    const evt = (prospect.source_event ?? '').toLowerCase();
+                    if (evt.includes('csv') || prospect.source_file_name) return 'csv';
+                    if (evt.includes('krs')) return 'ai_krs';
+                    if (evt.includes('web') || evt.includes('www')) return 'ai_web';
+                    if (evt.includes('crm')) return 'crm_push';
+                    // Default: prospekt z modułu spotkań CC
+                    return 'cc_meeting';
+                  })(),
           })
           .select('id')
           .single();
