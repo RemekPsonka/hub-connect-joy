@@ -1,88 +1,74 @@
 
 
-# Wybór lejka i etapu w „Przekaż do SGU"
+# Sub-etapy w „Przekaż do lejka"
 
 ## Cel
-Przycisk „Przekaż do SGU" (na karcie kontaktu) ma pytać: **do którego lejka** i **na który etap** trafia kontakt. Dziś hardkoduje SGU + `lead`, przez co nie da się wrzucić kontaktu np. do lejka `Paweł&Remek` ani od razu na `prospect`/`offering`.
+Po wyborze etapu głównego (Prospekt / Lead / Ofertowanie / Klient) dialog ma pokazać dodatkowy select z **konkretnym sub-etapem**, żeby kontakt od razu trafił we właściwą kolumnę kanbanu, bez ręcznego ustawiania po pushu.
 
-## Zakres zmian
+## Mapowanie etap → sub-etap
 
-### 1. UI — `PushToSGUDialog.tsx`
+| Stage | Pole DB | Opcje (z istniejących stałych w `dealTeam.ts`) | Default |
+|---|---|---|---|
+| `prospect` | `prospect_source` | `crm_push`, `cc_meeting`, `ai_krs`, `ai_web`, `csv`, `manual` | `crm_push` |
+| `lead` | `temperature` | `hot`, `top`, `cold`, `10x` | `cold` |
+| `offering` | `offering_stage` | 8 wartości z `OFFERING_STAGE_ORDER` (`decision_meeting` … `won`/`lost`) | `decision_meeting` |
+| `client` | `client_status` | `standard`, `ambassador` (bez `lost` — to robi się przez markowanie) | `standard` |
 
-Dodaję dwa selecty na początku formularza:
+Etykiety: bezpośrednio z `TEMPERATURE_LABELS`, `PROSPECT_SOURCE_LABELS`, `OFFERING_STAGE_LABELS`, `CLIENT_STATUS_LABELS` (bez duplikowania stringów).
 
-- **Lejek** (`team_id`) — `Select` z listą `deal_teams` dostępnych dla zalogowanego dyrektora (hook `useDealsTeams` lub query do `deal_teams` z filtrem RLS). Domyślnie SGU (zgodność wsteczna). Jeśli jest tylko 1 lejek — select ukryty, wartość ustawiona automatycznie.
-- **Etap startowy** (`stage`) — `Select` z 4 opcjami: `Prospekt` / `Lead` / `Ofertowanie` / `Klient`. Domyślnie `Lead`.
+## Zmiany
 
-Pole „Oczekiwany przypis" pokazuje się tylko dla `lead`/`offering`/`client` (przy `prospect` zwykle nieznany — opcjonalnie).
+### 1. `src/components/sgu/PushToSGUDialog.tsx`
+- Rozszerzam Zod schema o `substage: z.string().optional()`.
+- Default formularza dla `substage` = `cold` (bo default `stage` = `lead`).
+- Po zmianie `stage` reset `substage` do defaulta dla nowego etapu (efekt na `watch('stage')`).
+- Nowy `<Select>` „Pod-etap" pod selectem etapu — opcje dynamicznie z helpera `optionsForStage(stage)` zwracającego `{value, label}[]`.
+- Etykieta selecta zmienia się: „Temperatura" / „Źródło" / „Etap ofertowania" / „Status klienta".
+- W `onSubmit`: dokładam `substage: values.substage` do body edge functiona.
+- `client` + `expected_annual_premium_pln`: zostaje wymagane (tak jak `lead`/`offering`). Tylko `prospect` ukrywa pole.
 
-Tytuł dialogu zmieniam na **„Przekaż do lejka"** (bez sztywnej nazwy SGU). Subskrypt: „Wybierz lejek i etap startowy".
+### 2. `supabase/functions/sgu-push-contact/index.ts`
+- Dorzucam `substage?: string` do `PushBody`.
+- Whitelist per stage (te same wartości co w UI). Jeśli `substage` nie pasuje → ignorowany (cicho), nie 400 — backward compat.
+- Mapowanie do INSERT-u w `deal_team_contacts`:
+  - `prospect` → `prospect_source: substage`
+  - `lead` → `temperature: substage`
+  - `offering` → `offering_stage: substage`
+  - `client` → `client_status: substage`
+- Nadpisuje dotychczasowy hardcode `prospect_source: 'crm_push'` (dla prospect bierze z `substage`, dla pozostałych zostaje `'crm_push'` jako znacznik pochodzenia, ale w dodatkowym polu — albo ustawiamy `prospect_source` tylko dla `stage === 'prospect'` i zostawiamy NULL dla pozostałych; po sprawdzeniu obecnego kodu robię to drugie, bo `prospect_source` semantycznie należy do prospect).
 
-Po sukcesie nawigacja idzie do właściwego lejka:
-- SGU → `/sgu/sprzedaz?highlight=<id>`
-- inny → `/deals-team?team=<team_id>&view=sales&highlight=<id>`
+  **Decyzja:** dla `stage !== 'prospect'` — `prospect_source` NULL (czystsze, zgodne z modelem IA). Dla `stage === 'prospect'` — z `substage` (default `crm_push`).
 
-### 2. Edge function — `sgu-push-contact`
+- Idempotencja zostaje bez zmian (`team_id` + `source_contact_id`). Jeśli rekord już istnieje, sub-etap NIE jest aktualizowany (zwracamy istniejący — tak jak dziś).
 
-Rozszerzam `PushBody` o:
-- `team_id?: string` — opcjonalne, fallback do `get_sgu_team_id()` (BC).
-- `stage?: 'prospect' | 'lead' | 'offering' | 'client'` — opcjonalne, fallback `'lead'`.
-
-Walidacje:
-- Jeśli `team_id` podany → sprawdzam `is_deal_team_member(user, team_id)` przez RPC, żeby dyrektor nie wrzucał do cudzych lejków.
-- `stage` musi być w whitelist 4 wartości.
-
-Zmiana w INSERT:
-- `team_id` z body (lub fallback SGU).
-- `category` = mapowanie ze `stage`:
-  - `prospect` → `category: 'prospect'`
-  - `lead` → `category: 'lead'`
-  - `offering` → `category: 'offering'`
-  - `client` → `category: 'client'` + `status: 'won'` zamiast `'new'`
-- `prospect_source: 'crm_push'` (zawsze, niezależnie od etapu — bo to przekazanie z CRM).
-
-Idempotencja zostaje per `(team_id, source_contact_id)` — czyli ten sam kontakt można wrzucić do **różnych** lejków, ale do tego samego raz.
-
-Komunikat zwrotny zawiera `team_id` i `stage`, żeby frontend mógł zbudować właściwy link.
-
-### 3. Hook — nowy `useAvailableDealTeams.ts`
-
-```ts
-// query do deal_teams gdzie is_active=true, RLS filtruje do dostępnych dla usera
-```
-
-Używany w `PushToSGUDialog` do wypełnienia selecta. Cache `staleTime: 5 min`.
-
-### 4. Drobne — przycisk wywołujący
-
-Plik z przyciskiem „Przekaż do SGU" na karcie kontaktu (komponent w okolicy `ContactDetail`) — zmieniam etykietę przycisku na **„Przekaż do lejka"**. Warunek widoczności: dyrektor + `useAvailableDealTeams.length > 0` (zamiast warunku na SGU). SGU-only flag z `useSGUTeamId().enabled` przestaje gatekeepować — przycisk działa też gdy jest tylko `Paweł&Remek`.
+### 3. (opcjonalnie, jeśli starczy w 1 etapie) drobne UX
+- Pod-etap pokazuje się jako drugi select w gridzie 1-kolumnowym, z labelką dynamiczną.
+- Komunikat sukcesu wzbogacam: „Kontakt przekazany jako Lead · 🔥 HOT" (label z mapy).
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/hooks/useAvailableDealTeams.ts` | NEW |
-| 2 | `src/components/sgu/PushToSGUDialog.tsx` | EDIT — 2 selecty, mapowanie, nawigacja |
-| 3 | `supabase/functions/sgu-push-contact/index.ts` | EDIT — body schema + walidacja + mapowanie stage→category |
-| 4 | komponent z przyciskiem (do zlokalizowania w `src/components/contacts/...`) | EDIT — etykieta + warunek widoczności |
+| 1 | `src/components/sgu/PushToSGUDialog.tsx` | EDIT — substage select + reset on stage change + body |
+| 2 | `supabase/functions/sgu-push-contact/index.ts` | EDIT — body schema + walidacja + mapowanie do 4 pól |
 
-Bez migracji DB — schemat wystarcza (`category` enum już ma wszystkie wartości, `prospect_source` zostaje `crm_push`).
+Bez nowych hooków, bez migracji — kolumny `temperature` / `prospect_source` / `offering_stage` / `client_status` już istnieją w `deal_team_contacts`.
 
 ## Poza zakresem
-- Wybór konkretnej sub-kategorii (temperature/offering_stage/client_status) w dialogu — domyślnie `NULL`, ustawiane potem na kanbanie.
-- Bulk push (wiele kontaktów naraz).
-- Nowa nazwa pliku komponentu (`PushToSGUDialog` zostaje, choć działa już dla wszystkich lejków — rename w osobnym PR).
+- Edycja sub-etapu, gdy kontakt już jest w lejku (idempotentnie zwracamy istniejący).
+- Bulk push z sub-etapem.
+- UI do oznaczania `lost` przy pushu (do tego służy późniejszy „Won/Lost" flow w kanbanie).
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Dialog pokazuje select lejków (lub auto-ustawia gdy 1 lejek) | ⬜ |
-| Dialog pokazuje select etapu (4 opcje, domyślnie Lead) | ⬜ |
-| Edge function akceptuje `team_id` + `stage`, waliduje członkostwo | ⬜ |
-| Mapowanie stage→category działa (prospect/lead/offering/client) | ⬜ |
-| Idempotencja per `(team_id, source_contact_id)` — ten sam kontakt do 2 lejków OK | ⬜ |
-| Po pushu do `Paweł&Remek` nawigacja do `/deals-team?team=...&highlight=...` | ⬜ |
-| Po pushu do SGU nawigacja do `/sgu/sprzedaz?highlight=...` (BC) | ⬜ |
+| Po wyborze `Lead` widać select „Temperatura" z 4 opcjami (default `cold`) | ⬜ |
+| Po wyborze `Prospekt` widać select „Źródło" (default `crm_push`) | ⬜ |
+| Po wyborze `Ofertowanie` widać select „Etap ofertowania" z 8 opcjami | ⬜ |
+| Po wyborze `Klient` widać select „Status klienta" (standard/ambassador) | ⬜ |
+| Zmiana etapu resetuje sub-etap do defaulta nowego etapu | ⬜ |
+| Edge function zapisuje sub-etap w odpowiedniej kolumnie DB | ⬜ |
+| Push do `Lead/HOT` → kontakt pojawia się w kolumnie HOT na kanbanie | ⬜ |
 | `npx tsc --noEmit` exit 0 | ⬜ |
 
