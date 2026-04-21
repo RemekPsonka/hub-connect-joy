@@ -31,6 +31,7 @@ import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
