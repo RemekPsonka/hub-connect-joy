@@ -260,7 +260,7 @@ export function ProspectingConvertDialog({
             tenant_id: tenantId,
             // NULL category → generated deal_stage = 'prospect'
             // (chyba że konwertujemy bezpośrednio do klienta — wtedy zostawiamy 'client')
-            category: category === 'client' ? 'client' : null,
+            category: (category === 'client' ? 'client' : null) as unknown as string,
             priority: 'medium',
             status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
