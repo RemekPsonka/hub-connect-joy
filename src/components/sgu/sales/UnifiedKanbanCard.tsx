@@ -87,46 +87,48 @@ export function UnifiedKanbanCard({
 
       {/* Row 2: tasks + sub-badge + areas + premium */}
       <div
-        className="flex items-center gap-1 flex-wrap"
+        className="flex items-start gap-2"
         onClick={(e) => e.stopPropagation()}
       >
-        <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
-        {stage === 'lead' && (
-          <TemperatureBadge
-            value={contact.temperature}
-            onChange={(v) => onSubcategoryChange('temperature', v)}
+        <div className="flex-1 min-w-0 flex items-center gap-1 flex-wrap">
+          <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
+          {stage === 'lead' && (
+            <TemperatureBadge
+              value={contact.temperature}
+              onChange={(v) => onSubcategoryChange('temperature', v)}
+            />
+          )}
+          {stage === 'prospect' && (
+            <SourceBadge
+              value={contact.prospect_source}
+              onChange={(v) => onSubcategoryChange('prospect_source', v)}
+            />
+          )}
+          {stage === 'client' && (
+            <ClientStatusBadge
+              value={contact.client_status}
+              onChange={(v) => onSubcategoryChange('client_status', v)}
+            />
+          )}
+          {stage === 'offering' && (
+            <StageBadge
+              stage="offering"
+              value={contact.offering_stage as OfferingStage}
+              mode="compact"
+              onChange={onOfferingStageChange}
+              onWonClick={onOfferingWonClick}
+              onLostClick={onOfferingLostClick}
+            />
+          )}
+          <ComplexityChips complexity={contact.client_complexity} />
+        </div>
+        <div className="shrink-0">
+          <PremiumQuickEdit
+            contactId={contact.id}
+            teamId={teamId}
+            valueGr={contact.expected_annual_premium_gr ?? null}
           />
-        )}
-        {stage === 'prospect' && (
-          <SourceBadge
-            value={contact.prospect_source}
-            onChange={(v) => onSubcategoryChange('prospect_source', v)}
-          />
-        )}
-        {stage === 'client' && (
-          <ClientStatusBadge
-            value={contact.client_status}
-            onChange={(v) => onSubcategoryChange('client_status', v)}
-          />
-        )}
-        {stage === 'offering' && (
-          <StageBadge
-            stage="offering"
-            value={contact.offering_stage as OfferingStage}
-            mode="compact"
-            onChange={onOfferingStageChange}
-            onWonClick={onOfferingWonClick}
-            onLostClick={onOfferingLostClick}
-          />
-        )}
-        <ComplexityChips complexity={contact.client_complexity} />
-        <div className="ml-auto shrink-0">
-        <PremiumQuickEdit
-          contactId={contact.id}
-          teamId={teamId}
-          valueGr={contact.expected_annual_premium_gr ?? null}
-        />
-      </div>
+        </div>
       </div>
 
       {/* Mini-banner: oldest overdue task */}
