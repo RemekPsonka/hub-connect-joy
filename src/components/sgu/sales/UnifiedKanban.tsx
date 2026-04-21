@@ -262,9 +262,9 @@ function DroppableColumn({
           )}
         </div>
       </div>
-      <ScrollArea className="flex-1 p-2 min-w-0">
+      <div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
         <div className="min-w-0">{body}</div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
