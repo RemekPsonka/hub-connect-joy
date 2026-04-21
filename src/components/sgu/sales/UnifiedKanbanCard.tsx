@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
@@ -67,14 +67,14 @@ export function UnifiedKanbanCard({
     <Card
       onClick={handleCardClick}
       className={cn(
-        'p-3 cursor-pointer hover:shadow-md transition-all space-y-2 border-l-4',
+        'p-2.5 cursor-pointer hover:shadow-md transition-all space-y-1.5 border-l-4',
         borderClass[status],
         isDragging && 'opacity-50',
       )}
     >
-      {/* Header */}
-      <div className="flex flex-col gap-1.5">
-        <div className="min-w-0">
+      {/* Row 1: title + assignees */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">{fullName}</div>
           {(company || position) && (
             <div className="text-xs text-muted-foreground truncate">
@@ -82,44 +82,34 @@ export function UnifiedKanbanCard({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1 flex-wrap">
-          <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
-          <div className="ml-auto">
-            <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
-          </div>
-        </div>
+        <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
       </div>
 
-      {/* Sub-category badge — only for the matching stage */}
-      {(stage === 'lead' || stage === 'prospect' || stage === 'client') && (
-        <div
-          className="flex items-center gap-1 flex-wrap"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {stage === 'lead' && (
-            <TemperatureBadge
-              value={contact.temperature}
-              onChange={(v) => onSubcategoryChange('temperature', v)}
-            />
-          )}
-          {stage === 'prospect' && (
-            <SourceBadge
-              value={contact.prospect_source}
-              onChange={(v) => onSubcategoryChange('prospect_source', v)}
-            />
-          )}
-          {stage === 'client' && (
-            <ClientStatusBadge
-              value={contact.client_status}
-              onChange={(v) => onSubcategoryChange('client_status', v)}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Offering stage badge */}
-      {stage === 'offering' && (
-        <div onClick={(e) => e.stopPropagation()}>
+      {/* Row 2: tasks + sub-badge + areas + premium */}
+      <div
+        className="flex items-center gap-1 flex-wrap"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
+        {stage === 'lead' && (
+          <TemperatureBadge
+            value={contact.temperature}
+            onChange={(v) => onSubcategoryChange('temperature', v)}
+          />
+        )}
+        {stage === 'prospect' && (
+          <SourceBadge
+            value={contact.prospect_source}
+            onChange={(v) => onSubcategoryChange('prospect_source', v)}
+          />
+        )}
+        {stage === 'client' && (
+          <ClientStatusBadge
+            value={contact.client_status}
+            onChange={(v) => onSubcategoryChange('client_status', v)}
+          />
+        )}
+        {stage === 'offering' && (
           <StageBadge
             stage="offering"
             value={contact.offering_stage as OfferingStage}
@@ -128,19 +118,15 @@ export function UnifiedKanbanCard({
             onWonClick={onOfferingWonClick}
             onLostClick={onOfferingLostClick}
           />
-        </div>
-      )}
-
-      {/* Areas */}
-      <ComplexityChips complexity={contact.client_complexity} />
-
-      {/* Premium quick edit */}
-      <div onClick={(e) => e.stopPropagation()}>
+        )}
+        <ComplexityChips complexity={contact.client_complexity} />
+        <div className="ml-auto">
         <PremiumQuickEdit
           contactId={contact.id}
           teamId={teamId}
           valueGr={contact.expected_annual_premium_gr ?? null}
         />
+      </div>
       </div>
 
       {/* Mini-banner: oldest overdue task */}
@@ -149,7 +135,7 @@ export function UnifiedKanbanCard({
           type="button"
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="w-full text-left text-[11px] px-2 py-1 rounded bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition truncate"
+          className="w-full text-left text-[10px] px-2 py-0.5 rounded-sm bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition truncate"
         >
           {taskInfo.oldestOverdue.days_ago === 0
             ? `Dziś: ${taskInfo.oldestOverdue.title}`
@@ -157,25 +143,28 @@ export function UnifiedKanbanCard({
         </button>
       )}
 
-      {/* Footer: More + Lost */}
-      <div className="pt-1 border-t flex justify-end items-center" onClick={(e) => e.stopPropagation()}>
+      {/* Footer: icon-only actions */}
+      <div className="pt-0.5 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="h-6 px-2 text-[10px] gap-1 mr-auto"
+          className="h-6 w-6 p-0"
+          title="Więcej"
+          aria-label="Więcej"
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <MoreHorizontal className="h-3 w-3" />
-          Więcej
+          <MoreHorizontal className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 text-[10px] text-muted-foreground hover:text-destructive"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+          title="Oznacz jako lost"
+          aria-label="Oznacz jako lost"
           onClick={onLostClick}
         >
-          Oznacz jako lost
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
     </Card>
