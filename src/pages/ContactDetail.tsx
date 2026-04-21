@@ -64,8 +64,8 @@ export default function ContactDetail() {
   const [isPushSGUOpen, setIsPushSGUOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'person' | 'company'>('person');
   const generateContactProfile = useGenerateContactProfile();
-  const { sguTeamId } = useSGUTeamId();
-  const canPushToSGU = director !== null && !!sguTeamId;
+  const { teams: availableTeams } = useAvailableDealTeams();
+  const canPushToSGU = director !== null && availableTeams.length > 0;
 
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
@@ -133,7 +133,7 @@ export default function ContactDetail() {
         <div className="flex justify-end -mt-2">
           <Button variant="outline" size="sm" onClick={() => setIsPushSGUOpen(true)} className="gap-2">
             <Share2 className="h-4 w-4" />
-            Przekaż do SGU
+            Przekaż do lejka
           </Button>
         </div>
       )}
