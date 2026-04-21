@@ -743,8 +743,27 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
             />
             Grupuj wg sub-kategorii
           </label>
+          <Toggle
+            pressed={myOverdueOnly}
+            onPressedChange={setMyOverdueOnly}
+            size="sm"
+            aria-label="Pokaż tylko moje overdue"
+            className="h-8 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
+          >
+            <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
+            Moje overdue
+          </Toggle>
         </div>
       </div>
+
+      <MeetingProgressBar
+        progress={meetingProgress}
+        lastMeetingAt={lastMeeting?.meeting_at ?? null}
+        openTasksCount={openTasksSnapshot.length}
+        streak={streak}
+        onSaveMeeting={() => setShowMeetingDialog(true)}
+        isPending={saveMeeting.isPending}
+      />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div ref={snoozedRef}>
