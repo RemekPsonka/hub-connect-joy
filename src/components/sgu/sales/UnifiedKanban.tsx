@@ -482,6 +482,15 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   }, [openSnoozedSignal]);
   const { data: taskInfoMap } = useActiveTaskContacts(teamId);
+  const { data: currentDirector } = useCurrentDirector();
+  const { data: lastMeeting } = useLastTeamMeeting(teamId);
+  const { data: meetingProgress } = useMeetingProgress(lastMeeting?.id);
+  const { data: streak = 0 } = useTeamMeetingStreak(teamId);
+  const { data: openTasks = [] } = useOpenTasksSnapshot(teamId);
+  const saveMeeting = useSaveTeamMeeting();
+  const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+  const [myOverdueOnly, setMyOverdueOnly] = useState(false);
+  const prevOverdueCountRef = useRef<number>(0);
 
   const [convertContact, setConvertContact] = useState<DealTeamContact | null>(null);
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
