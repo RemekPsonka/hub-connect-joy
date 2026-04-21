@@ -290,6 +290,26 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="substage">{SUBSTAGE_LABEL[stage]}</Label>
+              <Select
+                value={substage ?? SUBSTAGE_DEFAULTS[stage]}
+                onValueChange={(v) => form.setValue('substage', v, { shouldValidate: false })}
+                disabled={submitting}
+              >
+                <SelectTrigger id="substage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {subOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {showPremium && (
               <div className="space-y-1.5">
                 <Label htmlFor="premium">Oczekiwany przypis roczny (PLN)</Label>
