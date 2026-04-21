@@ -263,6 +263,21 @@ export function ProspectingConvertDialog({
             status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
             ai_brief_generated_at: prospect.ai_brief_generated_at || null,
+            // Map prospecting source → deal_stage + prospect_source
+            // so CC-meeting prospects show up in the Prospekt column with CC badge.
+            deal_stage: category === 'client' ? 'client' : 'prospect',
+            prospect_source:
+              category === 'client'
+                ? null
+                : prospect.source_type === 'meeting'
+                  ? 'cc_meeting'
+                  : prospect.source_type === 'csv'
+                    ? 'csv'
+                    : prospect.source_type === 'krs'
+                      ? 'ai_krs'
+                      : prospect.source_type === 'web'
+                        ? 'ai_web'
+                        : 'manual',
           })
           .select('id')
           .single();
