@@ -1,81 +1,91 @@
 
 
-# B-FIX.16 — Komplet placeholderów na karcie (opiekun, składka, banner zadania)
+# B-FIX.5-owner — Avatar opiekuna kontaktu zawsze widoczny na karcie kanban
 
 ## Diagnoza
 
-Layout kart we wszystkich 4 kolumnach jest identyczny (jeden plik `UnifiedKanbanCard.tsx`), ale **3 elementy mają conditional render i znikają, gdy brak danych**:
+`deal_team_contacts.assigned_to` (uuid → `directors.id`) trzyma opiekuna kontaktu, ale na kartach Kanbana nie pokazujemy go. Slot „opiekun" w prawym górnym rogu pokazuje wyłącznie assignees zadania (`taskInfo.assignees`). Gdy kontakt nie ma żadnego aktywnego zadania (Lead/Klient bez zadań), karta wygląda jak „bez opiekuna" — choć rzeczywisty opiekun istnieje.
 
-| Element | Warunek render | Co user widzi |
-|---|---|---|
-| `AssigneeAvatars` | `if (!assignees.length) return null` | Puste miejsce po prawej w Lead/Klient |
-| Banner overdue | `{taskInfo?.oldestOverdue && ...}` | Brak info o zaległym zadaniu |
-| `PremiumQuickEdit` | renderuje placeholder `+ składka` (już OK po B-FIX.13) | **Widoczne** — ale na screenie Artur Czepczyński go nie ma, bo… |
-
-Faktyczne źródło różnic na screenach:
-
-- **Ofertowanie / Wojciech Staniszewski**: ma składkę (`200 000 zł`), ma awatar AO (przypisany opiekun), ma banner overdue → komplet
-- **Lead / Artur Czepczyński**: brak składki, brak opiekuna, brak overdue → karta wygląda jak „pusta"
-- **Klient / Artur Lewandowski**: brak składki, brak opiekuna → karta wygląda jak „pusta"
-
-User chce, żeby karty **zawsze pokazywały te 3 sloty** — w postaci aktywnych placeholderów do uzupełnienia, nie ukrywały ich.
+Stan obecny:
+- `deal_team_contacts.assigned_to` → `uuid`, brak FK (potwierdzone w DB).
+- W typie `DealTeamContact` jest już prefigurowany `assigned_director?: { id, full_name }`, ale nie jest pobierany.
+- `useTeamContacts` robi `select('*')` bez joinu.
+- `AssigneeAvatars` przyjmuje tylko `assignees: TaskAssignee[]`.
 
 ## Rozwiązanie
 
-### 1. `AssigneeAvatars` — placeholder „dodaj opiekuna"
-Plik: `src/components/sgu/sales/AssigneeAvatars.tsx`
+### 1. Migracja: FK `deal_team_contacts.assigned_to → directors(id)`
+Plik: `supabase/migrations/<ts>_deal_team_contacts_assigned_to_fk.sql`
 
-- Usunąć `if (!assignees.length) return null`.
-- Gdy lista pusta, renderować pojedynczy „pusty" awatar — kółko `h-5 w-5` z ikoną `UserPlus`, dashed border w kolorze primary, klikalne (otwiera `onMoreClick` / dialog zadania, gdzie można przypisać opiekuna).
-- Dodać prop `onAddClick?: () => void` i przekazać go z `UnifiedKanbanCard` (reuse `onMoreClick`).
-- Tooltip: „Dodaj opiekuna zadania".
+- Dodać brakujący FK z `ON DELETE SET NULL`.
+- Dodać indeks na `assigned_to` (nie istnieje, a jest filtrowany w wielu miejscach).
+- ROLLBACK w komentarzu.
 
-### 2. Banner zadania — placeholder „brak aktywnego zadania"
-Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+```sql
+ALTER TABLE public.deal_team_contacts
+  ADD CONSTRAINT deal_team_contacts_assigned_to_fkey
+  FOREIGN KEY (assigned_to) REFERENCES public.directors(id) ON DELETE SET NULL;
 
-Obecnie banner renderuje się TYLKO dla `oldestOverdue`. Rozszerzyć logikę:
+CREATE INDEX IF NOT EXISTS idx_deal_team_contacts_assigned_to
+  ON public.deal_team_contacts(assigned_to)
+  WHERE assigned_to IS NOT NULL;
 
-- **Jest overdue** → czerwony banner „X dni temu: <title>" (bez zmian)
-- **Jest aktywne zadanie (today/active)** → neutralny banner z tytułem zadania, np. „Dziś: <title>" lub „<data>: <title>" (amber/emerald w zależności od statusu)
-- **Brak jakiegokolwiek zadania** → szary, dashed banner placeholder „+ Zaplanuj następne zadanie", klikalny → `onMoreClick`
-
-Wymaga rozszerzenia o pole `nextTask` w `TaskContactInfo` lub użycia istniejących danych z `byType` / `oldestOverdue`. Sprawdzę `useActiveTaskContacts` przed implementacją; jeśli nie ma, dodam minimalny selektor „pierwsze otwarte zadanie".
-
-### 3. Składka — pozostawić bez zmian
-`PremiumQuickEdit` już renderuje placeholder `+ składka` (B-FIX.13). Na screenie Artura Czepczyńskiego go nie widać — ale to jest kwestia tego, że karta jest zwinięta w sekcji „Lead" pokazanej powyżej (może być przesłonięta). **Zweryfikować po deployu** — jeśli faktycznie nadal nie ma, dopiero wtedy wracamy do tematu.
-
-### 4. Spójna kolejność i wygląd elementów we wszystkich kolumnach
-Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
-
-Po zmianach wszystkie 4 stage'e mają **dokładnie ten sam szkielet** ze stałymi slotami:
-
-```text
-[Wiersz 1]  Imię nazwisko                          [opiekun lub +]
-            firma · stanowisko
-[Wiersz 2]  TaskPill + StageBadge       [składka lub +]
-[Wiersz 3]  ComplexityChips (opt.)
-[Wiersz 4]  Banner zadania (zawsze widoczny)
-[Wiersz 5]  …                                                  ×
+-- ROLLBACK:
+-- DROP INDEX IF EXISTS public.idx_deal_team_contacts_assigned_to;
+-- ALTER TABLE public.deal_team_contacts DROP CONSTRAINT IF EXISTS deal_team_contacts_assigned_to_fkey;
 ```
 
-Żaden z 3 placeholder-slotów nigdy nie znika.
+### 2. `useDealsTeamContacts.ts` — dociągnąć opiekuna
+Plik: `src/hooks/useDealsTeamContacts.ts`
+
+- W `useTeamContacts`: zostawić obecny kształt zapytania, ale po pobraniu `dealContacts` dociągnąć batch `directors(id, full_name)` po unikalnych `assigned_to` (tak samo jak robimy z `companies` — bez join-stringa, prościej i bez ryzyka relacji w PostgREST).
+- Zmapować na każdy `dc` pole `assigned_director: { id, full_name } | null`.
+- Analogicznie w `useTeamContact` (single).
+
+Powód doboru tej drogi (zamiast `select(',owner:directors!fk(...)')`): istniejący kod świadomie unika joinów PostgREST i robi mapy w JS — będzie spójnie i nie ryzykujemy konfliktów z RLS na `directors`.
+
+### 3. Typ — bez zmian
+Plik: `src/types/dealTeam.ts`
+
+`DealTeamContact.assigned_director?: { id; full_name }` już istnieje (linie 166–169). Wystarczy go faktycznie wypełniać. Brief proponował `owner` — używamy istniejącego `assigned_director`, by nie mnożyć pól.
+
+### 4. `AssigneeAvatars` — nowy prop `owner`
+Plik: `src/components/sgu/sales/AssigneeAvatars.tsx`
+
+- Dodać prop `owner?: { id; full_name } | null`.
+- Zbudować lokalną listę `items`: najpierw `owner` (jeśli jest), potem `assignees` z deduplikacją po `id`.
+- Placeholder „+" pokazujemy tylko gdy `items.length === 0` (tak jak dziś, ale na połączonej liście).
+- `visible = items.slice(0, 3)`, `extra = items.length - visible.length`. Pierwszy avatar (opiekun) dostaje cienką ramkę-akcent (`ring-primary/40`) żeby wizualnie odróżnić go od assignees zadania. Tooltip opiekuna: `"Opiekun: <full_name>"`.
+
+### 5. `UnifiedKanbanCard` — przekazać `owner`
+Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+
+```tsx
+<AssigneeAvatars
+  owner={contact.assigned_director ?? null}
+  assignees={taskInfo?.assignees ?? []}
+  onAddClick={onMoreClick}
+/>
+```
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `src/components/sgu/sales/AssigneeAvatars.tsx` | EDIT — placeholder „+" gdy brak opiekuna; nowy prop `onAddClick` |
-| 2 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — przekazać `onMoreClick` do `AssigneeAvatars`; rozszerzyć banner o stany `next` i `none` (placeholder) |
-| 3 | `src/hooks/useActiveTaskContacts.ts` | VERIFY/EDIT — upewnić się, że `TaskContactInfo` udostępnia info o najbliższym aktywnym zadaniu (title, status, date); jeśli nie — dodać minimalne pole `nextTask` |
+| 1 | `supabase/migrations/<ts>_deal_team_contacts_assigned_to_fk.sql` | NEW — FK + indeks + rollback |
+| 2 | `src/hooks/useDealsTeamContacts.ts` | EDIT — dociągnięcie `directors` po `assigned_to` w `useTeamContacts` i `useTeamContact`, mapowanie na `assigned_director` |
+| 3 | `src/components/sgu/sales/AssigneeAvatars.tsx` | EDIT — nowy prop `owner`, scalenie z `assignees`, dedupe, akcent na pierwszym avatarze |
+| 4 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — przekazać `contact.assigned_director` do `AssigneeAvatars` |
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| W każdej kolumnie (Lead/Prospect/Klient/Ofertowanie) karta ma awatar opiekuna LUB klikalny placeholder „+" | ✅ |
-| W każdej kolumnie karta ma `+ składka` lub badge ze składką | ✅ |
-| W każdej kolumnie karta ma banner zadania: overdue (czerwony) / next (amber/emerald) / placeholder „+ Zaplanuj zadanie" (szary, dashed) | ✅ |
-| Placeholder opiekuna i banner placeholder otwierają `onMoreClick` (panel zadań) | ✅ |
-| Karta Ofertowanie wygląda bez regresji (wszystkie istniejące dane wyświetlają się tak samo) | ✅ |
-| `tsc --noEmit` exit 0 | ✅ |
+| Migracja FK + indeks zadeployowana, rollback udokumentowany | ✅ |
+| Kontakt z `assigned_to` ustawionym → avatar opiekuna widoczny w Lead/Prospekt/Klient/Ofertowanie nawet bez tasków | ✅ |
+| Tooltip opiekuna: „Opiekun: <Imię Nazwisko>" | ✅ |
+| Opiekun + assignee tego samego doradcy → jeden avatar (dedupe) | ✅ |
+| Opiekun + assignee innego doradcy → dwa avatary, opiekun pierwszy z subtelnym akcentem | ✅ |
+| Bez opiekuna i bez assignee → istniejący placeholder „+" bez zmian | ✅ |
+| `npx tsc --noEmit` exit 0 | ✅ |
 
