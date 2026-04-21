@@ -287,6 +287,10 @@ export function useUpdateTeamContact() {
       lostReason,
       lostAt,
       expectedAnnualPremiumGr,
+      potentialPropertyGr,
+      potentialFinancialGr,
+      potentialCommunicationGr,
+      potentialLifeGroupGr,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -332,6 +336,10 @@ export function useUpdateTeamContact() {
       if (lostReason !== undefined) updates.lost_reason = lostReason;
       if (lostAt !== undefined && isLost === undefined) updates.lost_at = lostAt;
       if (expectedAnnualPremiumGr !== undefined) updates.expected_annual_premium_gr = expectedAnnualPremiumGr;
+      if (potentialPropertyGr !== undefined) updates.potential_property_gr = potentialPropertyGr;
+      if (potentialFinancialGr !== undefined) updates.potential_financial_gr = potentialFinancialGr;
+      if (potentialCommunicationGr !== undefined) updates.potential_communication_gr = potentialCommunicationGr;
+      if (potentialLifeGroupGr !== undefined) updates.potential_life_group_gr = potentialLifeGroupGr;
 
       const { error } = await supabase
         .from('deal_team_contacts')

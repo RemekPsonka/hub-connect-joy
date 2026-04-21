@@ -59,6 +59,13 @@ export function UnifiedKanbanCard({
   const company = contact.contact?.company;
   const position = contact.contact?.position;
 
+  // Suma oczekiwanych składek z 4 obszarów (stage 'client' badge)
+  const potentialSumGr =
+    (contact.potential_property_gr ?? 0) +
+    (contact.potential_financial_gr ?? 0) +
+    (contact.potential_communication_gr ?? 0) +
+    (contact.potential_life_group_gr ?? 0);
+
   const handleCardClick = () => {
     navigate(`/sgu/klienci?contactId=${contact.contact_id}`);
   };
@@ -138,6 +145,23 @@ export function UnifiedKanbanCard({
           />
         </div>
       </div>
+
+      {/* Klient stage: badge sumy oczekiwanych składek z obszarów */}
+      {stage === 'client' && potentialSumGr > 0 && (
+        <div
+          className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5 inline-flex items-center gap-1 self-start"
+          title="Suma oczekiwanych składek z obszarów (Majątek + Finansowe + Komunikacja + Życie/Grupowe)"
+        >
+          <span>Σ oczek.</span>
+          <span className="font-semibold tabular-nums">
+            {new Intl.NumberFormat('pl-PL', {
+              style: 'currency',
+              currency: 'PLN',
+              maximumFractionDigits: 0,
+            }).format(potentialSumGr / 100)}
+          </span>
+        </div>
+      )}
 
       {/* Row 3: complexity chips on their own row */}
       <ComplexityChips complexity={contact.client_complexity} />

@@ -8,6 +8,7 @@ import {
   TrendingDown,
   Trophy,
   Layers,
+  Target,
 } from 'lucide-react';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import type { SGUClientsPortfolio } from '@/hooks/useSGUClientsPortfolio';
@@ -30,7 +31,7 @@ export function ClientsHeader({ data, isLoading, onCardClick }: Props) {
   const commTrend = t ? trend(t.commissionMonthGr, t.commissionPrevMonthGr) : null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
       <KpiCard
         icon={<Users className="h-4 w-4" />}
         label="Klienci aktywni"
@@ -61,6 +62,13 @@ export function ClientsHeader({ data, isLoading, onCardClick }: Props) {
           ) : null
         }
         onClick={onCardClick ? () => onCardClick('portfolio') : undefined}
+      />
+      <KpiCard
+        icon={<Target className="h-4 w-4 text-emerald-600" />}
+        label="Portfel oczekiwany"
+        value={isLoading ? '—' : formatCompactCurrency((t?.expectedPortfolioGr ?? 0) / 100)}
+        sub="Σ obszarów"
+        onClick={onCardClick ? () => onCardClick('complex') : undefined}
       />
       <KpiCard
         icon={

@@ -64,6 +64,7 @@ export interface SGUClientsPortfolio {
     commissionPrevMonthGr: number;
     ambassadorsCount: number;
     complexClientsCount: number;
+    expectedPortfolioGr: number;
   };
 }
 
@@ -102,6 +103,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           commissionPrevMonthGr: 0,
           ambassadorsCount: 0,
           complexClientsCount: 0,
+          expectedPortfolioGr: 0,
         },
       };
       if (!teamId) return empty;
@@ -323,6 +325,16 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
         return active >= 3;
       }).length;
 
+      const expectedPortfolioGr = rows.reduce(
+        (s, r) =>
+          s +
+          r.potential_property_gr +
+          r.potential_financial_gr +
+          r.potential_communication_gr +
+          r.potential_life_group_gr,
+        0,
+      );
+
       return {
         rows: rows.sort((a, b) => b.expected_annual_premium_gr - a.expected_annual_premium_gr),
         totals: {
@@ -337,6 +349,7 @@ export function useSGUClientsPortfolio(teamId: string | null | undefined) {
           commissionPrevMonthGr,
           ambassadorsCount,
           complexClientsCount,
+          expectedPortfolioGr,
         },
       };
     },

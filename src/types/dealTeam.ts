@@ -334,6 +334,10 @@ export interface UpdateTeamContactInput {
   lostReason?: string | null;
   lostAt?: string | null;
   expectedAnnualPremiumGr?: number | null;
+  potentialPropertyGr?: number | null;
+  potentialFinancialGr?: number | null;
+  potentialCommunicationGr?: number | null;
+  potentialLifeGroupGr?: number | null;
 }
 
 export interface PromoteContactInput {
