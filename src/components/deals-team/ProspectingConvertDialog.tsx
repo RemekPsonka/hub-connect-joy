@@ -258,9 +258,9 @@ export function ProspectingConvertDialog({
             team_id: effectiveTeamId,
             contact_id: contactId,
             tenant_id: tenantId,
-            // NULL category → generated deal_stage = 'prospect'
-            // (chyba że konwertujemy bezpośrednio do klienta — wtedy zostawiamy 'client')
-            category: (category === 'client' ? 'client' : null) as unknown as string,
+            // category='prospect' → generated deal_stage = 'prospect'
+            // (kategorie 'lead'/'client'/etc. mapują na inne etapy lejka)
+            category: category === 'client' ? 'client' : 'prospect',
             priority: 'medium',
             status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
