@@ -1,91 +1,79 @@
 
 
-# B-FIX.5-owner — Avatar opiekuna kontaktu zawsze widoczny na karcie kanban
+# B-FIX.5-overflow — Wyrwanie kart z ScrollArea i defensywny truncate na bannerach
 
 ## Diagnoza
 
-`deal_team_contacts.assigned_to` (uuid → `directors.id`) trzyma opiekuna kontaktu, ale na kartach Kanbana nie pokazujemy go. Slot „opiekun" w prawym górnym rogu pokazuje wyłącznie assignees zadania (`taskInfo.assignees`). Gdy kontakt nie ma żadnego aktywnego zadania (Lead/Klient bez zadań), karta wygląda jak „bez opiekuna" — choć rzeczywisty opiekun istnieje.
+Karty Lead/Klient nadal rozpychają kolumnę poziomo, mimo `min-w-0 overflow-hidden` na wrapperach. Root cause: **Radix `ScrollArea`** (linia 266) wewnętrznie renderuje `<ScrollAreaPrimitive.Viewport>` z `display: table; min-width: 100%`. Element `table` ignoruje `min-w-0` rodzica i rozszerza się do szerokości najszerszego dziecka — w tym przypadku `<button class="w-full ... truncate">` z długim tekstem („Dziś: Zadzwonić do Artur Czepczyński"). To omija `overflow-hidden` na samej kolumnie, bo ScrollArea-viewport pozwala na poziome wylewanie zawartości w górę drzewa.
 
-Stan obecny:
-- `deal_team_contacts.assigned_to` → `uuid`, brak FK (potwierdzone w DB).
-- W typie `DealTeamContact` jest już prefigurowany `assigned_director?: { id, full_name }`, ale nie jest pobierany.
-- `useTeamContacts` robi `select('*')` bez joinu.
-- `AssigneeAvatars` przyjmuje tylko `assignees: TaskAssignee[]`.
+Dodatkowo: `<button>` w trybie flex/grid ma w niektórych silnikach domyślne `min-inline-size: min-content`, więc samo `truncate` na buttonie potrafi nie zadziałać bez `min-w-0` + wewnętrznego `<span class="truncate">`.
 
 ## Rozwiązanie
 
-### 1. Migracja: FK `deal_team_contacts.assigned_to → directors(id)`
-Plik: `supabase/migrations/<ts>_deal_team_contacts_assigned_to_fk.sql`
+### 1. `UnifiedKanban.tsx` — zastąpić `ScrollArea` natywnym scrollem
+Plik: `src/components/sgu/sales/UnifiedKanban.tsx`
 
-- Dodać brakujący FK z `ON DELETE SET NULL`.
-- Dodać indeks na `assigned_to` (nie istnieje, a jest filtrowany w wielu miejscach).
-- ROLLBACK w komentarzu.
-
-```sql
-ALTER TABLE public.deal_team_contacts
-  ADD CONSTRAINT deal_team_contacts_assigned_to_fkey
-  FOREIGN KEY (assigned_to) REFERENCES public.directors(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_deal_team_contacts_assigned_to
-  ON public.deal_team_contacts(assigned_to)
-  WHERE assigned_to IS NOT NULL;
-
--- ROLLBACK:
--- DROP INDEX IF EXISTS public.idx_deal_team_contacts_assigned_to;
--- ALTER TABLE public.deal_team_contacts DROP CONSTRAINT IF EXISTS deal_team_contacts_assigned_to_fkey;
-```
-
-### 2. `useDealsTeamContacts.ts` — dociągnąć opiekuna
-Plik: `src/hooks/useDealsTeamContacts.ts`
-
-- W `useTeamContacts`: zostawić obecny kształt zapytania, ale po pobraniu `dealContacts` dociągnąć batch `directors(id, full_name)` po unikalnych `assigned_to` (tak samo jak robimy z `companies` — bez join-stringa, prościej i bez ryzyka relacji w PostgREST).
-- Zmapować na każdy `dc` pole `assigned_director: { id, full_name } | null`.
-- Analogicznie w `useTeamContact` (single).
-
-Powód doboru tej drogi (zamiast `select(',owner:directors!fk(...)')`): istniejący kod świadomie unika joinów PostgREST i robi mapy w JS — będzie spójnie i nie ryzykujemy konfliktów z RLS na `directors`.
-
-### 3. Typ — bez zmian
-Plik: `src/types/dealTeam.ts`
-
-`DealTeamContact.assigned_director?: { id; full_name }` już istnieje (linie 166–169). Wystarczy go faktycznie wypełniać. Brief proponował `owner` — używamy istniejącego `assigned_director`, by nie mnożyć pól.
-
-### 4. `AssigneeAvatars` — nowy prop `owner`
-Plik: `src/components/sgu/sales/AssigneeAvatars.tsx`
-
-- Dodać prop `owner?: { id; full_name } | null`.
-- Zbudować lokalną listę `items`: najpierw `owner` (jeśli jest), potem `assignees` z deduplikacją po `id`.
-- Placeholder „+" pokazujemy tylko gdy `items.length === 0` (tak jak dziś, ale na połączonej liście).
-- `visible = items.slice(0, 3)`, `extra = items.length - visible.length`. Pierwszy avatar (opiekun) dostaje cienką ramkę-akcent (`ring-primary/40`) żeby wizualnie odróżnić go od assignees zadania. Tooltip opiekuna: `"Opiekun: <full_name>"`.
-
-### 5. `UnifiedKanbanCard` — przekazać `owner`
-Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+- Usunąć import `ScrollArea` z `@/components/ui/scroll-area` (linia 12) — nie jest używany nigdzie indziej w tym pliku.
+- Zastąpić blok (linie 266–268):
 
 ```tsx
-<AssigneeAvatars
-  owner={contact.assigned_director ?? null}
-  assignees={taskInfo?.assignees ?? []}
-  onAddClick={onMoreClick}
-/>
+<ScrollArea className="flex-1 p-2 min-w-0">
+  <div className="min-w-0">{body}</div>
+</ScrollArea>
 ```
+
+na:
+
+```tsx
+<div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
+  <div className="min-w-0">{body}</div>
+</div>
+```
+
+Efekt: pionowy scroll działa jak dotąd; poziomy scroll/wylewanie jest twardo klipowane przez `overflow-x-hidden` bez wewnętrznego table-wrappera Radix.
+
+### 2. `UnifiedKanbanCard.tsx` — defensywny `min-w-0` + span-truncate na bannerach
+Plik: `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+
+Trzy `<button>` mini-bannera (overdue / next / placeholder) — w każdym:
+
+- Na `<button>`: usunąć klasę `truncate`, dodać `min-w-0 block overflow-hidden` (zachować pozostałe klasy, w tym dynamiczne `cn(...)` dla wariantu next).
+- Tekst opakować w `<span className="block truncate">…</span>`.
+
+Przykład (overdue):
+
+```tsx
+<button
+  type="button"
+  onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+  onPointerDown={(e) => e.stopPropagation()}
+  className="w-full min-w-0 block text-left text-[10px] px-2 py-0.5 rounded-sm bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15 transition overflow-hidden"
+>
+  <span className="block truncate">
+    {taskInfo.oldestOverdue.days_ago === 0
+      ? `Dziś: ${taskInfo.oldestOverdue.title}`
+      : `${taskInfo.oldestOverdue.days_ago} dni temu: ${taskInfo.oldestOverdue.title}`}
+  </span>
+</button>
+```
+
+Analogicznie dla wariantu `nextTask` (zachować dynamiczny `cn(...)` z amber/emerald) i placeholdera „+ Zaplanuj następne zadanie".
 
 ## Pliki
 
 | # | Plik | Akcja |
 |---|---|---|
-| 1 | `supabase/migrations/<ts>_deal_team_contacts_assigned_to_fk.sql` | NEW — FK + indeks + rollback |
-| 2 | `src/hooks/useDealsTeamContacts.ts` | EDIT — dociągnięcie `directors` po `assigned_to` w `useTeamContacts` i `useTeamContact`, mapowanie na `assigned_director` |
-| 3 | `src/components/sgu/sales/AssigneeAvatars.tsx` | EDIT — nowy prop `owner`, scalenie z `assignees`, dedupe, akcent na pierwszym avatarze |
-| 4 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — przekazać `contact.assigned_director` do `AssigneeAvatars` |
+| 1 | `src/components/sgu/sales/UnifiedKanban.tsx` | EDIT — usunąć import `ScrollArea`, zastąpić `<ScrollArea>` natywnym `<div overflow-y-auto overflow-x-hidden>` |
+| 2 | `src/components/sgu/sales/UnifiedKanbanCard.tsx` | EDIT — w 3 buttonach mini-bannera: `min-w-0 block overflow-hidden` na buttonie + `<span class="block truncate">` na tekście |
 
 ## DoD
 
 | Check | Stan |
 |---|---|
-| Migracja FK + indeks zadeployowana, rollback udokumentowany | ✅ |
-| Kontakt z `assigned_to` ustawionym → avatar opiekuna widoczny w Lead/Prospekt/Klient/Ofertowanie nawet bez tasków | ✅ |
-| Tooltip opiekuna: „Opiekun: <Imię Nazwisko>" | ✅ |
-| Opiekun + assignee tego samego doradcy → jeden avatar (dedupe) | ✅ |
-| Opiekun + assignee innego doradcy → dwa avatary, opiekun pierwszy z subtelnym akcentem | ✅ |
-| Bez opiekuna i bez assignee → istniejący placeholder „+" bez zmian | ✅ |
+| Banner „Dziś: Zadzwonić do Artur Czepczyński" w Lead obcięty elipsą w granicach kolumny | ✅ |
+| Bannery overdue w Ofertowanie obcięte do szerokości kolumny | ✅ |
+| Pionowy scroll w kolumnach nadal działa | ✅ |
+| DnD między kolumnami nadal działa | ✅ |
+| Żadna kolumna nie wystaje poziomo poza grid | ✅ |
 | `npx tsc --noEmit` exit 0 | ✅ |
 
