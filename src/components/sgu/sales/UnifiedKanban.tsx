@@ -11,6 +11,18 @@ import {
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from '@/components/ui/dropdown-menu';
+import { ArrowUpDown, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
@@ -99,6 +111,41 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
   },
 };
 
+type SortKey = 'name_asc' | 'name_desc' | 'value_desc' | 'recent';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  name_asc: 'Nazwa A→Z',
+  name_desc: 'Nazwa Z→A',
+  value_desc: 'Wartość ↓',
+  recent: 'Najnowsze',
+};
+
+const NONE_KEY = '__none__';
+
+function sortContacts(list: DealTeamContact[], sort: SortKey): DealTeamContact[] {
+  const arr = [...list];
+  switch (sort) {
+    case 'name_asc':
+      return arr.sort((a, b) =>
+        (a.contact?.full_name ?? '').localeCompare(b.contact?.full_name ?? '', 'pl'),
+      );
+    case 'name_desc':
+      return arr.sort((a, b) =>
+        (b.contact?.full_name ?? '').localeCompare(a.contact?.full_name ?? '', 'pl'),
+      );
+    case 'value_desc':
+      return arr.sort(
+        (a, b) => (b.expected_annual_premium_gr ?? 0) - (a.expected_annual_premium_gr ?? 0),
+      );
+    case 'recent':
+      return arr.sort((a, b) => {
+        const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return tb - ta;
+      });
+  }
+}
+
 function DraggableCard({
   contact,
   stage,
@@ -154,6 +201,11 @@ function DroppableColumn({
   contacts,
   groupBy,
   teamId,
+  sort,
+  onSortChange,
+  statusFilter,
+  onStatusFilterToggle,
+  onStatusFilterClear,
   onLostClick,
   onOfferingStageChange,
   onOfferingWonClick,
@@ -166,6 +218,11 @@ function DroppableColumn({
   contacts: DealTeamContact[];
   groupBy: boolean;
   teamId: string;
+  sort: SortKey;
+  onSortChange: (s: SortKey) => void;
+  statusFilter: Set<string>;
+  onStatusFilterToggle: (key: string) => void;
+  onStatusFilterClear: () => void;
   onLostClick: (c: DealTeamContact) => void;
   onOfferingStageChange: (c: DealTeamContact, next: string) => void;
   onOfferingWonClick: (c: DealTeamContact) => void;
@@ -176,7 +233,19 @@ function DroppableColumn({
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
-  const sumPLN = contacts.reduce(
+  const cfg = SUBGROUP_CONFIG[col.stage];
+
+  const filtered = useMemo(() => {
+    if (statusFilter.size === 0) return contacts;
+    return contacts.filter((c) => {
+      const v = cfg.getter(c) ?? NONE_KEY;
+      return statusFilter.has(v);
+    });
+  }, [contacts, statusFilter, cfg]);
+
+  const sorted = useMemo(() => sortContacts(filtered, sort), [filtered, sort]);
+
+  const sumPLN = sorted.reduce(
     (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
     0,
   );
@@ -203,17 +272,18 @@ function DroppableColumn({
   );
 
   let body: JSX.Element;
-  if (contacts.length === 0) {
+  if (sorted.length === 0) {
     body = (
       <div className="flex items-center justify-center h-full min-h-[200px] text-center p-4">
-        <p className="text-sm text-muted-foreground">Brak kontaktów</p>
+        <p className="text-sm text-muted-foreground">
+          {contacts.length === 0 ? 'Brak kontaktów' : 'Brak wyników dla filtra'}
+        </p>
       </div>
     );
   } else if (groupBy) {
-    const cfg = SUBGROUP_CONFIG[col.stage];
     const groups: Record<string, DealTeamContact[]> = {};
-    for (const c of contacts) {
-      const k = cfg.getter(c) ?? '__none__';
+    for (const c of sorted) {
+      const k = cfg.getter(c) ?? NONE_KEY;
       (groups[k] ??= []).push(c);
     }
     const sortedKeys = Object.keys(groups).sort((a, b) => {
@@ -236,7 +306,7 @@ function DroppableColumn({
       </div>
     );
   } else {
-    body = <div className="space-y-2">{contacts.map(renderCard)}</div>;
+    body = <div className="space-y-2">{sorted.map(renderCard)}</div>;
   }
 
   return (
@@ -253,13 +323,101 @@ function DroppableColumn({
           <span className="text-lg">{col.icon}</span>
           <h3 className="font-semibold text-sm truncate">{col.title}</h3>
           <Badge variant="secondary" className="text-xs">
-            {contacts.length}
+            {sorted.length}
+            {statusFilter.size > 0 && contacts.length !== sorted.length && (
+              <span className="text-muted-foreground">/{contacts.length}</span>
+            )}
           </Badge>
           {sumPLN > 0 && (
             <span className="text-xs text-muted-foreground truncate">
               · Σ {plnFormatter.format(sumPLN)}
             </span>
           )}
+          <div className="ml-auto flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn('h-7 w-7', statusFilter.size > 0 && 'text-primary')}
+                  aria-label="Filtruj statusy"
+                  title="Filtruj statusy"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-xs">Statusy</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {cfg.order.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Brak statusów
+                  </div>
+                ) : (
+                  <>
+                    {cfg.order.map((key) => (
+                      <DropdownMenuCheckboxItem
+                        key={key}
+                        checked={statusFilter.has(key)}
+                        onCheckedChange={() => onStatusFilterToggle(key)}
+                        onSelect={(e) => e.preventDefault()}
+                        className="text-xs"
+                      >
+                        {cfg.labels[key] ?? key}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    <DropdownMenuCheckboxItem
+                      checked={statusFilter.has(NONE_KEY)}
+                      onCheckedChange={() => onStatusFilterToggle(NONE_KEY)}
+                      onSelect={(e) => e.preventDefault()}
+                      className="text-xs"
+                    >
+                      (brak)
+                    </DropdownMenuCheckboxItem>
+                    {statusFilter.size > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <button
+                          type="button"
+                          onClick={onStatusFilterClear}
+                          className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent rounded-sm"
+                        >
+                          Wyczyść filtr
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label="Sortuj"
+                  title={`Sortuj: ${SORT_LABELS[sort]}`}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-xs">Sortuj</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={sort}
+                  onValueChange={(v) => onSortChange(v as SortKey)}
+                >
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                    <DropdownMenuRadioItem key={k} value={k} className="text-xs">
+                      {SORT_LABELS[k]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
       <div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
@@ -279,6 +437,32 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
+    prospect: 'recent',
+    lead: 'recent',
+    offering: 'recent',
+    client: 'recent',
+    lost: 'recent',
+  });
+  const [filterByStage, setFilterByStage] = useState<Record<DealStage, Set<string>>>({
+    prospect: new Set(),
+    lead: new Set(),
+    offering: new Set(),
+    client: new Set(),
+    lost: new Set(),
+  });
+
+  const setSortFor = (stage: DealStage, s: SortKey) =>
+    setSortByStage((prev) => ({ ...prev, [stage]: s }));
+  const toggleFilterFor = (stage: DealStage, key: string) =>
+    setFilterByStage((prev) => {
+      const next = new Set(prev[stage]);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return { ...prev, [stage]: next };
+    });
+  const clearFilterFor = (stage: DealStage) =>
+    setFilterByStage((prev) => ({ ...prev, [stage]: new Set() }));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -401,6 +585,11 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               contacts={grouped[col.stage]}
               groupBy={groupBySubcategory}
               teamId={teamId}
+              sort={sortByStage[col.stage]}
+              onSortChange={(s) => setSortFor(col.stage, s)}
+              statusFilter={filterByStage[col.stage]}
+              onStatusFilterToggle={(k) => toggleFilterFor(col.stage, k)}
+              onStatusFilterClear={() => clearFilterFor(col.stage)}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);
