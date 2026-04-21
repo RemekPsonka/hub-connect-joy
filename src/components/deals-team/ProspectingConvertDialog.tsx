@@ -258,11 +258,26 @@ export function ProspectingConvertDialog({
             team_id: effectiveTeamId,
             contact_id: contactId,
             tenant_id: tenantId,
-            category,
+            // category='prospect' → generated deal_stage = 'prospect'
+            // (kategorie 'lead'/'client'/etc. mapują na inne etapy lejka)
+            category: category === 'client' ? 'client' : 'prospect',
             priority: 'medium',
             status: category === 'client' ? 'won' : 'active',
             ai_brief: prospect.ai_brief || null,
             ai_brief_generated_at: prospect.ai_brief_generated_at || null,
+            // Mapuj źródło prospektingu → prospect_source (badge CC w kafelku Prospekci).
+            prospect_source:
+              category === 'client'
+                ? null
+                : (() => {
+                    const evt = (prospect.source_event ?? '').toLowerCase();
+                    if (evt.includes('csv') || prospect.source_file_name) return 'csv';
+                    if (evt.includes('krs')) return 'ai_krs';
+                    if (evt.includes('web') || evt.includes('www')) return 'ai_web';
+                    if (evt.includes('crm')) return 'crm_push';
+                    // Default: prospekt z modułu spotkań CC
+                    return 'cc_meeting';
+                  })(),
           })
           .select('id')
           .single();
