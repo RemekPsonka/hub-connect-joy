@@ -31,6 +31,7 @@ export type TaskContactInfo = {
   activeCount: number;
   doneCount: number;
   oldestOverdue?: { title: string; due_date: string; days_ago: number };
+  nextTask?: { title: string; due_date: string | null; status: 'today' | 'active' };
   assignees: TaskAssignee[];
   byType: Record<TaskType, TaskTypeInfo>;
 };
