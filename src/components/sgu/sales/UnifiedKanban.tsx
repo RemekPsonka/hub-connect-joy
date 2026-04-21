@@ -113,13 +113,21 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
   },
 };
 
-type SortKey = 'name_asc' | 'name_desc' | 'value_desc' | 'recent';
+type SortKey = 'name_asc' | 'name_desc' | 'value_desc' | 'recent' | 'temperature';
 
 const SORT_LABELS: Record<SortKey, string> = {
   name_asc: 'Nazwa A→Z',
   name_desc: 'Nazwa Z→A',
   value_desc: 'Wartość ↓',
   recent: 'Najnowsze',
+  temperature: 'Temperatura (HOT→COLD)',
+};
+
+const TEMPERATURE_ORDER: Record<string, number> = {
+  hot: 0,
+  top: 1,
+  '10x': 2,
+  cold: 3,
 };
 
 const NONE_KEY = '__none__';
@@ -144,6 +152,13 @@ function sortContacts(list: DealTeamContact[], sort: SortKey): DealTeamContact[]
         const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
         const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
         return tb - ta;
+      });
+    case 'temperature':
+      return arr.sort((a, b) => {
+        const oa = TEMPERATURE_ORDER[a.temperature ?? ''] ?? 99;
+        const ob = TEMPERATURE_ORDER[b.temperature ?? ''] ?? 99;
+        if (oa !== ob) return oa - ob;
+        return (a.contact?.full_name ?? '').localeCompare(b.contact?.full_name ?? '', 'pl');
       });
   }
 }
