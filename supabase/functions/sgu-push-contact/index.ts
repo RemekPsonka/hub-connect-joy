@@ -145,7 +145,8 @@ Deno.serve(async (req) => {
     const status = stage === 'client' ? 'won' : 'new';
 
     // mapowanie substage → 4 osobne kolumny
-    const prospect_source = stage === 'prospect' ? substage : 'crm_push';
+    // prospect_source semantycznie należy tylko do stage='prospect' — dla innych NULL
+    const prospect_source = stage === 'prospect' ? substage : null;
     const temperature = stage === 'lead' ? substage : null;
     const offering_stage = stage === 'offering' ? substage : null;
     const client_status = stage === 'client' ? substage : null;
