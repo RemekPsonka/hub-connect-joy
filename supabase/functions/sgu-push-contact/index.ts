@@ -9,10 +9,34 @@ const corsHeaders = {
 type Stage = 'prospect' | 'lead' | 'offering' | 'client';
 const ALLOWED_STAGES: Stage[] = ['prospect', 'lead', 'offering', 'client'];
 
+const SUBSTAGE_WHITELIST: Record<Stage, readonly string[]> = {
+  prospect: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
+  lead: ['hot', 'top', 'cold', '10x'],
+  offering: [
+    'decision_meeting',
+    'handshake',
+    'power_of_attorney',
+    'audit',
+    'offer_sent',
+    'negotiation',
+    'won',
+    'lost',
+  ],
+  client: ['standard', 'ambassador'],
+};
+
+const SUBSTAGE_DEFAULTS: Record<Stage, string> = {
+  prospect: 'crm_push',
+  lead: 'cold',
+  offering: 'decision_meeting',
+  client: 'standard',
+};
+
 interface PushBody {
   contact_id: string;
   team_id?: string;
   stage?: Stage;
+  substage?: string;
   expected_annual_premium_gr?: number;
   notes?: string | null;
 }
