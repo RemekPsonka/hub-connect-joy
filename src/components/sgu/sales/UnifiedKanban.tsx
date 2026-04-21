@@ -323,13 +323,101 @@ function DroppableColumn({
           <span className="text-lg">{col.icon}</span>
           <h3 className="font-semibold text-sm truncate">{col.title}</h3>
           <Badge variant="secondary" className="text-xs">
-            {contacts.length}
+            {sorted.length}
+            {statusFilter.size > 0 && contacts.length !== sorted.length && (
+              <span className="text-muted-foreground">/{contacts.length}</span>
+            )}
           </Badge>
           {sumPLN > 0 && (
             <span className="text-xs text-muted-foreground truncate">
               · Σ {plnFormatter.format(sumPLN)}
             </span>
           )}
+          <div className="ml-auto flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn('h-7 w-7', statusFilter.size > 0 && 'text-primary')}
+                  aria-label="Filtruj statusy"
+                  title="Filtruj statusy"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-xs">Statusy</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {cfg.order.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Brak statusów
+                  </div>
+                ) : (
+                  <>
+                    {cfg.order.map((key) => (
+                      <DropdownMenuCheckboxItem
+                        key={key}
+                        checked={statusFilter.has(key)}
+                        onCheckedChange={() => onStatusFilterToggle(key)}
+                        onSelect={(e) => e.preventDefault()}
+                        className="text-xs"
+                      >
+                        {cfg.labels[key] ?? key}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    <DropdownMenuCheckboxItem
+                      checked={statusFilter.has(NONE_KEY)}
+                      onCheckedChange={() => onStatusFilterToggle(NONE_KEY)}
+                      onSelect={(e) => e.preventDefault()}
+                      className="text-xs"
+                    >
+                      (brak)
+                    </DropdownMenuCheckboxItem>
+                    {statusFilter.size > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <button
+                          type="button"
+                          onClick={onStatusFilterClear}
+                          className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent rounded-sm"
+                        >
+                          Wyczyść filtr
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label="Sortuj"
+                  title={`Sortuj: ${SORT_LABELS[sort]}`}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-xs">Sortuj</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={sort}
+                  onValueChange={(v) => onSortChange(v as SortKey)}
+                >
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                    <DropdownMenuRadioItem key={k} value={k} className="text-xs">
+                      {SORT_LABELS[k]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
       <div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
