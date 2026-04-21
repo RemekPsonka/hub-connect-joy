@@ -132,7 +132,7 @@ function DraggableCard({
     : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="min-w-0">
       <UnifiedKanbanCard
         contact={contact}
         stage={stage}
