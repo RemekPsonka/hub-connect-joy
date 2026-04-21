@@ -168,7 +168,7 @@ export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
           </div>
         ) : (
           <Button variant="outline" size="sm" className="w-full" onClick={() => setSguOpen(true)}>
-            ⭐ Przekaż do SGU
+            ⭐ Przekaż do lejka
           </Button>
         )}
       </Section>
