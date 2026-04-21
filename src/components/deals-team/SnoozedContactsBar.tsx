@@ -15,14 +15,27 @@ interface SnoozedContactsBarProps {
   snoozedContacts: DealTeamContact[];
   teamId: string;
   onContactClick: (contact: DealTeamContact) => void;
+  expanded?: boolean;
+  onExpandedChange?: (open: boolean) => void;
 }
 
 const categoryIcons: Record<string, string> = {
   hot: '🔥', top: '⭐', lead: '📋', '10x': '🔄', cold: '❄️', lost: '✖️',
 };
 
-export function SnoozedContactsBar({ snoozedContacts, teamId, onContactClick }: SnoozedContactsBarProps) {
-  const [expanded, setExpanded] = useState(false);
+export function SnoozedContactsBar({
+  snoozedContacts,
+  teamId,
+  onContactClick,
+  expanded: expandedProp,
+  onExpandedChange,
+}: SnoozedContactsBarProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = expandedProp ?? internalExpanded;
+  const setExpanded = (v: boolean) => {
+    if (onExpandedChange) onExpandedChange(v);
+    else setInternalExpanded(v);
+  };
   const queryClient = useQueryClient();
 
   if (snoozedContacts.length === 0) return null;
