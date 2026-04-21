@@ -165,6 +165,23 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
                     ))}
                   </div>
                 )}
+                {it.key === 'prospect' && it.value === 0 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="text-[10px] text-muted-foreground italic pt-0.5 cursor-help">
+                        Brak prospektów — zaimportuj z KRS / CSV / CC
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs max-w-[260px]">
+                      Prospekt = świeży, niezakwalifikowany kontakt (źródło: CRM push, spotkanie CC, AI KRS, AI WWW, CSV, ręczny). Aktualnie wszystkie kontakty są już zakwalifikowane jako Lead lub wyżej.
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {badges && badges.length === 0 && it.value > 0 && it.key !== 'snoozed' && it.key !== 'prospect' && (
+                  <div className="text-[10px] text-muted-foreground italic pt-0.5">
+                    Brak rozbicia (puste pole)
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
