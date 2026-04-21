@@ -50,7 +50,7 @@ export function MeetingScheduledDialog({
       await updateContact.mutateAsync({
         id: teamContactId,
         teamId,
-        offeringStage: 'meeting_scheduled',
+        offeringStage: 'decision_meeting',
         nextMeetingDate: dateStr,
         nextMeetingWith: meetingWith || null,
       });
