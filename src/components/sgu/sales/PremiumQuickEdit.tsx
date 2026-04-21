@@ -61,7 +61,7 @@ export function PremiumQuickEdit({ contactId, teamId, valueGr }: Props) {
               💰 {formatter.format((valueGr as number) / 100)}
             </Badge>
           ) : (
-            <span className="inline-flex items-center gap-0.5 h-5 px-2 text-[10px] font-medium border border-dashed border-primary/50 text-primary bg-primary/5 hover:bg-primary/10 hover:border-primary rounded-full cursor-pointer transition-colors">
+            <span className="inline-flex items-center gap-0.5 h-5 px-2 text-[10px] font-medium border border-dashed border-primary/50 text-primary bg-primary/5 hover:bg-primary/10 hover:border-primary rounded-full cursor-pointer transition-colors whitespace-nowrap">
               <Plus className="h-3 w-3" />
               składka
             </span>
