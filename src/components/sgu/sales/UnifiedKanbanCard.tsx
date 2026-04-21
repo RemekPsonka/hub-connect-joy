@@ -86,7 +86,7 @@ export function UnifiedKanbanCard({
           )}
         </div>
         <div className="shrink-0">
-          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} onAddClick={onMoreClick} />
         </div>
       </div>
 
@@ -138,8 +138,8 @@ export function UnifiedKanbanCard({
       {/* Row 3: complexity chips on their own row */}
       <ComplexityChips complexity={contact.client_complexity} />
 
-      {/* Mini-banner: oldest overdue task */}
-      {taskInfo?.oldestOverdue && (
+      {/* Mini-banner: always shown — overdue / next / placeholder */}
+      {taskInfo?.oldestOverdue ? (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
@@ -149,6 +149,33 @@ export function UnifiedKanbanCard({
           {taskInfo.oldestOverdue.days_ago === 0
             ? `Dziś: ${taskInfo.oldestOverdue.title}`
             : `${taskInfo.oldestOverdue.days_ago} dni temu: ${taskInfo.oldestOverdue.title}`}
+        </button>
+      ) : taskInfo?.nextTask ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={cn(
+            'w-full text-left text-[10px] px-2 py-0.5 rounded-sm border transition truncate',
+            taskInfo.nextTask.status === 'today'
+              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/15'
+              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15',
+          )}
+        >
+          {taskInfo.nextTask.status === 'today'
+            ? `Dziś: ${taskInfo.nextTask.title}`
+            : taskInfo.nextTask.due_date
+              ? `${taskInfo.nextTask.due_date}: ${taskInfo.nextTask.title}`
+              : taskInfo.nextTask.title}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="w-full text-left text-[10px] px-2 py-0.5 rounded-sm border border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50 transition truncate"
+        >
+          + Zaplanuj następne zadanie
         </button>
       )}
 

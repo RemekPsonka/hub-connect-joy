@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { UserPlus } from 'lucide-react';
 import type { TaskAssignee } from '@/hooks/useActiveTaskContacts';
 
 const PALETTE = [
@@ -26,10 +27,28 @@ function initials(name: string) {
 
 interface Props {
   assignees: TaskAssignee[];
+  onAddClick?: () => void;
 }
 
-export function AssigneeAvatars({ assignees }: Props) {
-  if (!assignees.length) return null;
+export function AssigneeAvatars({ assignees, onAddClick }: Props) {
+  if (!assignees.length) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAddClick?.(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="h-5 w-5 rounded-full border border-dashed border-primary/50 text-primary/70 hover:text-primary hover:border-primary flex items-center justify-center shrink-0 transition"
+            aria-label="Dodaj opiekuna zadania"
+          >
+            <UserPlus className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">Dodaj opiekuna zadania</TooltipContent>
+      </Tooltip>
+    );
+  }
   const visible = assignees.slice(0, 3);
   const extra = assignees.length - visible.length;
 
