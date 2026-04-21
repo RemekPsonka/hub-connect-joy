@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import { PageLoadingFallback } from '@/components/PageLoadingFallback';
@@ -6,20 +6,14 @@ import { SalesHeader } from '@/components/sgu/headers/SalesHeader';
 import { UnifiedKanban } from '@/components/sgu/sales/UnifiedKanban';
 import { AddLeadDialog } from '@/components/sgu/AddLeadDialog';
 
-type SalesFilter = 'prospect' | 'lead' | 'offering' | 'today' | 'overdue';
+type SalesFilter = 'prospect' | 'lead' | 'offering' | 'snoozed';
 
 export default function SGUPipelineRoute() {
   const { sguTeamId, isLoading } = useSGUTeamId();
   const [filter, setFilter] = useState<SalesFilter | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const navigate = useNavigate();
+  const [snoozedOpenTick, setSnoozedOpenTick] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    if (filter === 'today' || filter === 'overdue') {
-      navigate(`/sgu/zadania?filter=${filter}`, { replace: true });
-    }
-  }, [filter, navigate]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'new-client') {
@@ -45,17 +39,25 @@ export default function SGUPipelineRoute() {
     );
   }
 
-  const kanbanFilter =
-    filter === 'today' || filter === 'overdue' ? null : filter;
+  const kanbanFilter = filter === 'snoozed' ? null : filter;
 
   return (
     <div className="space-y-4">
       <SalesHeader
         teamId={sguTeamId}
         activeKey={filter}
-        onCardClick={(k) => setFilter((prev) => (prev === k ? null : k))}
+        onCardClick={(k) => {
+          setFilter((prev) => (prev === k ? null : k));
+          if (k === 'snoozed') {
+            setSnoozedOpenTick((t) => t + 1);
+          }
+        }}
       />
-      <UnifiedKanban teamId={sguTeamId} filter={kanbanFilter} />
+      <UnifiedKanban
+        teamId={sguTeamId}
+        filter={kanbanFilter}
+        openSnoozedSignal={snoozedOpenTick}
+      />
       <AddLeadDialog open={addOpen} onOpenChange={handleAddOpenChange} />
     </div>
   );
