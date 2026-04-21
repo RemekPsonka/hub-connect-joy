@@ -244,26 +244,28 @@ function DroppableColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        'bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-320px)] min-w-0 transition-colors',
+        'bg-muted/30 rounded-lg border border-t-2 flex flex-col min-h-[400px] max-h-[calc(100vh-320px)] min-w-0 overflow-hidden transition-colors',
         col.borderClass,
         isOver && 'ring-2 ring-primary/50 bg-primary/5',
       )}
     >
       <div className="p-3 border-b bg-muted/50">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <span className="text-lg">{col.icon}</span>
-          <h3 className="font-semibold text-sm">{col.title}</h3>
+          <h3 className="font-semibold text-sm truncate">{col.title}</h3>
           <Badge variant="secondary" className="text-xs">
             {contacts.length}
           </Badge>
           {sumPLN > 0 && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground truncate">
               · Σ {plnFormatter.format(sumPLN)}
             </span>
           )}
         </div>
       </div>
-      <ScrollArea className="flex-1 p-2">{body}</ScrollArea>
+      <ScrollArea className="flex-1 p-2 min-w-0">
+        <div className="min-w-0">{body}</div>
+      </ScrollArea>
     </div>
   );
 }

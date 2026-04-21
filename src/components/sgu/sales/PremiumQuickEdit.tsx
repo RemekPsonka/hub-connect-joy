@@ -51,12 +51,12 @@ export function PremiumQuickEdit({ contactId, teamId, valueGr }: Props) {
           aria-label={hasValue ? 'Edytuj prognozę składki' : 'Dodaj prognozę składki'}
           title={hasValue ? 'Edytuj prognozę składki' : 'Dodaj prognozę składki'}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex"
+          className="inline-flex shrink-0 max-w-full"
         >
           {hasValue ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:opacity-80 tabular-nums"
+              className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:opacity-80 tabular-nums whitespace-nowrap"
             >
               💰 {formatter.format((valueGr as number) / 100)}
             </Badge>

@@ -67,27 +67,32 @@ export function UnifiedKanbanCard({
     <Card
       onClick={handleCardClick}
       className={cn(
-        'p-2.5 cursor-pointer hover:shadow-md transition-all space-y-1.5 border-l-4',
+        'p-2.5 cursor-pointer hover:shadow-md transition-all border-l-4 min-w-0 overflow-hidden flex flex-col gap-1.5',
         borderClass[status],
         isDragging && 'opacity-50',
       )}
     >
       {/* Row 1: title + assignees */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate">{fullName}</div>
+          <div className="text-sm font-semibold truncate" title={fullName}>{fullName}</div>
           {(company || position) && (
-            <div className="text-xs text-muted-foreground truncate">
+            <div
+              className="text-xs text-muted-foreground truncate"
+              title={[company, position].filter(Boolean).join(' · ')}
+            >
               {[company, position].filter(Boolean).join(' · ')}
             </div>
           )}
         </div>
-        <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+        <div className="shrink-0">
+          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} />
+        </div>
       </div>
 
-      {/* Row 2: tasks + sub-badge + areas + premium */}
+      {/* Row 2: tasks + sub-badge | premium (fixed zones, no wrap of premium) */}
       <div
-        className="flex items-start gap-2"
+        className="flex items-start gap-2 min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-1 min-w-0 flex items-center gap-1 flex-wrap">
@@ -120,7 +125,6 @@ export function UnifiedKanbanCard({
               onLostClick={onOfferingLostClick}
             />
           )}
-          <ComplexityChips complexity={contact.client_complexity} />
         </div>
         <div className="shrink-0">
           <PremiumQuickEdit
@@ -130,6 +134,9 @@ export function UnifiedKanbanCard({
           />
         </div>
       </div>
+
+      {/* Row 3: complexity chips on their own row */}
+      <ComplexityChips complexity={contact.client_complexity} />
 
       {/* Mini-banner: oldest overdue task */}
       {taskInfo?.oldestOverdue && (
