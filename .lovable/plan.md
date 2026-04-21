@@ -1,90 +1,126 @@
+# Część A — Recon report (read-only): root cause „Odłóż" zlokalizowany
 
+Data: 2026-04-21. Źródło: live DB query (Supabase).
 
-# Część A — Recon read-only (bez edycji): trigger `log_deal_category_change`, CHECK na `offering_stage`, fallback `actor_id`
+## 🔴 ROOT CAUSE — POTWIERDZONY
 
-## Cel
+**Tabela `public.deal_team_activity_log` NIE ISTNIEJE w bazie**, a trigger `log_deal_category_change` na `deal_team_contacts` próbuje do niej `INSERT` przy każdej zmianie `category`. Każdy UPDATE zmieniający kategorię (np. `'audit' → '10x'` przy snooze) **rolluje się** z błędem `relation "public.deal_team_activity_log" does not exist`.
 
-Zebrać twarde dowody z bazy, żeby móc zaplanować Część B (fix migracja). Zero zmian w kodzie ani DB. Wyniki spiszemy w `.lovable/plan.md` jako recon-report.
+To wyjaśnia 100% objawów:
+- Bogdan Pietrzak: `category=audit, snoozed_until=NULL, updated_at=2026-04-20 18:11:09` (sprzed dnia kliku „Odłóż").
+- Każdy klik „Odłóż" → mutacja → Postgres rzuca błąd → React Query `onError` → toast „Błąd aktualizacji…".
+- Wszystkie inne UPDATE na `deal_team_contacts` które NIE zmieniają `category` (np. „Wyślij ofertę" gdy contact już ma `category='offering'`, „Zadzwoń" bez update, „Spotkanie umówione" gdy kategoria bez zmian) — przechodzą OK.
 
-## Co sprawdzimy (3 obszary)
-
-### 1. Trigger `log_deal_category_change` + tabela activity log
-
-Sprawdzić w Supabase:
-
-```sql
--- definicja funkcji triggera
-SELECT pg_get_functiondef(p.oid)
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND p.proname = 'log_deal_category_change';
-
--- kolumny i NOT NULL w activity log
-SELECT column_name, data_type, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'deal_team_activity_log'
-ORDER BY ordinal_position;
-
--- definicja get_current_director_id()
-SELECT pg_get_functiondef(p.oid)
-FROM pg_proc p WHERE p.proname = 'get_current_director_id';
-```
-
-Cel: potwierdzić czy `actor_id` jest `NOT NULL` i czy `get_current_director_id()` może zwrócić NULL → wtedy trigger blokuje cały UPDATE.
-
-### 2. CHECK constraint na `deal_team_contacts.offering_stage`
+## 1. Trigger `log_deal_category_change`
 
 ```sql
-SELECT conname, pg_get_constraintdef(c.oid)
-FROM pg_constraint c
-JOIN pg_class t ON t.oid = c.conrelid
-WHERE t.relname = 'deal_team_contacts' AND c.contype = 'c';
+CREATE OR REPLACE FUNCTION public.log_deal_category_change()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF OLD.category IS DISTINCT FROM NEW.category THEN
+    INSERT INTO public.deal_team_activity_log
+      (team_id, tenant_id, team_contact_id, actor_id, action, old_value, new_value)
+    VALUES
+      (NEW.team_id, NEW.tenant_id, NEW.id,
+       get_current_director_id(), 'category_changed',
+       jsonb_build_object('category', OLD.category),
+       jsonb_build_object('category', NEW.category));
+    NEW.category_changed_at = now();
+  END IF;
+  RETURN NEW;
+END;
+$function$
 ```
 
-Cel: pełna lista dozwolonych wartości. Porównać z `OfferingStage` w `src/types/dealTeam.ts` i z `defaultSubStages` w `src/hooks/useDealsTeamContacts.ts:296–304`. Wytypować brakujące (`audit_plan`, `audit_scheduled`, `meeting_plan`, `meeting_scheduled`).
+**Tabela docelowa:**
+```sql
+SELECT column_name, data_type, is_nullable FROM information_schema.columns
+WHERE table_schema='public' AND table_name='deal_team_activity_log';
+-- → 0 wierszy. Tabela nie istnieje.
+```
 
-### 3. Stan rekordu Bogdana + Postgres logs z ostatnich 24h
+`get_current_director_id()` jest poprawna i dla Remka zwraca `98a271e8-d923-49cb-a6aa-45f3ac0064d8`:
+```sql
+SELECT id FROM public.directors WHERE user_id = auth.uid() LIMIT 1
+```
+Remek istnieje: `Remigiusz Psonka` / `remek@ideecom.pl` / director_id `98a271e8-...`.
+
+→ Problem **NIE** jest w `actor_id NULL`. Problem to brakująca tabela.
+
+## 2. CHECK na `deal_team_contacts.offering_stage`
 
 ```sql
--- stan rekordu
-SELECT id, name, category, offering_stage, snoozed_until, snooze_reason,
-       snoozed_from_category, updated_at
-FROM deal_team_contacts
-WHERE name ILIKE '%Bogdan%Pietrzak%';
-
--- czy Remek ma director?
-SELECT d.id, d.full_name, d.user_id
-FROM directors d
-WHERE d.user_id IN (SELECT id FROM auth.users WHERE email ILIKE '%remek%');
+CHECK (offering_stage IS NULL OR offering_stage = ANY (ARRAY[
+  'decision_meeting','handshake','power_of_attorney','audit',
+  'offer_sent','negotiation','won','lost'
+]))
 ```
 
-I logi z `analytics_query` (postgres_logs) z grepem po `deal_team_contacts` / `actor_id` / `offering_stage` / `violates` z ostatnich 24h.
+**Diff TS vs DB vs hook:**
 
-## Pliki
+| Wartość | TS `OfferingStage` | DB CHECK | Hook `defaultSubStages` |
+|---|---|---|---|
+| `decision_meeting` | ✅ | ✅ | — |
+| `handshake` | ✅ | ✅ | offering→ |
+| `power_of_attorney` | ✅ | ✅ | — |
+| `audit` | ✅ | ✅ | — |
+| `offer_sent` | ✅ | ✅ | — |
+| `negotiation` | ✅ | ✅ | — |
+| `won` | ✅ | ✅ | — |
+| `lost` | ✅ | ✅ | — |
+| `preparation`, `accepted` | ✅ legacy | ❌ | — |
+| `audit_plan` | ✅ legacy | ❌ | **audit→** ⚠️ |
+| `audit_scheduled`, `audit_done` | ✅ legacy | ❌ | — |
+| `meeting_plan` | ✅ legacy | ❌ | **hot→, top→** ⚠️ |
+| `meeting_scheduled`, `meeting_done` | ✅ legacy | ❌ | — |
 
-| # | Plik | Akcja |
-|---|---|---|
-| 1 | `.lovable/plan.md` | EDIT — zastąpić aktualny plan recon-reportem (3 sekcje: trigger, CHECK, stan Bogdana + logs) |
+**Bomby zegarowe** (`useDealsTeamContacts.ts:296-304`):
+- `category:'audit'` bez jawnego `offeringStage` → hook ustawia `'audit_plan'` → CHECK violation → UPDATE rollback.
+- `category:'hot'` lub `'top'` → hook ustawia `'meeting_plan'` → CHECK violation → UPDATE rollback.
+- `category:'10x'` → brak w `defaultSubStages` → `offering_stage` zostaje (`handshake`) → OK ze strony CHECK, ale i tak rolluje się przez brakującą tabelę z punktu 1.
+
+## 3. Stan rekordu Bogdana
+
+```sql
+SELECT dtc.id, c.full_name, dtc.category, dtc.offering_stage, dtc.snoozed_until,
+       dtc.snooze_reason, dtc.snoozed_from_category, dtc.updated_at, dtc.category_changed_at
+FROM deal_team_contacts dtc JOIN contacts c ON c.id=dtc.contact_id
+WHERE c.full_name ILIKE '%Bogdan%Pietrzak%';
+```
+| pole | wartość |
+|---|---|
+| id | `ff95fb46-90a4-4097-a964-14dd7fdd193b` |
+| category | `audit` |
+| offering_stage | `handshake` |
+| snoozed_until | **NULL** |
+| snooze_reason | NULL |
+| snoozed_from_category | NULL |
+| updated_at | 2026-04-20 18:11:09 (wczoraj) |
+| category_changed_at | 2026-02-14 09:26:38 |
+
+→ Ani jeden klik „Odłóż" z 2026-04-21 nie dotarł do bazy.
 
 ## DoD Część A
 
 | Check | Stan |
 |---|---|
-| Pełna definicja `log_deal_category_change` zacytowana w raporcie | ⬜ |
-| Lista kolumn `deal_team_activity_log` z `is_nullable` | ⬜ |
-| Definicja `get_current_director_id()` + odpowiedź czy zwraca NULL dla Remka | ⬜ |
-| Pełny CHECK constraint na `offering_stage` z listą wartości | ⬜ |
-| Diff: `OfferingStage` (TS) vs `defaultSubStages` (hook) vs CHECK (DB) | ⬜ |
-| Stan rekordu Bogdana po próbie snooze + ewentualne błędy z postgres_logs | ⬜ |
+| Pełna definicja `log_deal_category_change` | ✅ |
+| Lista kolumn `deal_team_activity_log` | ✅ tabela nie istnieje (0 wierszy) |
+| Definicja `get_current_director_id()` + sprawdzenie dla Remka | ✅ zwraca director_id, NIE NULL |
+| Pełny CHECK na `offering_stage` z listą wartości | ✅ 8 wartości, brak `*_plan/scheduled/done`, `preparation`, `accepted` |
+| Diff TS vs hook vs DB | ✅ tabela powyżej |
+| Stan rekordu Bogdana | ✅ snoozed_until NULL, updated_at sprzed kliku |
 | Zero edycji kodu/DB | ✅ |
 
-## Część B (zarys, do oddzielnego sprintu po wynikach A)
+## Część B (do osobnego sprintu — propozycja po wynikach A)
 
-Trzy gałęzie zależne od wyników:
+**B.1 (priorytet 0 — odblokowuje „Odłóż" i każdą zmianę kategorii):**
+Migracja tworząca tabelę `public.deal_team_activity_log` z kolumnami z INSERT triggera (`team_id, tenant_id, team_contact_id, actor_id, action, old_value, new_value, created_at`), `actor_id` **nullable** (bo `get_current_director_id()` ze service_role/cron może być NULL), RLS read-only dla członków zespołu, FK na `deal_teams/tenants/deal_team_contacts` z `ON DELETE CASCADE`. Z rollbackiem (DROP TABLE).
 
-- **B.1 (jeśli `actor_id NOT NULL` + NULL z `get_current_director_id`):** migracja patchująca `log_deal_category_change` — `IF NEW.actor_id IS NULL THEN RETURN NEW;` lub `COALESCE(get_current_director_id(), (SELECT id FROM directors WHERE tenant_id = NEW.tenant_id LIMIT 1))`. Z rollbackiem.
-- **B.2 (jeśli CHECK nie zawiera `audit_plan/audit_scheduled/meeting_plan/meeting_scheduled`):** migracja `DROP CONSTRAINT ... ADD CONSTRAINT ...` z pełną listą wyciągniętą z `OfferingStage` w `types/dealTeam.ts`. Z rollbackiem.
-- **B.3 spójność hooka:** edytować `useDealsTeamContacts.ts:296–304` — albo usunąć `audit:'audit_plan'` z `defaultSubStages`, albo zmienić na `audit_scheduled` (decyzja po review screenu „Audyt").
+**B.2 (priorytet 1 — usuwa bomby zegarowe na `audit/hot/top`):**
+Edytować `useDealsTeamContacts.ts:296-304` — usunąć `audit:'audit_plan'`, `hot:'meeting_plan'`, `top:'meeting_plan'` z `defaultSubStages`. Zostawić tylko `offering:'handshake'` (jedyne legalne). UI dialogi które chcą ustawić `audit` powinny same przekazać legalne `offeringStage` (`'audit'` z nowej listy 8, nie legacy `audit_plan`).
 
-Część B osobnym planem po zatwierdzeniu wyników recon.
+**B.3 (opcjonalnie, niski priorytet):**
+Wyczyścić legacy z `OfferingStage` w `src/types/dealTeam.ts` (linie 42-50) po sweep'ie kodu. Osobny ADR.
 
