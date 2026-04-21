@@ -585,6 +585,11 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
               contacts={grouped[col.stage]}
               groupBy={groupBySubcategory}
               teamId={teamId}
+              sort={sortByStage[col.stage]}
+              onSortChange={(s) => setSortFor(col.stage, s)}
+              statusFilter={filterByStage[col.stage]}
+              onStatusFilterToggle={(k) => toggleFilterFor(col.stage, k)}
+              onStatusFilterClear={() => clearFilterFor(col.stage)}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);
