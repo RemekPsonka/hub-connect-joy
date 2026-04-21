@@ -9448,6 +9448,114 @@ export type Database = {
           },
         ]
       }
+      team_meeting_task_snapshot: {
+        Row: {
+          column_key: string
+          id: string
+          meeting_id: string
+          task_id: string
+          task_status_at_snapshot: string
+          team_contact_id: string
+        }
+        Insert: {
+          column_key: string
+          id?: string
+          meeting_id: string
+          task_id: string
+          task_status_at_snapshot: string
+          team_contact_id: string
+        }
+        Update: {
+          column_key?: string
+          id?: string
+          meeting_id?: string
+          task_id?: string
+          task_status_at_snapshot?: string
+          team_contact_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_meeting_task_snapshot_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "team_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_meeting_task_snapshot_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_meeting_task_snapshot_team_contact_id_fkey"
+            columns: ["team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_meetings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          meeting_at: string
+          notes: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          meeting_at?: string
+          notes?: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          meeting_at?: string
+          notes?: string | null
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_meetings_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_meetings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "team_meetings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string | null
@@ -10086,6 +10194,10 @@ export type Database = {
         Args: { p_wanted_id: string }
         Returns: boolean
       }
+      create_team_meeting: {
+        Args: { p_notes?: string; p_snapshot?: Json; p_team_id: string }
+        Returns: string
+      }
       find_connection_path: {
         Args: {
           p_end_contact: string
@@ -10180,6 +10292,7 @@ export type Database = {
         Returns: string
       }
       get_sgu_team_id: { Args: never; Returns: string }
+      get_team_meeting_streak: { Args: { p_team_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
