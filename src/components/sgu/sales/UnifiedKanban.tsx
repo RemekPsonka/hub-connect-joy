@@ -463,6 +463,25 @@ function DroppableColumn({
             </DropdownMenu>
           </div>
         </div>
+        {columnProgress && columnProgress.total > 0 && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Od odprawy</span>
+              <span>
+                {columnProgress.done}/{columnProgress.total}
+              </span>
+            </div>
+            <Progress
+              value={Math.round((columnProgress.done / columnProgress.total) * 100)}
+              className={cn(
+                'h-1',
+                columnProgress.done === columnProgress.total
+                  ? '[&>div]:bg-emerald-500'
+                  : '[&>div]:bg-amber-500',
+              )}
+            />
+          </div>
+        )}
       </div>
       <div className="flex-1 p-2 min-w-0 overflow-y-auto overflow-x-hidden">
         <div className="min-w-0">{body}</div>
