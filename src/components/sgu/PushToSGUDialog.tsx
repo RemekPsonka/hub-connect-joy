@@ -194,6 +194,7 @@ export function PushToSGUDialog({ contactId, contactName, open, onOpenChange }: 
       form.reset({
         team_id: defaultTeamId,
         stage: 'lead',
+        substage: SUBSTAGE_DEFAULTS.lead,
         expected_annual_premium_pln: 0,
         notes: '',
       });
