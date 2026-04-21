@@ -822,6 +822,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
               onSubcategoryChange={handleSubcategoryChange}
               onMoreClick={(c) => setSheetContact(c)}
               taskInfoMap={taskInfoMap}
+              columnProgress={meetingProgress?.by_column[col.stage]}
             />
           ))}
         </div>
@@ -856,6 +857,14 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           onSuccess={() => setLostContact(null)}
         />
       )}
+
+      <SaveMeetingDialog
+        open={showMeetingDialog}
+        onOpenChange={setShowMeetingDialog}
+        openTasksCount={openTasksSnapshot.length}
+        onConfirm={handleSaveMeeting}
+        isPending={saveMeeting.isPending}
+      />
     </>
   );
 }
