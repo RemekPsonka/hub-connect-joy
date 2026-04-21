@@ -456,9 +456,18 @@ function DroppableColumn({
   );
 }
 
-export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
+export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanbanProps) {
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
+  const snoozedRef = useRef<HTMLDivElement>(null);
+  const [snoozedExpanded, setSnoozedExpanded] = useState(false);
+
+  useEffect(() => {
+    if (openSnoozedSignal && openSnoozedSignal > 0) {
+      setSnoozedExpanded(true);
+      snoozedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [openSnoozedSignal]);
   const { data: taskInfoMap } = useActiveTaskContacts(teamId);
 
   const [convertContact, setConvertContact] = useState<DealTeamContact | null>(null);
@@ -657,11 +666,15 @@ export function UnifiedKanban({ teamId, filter }: UnifiedKanbanProps) {
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <SnoozedContactsBar
-          snoozedContacts={snoozedActive}
-          teamId={teamId}
-          onContactClick={(c) => setSheetContact(c)}
-        />
+        <div ref={snoozedRef}>
+          <SnoozedContactsBar
+            snoozedContacts={snoozedActive}
+            teamId={teamId}
+            onContactClick={(c) => setSheetContact(c)}
+            expanded={snoozedExpanded}
+            onExpandedChange={setSnoozedExpanded}
+          />
+        </div>
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
             <DroppableColumn
