@@ -27,6 +27,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAvailableDealTeams } from '@/hooks/useAvailableDealTeams';
+import {
+  TEMPERATURE_LABELS,
+  PROSPECT_SOURCE_LABELS,
+  CLIENT_STATUS_LABELS,
+  OFFERING_STAGE_LABELS,
+  OFFERING_STAGE_ORDER,
+} from '@/types/dealTeam';
 
 const STAGE_OPTIONS = [
   { value: 'prospect', label: 'Prospekt' },
@@ -37,9 +44,46 @@ const STAGE_OPTIONS = [
 
 type Stage = (typeof STAGE_OPTIONS)[number]['value'];
 
+const SUBSTAGE_DEFAULTS: Record<Stage, string> = {
+  prospect: 'crm_push',
+  lead: 'cold',
+  offering: 'decision_meeting',
+  client: 'standard',
+};
+
+const SUBSTAGE_LABEL: Record<Stage, string> = {
+  prospect: 'Źródło',
+  lead: 'Temperatura',
+  offering: 'Etap ofertowania',
+  client: 'Status klienta',
+};
+
+function optionsForStage(stage: Stage): { value: string; label: string }[] {
+  switch (stage) {
+    case 'prospect':
+      return (['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'] as const).map((v) => ({
+        value: v,
+        label: PROSPECT_SOURCE_LABELS[v] ?? v,
+      }));
+    case 'lead':
+      return (['hot', 'top', '10x', 'cold'] as const).map((v) => ({
+        value: v,
+        label: TEMPERATURE_LABELS[v] ?? v,
+      }));
+    case 'offering':
+      return OFFERING_STAGE_ORDER.map((v) => ({ value: v, label: OFFERING_STAGE_LABELS[v] ?? v }));
+    case 'client':
+      return (['standard', 'ambassador'] as const).map((v) => ({
+        value: v,
+        label: CLIENT_STATUS_LABELS[v] ?? v,
+      }));
+  }
+}
+
 const schema = z.object({
   team_id: z.string().uuid('Wybierz lejek'),
   stage: z.enum(['prospect', 'lead', 'offering', 'client']),
+  substage: z.string().optional(),
   expected_annual_premium_pln: z
     .number({ invalid_type_error: 'Podaj liczbę' })
     .min(0, 'Wartość nie może być ujemna')
