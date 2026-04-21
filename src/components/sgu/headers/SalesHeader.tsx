@@ -1,13 +1,13 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, Flame, Briefcase, Moon } from 'lucide-react';
+import { Users, Flame, Briefcase, Moon, Star } from 'lucide-react';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { cn } from '@/lib/utils';
 import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
 
 interface SalesHeaderProps {
   teamId: string;
-  onCardClick?: (key: 'prospect' | 'lead' | 'offering' | 'snoozed') => void;
-  activeKey?: 'prospect' | 'lead' | 'offering' | 'snoozed' | null;
+  onCardClick?: (key: 'prospect' | 'lead' | 'offering' | 'client' | 'snoozed') => void;
+  activeKey?: 'prospect' | 'lead' | 'offering' | 'client' | 'snoozed' | null;
 }
 
 export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps) {
