@@ -74,6 +74,14 @@ Deno.serve(async (req) => {
     const stage: Stage =
       body.stage && ALLOWED_STAGES.includes(body.stage) ? body.stage : 'lead';
 
+    // Walidacja substage (cicho ignorowany jeśli nie pasuje → fallback do defaulta)
+    const candidateSub =
+      typeof body.substage === 'string' && body.substage.length > 0 ? body.substage : null;
+    const substage =
+      candidateSub && SUBSTAGE_WHITELIST[stage].includes(candidateSub)
+        ? candidateSub
+        : SUBSTAGE_DEFAULTS[stage];
+
     const expected_annual_premium_gr =
       typeof body.expected_annual_premium_gr === 'number' && body.expected_annual_premium_gr >= 0
         ? Math.floor(body.expected_annual_premium_gr)
