@@ -86,7 +86,11 @@ export function UnifiedKanbanCard({
           )}
         </div>
         <div className="shrink-0">
-          <AssigneeAvatars assignees={taskInfo?.assignees ?? []} onAddClick={onMoreClick} />
+          <AssigneeAvatars
+            owner={contact.assigned_director ?? null}
+            assignees={taskInfo?.assignees ?? []}
+            onAddClick={onMoreClick}
+          />
         </div>
       </div>
 
