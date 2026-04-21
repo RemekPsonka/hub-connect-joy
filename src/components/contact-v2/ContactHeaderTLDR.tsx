@@ -172,7 +172,7 @@ export function ContactHeaderTLDR({
                   ✅ Zadanie
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setSguOpen(true)}>⭐ Przekaż do SGU</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSguOpen(true)}>⭐ Przekaż do lejka</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 

@@ -6,8 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+type Stage = 'prospect' | 'lead' | 'offering' | 'client';
+const ALLOWED_STAGES: Stage[] = ['prospect', 'lead', 'offering', 'client'];
+
 interface PushBody {
   contact_id: string;
+  team_id?: string;
+  stage?: Stage;
   expected_annual_premium_gr?: number;
   notes?: string | null;
 }
@@ -20,13 +25,8 @@ function json(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  if (req.method !== 'POST') {
-    return json({ error: 'method_not_allowed' }, 405);
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -46,6 +46,10 @@ Deno.serve(async (req) => {
       return json({ error: 'contact_id_required' }, 400);
     }
     const contact_id = body.contact_id;
+
+    const stage: Stage =
+      body.stage && ALLOWED_STAGES.includes(body.stage) ? body.stage : 'lead';
+
     const expected_annual_premium_gr =
       typeof body.expected_annual_premium_gr === 'number' && body.expected_annual_premium_gr >= 0
         ? Math.floor(body.expected_annual_premium_gr)
@@ -60,15 +64,28 @@ Deno.serve(async (req) => {
     if (dirErr) return json({ error: 'director_check_failed', details: dirErr.message }, 500);
     if (!directorId) return json({ error: 'only_director_can_push' }, 403);
 
-    // 2. SGU team
-    const { data: sguTeamId, error: teamErr } = await supabase.rpc('get_sgu_team_id');
-    if (teamErr) return json({ error: 'sgu_team_lookup_failed', details: teamErr.message }, 500);
-    if (!sguTeamId) return json({ error: 'sgu_team_not_configured' }, 500);
-
-    // 3. tenant
+    // 2. tenant
     const { data: tenantId, error: tenantErr } = await supabase.rpc('get_current_tenant_id');
     if (tenantErr) return json({ error: 'tenant_lookup_failed', details: tenantErr.message }, 500);
     if (!tenantId) return json({ error: 'no_tenant' }, 500);
+
+    // 3. team_id resolution + membership check
+    let team_id = typeof body.team_id === 'string' && body.team_id ? body.team_id : null;
+    if (!team_id) {
+      const { data: sguTeamId, error: teamErr } = await supabase.rpc('get_sgu_team_id');
+      if (teamErr) return json({ error: 'sgu_team_lookup_failed', details: teamErr.message }, 500);
+      if (!sguTeamId) return json({ error: 'no_team_specified' }, 400);
+      team_id = sguTeamId as string;
+    } else {
+      // walidacja: dyrektor musi należeć do team_id (1-arg overload korzysta z auth.uid())
+      const { data: isMember, error: memberErr } = await supabase.rpc('is_deal_team_member', {
+        p_team_id: team_id,
+      });
+      if (memberErr) {
+        return json({ error: 'team_membership_check_failed', details: memberErr.message }, 500);
+      }
+      if (!isMember) return json({ error: 'not_team_member' }, 403);
+    }
 
     // 4. validate contact in tenant
     const { data: contactRow, error: contactErr } = await supabase
@@ -80,28 +97,31 @@ Deno.serve(async (req) => {
     if (contactErr) return json({ error: 'contact_lookup_failed', details: contactErr.message }, 500);
     if (!contactRow) return json({ error: 'contact_not_found' }, 404);
 
-    // 5. idempotency — already pushed?
+    // 5. idempotency — already pushed to THIS team?
     const { data: existing, error: existErr } = await supabase
       .from('deal_team_contacts')
       .select('id')
-      .eq('team_id', sguTeamId)
+      .eq('team_id', team_id)
       .eq('source_contact_id', contact_id)
       .maybeSingle();
     if (existErr) return json({ error: 'existing_lookup_failed', details: existErr.message }, 500);
     if (existing) {
-      return json({ deal_team_contact_id: existing.id, created: false });
+      return json({ deal_team_contact_id: existing.id, team_id, stage, created: false });
     }
 
-    // 6. INSERT (race-safe via partial unique index idx_dtc_source_unique_per_team)
+    // 6. mapowanie stage → category/status
+    const status = stage === 'client' ? 'won' : 'new';
+
     const { data: inserted, error: insertErr } = await supabase
       .from('deal_team_contacts')
       .insert({
         tenant_id: tenantId,
-        team_id: sguTeamId,
-        contact_id: contact_id,
+        team_id,
+        contact_id,
         source_contact_id: contact_id,
-        category: 'lead',
-        status: 'new',
+        category: stage,
+        status,
+        prospect_source: 'crm_push',
         expected_annual_premium_gr,
         notes,
       })
@@ -109,21 +129,20 @@ Deno.serve(async (req) => {
       .single();
 
     if (insertErr) {
-      // 23505 = unique_violation → race won by another request, re-fetch
       const code = (insertErr as { code?: string }).code;
       if (code === '23505') {
         const { data: raceRow } = await supabase
           .from('deal_team_contacts')
           .select('id')
-          .eq('team_id', sguTeamId)
+          .eq('team_id', team_id)
           .eq('source_contact_id', contact_id)
           .maybeSingle();
-        if (raceRow) return json({ deal_team_contact_id: raceRow.id, created: false });
+        if (raceRow) return json({ deal_team_contact_id: raceRow.id, team_id, stage, created: false });
       }
       return json({ error: 'insert_failed', details: insertErr.message }, 500);
     }
 
-    return json({ deal_team_contact_id: inserted.id, created: true });
+    return json({ deal_team_contact_id: inserted.id, team_id, stage, created: true });
   } catch (e) {
     return json({ error: 'internal', details: e instanceof Error ? e.message : String(e) }, 500);
   }

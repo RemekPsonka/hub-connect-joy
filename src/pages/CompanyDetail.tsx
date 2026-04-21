@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCompany, useCompanyContacts } from '@/hooks/useCompanies';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSGUTeamId } from '@/hooks/useSGUTeamId';
+import { useAvailableDealTeams } from '@/hooks/useAvailableDealTeams';
 import { CompanyProfileHeader } from '@/components/companies/CompanyProfileHeader';
 import { CompanyFlatTabs } from '@/components/company/CompanyFlatTabs';
 import { CompanyRegistryCard } from '@/components/companies/CompanyRegistryCard';
@@ -30,13 +30,13 @@ export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: company, isLoading, error } = useCompany(id);
   const { director } = useAuth();
-  const { sguTeamId } = useSGUTeamId();
+  const { teams: availableTeams } = useAvailableDealTeams();
   const { data: companyContacts = [] } = useCompanyContacts(id);
 
   const [isPushSingleOpen, setIsPushSingleOpen] = useState(false);
   const [isPushMultiOpen, setIsPushMultiOpen] = useState(false);
 
-  const canPushToSGU = director !== null && !!sguTeamId;
+  const canPushToSGU = director !== null && availableTeams.length > 0;
 
   const contactOptions: CompanyContactOption[] = useMemo(
     () =>
@@ -86,7 +86,7 @@ export default function CompanyDetail() {
       className="gap-2"
     >
       <Share2 className="h-4 w-4" />
-      Przekaż do SGU
+      Przekaż do lejka
     </Button>
   );
 
