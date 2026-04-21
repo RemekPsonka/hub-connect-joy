@@ -51,7 +51,7 @@ export function useActiveTaskContacts(teamId: string | undefined) {
           assignee:directors!tasks_assigned_to_fkey(id, full_name)
         `)
         .eq('deal_team_id', teamId!)
-        .in('status', ['todo', 'in_progress', 'completed'])
+        .in('status', ['todo', 'pending', 'in_progress', 'completed'])
         .not('deal_team_contact_id', 'is', null);
 
       if (error) throw error;
@@ -92,7 +92,7 @@ export function useActiveTaskContacts(teamId: string | undefined) {
         const cid = t.deal_team_contact_id as string;
         if (!cid) continue;
         const info = ensure(cid);
-        const isOpen = t.status === 'todo' || t.status === 'in_progress';
+        const isOpen = t.status === 'todo' || t.status === 'pending' || t.status === 'in_progress';
         const ttype = classifyTask((t as any).title || '');
         const tt = info.byType[ttype];
 
