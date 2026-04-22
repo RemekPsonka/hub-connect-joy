@@ -26,6 +26,11 @@ import {
   useDropMeetingQuestion,
   type MeetingQuestionRow,
 } from '@/hooks/useMeetingQuestions';
+import {
+  getEscalationLabel,
+  getEscalationClasses,
+  getEscalationIcon,
+} from '@/lib/meetingQuestions';
 
 type DecisionType = 'go' | 'postponed' | 'dead';
 type QuestionAction = 'askAgain' | 'answer' | 'skip' | 'drop';
@@ -502,12 +507,17 @@ const ACTION_LABELS: Record<QuestionAction, string> = {
 function QuestionCarryForwardRow({
   question, readOnly, action, answerText, onActionChange, onAnswerChange,
 }: QuestionCarryForwardRowProps) {
+  const Icon = getEscalationIcon(question.ask_count);
+  const escalationLabel = getEscalationLabel(question.ask_count);
+  const escalationClasses = getEscalationClasses(question.ask_count);
+
   return (
     <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm flex-1">{question.question_text}</p>
-        <span className="text-xs text-muted-foreground shrink-0">
-          zadane {question.ask_count}×
+        <span className={cn('text-xs shrink-0 flex items-center gap-1', escalationClasses)}>
+          {Icon && <Icon className="h-3 w-3" />}
+          {escalationLabel}
         </span>
       </div>
 
