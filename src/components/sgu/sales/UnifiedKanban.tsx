@@ -524,7 +524,6 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [lostContact, setLostContact] = useState<DealTeamContact | null>(null);
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
-  const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
@@ -799,7 +798,9 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           <SnoozedContactsBar
             snoozedContacts={snoozedActive}
             teamId={teamId}
-            onContactClick={(c) => setSheetContact(c)}
+            onContactClick={(c) => {
+              if (c.contact_id) navigate(`/contacts/${c.contact_id}?tab=more&sub=tasks-full`);
+            }}
             expanded={snoozedExpanded}
             onExpandedChange={setSnoozedExpanded}
           />
