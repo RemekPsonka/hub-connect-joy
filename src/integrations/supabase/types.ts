@@ -3859,6 +3859,12 @@ export type Database = {
           expected_annual_premium_gr: number | null
           id: string
           is_lost: boolean | null
+          k1_meeting_done_at: string | null
+          k1_meeting_scheduled_at: string | null
+          k2_handshake_at: string | null
+          k3_poa_signed_at: string | null
+          k4_offer_accepted_at: string | null
+          k4_policy_signed_at: string | null
           last_status_update: string | null
           lost_at: string | null
           lost_reason: string | null
@@ -3905,6 +3911,12 @@ export type Database = {
           expected_annual_premium_gr?: number | null
           id?: string
           is_lost?: boolean | null
+          k1_meeting_done_at?: string | null
+          k1_meeting_scheduled_at?: string | null
+          k2_handshake_at?: string | null
+          k3_poa_signed_at?: string | null
+          k4_offer_accepted_at?: string | null
+          k4_policy_signed_at?: string | null
           last_status_update?: string | null
           lost_at?: string | null
           lost_reason?: string | null
@@ -3951,6 +3963,12 @@ export type Database = {
           expected_annual_premium_gr?: number | null
           id?: string
           is_lost?: boolean | null
+          k1_meeting_done_at?: string | null
+          k1_meeting_scheduled_at?: string | null
+          k2_handshake_at?: string | null
+          k3_poa_signed_at?: string | null
+          k4_offer_accepted_at?: string | null
+          k4_policy_signed_at?: string | null
           last_status_update?: string | null
           lost_at?: string | null
           lost_reason?: string | null
@@ -5972,6 +5990,89 @@ export type Database = {
           },
         ]
       }
+      meeting_decisions: {
+        Row: {
+          created_at: string
+          created_by: string
+          dead_reason: string | null
+          deal_team_contact_id: string
+          decision_type: string
+          id: string
+          meeting_date: string
+          next_action_date: string | null
+          notes: string | null
+          postponed_until: string | null
+          prev_category: string | null
+          prev_offering_stage: string | null
+          prev_temperature: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          dead_reason?: string | null
+          deal_team_contact_id: string
+          decision_type: string
+          id?: string
+          meeting_date: string
+          next_action_date?: string | null
+          notes?: string | null
+          postponed_until?: string | null
+          prev_category?: string | null
+          prev_offering_stage?: string | null
+          prev_temperature?: string | null
+          team_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          dead_reason?: string | null
+          deal_team_contact_id?: string
+          decision_type?: string
+          id?: string
+          meeting_date?: string
+          next_action_date?: string | null
+          notes?: string | null
+          postponed_until?: string | null
+          prev_category?: string | null
+          prev_offering_stage?: string | null
+          prev_temperature?: string | null
+          team_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_decisions_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_decisions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_decisions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "meeting_decisions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_participants: {
         Row: {
           attendance_status: string | null
@@ -6026,6 +6127,89 @@ export type Database = {
             columns: ["prospect_id"]
             isOneToOne: false
             referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_questions: {
+        Row: {
+          answer_text: string | null
+          answered_at: string | null
+          answered_by: string | null
+          ask_count: number
+          created_at: string
+          created_by: string
+          deal_team_contact_id: string
+          id: string
+          last_asked_at: string
+          last_asked_by: string | null
+          question_text: string
+          status: string
+          team_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          answer_text?: string | null
+          answered_at?: string | null
+          answered_by?: string | null
+          ask_count?: number
+          created_at?: string
+          created_by: string
+          deal_team_contact_id: string
+          id?: string
+          last_asked_at?: string
+          last_asked_by?: string | null
+          question_text: string
+          status?: string
+          team_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          answer_text?: string | null
+          answered_at?: string | null
+          answered_by?: string | null
+          ask_count?: number
+          created_at?: string
+          created_by?: string
+          deal_team_contact_id?: string
+          id?: string
+          last_asked_at?: string
+          last_asked_by?: string | null
+          question_text?: string
+          status?: string
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_questions_deal_team_contact_id_fkey"
+            columns: ["deal_team_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_questions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_questions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "meeting_questions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
