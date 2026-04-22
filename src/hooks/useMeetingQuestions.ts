@@ -55,11 +55,12 @@ type DropInput = { questionId: string; contactId: string };
 
 export function useCreateMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { tenantId, userId } = useAuthIds();
+  const { tenantId, authUserId, directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: CreateQuestionInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!authUserId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
       if (!tenantId) throw new Error('Brak tenant_id');
 
       const questionText = input.questionText.trim();
@@ -81,8 +82,8 @@ export function useCreateMeetingQuestion() {
           deal_team_contact_id: input.contactId,
           question_text: questionText,
           last_asked_at: new Date().toISOString(),
-          last_asked_by: userId,
-          created_by: userId,
+          last_asked_by: directorId,
+          created_by: authUserId,
         })
         .select('id')
         .single();
