@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
   PointerSensor,
@@ -46,6 +45,7 @@ import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
+import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
