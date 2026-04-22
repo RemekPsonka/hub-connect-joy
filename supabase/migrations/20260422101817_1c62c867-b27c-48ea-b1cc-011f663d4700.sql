@@ -1,0 +1,2 @@
+COMMENT ON TABLE public.meeting_decisions IS 'Weekly meeting decisions per deal_team_contact (sync types regen N2-N4)';
+COMMENT ON TABLE public.meeting_questions IS 'Open questions per deal_team_contact captured during weekly status (sync types regen N2-N4)';
