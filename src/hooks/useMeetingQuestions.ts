@@ -148,11 +148,11 @@ export function useAskMeetingQuestionAgain() {
 
 export function useAnswerMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: AnswerInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const answerText = input.answerText.trim();
       if (!answerText) throw new Error('Treść odpowiedzi wymagana');
@@ -173,7 +173,7 @@ export function useAnswerMeetingQuestion() {
         .update({
           status: 'answered',
           answered_at: new Date().toISOString(),
-          answered_by: userId,
+          answered_by: directorId,
           answer_text: answerText,
         })
         .eq('id', input.questionId);
