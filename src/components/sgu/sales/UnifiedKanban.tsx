@@ -188,6 +188,7 @@ function DraggableCard({
   onOfferingLostClick,
   onSubcategoryChange,
   onMoreClick,
+  onMeetingDoneClick,
   taskInfo,
 }: {
   contact: DealTeamContact;
@@ -199,6 +200,7 @@ function DraggableCard({
   onOfferingLostClick: () => void;
   onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: () => void;
+  onMeetingDoneClick?: () => void;
   taskInfo?: TaskContactInfo;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
@@ -221,6 +223,7 @@ function DraggableCard({
         onOfferingLostClick={onOfferingLostClick}
         onSubcategoryChange={onSubcategoryChange}
         onMoreClick={onMoreClick}
+        onMeetingDoneClick={onMeetingDoneClick}
         isDragging={isDragging}
         taskInfo={taskInfo}
       />
