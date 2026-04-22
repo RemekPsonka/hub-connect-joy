@@ -10,6 +10,7 @@ import {
 import { NextActionDialog } from './NextActionDialog';
 import { SnoozeDialog } from './SnoozeDialog';
 import { ConvertToClientDialog } from './ConvertToClientDialog';
+import { MeetingDecisionDialog } from './MeetingDecisionDialog';
 import { ContactActionButtons } from './ContactActionButtons';
 import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -119,6 +120,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [pendingCompleteTaskTitle, setPendingCompleteTaskTitle] = useState<string>('');
   const [showSnooze, setShowSnooze] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+  const [showMeetingDecision, setShowMeetingDecision] = useState(false);
   // Reset assignTo when director changes
   useEffect(() => {
     if (director?.id && !assignTo) setAssignTo(director.id);
@@ -237,6 +239,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                       teamId={teamId}
                       onSnooze={() => setShowSnooze(true)}
                       onConvertToClient={() => setShowConvert(true)}
+                      onMeetingDone={() => setShowMeetingDecision(true)}
                     />
                   </section>
 

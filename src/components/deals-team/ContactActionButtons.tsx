@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   CalendarIcon, Loader2, PhoneCall, FileText, Send, Moon, UserCheck, XCircle,
-  Handshake, ClipboardCheck,
+  Handshake, ClipboardCheck, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ import type { DealTeamContact, DealCategory, OfferingStage } from '@/types/dealT
 type ActionType =
   | 'schedule_meeting'
   | 'meeting_scheduled'
+  | 'meeting_done'
   | 'audit'
   | 'send_offer'
   | 'call'
@@ -46,6 +47,8 @@ const ACTIONS: ActionDef[] = [
     isActive: (c) => c.offering_stage === 'meeting_plan' },
   { value: 'meeting_scheduled', label: 'Spotkanie umówione', icon: Handshake, needsDate: true,
     isActive: (c) => c.offering_stage === 'meeting_scheduled' },
+  { value: 'meeting_done', label: 'Spotkanie odbyte', icon: CheckCircle2, needsDate: false,
+    isActive: (c) => c.offering_stage === 'meeting_done' },
   { value: 'audit', label: 'Audyt', icon: ClipboardCheck, needsDate: true,
     isActive: (c) => c.category === 'audit' },
   { value: 'send_offer', label: 'Wyślij ofertę', icon: FileText, needsDate: true,
@@ -67,13 +70,15 @@ interface ContactActionButtonsProps {
   onSnooze: () => void;
   /** Open external convert-to-client dialog */
   onConvertToClient: () => void;
+  /** Open external meeting-decision dialog */
+  onMeetingDone: () => void;
 }
 
 /**
  * Always-visible action grid for a contact. Each button creates/updates a task and
  * adjusts category/offering_stage independently of any existing task.
  */
-export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToClient }: ContactActionButtonsProps) {
+export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToClient, onMeetingDone }: ContactActionButtonsProps) {
   const { director } = useAuth();
   const { data: teamMembers = [] } = useTeamMembers(teamId);
   const createTask = useCreateTask();
@@ -92,6 +97,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
   const handleClick = (action: ActionDef) => {
     if (action.value === 'snooze') { onSnooze(); return; }
     if (action.value === 'client') { onConvertToClient(); return; }
+    if (action.value === 'meeting_done') { onMeetingDone(); return; }
     if (action.value === 'lost') {
       // Direct update — no extra data needed
       updateContact.mutate(
