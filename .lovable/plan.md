@@ -1,74 +1,60 @@
 
 
-# Sub-etapy w „Przekaż do lejka"
+# Regen `types.ts` z live Supabase — execute
 
-## Cel
-Po wyborze etapu głównego (Prospekt / Lead / Ofertowanie / Klient) dialog ma pokazać dodatkowy select z **konkretnym sub-etapem**, żeby kontakt od razu trafił we właściwą kolumnę kanbanu, bez ręcznego ustawiania po pushu.
+## Plik ruszony
+- **Tylko** `src/integrations/supabase/types.ts` (nadpisanie outputem generatora).
 
-## Mapowanie etap → sub-etap
+## Kroki wykonania (default mode)
 
-| Stage | Pole DB | Opcje (z istniejących stałych w `dealTeam.ts`) | Default |
-|---|---|---|---|
-| `prospect` | `prospect_source` | `crm_push`, `cc_meeting`, `ai_krs`, `ai_web`, `csv`, `manual` | `crm_push` |
-| `lead` | `temperature` | `hot`, `top`, `cold`, `10x` | `cold` |
-| `offering` | `offering_stage` | 8 wartości z `OFFERING_STAGE_ORDER` (`decision_meeting` … `won`/`lost`) | `decision_meeting` |
-| `client` | `client_status` | `standard`, `ambassador` (bez `lost` — to robi się przez markowanie) | `standard` |
+1. **Backup obecnego pliku** → `/tmp/types.before.ts` (do diff-a).
+2. **Introspekcja live schematu** dla tabel docelowych — `psql` na live DB:
+   ```sql
+   SELECT column_name, data_type, is_nullable, column_default
+   FROM information_schema.columns
+   WHERE table_schema='public'
+     AND table_name IN ('meeting_decisions','meeting_questions')
+   ORDER BY table_name, ordinal_position;
+   ```
+   Wynik = source of truth do walidacji.
+3. **Sanity check vs Twoja lista pól** (przed regenem):
+   - Dla każdej Twojej kolumny sprawdzam obecność + typ + nullability w live DB.
+   - **Jeśli brakuje którejkolwiek** z Twoich kolumn (`tenant_id`, `decision`, `ask_count`, `is_active`, `last_asked_at`, …) → **STOP**, nie odpalam generatora, raportuję rozjazd:
+     ```
+     MISMATCH:
+       meeting_decisions: brak kolumny X (typ oczekiwany Y)
+       meeting_questions: ...
+     ```
+   - Jeśli live ma **extra** kolumny — kontynuuję, pokażę je w diff.
+4. **Regen przez Supabase Management API** (CLI w sandboxie nie ma `SUPABASE_ACCESS_TOKEN`, więc idę REST-em):
+   ```bash
+   curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+     "https://api.supabase.com/v1/projects/smuaroosnsrqfjsbpxpa/types/typescript?included_schemas=public" \
+     -o /tmp/types.after.ts
+   ```
+   Sprawdzam: rozmiar > 0, zaczyna się od `export type Json =`, zawiera `meeting_decisions:` i `meeting_questions:`.
+   Fallback gdy brak `SUPABASE_ACCESS_TOKEN`: `npx supabase gen types typescript --project-id smuaroosnsrqfjsbpxpa --schema public` (jeśli też padnie → STOP, raportuję, NIE rekonstruuję ręcznie).
+5. **Diff przed nadpisaniem** — `diff /tmp/types.before.ts /tmp/types.after.ts`:
+   - Oczekuję: tylko nowe klucze `meeting_decisions` + `meeting_questions` w `Database['public']['Tables']`.
+   - **Jeśli inne tabele zmieniają kształt** (Row/Insert/Update/Relationships pozostałych tabel) → **STOP**, raportuję pełną listę zmian, nie nadpisuję.
+6. **Nadpisanie** `src/integrations/supabase/types.ts` outputem z `/tmp/types.after.ts`.
+7. **Walidacja**: `npx tsc --noEmit` — exit 0 wymagany. Jeśli ≠ 0 → pokazuję pełny output, nie zostawiam zepsutego pliku.
 
-Etykiety: bezpośrednio z `TEMPERATURE_LABELS`, `PROSPECT_SOURCE_LABELS`, `OFFERING_STAGE_LABELS`, `CLIENT_STATUS_LABELS` (bez duplikowania stringów).
+## Co dostaniesz w odpowiedzi po execute
 
-## Zmiany
+1. **Diff** ograniczony do nowych kluczy `Tables.meeting_decisions` + `Tables.meeting_questions` (Row/Insert/Update/Relationships) + potwierdzenie „reszta nietknięta".
+2. **Output `npx tsc --noEmit`** (exit code + ewentualne błędy).
+3. **Commit info**: w Lovable nie odpalam `git` — zmiana w pliku jest commitowana automatycznie przez platformę po nadpisaniu. Zamiast hash-a podam: nazwę pliku + bytes before/after + listę zmienionych linii.
 
-### 1. `src/components/sgu/PushToSGUDialog.tsx`
-- Rozszerzam Zod schema o `substage: z.string().optional()`.
-- Default formularza dla `substage` = `cold` (bo default `stage` = `lead`).
-- Po zmianie `stage` reset `substage` do defaulta dla nowego etapu (efekt na `watch('stage')`).
-- Nowy `<Select>` „Pod-etap" pod selectem etapu — opcje dynamicznie z helpera `optionsForStage(stage)` zwracającego `{value, label}[]`.
-- Etykieta selecta zmienia się: „Temperatura" / „Źródło" / „Etap ofertowania" / „Status klienta".
-- W `onSubmit`: dokładam `substage: values.substage` do body edge functiona.
-- `client` + `expected_annual_premium_pln`: zostaje wymagane (tak jak `lead`/`offering`). Tylko `prospect` ukrywa pole.
+## STOP conditions (nic nie nadpisuję jeśli)
+- Live DB nie ma którejś z Twoich kolumn → mismatch report.
+- Generator zwrócił pusty / niepełny plik (brak nagłówka `export type Json` lub brak oczekiwanych tabel).
+- Diff pokazuje zmiany w innych tabelach niż dwie docelowe.
+- `npx tsc --noEmit` exit ≠ 0 → rollback z `/tmp/types.before.ts`.
 
-### 2. `supabase/functions/sgu-push-contact/index.ts`
-- Dorzucam `substage?: string` do `PushBody`.
-- Whitelist per stage (te same wartości co w UI). Jeśli `substage` nie pasuje → ignorowany (cicho), nie 400 — backward compat.
-- Mapowanie do INSERT-u w `deal_team_contacts`:
-  - `prospect` → `prospect_source: substage`
-  - `lead` → `temperature: substage`
-  - `offering` → `offering_stage: substage`
-  - `client` → `client_status: substage`
-- Nadpisuje dotychczasowy hardcode `prospect_source: 'crm_push'` (dla prospect bierze z `substage`, dla pozostałych zostaje `'crm_push'` jako znacznik pochodzenia, ale w dodatkowym polu — albo ustawiamy `prospect_source` tylko dla `stage === 'prospect'` i zostawiamy NULL dla pozostałych; po sprawdzeniu obecnego kodu robię to drugie, bo `prospect_source` semantycznie należy do prospect).
-
-  **Decyzja:** dla `stage !== 'prospect'` — `prospect_source` NULL (czystsze, zgodne z modelem IA). Dla `stage === 'prospect'` — z `substage` (default `crm_push`).
-
-- Idempotencja zostaje bez zmian (`team_id` + `source_contact_id`). Jeśli rekord już istnieje, sub-etap NIE jest aktualizowany (zwracamy istniejący — tak jak dziś).
-
-### 3. (opcjonalnie, jeśli starczy w 1 etapie) drobne UX
-- Pod-etap pokazuje się jako drugi select w gridzie 1-kolumnowym, z labelką dynamiczną.
-- Komunikat sukcesu wzbogacam: „Kontakt przekazany jako Lead · 🔥 HOT" (label z mapy).
-
-## Pliki
-
-| # | Plik | Akcja |
-|---|---|---|
-| 1 | `src/components/sgu/PushToSGUDialog.tsx` | EDIT — substage select + reset on stage change + body |
-| 2 | `supabase/functions/sgu-push-contact/index.ts` | EDIT — body schema + walidacja + mapowanie do 4 pól |
-
-Bez nowych hooków, bez migracji — kolumny `temperature` / `prospect_source` / `offering_stage` / `client_status` już istnieją w `deal_team_contacts`.
-
-## Poza zakresem
-- Edycja sub-etapu, gdy kontakt już jest w lejku (idempotentnie zwracamy istniejący).
-- Bulk push z sub-etapem.
-- UI do oznaczania `lost` przy pushu (do tego służy późniejszy „Won/Lost" flow w kanbanie).
-
-## DoD
-
-| Check | Stan |
-|---|---|
-| Po wyborze `Lead` widać select „Temperatura" z 4 opcjami (default `cold`) | ⬜ |
-| Po wyborze `Prospekt` widać select „Źródło" (default `crm_push`) | ⬜ |
-| Po wyborze `Ofertowanie` widać select „Etap ofertowania" z 8 opcjami | ⬜ |
-| Po wyborze `Klient` widać select „Status klienta" (standard/ambassador) | ⬜ |
-| Zmiana etapu resetuje sub-etap do defaulta nowego etapu | ⬜ |
-| Edge function zapisuje sub-etap w odpowiedniej kolumnie DB | ⬜ |
-| Push do `Lead/HOT` → kontakt pojawia się w kolumnie HOT na kanbanie | ⬜ |
-| `npx tsc --noEmit` exit 0 | ⬜ |
+## Poza zakresem (bez zmian)
+- Bez nowej migracji SQL.
+- Bez nowych hooków.
+- Bez `src/types/dealTeam.ts`.
+- Bez komponentów.
 
