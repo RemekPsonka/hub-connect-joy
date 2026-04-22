@@ -1,95 +1,85 @@
 
 
-# B-FIX.15 — Kafelek "Spotkanie odbyte" w drawer AKCJE
+# REVERT-NAV-1 — Klik w kafelek kanbana otwiera drawer AKCJE (ContactTasksSheet)
 
-## Cel
-Dodać 10. kafelek "Spotkanie odbyte" w `ContactActionButtons` (drawer AKCJE w `ContactTasksSheet`). Klik → otwiera `MeetingDecisionDialog`. Zamknięcie taska załatwia trigger DB z HOTFIX-OS3 — bez `updateTask` w FE.
+## Problem
 
-## Pliki dotknięte (2)
+Poprzedni patch (klik karty → `/contacts/:id?tab=more&sub=tasks-full`) okazał się błędny UX-owo. User chce wrócić do oryginalnego zachowania:
 
-### Plik 1: `src/components/deals-team/ContactActionButtons.tsx`
+**Klik w kafelek kanbana → `ContactTasksSheet` (boczny drawer)** — który zawiera sekcję **Akcje** z 10 kafelkami (`ContactActionButtons`, w tym świeży "Spotkanie odbyte" z B-FIX.15).
 
-**A. Extend `ActionType`** — dodać `'meeting_done'` po `'meeting_scheduled'`.
+Nawigacja do pełnej karty kontaktu pozostaje dostępna z poziomu `ContactTasksSheet` (link "Otwórz pełną kartę" już tam jest).
 
-**B. Import** — dodać `CheckCircle2` z `lucide-react`.
+## Recon (potwierdzone)
 
-**C. ACTIONS** — wstaw entry po `meeting_scheduled`:
+- `ContactTasksSheet` istnieje i nadal jest używany w `ClientsTab.tsx` + `KanbanBoard.tsx` — komponent żywy, wystarczy go z powrotem podpiąć w kanbanie.
+- `ContactTasksSheet` w sekcji "Akcje" (linia 233-239) renderuje `<ContactActionButtons ... />` z pełnym setem 10 akcji, w tym `meeting_done` (B-FIX.15).
+- `UnifiedKanbanCard` przyjmuje propsy `onMoreClick: () => void` (footer ⋯ + status pill + button "Add task") i `onContactClick` w `SnoozedContactsBar`.
+
+## Zmiany — 1 plik
+
+`src/components/sgu/sales/UnifiedKanban.tsx`
+
+### Krok 1: Przywróć import + state
 ```tsx
-{ value: 'meeting_done', label: 'Spotkanie odbyte', icon: CheckCircle2, needsDate: false,
-  isActive: (c) => c.offering_stage === 'meeting_done' },
+import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+// ...
+const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
 ```
 
-**D. Props** — dodać `onMeetingDone: () => void` do `ContactActionButtonsProps`.
-
-**E. handleClick** — early-return obok `'snooze'` / `'client'`:
+### Krok 2: Zamień handler `onMoreClick` (kafelek) z navigate na setSheetContact
 ```tsx
-if (action.value === 'meeting_done') { onMeetingDone(); return; }
+onMoreClick={() => setSheetContact(c)}
 ```
 
-### Plik 2: `src/components/deals-team/ContactTasksSheet.tsx`
-
-**F. Import**:
+### Krok 3: Zamień handler `onContactClick` w `SnoozedContactsBar` z navigate na setSheetContact
 ```tsx
-import { MeetingDecisionDialog } from './MeetingDecisionDialog';
+onContactClick={(c) => setSheetContact(c)}
 ```
 
-**G. State**:
+### Krok 4: Render `<ContactTasksSheet>` (przed `</DndContext>` lub w drzewie tam gdzie był wcześniej)
 ```tsx
-const [showMeetingDecision, setShowMeetingDecision] = useState(false);
+<ContactTasksSheet
+  contact={sheetContact}
+  teamId={teamId}
+  open={!!sheetContact}
+  onOpenChange={(open) => !open && setSheetContact(null)}
+/>
 ```
 
-**H. Callback do `<ContactActionButtons>`**:
-```tsx
-onMeetingDone={() => setShowMeetingDecision(true)}
-```
-
-**I. Render dialogu** (obok innych dialogów):
-```tsx
-{contact.contact_id && (
-  <MeetingDecisionDialog
-    open={showMeetingDecision}
-    onOpenChange={setShowMeetingDecision}
-    contactId={contact.contact_id}
-    contactDisplayName={contact.contact?.full_name ?? 'kontakt'}
-    onSuccess={() => setShowMeetingDecision(false)}
-  />
-)}
-```
+### Krok 5: Usuń `useNavigate` jeśli niewykorzystywany w innych miejscach pliku
+- Sprawdzić w execute: jeśli `navigate(...)` nie jest używany nigdzie indziej w tym pliku, usunąć import i deklarację.
 
 ## ZERO zmian w
-- `MeetingDecisionDialog.tsx` (props sygnatura zgadza się z reconu)
-- `useTasks.ts` / `useDealsTeamContacts.ts` (trigger DB załatwia close task)
-- Migracjach
-- Innych callsite'ach `ContactActionButtons` (jest tylko jeden — `ContactTasksSheet`)
+- `ContactTasksSheet.tsx` (tylko consumer)
+- `ContactActionButtons.tsx` (B-FIX.15 z 10. kafelkiem już wdrożony)
+- `ContactDetail.tsx` — whitelist `more` + `getDefaultSubTab()` z poprzedniego patcha **zostaje** (nie szkodzi, przyda się do ewentualnych deep-linków z innych miejsc np. emaili/Sovry)
+- Routach, migracjach, innych komponentach kanbana
 
 ## Pre-flight
-1. `grep -n "meeting_done\|MeetingDecisionDialog\|onMeetingDone" src/components/deals-team/ContactActionButtons.tsx src/components/deals-team/ContactTasksSheet.tsx` — oczekiwane: ActionType + ACTIONS + prop + handleClick w pliku 1; import + state + callback + render w pliku 2
-2. `npx tsc --noEmit` → 0 nowych errors
-3. Lint na 2 zmodyfikowanych plikach → 0 nowych warnings
-4. Grep `<ContactActionButtons` w `src/` → tylko 1 hit (`ContactTasksSheet.tsx`) — potwierdza że nie trzeba aktualizować innych callsite'ów
+1. `grep -n "ContactTasksSheet\|setSheetContact\|sheetContact" src/components/sgu/sales/UnifiedKanban.tsx` → import + state declare/setter + render + 2 handlery (≥6 hits)
+2. `grep -n "navigate(" src/components/sgu/sales/UnifiedKanban.tsx` → 0 hits (lub tylko niezwiązane z klikiem karty); usuń `useNavigate` jeśli pusto
+3. `npx tsc --noEmit` → 0 nowych errors
+4. Lint zmodyfikowanego pliku → 0 nowych warnings
 
 ## STOP conditions
-- TYLKO 2 pliki tknięte
-- Bez `updateTask` w `onSuccess` (trigger HOTFIX-OS3 to robi)
-- Bez zmian kolejności pozostałych akcji
-- Grid kafelków pozostaje `grid-cols-3` (10 kafelków = 4 wiersze, akceptowalne)
-- Zero `console.log`, zero `any`
+- TYLKO 1 plik tknięty (`UnifiedKanban.tsx`)
+- Bez zmian w `ContactTasksSheet`, `ContactActionButtons`, `ContactDetail.tsx`
+- Klik karty (footer ⋯, status pill, "Add task") oraz klik w `SnoozedContactsBar` → `ContactTasksSheet` (drawer z prawej)
+- W drawer dostępna sekcja "Akcje" z 10 kafelkami, w tym "Spotkanie odbyte" → otwiera `MeetingDecisionDialog`
 
 ## Edge cases
 | Scenariusz | Zachowanie |
 |---|---|
-| Kontakt na stage `meeting_scheduled` | Kafelek "Spotkanie odbyte" klikalny, NIE highlighted (highlighted dopiero gdy stage=`meeting_done`) |
-| Kontakt poza workflow spotkań | Kafelek klikalny — user może manualnie zgłosić odbyte spotkanie. Akceptowalne. |
-| `contact.contact_id` null | Render dialogu z guardem `{contact.contact_id && ...}` — dialog nie renderuje się, kafelek nadal klikalny ale `setShowMeetingDecision(true)` no-op'uje wizualnie |
-| Cancel w dialogu | Dialog zamknięty, żaden zapis |
-| Decyzja zapisana | `onSuccess` zamyka dialog; trigger DB N-apply: `offering_stage`, `k1_meeting_done_at`, `next_action_date`, ewentualny `is_lost`; trigger HOTFIX-OS3: zamyka aktywne taski kontaktu |
+| `c.contact_id` null | Drawer otwiera się z dostępnymi danymi (DealTeamContact ma własne pola) — ContactActionButtons działa, sekcje wymagające `contact_id` graceful-fallback (już zaimplementowane) |
+| User chce pełną kartę | Link "Otwórz pełną kartę" w `ContactTasksSheet` (już istnieje) → `/contacts/:id` |
+| Drag karty | Bez zmian — drag handle nie odpala onMoreClick (`stopPropagation`) |
 
 ## Raport po execute
-1. Diff obu plików (~+15/-0 łącznie)
+1. Diff `UnifiedKanban.tsx` (~+10/-5)
 2. Pre-flight #1-#4 wyniki
-3. Manual smoke (user): Pawełczyk → AKCJE drawer → "Spotkanie odbyte" → dialog → "Idziemy" + data → Zapisz → kontakt do Ofertowanie + active task zamknięty
+3. Manual smoke: `/sgu/sprzedaz` → klik kafelek Pawełczyka → drawer z prawej → sekcja "Akcje" → kafelek "Spotkanie odbyte" widoczny → klik → `MeetingDecisionDialog` otwarty
 
 ## Backlog (nie ten sprint)
-- **B-FIX.16** — UX: highlight wizualny gdy active task = "spotkanie K1" (sugestia że "Spotkanie odbyte" to logiczny next step)
-- **B-FIX.17** — Memory cleanup: `project_meeting_decision_application_gap.md` → "DOMKNIĘTY przez 3 entry points: kanban icon ✓ + TaskDetailSheet dropdown + ContactActionButtons kafelek"
+- **B-FIX.18** — Decyzja UX: czy w drawerze dodać prominent "Otwórz pełną kartę → Zadania" button (jeśli user często chce trafić do listy wszystkich tasków kontaktu). Na razie linkuje do default tab.
 
