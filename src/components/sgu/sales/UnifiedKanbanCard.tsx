@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, X } from 'lucide-react';
+import { CheckCircle2, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
@@ -26,6 +26,7 @@ interface UnifiedKanbanCardProps {
   onOfferingLostClick: () => void;
   onSubcategoryChange: (field: SubcategoryField, value: string) => void;
   onMoreClick: () => void;
+  onMeetingDoneClick?: () => void;
   isDragging?: boolean;
   taskInfo?: TaskContactInfo;
 }
@@ -48,6 +49,7 @@ export function UnifiedKanbanCard({
   onOfferingLostClick,
   onSubcategoryChange,
   onMoreClick,
+  onMeetingDoneClick,
   isDragging,
   taskInfo,
 }: UnifiedKanbanCardProps) {
@@ -224,16 +226,31 @@ export function UnifiedKanbanCard({
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-          title="Oznacz jako lost"
-          aria-label="Oznacz jako lost"
-          onClick={onLostClick}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {onMeetingDoneClick && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-emerald-600"
+              title="Spotkanie odbyte"
+              aria-label="Spotkanie odbyte"
+              onClick={(e) => { e.stopPropagation(); onMeetingDoneClick(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+            title="Oznacz jako lost"
+            aria-label="Oznacz jako lost"
+            onClick={onLostClick}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </Card>
   );

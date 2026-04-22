@@ -247,6 +247,7 @@ function DroppableColumn({
   onOfferingLostClick,
   onSubcategoryChange,
   onMoreClick,
+  onMeetingDoneClick,
   taskInfoMap,
   columnProgress,
 }: {
@@ -265,6 +266,7 @@ function DroppableColumn({
   onOfferingLostClick: (c: DealTeamContact) => void;
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: (c: DealTeamContact) => void;
+  onMeetingDoneClick?: (c: DealTeamContact) => void;
   taskInfoMap?: Map<string, TaskContactInfo>;
   columnProgress?: { total: number; done: number };
 }) {
@@ -315,6 +317,7 @@ function DroppableColumn({
       onOfferingLostClick={() => onOfferingLostClick(c)}
       onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
       onMoreClick={() => onMoreClick(c)}
+      onMeetingDoneClick={onMeetingDoneClick ? () => onMeetingDoneClick(c) : undefined}
       taskInfo={taskInfoMap?.get(c.id)}
     />
   );
@@ -826,6 +829,9 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
               }}
               onSubcategoryChange={handleSubcategoryChange}
               onMoreClick={(c) => setSheetContact(c)}
+              onMeetingDoneClick={
+                currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
+              }
               taskInfoMap={taskInfoMap}
               columnProgress={meetingProgress?.by_column[col.stage]}
             />
