@@ -150,6 +150,7 @@ export function MeetingDecisionDialog({
     decisionType !== null &&
     meetingDate instanceof Date &&
     !isNaN(meetingDate.getTime()) &&
+    (decisionType !== 'go' || nextActionDate instanceof Date) &&
     (decisionType !== 'postponed' || (postponedUntil instanceof Date && postponedUntil >= tomorrow)) &&
     (decisionType !== 'dead' || deadReason.trim().length >= 3) &&
     answerValidationOk;
