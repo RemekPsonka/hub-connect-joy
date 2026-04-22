@@ -35,13 +35,13 @@ type CreateMeetingDecisionInput = {
 
 export function useCreateMeetingDecision() {
   const queryClient = useQueryClient();
-  const { director, assistant } = useAuth();
+  const { user, director, assistant } = useAuth();
   const tenantId = director?.tenant_id || assistant?.tenant_id;
-  const userId = director?.id;
+  const authUserId = user?.id;
 
   return useMutation({
     mutationFn: async (input: CreateMeetingDecisionInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!authUserId) throw new Error('Brak zalogowanego użytkownika');
       if (!tenantId) throw new Error('Brak tenant_id');
 
       const { contactId, decisionType, meetingDate } = input;
@@ -84,7 +84,7 @@ export function useCreateMeetingDecision() {
           prev_category: dtc.category,
           prev_offering_stage: dtc.offering_stage ?? null,
           prev_temperature: dtc.temperature ?? null,
-          created_by: userId,
+          created_by: authUserId,
         });
       if (insErr) throw insErr;
 
