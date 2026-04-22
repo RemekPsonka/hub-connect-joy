@@ -498,6 +498,7 @@ function DroppableColumn({
 }
 
 export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanbanProps) {
+  const navigate = useNavigate();
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
   const snoozedRef = useRef<HTMLDivElement>(null);
@@ -829,7 +830,9 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
                 setLostContact(c);
               }}
               onSubcategoryChange={handleSubcategoryChange}
-              onMoreClick={(c) => setSheetContact(c)}
+              onMoreClick={(c) => {
+                if (c.contact_id) navigate(`/contacts/${c.contact_id}?tab=more&sub=tasks-full`);
+              }}
               onMeetingDoneClick={
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
@@ -839,13 +842,6 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           ))}
         </div>
       </DndContext>
-
-      <ContactTasksSheet
-        contact={sheetContact}
-        teamId={teamId}
-        open={sheetContact !== null}
-        onOpenChange={(open) => !open && setSheetContact(null)}
-      />
 
       {convertContact && (
         <ConvertWonToClientDialog
