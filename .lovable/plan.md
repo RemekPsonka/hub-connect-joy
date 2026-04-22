@@ -1,78 +1,95 @@
 
 
-# Klik w kartę kanbana → karta kontaktu z zakładką "Zadania"
+# B-FIX.15 — Kafelek "Spotkanie odbyte" w drawer AKCJE
 
-## Problem
+## Cel
+Dodać 10. kafelek "Spotkanie odbyte" w `ContactActionButtons` (drawer AKCJE w `ContactTasksSheet`). Klik → otwiera `MeetingDecisionDialog`. Zamknięcie taska załatwia trigger DB z HOTFIX-OS3 — bez `updateTask` w FE.
 
-Obecnie klik w kartę na kanbanie (`/sgu/sprzedaz`) otwiera `ContactTasksSheet` (boczny panel z zadaniami). User chce, żeby zamiast tego otwierała się **pełna karta kontaktu** (strona `/contacts/:id`) z domyślnie aktywną zakładką **Zadania**.
+## Pliki dotknięte (2)
 
-## Recon
+### Plik 1: `src/components/deals-team/ContactActionButtons.tsx`
 
-**`src/components/sgu/sales/UnifiedKanban.tsx`** — handler kliknięcia karty:
-- State: `selectedContact` + render `<ContactTasksSheet contact={selectedContact} ... />`
-- `UnifiedKanbanCard` przyjmuje `onClick={() => setSelectedContact(c)}`
+**A. Extend `ActionType`** — dodać `'meeting_done'` po `'meeting_scheduled'`.
 
-**`src/pages/ContactDetail.tsx`** (lub równoważna strona karty kontaktu) — przyjmuje `:id` w URL i renderuje tabsy: Info / Zadania / Notatki / Emaile / BI / etc.
+**B. Import** — dodać `CheckCircle2` z `lucide-react`.
 
-**Wzorzec już użyty w projekcie:** kilka miejsc nawiguje do karty kontaktu z `?tab=...` query paramem (np. `ContactTasksSheet` ma link "Otwórz pełną kartę"). Trzeba potwierdzić w execute exact param name (`?tab=tasks` vs `?tab=zadania`).
-
-## Zmiany
-
-**1 plik dotknięty:** `src/components/sgu/sales/UnifiedKanban.tsx`
-
-### Krok 1: Zamień handler `onClick` karty
+**C. ACTIONS** — wstaw entry po `meeting_scheduled`:
 ```tsx
-import { useNavigate } from 'react-router-dom';
-// ...
-const navigate = useNavigate();
-// ...
-<UnifiedKanbanCard
-  ...
-  onClick={() => {
-    if (c.contact_id) {
-      navigate(`/contacts/${c.contact_id}?tab=tasks`);
-    }
-  }}
-/>
+{ value: 'meeting_done', label: 'Spotkanie odbyte', icon: CheckCircle2, needsDate: false,
+  isActive: (c) => c.offering_stage === 'meeting_done' },
 ```
 
-### Krok 2: Usuń `ContactTasksSheet` z drzewa kanbana
-- Usuń state `selectedContact` + `setSelectedContact`
-- Usuń `<ContactTasksSheet ... />` render
-- Usuń import `ContactTasksSheet` jeśli niepotrzebny gdzie indziej w tym pliku
+**D. Props** — dodać `onMeetingDone: () => void` do `ContactActionButtonsProps`.
 
-### Krok 3 (recon w execute): Potwierdź exact tab key
-- Sprawdź `src/pages/ContactDetail.tsx` (lub odpowiednik) — czy czyta `searchParams.get('tab')` i jaką wartością mapuje na zakładkę "Zadania" (`tasks`, `zadania`, `tasks-tab`?)
-- Użyj exact value w `navigate(...)` URL
+**E. handleClick** — early-return obok `'snooze'` / `'client'`:
+```tsx
+if (action.value === 'meeting_done') { onMeetingDone(); return; }
+```
 
-## STOP conditions
-- TYLKO 1 plik tknięty (`UnifiedKanban.tsx`)
-- Zero zmian w `ContactTasksSheet.tsx` (komponent zostaje — może być używany gdzie indziej, np. w `ClientsTab.tsx`)
-- Zero zmian w routach
-- Zero zmian w karcie kontaktu (poza recon czytania `?tab=` jeśli już istnieje — jeśli NIE istnieje, dodanie tej obsługi wpada do osobnego sprintu B-FIX.16)
-- TS clean, lint clean
+### Plik 2: `src/components/deals-team/ContactTasksSheet.tsx`
+
+**F. Import**:
+```tsx
+import { MeetingDecisionDialog } from './MeetingDecisionDialog';
+```
+
+**G. State**:
+```tsx
+const [showMeetingDecision, setShowMeetingDecision] = useState(false);
+```
+
+**H. Callback do `<ContactActionButtons>`**:
+```tsx
+onMeetingDone={() => setShowMeetingDecision(true)}
+```
+
+**I. Render dialogu** (obok innych dialogów):
+```tsx
+{contact.contact_id && (
+  <MeetingDecisionDialog
+    open={showMeetingDecision}
+    onOpenChange={setShowMeetingDecision}
+    contactId={contact.contact_id}
+    contactDisplayName={contact.contact?.full_name ?? 'kontakt'}
+    onSuccess={() => setShowMeetingDecision(false)}
+  />
+)}
+```
+
+## ZERO zmian w
+- `MeetingDecisionDialog.tsx` (props sygnatura zgadza się z reconu)
+- `useTasks.ts` / `useDealsTeamContacts.ts` (trigger DB załatwia close task)
+- Migracjach
+- Innych callsite'ach `ContactActionButtons` (jest tylko jeden — `ContactTasksSheet`)
 
 ## Pre-flight
-1. `grep -n "ContactTasksSheet" src/components/sgu/sales/UnifiedKanban.tsx` → 0 hits po zmianie
-2. `grep -n "useNavigate" src/components/sgu/sales/UnifiedKanban.tsx` → 1+ hits
-3. `grep -rn "searchParams.get('tab')" src/pages/` → potwierdza że karta kontaktu czyta tab param
-4. `npx tsc --noEmit` → 0 nowych errors
-5. `ContactTasksSheet` używany w `ClientsTab.tsx` → bez zmian
+1. `grep -n "meeting_done\|MeetingDecisionDialog\|onMeetingDone" src/components/deals-team/ContactActionButtons.tsx src/components/deals-team/ContactTasksSheet.tsx` — oczekiwane: ActionType + ACTIONS + prop + handleClick w pliku 1; import + state + callback + render w pliku 2
+2. `npx tsc --noEmit` → 0 nowych errors
+3. Lint na 2 zmodyfikowanych plikach → 0 nowych warnings
+4. Grep `<ContactActionButtons` w `src/` → tylko 1 hit (`ContactTasksSheet.tsx`) — potwierdza że nie trzeba aktualizować innych callsite'ów
+
+## STOP conditions
+- TYLKO 2 pliki tknięte
+- Bez `updateTask` w `onSuccess` (trigger HOTFIX-OS3 to robi)
+- Bez zmian kolejności pozostałych akcji
+- Grid kafelków pozostaje `grid-cols-3` (10 kafelków = 4 wiersze, akceptowalne)
+- Zero `console.log`, zero `any`
 
 ## Edge cases
 | Scenariusz | Zachowanie |
 |---|---|
-| `c.contact_id` null | `onClick` no-op (guard) — karta bez kontaktu nie nawiguje |
-| Karta kontaktu nie ma tab "Zadania" | Otworzy się domyślny tab (Info) — graceful fallback |
-| User zostaje na `/sgu/sprzedaz` w innych przypadkach | Akcje na karcie (`...` menu, ikona ✓ meeting decision, drag) działają jak wcześniej |
+| Kontakt na stage `meeting_scheduled` | Kafelek "Spotkanie odbyte" klikalny, NIE highlighted (highlighted dopiero gdy stage=`meeting_done`) |
+| Kontakt poza workflow spotkań | Kafelek klikalny — user może manualnie zgłosić odbyte spotkanie. Akceptowalne. |
+| `contact.contact_id` null | Render dialogu z guardem `{contact.contact_id && ...}` — dialog nie renderuje się, kafelek nadal klikalny ale `setShowMeetingDecision(true)` no-op'uje wizualnie |
+| Cancel w dialogu | Dialog zamknięty, żaden zapis |
+| Decyzja zapisana | `onSuccess` zamyka dialog; trigger DB N-apply: `offering_stage`, `k1_meeting_done_at`, `next_action_date`, ewentualny `is_lost`; trigger HOTFIX-OS3: zamyka aktywne taski kontaktu |
 
 ## Raport po execute
-1. Diff `UnifiedKanban.tsx` (~+5/-15 linii)
-2. Pre-flight #1-#5 wyniki
-3. Confirm: route `/contacts/:id?tab=tasks` istnieje i otwiera zakładkę Zadania (recon w execute)
-4. Manual smoke: `/sgu/sprzedaz` → klik dowolna karta kontaktu → przejście na `/contacts/<id>?tab=tasks` z aktywną zakładką "Zadania"
+1. Diff obu plików (~+15/-0 łącznie)
+2. Pre-flight #1-#4 wyniki
+3. Manual smoke (user): Pawełczyk → AKCJE drawer → "Spotkanie odbyte" → dialog → "Idziemy" + data → Zapisz → kontakt do Ofertowanie + active task zamknięty
 
-## Backlog (osobne sprinty)
-- **B-FIX.16** — Jeśli karta kontaktu NIE czyta `?tab=` z URL, dodać tę obsługę (Tabs `value` controlled by searchParam)
-- **B-FIX.17** — Decyzja: czy `ContactTasksSheet` jest jeszcze potrzebny? Jeśli `ClientsTab.tsx` to jedyny consumer i też się migruje na nawigację do karty → usuń komponent
+## Backlog (nie ten sprint)
+- **B-FIX.16** — UX: highlight wizualny gdy active task = "spotkanie K1" (sugestia że "Spotkanie odbyte" to logiczny next step)
+- **B-FIX.17** — Memory cleanup: `project_meeting_decision_application_gap.md` → "DOMKNIĘTY przez 3 entry points: kanban icon ✓ + TaskDetailSheet dropdown + ContactActionButtons kafelek"
 
