@@ -155,8 +155,23 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 
-function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: { teamContactId: string; teamId: string; onTitleChange?: (title: string) => void }) {
+function InteractivePipelineStageRow({
+  teamContactId,
+  teamId,
+  contactId,
+  contactName,
+  taskId,
+  onTitleChange,
+}: {
+  teamContactId: string;
+  teamId: string;
+  contactId: string;
+  contactName: string;
+  taskId: string;
+  onTitleChange?: (title: string) => void;
+}) {
   const { data } = useQuery({
     queryKey: ['deal-team-contact-stage', teamContactId],
     queryFn: async () => {
@@ -173,6 +188,8 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
   });
 
   const updateContact = useUpdateTeamContact();
+  const updateTask = useUpdateTask();
+  const [meetingDecisionOpen, setMeetingDecisionOpen] = useState(false);
 
   const currentCategory = (data?.category || 'lead') as DealCategory;
   const currentStage = data?.offering_stage as OfferingStage | null;
