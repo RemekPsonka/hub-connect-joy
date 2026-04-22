@@ -32,10 +32,11 @@ export function useMeetingQuestions(contactId: string) {
 // ────────────────────────────────────────────────────────────────
 
 function useAuthIds() {
-  const { director, assistant } = useAuth();
+  const { user, director, assistant } = useAuth();
   const tenantId = director?.tenant_id || assistant?.tenant_id;
-  const userId = director?.id;
-  return { tenantId, userId };
+  const authUserId = user?.id;       // RLS check (created_by)
+  const directorId = director?.id;   // audit fields (last_asked_by, answered_by)
+  return { tenantId, authUserId, directorId };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -54,11 +55,12 @@ type DropInput = { questionId: string; contactId: string };
 
 export function useCreateMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { tenantId, userId } = useAuthIds();
+  const { tenantId, authUserId, directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: CreateQuestionInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!authUserId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
       if (!tenantId) throw new Error('Brak tenant_id');
 
       const questionText = input.questionText.trim();
@@ -80,8 +82,8 @@ export function useCreateMeetingQuestion() {
           deal_team_contact_id: input.contactId,
           question_text: questionText,
           last_asked_at: new Date().toISOString(),
-          last_asked_by: userId,
-          created_by: userId,
+          last_asked_by: directorId,
+          created_by: authUserId,
         })
         .select('id')
         .single();
@@ -103,11 +105,11 @@ export function useCreateMeetingQuestion() {
 
 export function useAskMeetingQuestionAgain() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: AskAgainInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
@@ -125,7 +127,7 @@ export function useAskMeetingQuestionAgain() {
         .update({
           ask_count: row.ask_count + 1,
           last_asked_at: new Date().toISOString(),
-          last_asked_by: userId,
+          last_asked_by: directorId,
         })
         .eq('id', input.questionId);
       if (updErr) throw updErr;
@@ -146,11 +148,11 @@ export function useAskMeetingQuestionAgain() {
 
 export function useAnswerMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: AnswerInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const answerText = input.answerText.trim();
       if (!answerText) throw new Error('Treść odpowiedzi wymagana');
@@ -171,7 +173,7 @@ export function useAnswerMeetingQuestion() {
         .update({
           status: 'answered',
           answered_at: new Date().toISOString(),
-          answered_by: userId,
+          answered_by: directorId,
           answer_text: answerText,
         })
         .eq('id', input.questionId);
@@ -193,11 +195,11 @@ export function useAnswerMeetingQuestion() {
 
 export function useSkipMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: SkipInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
@@ -235,11 +237,11 @@ export function useSkipMeetingQuestion() {
 
 export function useDropMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: DropInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
