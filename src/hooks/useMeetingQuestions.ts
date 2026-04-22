@@ -195,11 +195,11 @@ export function useAnswerMeetingQuestion() {
 
 export function useSkipMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: SkipInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
@@ -237,11 +237,11 @@ export function useSkipMeetingQuestion() {
 
 export function useDropMeetingQuestion() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: DropInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
