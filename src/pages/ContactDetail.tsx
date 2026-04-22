@@ -274,7 +274,7 @@ export default function ContactDetail() {
 
                 {/* Tab: Więcej — Udziały + Zadania + Historia + Przegląd */}
                 <TabsContent value="more" className="mt-6">
-                  <Tabs defaultValue="ownership">
+                  <Tabs defaultValue={getDefaultSubTab()}>
                     <TabsList className="mb-4">
                       <TabsTrigger value="ownership">Udziały</TabsTrigger>
                       <TabsTrigger value="tasks-full">Zadania</TabsTrigger>
