@@ -60,10 +60,31 @@ export function MeetingDecisionDialog({
   const [nextActionDate, setNextActionDate] = useState<Date | undefined>(undefined);
   const [postponedUntil, setPostponedUntil] = useState<Date | undefined>(undefined);
   const [deadReason, setDeadReason] = useState('');
+  const [questionActions, setQuestionActions] = useState<Record<string, QuestionAction>>({});
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [newQuestions, setNewQuestions] = useState<string[]>([]);
+  const [newQuestionInput, setNewQuestionInput] = useState('');
   const submitInProgressRef = useRef(false);
 
   const createDecision = useCreateMeetingDecision();
-  const isPending = createDecision.isPending;
+  const { data: allQuestions = [], isLoading: questionsLoading } = useMeetingQuestions(contactId);
+  const askAgain = useAskMeetingQuestionAgain();
+  const answerQ  = useAnswerMeetingQuestion();
+  const skipQ    = useSkipMeetingQuestion();
+  const dropQ    = useDropMeetingQuestion();
+  const createQ  = useCreateMeetingQuestion();
+
+  const openQuestions = allQuestions
+    .filter((q) => q.status === 'open')
+    .sort((a, b) => {
+      if (b.ask_count !== a.ask_count) return b.ask_count - a.ask_count;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+  const anyQuestionPending =
+    askAgain.isPending || answerQ.isPending || skipQ.isPending ||
+    dropQ.isPending || createQ.isPending;
+  const isPending = createDecision.isPending || anyQuestionPending;
 
   // Reset on open (clears stale state from previous session)
   useEffect(() => {
@@ -74,18 +95,59 @@ export function MeetingDecisionDialog({
       setNextActionDate(undefined);
       setPostponedUntil(undefined);
       setDeadReason('');
+      setQuestionActions({});
+      setQuestionAnswers({});
+      setNewQuestions([]);
+      setNewQuestionInput('');
     }
   }, [open]);
 
+  // Reset per-question state ONLY when entering 'dead' mode (different UI).
+  // 'go' ↔ 'postponed' preserves user choice (same per-question UI).
+  useEffect(() => {
+    if (decisionType === 'dead') {
+      setQuestionActions({});
+      setQuestionAnswers({});
+    }
+  }, [decisionType]);
+
+  // Default action seeding: askAgain dla każdego open question, jeśli user nie wybrał.
+  // Guard !next[q.id] chroni user choice po React Query invalidacji.
+  useEffect(() => {
+    if (decisionType === 'go' || decisionType === 'postponed') {
+      setQuestionActions((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const q of openQuestions) {
+          if (!next[q.id]) {
+            next[q.id] = 'askAgain';
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decisionType, openQuestions.length, openQuestions.map((q) => q.id).join(',')]);
+
   const tomorrow = addDays(new Date(), 1);
   tomorrow.setHours(0, 0, 0, 0);
+
+  const answerValidationOk =
+    decisionType === 'dead' ||
+    openQuestions.every((q) => {
+      const action = questionActions[q.id] ?? 'askAgain';
+      if (action !== 'answer') return true;
+      return (questionAnswers[q.id] ?? '').trim().length > 0;
+    });
 
   const isValid =
     decisionType !== null &&
     meetingDate instanceof Date &&
     !isNaN(meetingDate.getTime()) &&
     (decisionType !== 'postponed' || (postponedUntil instanceof Date && postponedUntil >= tomorrow)) &&
-    (decisionType !== 'dead' || deadReason.trim().length >= 3);
+    (decisionType !== 'dead' || deadReason.trim().length >= 3) &&
+    answerValidationOk;
 
   const handleSubmit = async () => {
     if (!decisionType || !isValid || submitInProgressRef.current) return;
