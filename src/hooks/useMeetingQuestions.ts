@@ -32,10 +32,11 @@ export function useMeetingQuestions(contactId: string) {
 // ────────────────────────────────────────────────────────────────
 
 function useAuthIds() {
-  const { director, assistant } = useAuth();
+  const { user, director, assistant } = useAuth();
   const tenantId = director?.tenant_id || assistant?.tenant_id;
-  const userId = director?.id;
-  return { tenantId, userId };
+  const authUserId = user?.id;       // RLS check (created_by)
+  const directorId = director?.id;   // audit fields (last_asked_by, answered_by)
+  return { tenantId, authUserId, directorId };
 }
 
 // ────────────────────────────────────────────────────────────────
