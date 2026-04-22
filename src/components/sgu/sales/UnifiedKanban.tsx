@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
   PointerSensor,
@@ -43,7 +44,6 @@ import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
-import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import {
