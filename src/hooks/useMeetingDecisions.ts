@@ -54,6 +54,9 @@ export function useCreateMeetingDecision() {
         throw new Error('Nieprawidłowy typ decyzji');
       }
       if (!meetingDate) throw new Error('Data spotkania wymagana');
+      if (decisionType === 'go' && !nextActionDate) {
+        throw new Error("Decyzja 'Idziemy dalej' wymaga daty następnej akcji");
+      }
       if (decisionType === 'postponed' && !postponedUntil) {
         throw new Error('Termin odroczenia wymagany');
       }
