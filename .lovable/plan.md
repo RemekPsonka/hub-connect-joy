@@ -1,184 +1,119 @@
 
 
-# N-apply plan-v2 — Aplikacja decyzji do `deal_team_contacts`
+# HOTFIX-OS2 plan-v2 — Wire "Spotkanie odbyte" w TaskDetailSheet → MeetingDecisionDialog + zamknięcie taska
 
-## Korekty względem plan-v1 (per review)
+## Kluczowe ustalenia z reconu (commit 0724311)
 
-1. **Q-D ✅** — Dodaj `k1_meeting_done_at = COALESCE(k1_meeting_done_at, NEW.meeting_date::timestamptz)` do branch `'go'` i `'postponed'`.
-2. **Q-E ✏️ KOREKTA** — USUŃ `next_action = COALESCE(next_action, '...')` z `'go'` i `'postponed'`. Dla `'dead'` zostaje `next_action = NULL`.
-3. **Q-F ✅ NIE** — temperature out of scope (sprint T1).
+| Założenie plan-v1 | Realny kod |
+|---|---|
+| Props: `teamContactId, teamId, contactId, onDecisionSaved(decision)` | **`contactId, contactDisplayName, open, onOpenChange, onSuccess()`** — bez payload |
+| Trigger N-apply zadba o `tasks` | **FAŁSZ** — `trg_apply_meeting_decision` rusza tylko `deal_team_contacts` |
+| `tasks.completed_at` istnieje | **NIE ISTNIEJE** — set tylko `status='completed'` |
+| `TaskDetailSheet` musi liczyć contactId | **JUŻ POLICZONE** w linii 461-465 (`pipelineContactId`, `pipelineContactName`, `isPipelineTask`) |
 
-## Pre-flight checks PRZED execute (3 sprawdzenia, blokujące)
+## Scope: 1 plik, ~20 linii diff
 
-### Sprawdzenie #1 — CHECK constraints na `deal_stage` / `category`
-```sql
-SELECT conname, pg_get_constraintdef(oid)
-FROM pg_constraint
-WHERE conrelid = 'public.deal_team_contacts'::regclass
-  AND contype = 'c'
-  AND (conname ILIKE '%deal_stage%' OR conname ILIKE '%category%');
-```
-**Decyzja:** jeśli któryś CHECK NIE zawiera `'lost'` w whitelist → STOP, flag, czekam na korektę. Jeśli clean → execute.
+`src/components/tasks/TaskDetailSheet.tsx`
 
-### Sprawdzenie #2 — `status` allowed values
-```sql
-SELECT DISTINCT status FROM public.deal_team_contacts;
-SELECT conname, pg_get_constraintdef(oid)
-FROM pg_constraint
-WHERE conrelid = 'public.deal_team_contacts'::regclass
-  AND contype = 'c'
-  AND conname ILIKE '%status%';
-```
-**Decyzja:** jeśli `'lost'`/`'closed'` dozwolone → dorzuć `status='lost'` (preferowane) lub `status='closed'` do branch `'dead'`. Jeśli tylko `'active'` w użyciu i brak CHECK → zostaw `status` nietknięte, follow-up B-FIX.
+### Zmiany
 
-### Sprawdzenie #3 — `log_deal_category_change` body
-```sql
-SELECT pg_get_functiondef('public.log_deal_category_change'::regproc);
-```
-**Cel:** weryfikacja czy funkcja nie odwołuje się do `auth.uid()` w sposób, który w SECURITY DEFINER trigger zwraca NULL i łamie INSERT do `deal_team_activity_log`. Jeśli używa `auth.uid()` → flaguj, ewentualnie użyj `NEW.created_by` z meeting_decisions zamiast.
-
-## Migracja: `supabase/migrations/20260422120000_apply_meeting_decision.sql`
-
-```sql
--- =====================================================================
--- N-apply: Trigger AFTER INSERT ON meeting_decisions
---          → UPDATE deal_team_contacts (apply decision)
--- =====================================================================
-
-CREATE OR REPLACE FUNCTION public.apply_meeting_decision()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF NEW.decision_type = 'go' THEN
-    UPDATE public.deal_team_contacts
-       SET next_action_date   = NEW.next_action_date,
-           k1_meeting_done_at = COALESCE(k1_meeting_done_at, NEW.meeting_date::timestamptz),
-           last_status_update = now()
-     WHERE id = NEW.deal_team_contact_id;
-
-  ELSIF NEW.decision_type = 'postponed' THEN
-    UPDATE public.deal_team_contacts
-       SET next_action_date   = NEW.postponed_until,
-           k1_meeting_done_at = COALESCE(k1_meeting_done_at, NEW.meeting_date::timestamptz),
-           last_status_update = now()
-     WHERE id = NEW.deal_team_contact_id;
-
-  ELSIF NEW.decision_type = 'dead' THEN
-    UPDATE public.deal_team_contacts
-       SET is_lost            = true,
-           lost_reason         = NEW.dead_reason,
-           lost_at             = now(),
-           category            = 'lost',
-           deal_stage          = 'lost',
-           next_action_date    = NULL,
-           next_action         = NULL,
-           last_status_update  = now()
-     WHERE id = NEW.deal_team_contact_id;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trg_apply_meeting_decision
-AFTER INSERT ON public.meeting_decisions
-FOR EACH ROW
-EXECUTE FUNCTION public.apply_meeting_decision();
-
--- ROLLBACK:
--- DROP TRIGGER IF EXISTS trg_apply_meeting_decision ON public.meeting_decisions;
--- DROP FUNCTION IF EXISTS public.apply_meeting_decision();
+**1. Importy (top)**
+```tsx
+import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
+import { useUpdateTask } from '@/hooks/useTasks';
 ```
 
-**Note:** jeśli sprawdzenie #2 pokaże dozwolony `status='lost'` lub `'closed'`, dorzucę odpowiednio do branch `'dead'`. Inaczej zostawiam jak wyżej.
-
-## Pliki do dotknięcia
-
-| Plik | Estimate | Zakres |
-|---|---|---|
-| `supabase/migrations/20260422120000_apply_meeting_decision.sql` (NOWY) | ~50 linii | function + trigger + ROLLBACK comment |
-
-**ZERO zmian w FE.** `useCreateMeetingDecision.onSuccess` już invaliduje `['deal-team-contacts', teamId]`.
-
-## Post-execute pre-flight
-
-### #1 — trigger zarejestrowany
-```sql
-SELECT count(*) FROM pg_trigger
-WHERE tgname = 'trg_apply_meeting_decision' AND NOT tgisinternal;
--- expected: 1
+**2. State + hook** (obok istniejących `useState`)
+```tsx
+const [meetingDecisionOpen, setMeetingDecisionOpen] = useState(false);
+const updateTask = useUpdateTask();
 ```
 
-### #2 — test 'go' (BEGIN/ROLLBACK)
-```sql
-BEGIN;
-  WITH c AS (SELECT id, team_id, tenant_id FROM deal_team_contacts LIMIT 1)
-  INSERT INTO meeting_decisions (tenant_id, team_id, deal_team_contact_id,
-                                  decision_type, meeting_date, next_action_date, created_by)
-  SELECT tenant_id, team_id, id, 'go', CURRENT_DATE, CURRENT_DATE + 7,
-         (SELECT id FROM auth.users LIMIT 1)
-  FROM c;
-  SELECT id, next_action_date, k1_meeting_done_at, last_status_update
-    FROM deal_team_contacts
-   WHERE id = (SELECT id FROM deal_team_contacts LIMIT 1);
-ROLLBACK;
-```
-**Verify:** `next_action_date = CURRENT_DATE + 7`, `k1_meeting_done_at` set jeśli było NULL, `last_status_update ≈ now()`.
+**3. Guard w `handleWorkflowChange`** (po `const match = ...`, PRZED `if (!match) return;`)
+```tsx
+if (!match) return;
 
-### #3 — test 'dead' (BEGIN/ROLLBACK + audit log check)
-```sql
-BEGIN;
-  WITH c AS (SELECT id, team_id, tenant_id FROM deal_team_contacts LIMIT 1)
-  INSERT INTO meeting_decisions (tenant_id, team_id, deal_team_contact_id,
-                                  decision_type, meeting_date, dead_reason, created_by)
-  SELECT tenant_id, team_id, id, 'dead', CURRENT_DATE, 'Test reason',
-         (SELECT id FROM auth.users LIMIT 1)
-  FROM c;
-  SELECT id, is_lost, lost_reason, lost_at, category, deal_stage,
-         next_action_date, next_action
-    FROM deal_team_contacts
-   WHERE id = (SELECT id FROM deal_team_contacts LIMIT 1);
-  SELECT count(*) FROM deal_team_activity_log
-   WHERE contact_id = (SELECT id FROM deal_team_contacts LIMIT 1)
-     AND action = 'category_changed'
-     AND created_at > now() - interval '1 minute';
-ROLLBACK;
+// HOTFIX-OS2: meeting_done → otwórz dialog decyzji zamiast cichego UPDATE
+if (match.stage === 'meeting_done' && isPipelineTask && pipelineContactId) {
+  setMeetingDecisionOpen(true);
+  return;
+}
 ```
-**Verify:** `is_lost=true`, `lost_reason='Test reason'`, `category='lost'`, `deal_stage='lost'`, `next_action_date=NULL`, audit log row count ≥ 1.
+
+**4. Render dialogu** (na końcu JSX)
+```tsx
+{isPipelineTask && pipelineContactId && (
+  <MeetingDecisionDialog
+    open={meetingDecisionOpen}
+    onOpenChange={setMeetingDecisionOpen}
+    contactId={pipelineContactId}
+    contactDisplayName={pipelineContactName || 'kontakt'}
+    onSuccess={async () => {
+      setMeetingDecisionOpen(false);
+      // Każda decyzja (go/postponed/dead) = spotkanie odbyte → task zamknięty
+      try {
+        await updateTask.mutateAsync({
+          id: task.id,
+          status: 'completed',
+        });
+      } catch (err) {
+        console.error('[HOTFIX-OS2] Failed to close task after meeting decision', err);
+      }
+    }}
+  />
+)}
+```
+
+## Dlaczego każda decyzja zamyka task
+
+`MeetingDecisionDialog` ma 3 opcje (`go` / `postponed` / `dead`). Wszystkie oznaczają że spotkanie się odbyło i user podjął decyzję — task "umów/przygotuj K1" zrealizowany. `dead` = "spotkanie odbyte, kontakt odpada" (N-apply trigger ustawia `is_lost=true` per kontakt). Nie zostawiamy logiki rozróżniającej decision type, bo `onSuccess` nie dostaje payload — i nie potrzebuje.
+
+## ZERO zmian w
+
+- `MeetingDecisionDialog.tsx`
+- `useTasks.ts` / `useDealsTeamContacts.ts` / `useMeetingDecisions.ts`
+- Migracje DB (N-apply trigger już aplikuje wszystko po stronie kontaktu)
+- Każdy parent renderujący `<TaskDetailSheet>` (zero callback props do dodania — dialog lokalny)
+
+## Pre-flight (po execute)
+
+1. `grep -n "setMeetingDecisionOpen" src/components/tasks/TaskDetailSheet.tsx` → 2 hits (declare + setter)
+2. `grep -n "MeetingDecisionDialog" src/components/tasks/TaskDetailSheet.tsx` → 2 hits (import + render)
+3. `grep -rn "MeetingDecisionDialog" src/ --include="*.tsx"` poza TaskDetailSheet → bez nowych usages w innych plikach (UnifiedKanban.tsx pozostaje)
+4. `npx tsc --noEmit` → 0 nowych errors
+5. Lint na zmodyfikowanym pliku → 0 nowych warnings
 
 ## STOP conditions
 
-- Sprawdzenia #1, #2, #3 wykonane PRZED execute migracji
-- Jeśli któreś sprawdzenie pokazuje problem (CHECK whitelist bez 'lost', `auth.uid()` w log function) → STOP, flag, czekam na korektę
-- Migration name: `20260422120000_apply_meeting_decision.sql`
-- `SECURITY DEFINER` + `SET search_path = public`
-- `AFTER INSERT` (atomowość z rollbackiem)
-- ROLLBACK comment w pliku
-- ZERO zmian w FE
-- Post-execute pre-flight #1 + #2 + #3 wszystkie clean
-- Supabase linter — 0 nowych warnings
+- TYLKO 1 plik: `TaskDetailSheet.tsx`
+- Guard `match.stage === 'meeting_done' && isPipelineTask && pipelineContactId` (3-warunkowy AND)
+- `status='completed'` BEZ `completed_at` (kolumna nie istnieje)
+- `setMeetingDecisionOpen(false)` PRZED `try` — dialog zamknięty nawet jeśli update task fails
+- Zero `console.log` poza `console.error` w catch (debugging hotfixu)
+- Zero `any` (jeśli `(task as any).deal_team_id` już jest w pliku, nie dodawaj nowych)
+
+## Edge cases
+
+| Scenariusz | Zachowanie |
+|---|---|
+| Cancel w dialogu | Dialog zamknięty, task stage NIE zmieniony, task NIE zamknięty |
+| `updateTask` throw | console.error + toast.error z `useUpdateTask.onError`, dialog mimo wszystko zamknięty, task pozostaje otwarty (user widzi w refresh) |
+| `pipelineContactId` pusty mimo `isPipelineTask=true` | Guard nie odpala, fallback na zwykły `updateContact.mutate` (legacy) |
+| Task spoza lejka (`isPipelineTask=false`) | Guard nie odpala — `meeting_done` nie powinien wystąpić w workflow takiego taska |
+| Decyzja `dead` | N-apply trigger: `is_lost=true, category='lost'`. Task: `status='completed'`. Spójne. |
 
 ## Raport po execute
 
-1. Output sprawdzenia #1 (CHECK constraints na deal_stage/category)
-2. Output sprawdzenia #2 (status DISTINCT + CHECK)
-3. Output sprawdzenia #3 (log_deal_category_change body — flag jeśli auth.uid())
-4. Decyzja: czy `status='...'` dorzucone do 'dead' branch, jakie SQL final
-5. Migration file path + line count
-6. Pre-flight #1: trigger count = 1 ✅/❌
-7. Pre-flight #2: test 'go' — wszystkie pola zaktualizowane per spec
-8. Pre-flight #3: test 'dead' — wszystkie pola + audit log entry zarejestrowany
-9. Confirm: zero zmian w FE (grep `useMeetingDecisions`, `MeetingDecisionDialog` netknięte)
-10. Supabase linter output (0 nowych warnings)
+1. Diff `TaskDetailSheet.tsx` (linie zmienione, ~+20/-0)
+2. Pre-flight #1-#5 wyniki (grep counts, tsc, lint)
+3. Confirm grep #3: `MeetingDecisionDialog` poza TaskDetailSheet = tylko `UnifiedKanban.tsx` (bez nowych usages)
+4. Manual smoke wskazówka dla usera: Mirek Pawełczyk → /sgu/sprzedaz → klik task → "Etap zadania" → "Spotkanie odbyte" → dialog → "Idziemy" + data → Zapisz → task zamknięty + kontakt w Ofertowanie
 
-## Backlog (osobne sprinty)
+## Backlog (osobne sprinty, NIE ten hotfix)
 
-- **M2** — Milestone progression K2→K3→K4 (offering_stage advance)
-- **T1** — Temperature bump logic
-- **N1** — Notifications/eventy po decyzji (Sovra context update)
-- **B-FIX** — `status` field handling jeśli sprawdzenie #2 ujawni gap
-- **B1** — Backfill historycznych meeting_decisions (jeśli okaże się potrzebne)
+- **B-FIX.13** — Trigger BEFORE INSERT ON tasks: `deal_team_contacts.assigned_to → tasks.assigned_to` (Problem 2: RP vs Nieprzypisane)
+- **B-FIX.14** — `useCurrentDirector` fallback dla admin/owner bez wpisu w `directors` (entry point #1: ikona ✓ na kanbanie)
+- **B-FIX.15** — Memory cleanup: poprawić `project_meeting_decision_application_gap.md` na "DOMKNIĘTY przez 2 entry points + zamknięcie taska"
+- **DIAG-1** — Problem 1 (HOT+TOP badges): potrzebny screenshot z dokładnego miejsca przed diagnozą
+- **ODPRAWA-00** — Problem 4: greenfield spec dla `/sgu/odprawa` (osobny duży sprint)
 
