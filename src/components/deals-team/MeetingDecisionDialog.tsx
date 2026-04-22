@@ -369,6 +369,101 @@ export function MeetingDecisionDialog({
               />
             </div>
           )}
+
+          {/* Sekcja 4 — Persistent questions carry-forward */}
+          {decisionType && (
+            <div className="space-y-3 border-t pt-4">
+              <Label>Otwarte pytania ({openQuestions.length})</Label>
+
+              {decisionType === 'dead' && openQuestions.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Wszystkie otwarte pytania zostaną oznaczone jako porzucone (kontakt rezygnuje).
+                </p>
+              )}
+
+              {questionsLoading && (
+                <p className="text-sm text-muted-foreground">Ładowanie pytań...</p>
+              )}
+
+              {!questionsLoading && openQuestions.length === 0 && (
+                <p className="text-sm text-muted-foreground">Brak otwartych pytań</p>
+              )}
+
+              {!questionsLoading && openQuestions.length > 0 && (
+                <div className="space-y-3">
+                  {openQuestions.map((q) => (
+                    <QuestionCarryForwardRow
+                      key={q.id}
+                      question={q}
+                      readOnly={decisionType === 'dead'}
+                      action={questionActions[q.id] ?? 'askAgain'}
+                      answerText={questionAnswers[q.id] ?? ''}
+                      onActionChange={(a) =>
+                        setQuestionActions((p) => ({ ...p, [q.id]: a }))
+                      }
+                      onAnswerChange={(t) =>
+                        setQuestionAnswers((p) => ({ ...p, [q.id]: t }))
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+
+              {decisionType !== 'dead' && (
+                <div className="space-y-2 pt-2">
+                  <Label className="text-sm">Nowe pytania ({newQuestions.length})</Label>
+                  {newQuestions.map((text, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
+                    >
+                      <span className="flex-1 text-sm">{text}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() =>
+                          setNewQuestions((p) => p.filter((_, i) => i !== idx))
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Treść nowego pytania"
+                      value={newQuestionInput}
+                      onChange={(e) => setNewQuestionInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newQuestionInput.trim()) {
+                          e.preventDefault();
+                          setNewQuestions((p) => [...p, newQuestionInput.trim()]);
+                          setNewQuestionInput('');
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        const t = newQuestionInput.trim();
+                        if (t) {
+                          setNewQuestions((p) => [...p, t]);
+                          setNewQuestionInput('');
+                        }
+                      }}
+                      disabled={!newQuestionInput.trim()}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Dodaj
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>
