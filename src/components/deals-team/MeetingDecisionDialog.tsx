@@ -479,3 +479,68 @@ export function MeetingDecisionDialog({
     </Dialog>
   );
 }
+
+// ────────────────────────────────────────────────────────────────
+// Sub-component: persistent question carry-forward row
+// ────────────────────────────────────────────────────────────────
+
+interface QuestionCarryForwardRowProps {
+  question: MeetingQuestionRow;
+  readOnly: boolean;
+  action: QuestionAction;
+  answerText: string;
+  onActionChange: (action: QuestionAction) => void;
+  onAnswerChange: (text: string) => void;
+}
+
+const ACTION_LABELS: Record<QuestionAction, string> = {
+  askAgain: 'Zadaj ponownie',
+  answer: 'Odpowiedz',
+  skip: 'Pomiń',
+  drop: 'Porzuć',
+};
+
+function QuestionCarryForwardRow({
+  question, readOnly, action, answerText, onActionChange, onAnswerChange,
+}: QuestionCarryForwardRowProps) {
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm flex-1">{question.question_text}</p>
+        <span className="text-xs text-muted-foreground shrink-0">
+          zadane {question.ask_count}×
+        </span>
+      </div>
+
+      <RadioGroup
+        value={action}
+        onValueChange={(v) => onActionChange(v as QuestionAction)}
+        disabled={readOnly}
+        className="grid grid-cols-2 gap-1 sm:grid-cols-4"
+      >
+        {(Object.keys(ACTION_LABELS) as QuestionAction[]).map((key) => (
+          <label
+            key={key}
+            className={cn(
+              'flex items-center gap-1.5 text-xs cursor-pointer',
+              readOnly && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <RadioGroupItem value={key} id={`${question.id}-${key}`} />
+            <span>{ACTION_LABELS[key]}</span>
+          </label>
+        ))}
+      </RadioGroup>
+
+      {action === 'answer' && !readOnly && (
+        <Textarea
+          placeholder="Treść odpowiedzi"
+          value={answerText}
+          onChange={(e) => onAnswerChange(e.target.value)}
+          rows={2}
+          className="text-sm"
+        />
+      )}
+    </div>
+  );
+}
