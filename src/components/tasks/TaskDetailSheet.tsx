@@ -228,6 +228,12 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
     const match = matchSameCat || testMappings.find(m => col.match(m.cat, m.stage || null));
     if (!match) return;
 
+    // HOTFIX-OS2: meeting_done → otwórz dialog decyzji zamiast cichego UPDATE
+    if (match.stage === 'meeting_done' && contactId) {
+      setMeetingDecisionOpen(true);
+      return;
+    }
+
     const updates: { id: string; teamId: string; category?: DealCategory; offeringStage?: OfferingStage } = {
       id: teamContactId,
       teamId,
