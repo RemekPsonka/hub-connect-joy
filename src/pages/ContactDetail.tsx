@@ -70,7 +70,7 @@ export default function ContactDetail() {
   const getDefaultTab = () => {
     const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && !isAssistant) {
-      const validTabs = ['meetings', 'needs-offers', 'wanted', 'profile-ai', 'more'];
+      const validTabs = ['meetings', 'needs-offers', 'emails', 'wanted', 'profile-ai', 'more'];
       if (validTabs.includes(tabFromUrl)) {
         return tabFromUrl;
       }
@@ -79,8 +79,19 @@ export default function ContactDetail() {
       if (tabFromUrl === 'bi') return 'meetings';
       if (tabFromUrl === 'company') return 'meetings';
       if (tabFromUrl === 'network') return 'meetings';
+      // Direct deep-link to Zadania (sub-tab inside "more")
+      if (tabFromUrl === 'tasks' || tabFromUrl === 'tasks-full') return 'more';
     }
     return 'meetings';
+  };
+
+  const getDefaultSubTab = () => {
+    const sub = searchParams.get('sub');
+    const tab = searchParams.get('tab');
+    if (sub && ['ownership', 'tasks-full', 'history', 'overview'].includes(sub)) return sub;
+    // When user deep-links via ?tab=tasks(-full), preselect Zadania inside "more"
+    if (tab === 'tasks' || tab === 'tasks-full') return 'tasks-full';
+    return 'ownership';
   };
 
   if (isLoading) {
@@ -263,7 +274,7 @@ export default function ContactDetail() {
 
                 {/* Tab: Więcej — Udziały + Zadania + Historia + Przegląd */}
                 <TabsContent value="more" className="mt-6">
-                  <Tabs defaultValue="ownership">
+                  <Tabs defaultValue={getDefaultSubTab()}>
                     <TabsList className="mb-4">
                       <TabsTrigger value="ownership">Udziały</TabsTrigger>
                       <TabsTrigger value="tasks-full">Zadania</TabsTrigger>
