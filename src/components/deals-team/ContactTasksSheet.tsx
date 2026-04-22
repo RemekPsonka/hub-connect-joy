@@ -759,6 +759,17 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
         />
       )}
 
+      {/* Meeting Decision Dialog */}
+      {contact?.contact_id && (
+        <MeetingDecisionDialog
+          open={showMeetingDecision}
+          onOpenChange={setShowMeetingDecision}
+          contactId={contact.contact_id}
+          contactDisplayName={contact.contact?.full_name ?? 'kontakt'}
+          onSuccess={() => setShowMeetingDecision(false)}
+        />
+      )}
+
       <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
