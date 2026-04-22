@@ -155,8 +155,23 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 
-function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: { teamContactId: string; teamId: string; onTitleChange?: (title: string) => void }) {
+function InteractivePipelineStageRow({
+  teamContactId,
+  teamId,
+  contactId,
+  contactName,
+  taskId,
+  onTitleChange,
+}: {
+  teamContactId: string;
+  teamId: string;
+  contactId: string;
+  contactName: string;
+  taskId: string;
+  onTitleChange?: (title: string) => void;
+}) {
   const { data } = useQuery({
     queryKey: ['deal-team-contact-stage', teamContactId],
     queryFn: async () => {
@@ -173,6 +188,8 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
   });
 
   const updateContact = useUpdateTeamContact();
+  const updateTask = useUpdateTask();
+  const [meetingDecisionOpen, setMeetingDecisionOpen] = useState(false);
 
   const currentCategory = (data?.category || 'lead') as DealCategory;
   const currentStage = data?.offering_stage as OfferingStage | null;
@@ -227,6 +244,12 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
     );
     const match = matchSameCat || testMappings.find(m => col.match(m.cat, m.stage || null));
     if (!match) return;
+
+    // HOTFIX-OS2: meeting_done → otwórz dialog decyzji zamiast cichego UPDATE
+    if (match.stage === 'meeting_done' && contactId) {
+      setMeetingDecisionOpen(true);
+      return;
+    }
 
     const updates: { id: string; teamId: string; category?: DealCategory; offeringStage?: OfferingStage } = {
       id: teamContactId,
@@ -342,6 +365,23 @@ function InteractivePipelineStageRow({ teamContactId, teamId, onTitleChange }: {
           </DropdownMenuContent>
         </DropdownMenu>
       </MetaRow>
+
+      {contactId && (
+        <MeetingDecisionDialog
+          open={meetingDecisionOpen}
+          onOpenChange={setMeetingDecisionOpen}
+          contactId={contactId}
+          contactDisplayName={contactName || 'kontakt'}
+          onSuccess={async () => {
+            setMeetingDecisionOpen(false);
+            try {
+              await updateTask.mutateAsync({ id: taskId, status: 'completed' });
+            } catch (err) {
+              console.error('[HOTFIX-OS2] Failed to close task after meeting decision', err);
+            }
+          }}
+        />
+      )}
     </>
   );
 }
@@ -742,10 +782,17 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
             {/* Pipeline stage info */}
             {isPipelineTask && (
-              <InteractivePipelineStageRow teamContactId={pipelineTeamContactId} teamId={pipelineTeamId} onTitleChange={async (newTitle) => {
+              <InteractivePipelineStageRow
+                teamContactId={pipelineTeamContactId}
+                teamId={pipelineTeamId}
+                contactId={pipelineContactId}
+                contactName={pipelineContactName}
+                taskId={task.id}
+                onTitleChange={async (newTitle) => {
                 setTitleValue(newTitle);
                 await updateTask.mutateAsync({ id: task.id, title: newTitle });
-              }} />
+                }}
+              />
             )}
 
             {/* Due date */}
