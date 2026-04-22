@@ -302,7 +302,7 @@ export function MeetingDecisionDialog({
           {/* Sekcja 3 — conditional fields */}
           {decisionType === 'go' && (
             <div className="space-y-2">
-              <Label>Następna akcja (opcjonalnie)</Label>
+              <Label>Następna akcja *</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -328,6 +328,11 @@ export function MeetingDecisionDialog({
                   />
                 </PopoverContent>
               </Popover>
+              {!nextActionDate && (
+                <p className="text-xs text-destructive">
+                  Wymagane — zaplanuj datę następnej akcji
+                </p>
+              )}
             </div>
           )}
 
