@@ -199,7 +199,6 @@ export function MeetingDecisionDialog({
         const results = await Promise.allSettled(questionMutations);
         const rejected = results.filter((r) => r.status === 'rejected');
         if (rejected.length > 0) {
-          // eslint-disable-next-line no-console
           console.warn('[MeetingDecisionDialog] question mutations failed:', rejected);
           toast.warning(
             `Decyzja zapisana, ale ${rejected.length} z ${results.length} operacji na pytaniach nie powiodło się`,
