@@ -1,60 +1,137 @@
 
 
-# Regen `types.ts` z live Supabase — execute
+# Execute: `src/hooks/useMeetingDecisions.ts`
 
-## Plik ruszony
-- **Tylko** `src/integrations/supabase/types.ts` (nadpisanie outputem generatora).
+Plan-mode reset wymaga ponownej akceptacji. Plan bez zmian względem v2 — dorzucam tylko 3 dodatkowe checki w raporcie.
 
-## Kroki wykonania (default mode)
+## Plik (jedyny)
+- `src/hooks/useMeetingDecisions.ts` (nowy, ~95 linii)
 
-1. **Backup obecnego pliku** → `/tmp/types.before.ts` (do diff-a).
-2. **Introspekcja live schematu** dla tabel docelowych — `psql` na live DB:
-   ```sql
-   SELECT column_name, data_type, is_nullable, column_default
-   FROM information_schema.columns
-   WHERE table_schema='public'
-     AND table_name IN ('meeting_decisions','meeting_questions')
-   ORDER BY table_name, ordinal_position;
-   ```
-   Wynik = source of truth do walidacji.
-3. **Sanity check vs Twoja lista pól** (przed regenem):
-   - Dla każdej Twojej kolumny sprawdzam obecność + typ + nullability w live DB.
-   - **Jeśli brakuje którejkolwiek** z Twoich kolumn (`tenant_id`, `decision`, `ask_count`, `is_active`, `last_asked_at`, …) → **STOP**, nie odpalam generatora, raportuję rozjazd:
-     ```
-     MISMATCH:
-       meeting_decisions: brak kolumny X (typ oczekiwany Y)
-       meeting_questions: ...
-     ```
-   - Jeśli live ma **extra** kolumny — kontynuuję, pokażę je w diff.
-4. **Regen przez Supabase Management API** (CLI w sandboxie nie ma `SUPABASE_ACCESS_TOKEN`, więc idę REST-em):
-   ```bash
-   curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-     "https://api.supabase.com/v1/projects/smuaroosnsrqfjsbpxpa/types/typescript?included_schemas=public" \
-     -o /tmp/types.after.ts
-   ```
-   Sprawdzam: rozmiar > 0, zaczyna się od `export type Json =`, zawiera `meeting_decisions:` i `meeting_questions:`.
-   Fallback gdy brak `SUPABASE_ACCESS_TOKEN`: `npx supabase gen types typescript --project-id smuaroosnsrqfjsbpxpa --schema public` (jeśli też padnie → STOP, raportuję, NIE rekonstruuję ręcznie).
-5. **Diff przed nadpisaniem** — `diff /tmp/types.before.ts /tmp/types.after.ts`:
-   - Oczekuję: tylko nowe klucze `meeting_decisions` + `meeting_questions` w `Database['public']['Tables']`.
-   - **Jeśli inne tabele zmieniają kształt** (Row/Insert/Update/Relationships pozostałych tabel) → **STOP**, raportuję pełną listę zmian, nie nadpisuję.
-6. **Nadpisanie** `src/integrations/supabase/types.ts` outputem z `/tmp/types.after.ts`.
-7. **Walidacja**: `npx tsc --noEmit` — exit 0 wymagany. Jeśli ≠ 0 → pokazuję pełny output, nie zostawiam zepsutego pliku.
+## Pełna zawartość
 
-## Co dostaniesz w odpowiedzi po execute
+```ts
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import type { Tables } from '@/integrations/supabase/types';
 
-1. **Diff** ograniczony do nowych kluczy `Tables.meeting_decisions` + `Tables.meeting_questions` (Row/Insert/Update/Relationships) + potwierdzenie „reszta nietknięta".
-2. **Output `npx tsc --noEmit`** (exit code + ewentualne błędy).
-3. **Commit info**: w Lovable nie odpalam `git` — zmiana w pliku jest commitowana automatycznie przez platformę po nadpisaniu. Zamiast hash-a podam: nazwę pliku + bytes before/after + listę zmienionych linii.
+export type MeetingDecisionRow = Tables<'meeting_decisions'>;
 
-## STOP conditions (nic nie nadpisuję jeśli)
-- Live DB nie ma którejś z Twoich kolumn → mismatch report.
-- Generator zwrócił pusty / niepełny plik (brak nagłówka `export type Json` lub brak oczekiwanych tabel).
-- Diff pokazuje zmiany w innych tabelach niż dwie docelowe.
-- `npx tsc --noEmit` exit ≠ 0 → rollback z `/tmp/types.before.ts`.
+export function useMeetingDecisions(contactId: string) {
+  return useQuery({
+    queryKey: ['meeting-decisions', contactId],
+    enabled: !!contactId,
+    queryFn: async (): Promise<MeetingDecisionRow[]> => {
+      const { data, error } = await supabase
+        .from('meeting_decisions')
+        .select('*')
+        .eq('deal_team_contact_id', contactId)
+        .order('meeting_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
 
-## Poza zakresem (bez zmian)
-- Bez nowej migracji SQL.
-- Bez nowych hooków.
-- Bez `src/types/dealTeam.ts`.
-- Bez komponentów.
+type CreateMeetingDecisionInput = {
+  contactId: string;
+  decisionType: 'go' | 'postponed' | 'dead';
+  meetingDate: string;
+  notes?: string | null;
+  nextActionDate?: string | null;
+  postponedUntil?: string | null;
+  deadReason?: string | null;
+};
+
+export function useCreateMeetingDecision() {
+  const queryClient = useQueryClient();
+  const { director, assistant } = useAuth();
+  const tenantId = director?.tenant_id || assistant?.tenant_id;
+  const userId = director?.id;
+
+  return useMutation({
+    mutationFn: async (input: CreateMeetingDecisionInput) => {
+      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!tenantId) throw new Error('Brak tenant_id');
+
+      const { contactId, decisionType, meetingDate } = input;
+      const notes = input.notes ?? null;
+      const nextActionDate = input.nextActionDate ?? null;
+      const postponedUntil = input.postponedUntil ?? null;
+      const deadReason = input.deadReason?.trim() ?? '';
+
+      if (!['go', 'postponed', 'dead'].includes(decisionType)) {
+        throw new Error('Nieprawidłowy typ decyzji');
+      }
+      if (!meetingDate) throw new Error('Data spotkania wymagana');
+      if (decisionType === 'postponed' && !postponedUntil) {
+        throw new Error('Termin odroczenia wymagany');
+      }
+      if (decisionType === 'dead' && !deadReason) {
+        throw new Error('Powód rezygnacji wymagany');
+      }
+
+      const { data: dtc, error: fetchErr } = await supabase
+        .from('deal_team_contacts')
+        .select('category, offering_stage, temperature, tenant_id, team_id')
+        .eq('id', contactId)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!dtc) throw new Error('Kontakt nie znaleziony');
+
+      const { error: insErr } = await supabase
+        .from('meeting_decisions')
+        .insert({
+          tenant_id: dtc.tenant_id,
+          team_id: dtc.team_id,
+          deal_team_contact_id: contactId,
+          decision_type: decisionType,
+          meeting_date: meetingDate,
+          notes,
+          next_action_date: nextActionDate,
+          postponed_until: decisionType === 'postponed' ? postponedUntil : null,
+          dead_reason: decisionType === 'dead' ? deadReason : null,
+          prev_category: dtc.category,
+          prev_offering_stage: dtc.offering_stage ?? null,
+          prev_temperature: dtc.temperature ?? null,
+          created_by: userId,
+        });
+      if (insErr) throw insErr;
+
+      return { contactId, teamId: dtc.team_id };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['meeting-decisions', result.contactId] });
+      queryClient.invalidateQueries({ queryKey: ['deal-team-contacts', result.teamId] });
+      toast.success('Decyzja zapisana');
+    },
+    onError: (error: Error) => {
+      toast.error(`Błąd: ${error.message}`);
+    },
+  });
+}
+```
+
+## Raport po wykonaniu
+
+1. **Pełna treść** `src/hooks/useMeetingDecisions.ts` (paste).
+2. `npx tsc --noEmit` — exit code + output.
+3. `npm run lint` (lub `eslint src/hooks/useMeetingDecisions.ts`) — output.
+4. `grep -rn "useMeetingDecisions" src/` — oczekuję 2 hity (definicje), zero importów.
+5. `git diff --stat` — 1 plik.
+6. **Dodatkowe potwierdzenia:**
+   - `grep -c "^export function useMeetingDecisions" + grep -c "^export function useCreateMeetingDecision"` → po 1 każdy (brak duplikatów).
+   - `grep -n "from '@/integrations/supabase/types'" plik` → import `Tables` z poprawnego źródła; `grep "@/types/dealTeam" plik` → 0 hitów.
+   - `grep -E "as any|@ts-ignore|@ts-nocheck" plik` → 0 hitów.
+
+## STOP conditions
+- `tsc` exit ≠ 0 → output, brak fixu poza nowym plikiem.
+- Lint errors → output, fix tylko w nowym pliku.
+- Cokolwiek wymaga zmiany w innym pliku → STOP, zgłaszam.
+- Któryś z 3 dodatkowych checków (duplikaty / zły import / `any`) → STOP, raport.
+
+## Bez zmian
+- `useDealsTeamContacts.ts`, `src/types/dealTeam.ts`, inne hooki, komponenty, migracje SQL.
 
