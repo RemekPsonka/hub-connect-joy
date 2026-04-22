@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
   PointerSensor,
@@ -46,6 +45,7 @@ import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
 import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
+import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
@@ -498,7 +498,6 @@ function DroppableColumn({
 }
 
 export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanbanProps) {
-  const navigate = useNavigate();
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
   const snoozedRef = useRef<HTMLDivElement>(null);
@@ -526,6 +525,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
+  const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
     prospect: 'recent',
@@ -799,9 +799,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           <SnoozedContactsBar
             snoozedContacts={snoozedActive}
             teamId={teamId}
-            onContactClick={(c) => {
-              if (c.contact_id) navigate(`/contacts/${c.contact_id}?tab=more&sub=tasks-full`);
-            }}
+            onContactClick={(c) => setSheetContact(c)}
             expanded={snoozedExpanded}
             onExpandedChange={setSnoozedExpanded}
           />
@@ -830,9 +828,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
                 setLostContact(c);
               }}
               onSubcategoryChange={handleSubcategoryChange}
-              onMoreClick={(c) => {
-                if (c.contact_id) navigate(`/contacts/${c.contact_id}?tab=more&sub=tasks-full`);
-              }}
+              onMoreClick={(c) => setSheetContact(c)}
               onMeetingDoneClick={
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
@@ -879,6 +875,13 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         openTasksCount={openTasksSnapshot.length}
         onConfirm={handleSaveMeeting}
         isPending={saveMeeting.isPending}
+      />
+
+      <ContactTasksSheet
+        contact={sheetContact}
+        teamId={teamId}
+        open={!!sheetContact}
+        onOpenChange={(open) => !open && setSheetContact(null)}
       />
     </>
   );
