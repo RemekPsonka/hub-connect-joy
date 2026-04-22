@@ -105,11 +105,11 @@ export function useCreateMeetingQuestion() {
 
 export function useAskMeetingQuestionAgain() {
   const queryClient = useQueryClient();
-  const { userId } = useAuthIds();
+  const { directorId } = useAuthIds();
 
   return useMutation({
     mutationFn: async (input: AskAgainInput) => {
-      if (!userId) throw new Error('Brak zalogowanego użytkownika');
+      if (!directorId) throw new Error('Brak powiązanego dyrektora');
 
       const { data: row, error: fetchErr } = await supabase
         .from('meeting_questions')
@@ -127,7 +127,7 @@ export function useAskMeetingQuestionAgain() {
         .update({
           ask_count: row.ask_count + 1,
           last_asked_at: new Date().toISOString(),
-          last_asked_by: userId,
+          last_asked_by: directorId,
         })
         .eq('id', input.questionId);
       if (updErr) throw updErr;
