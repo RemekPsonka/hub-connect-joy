@@ -167,6 +167,46 @@ export function MeetingDecisionDialog({
           : null,
         deadReason: decisionType === 'dead' ? deadReason.trim() : null,
       });
+
+      // Batch question mutations (best-effort; decision already in DB)
+      const questionMutations: Promise<unknown>[] = [];
+
+      if (decisionType === 'dead') {
+        for (const q of openQuestions) {
+          questionMutations.push(dropQ.mutateAsync({ questionId: q.id, contactId }));
+        }
+      } else {
+        for (const q of openQuestions) {
+          const action = questionActions[q.id] ?? 'askAgain';
+          if (action === 'askAgain') {
+            questionMutations.push(askAgain.mutateAsync({ questionId: q.id, contactId }));
+          } else if (action === 'answer') {
+            questionMutations.push(answerQ.mutateAsync({
+              questionId: q.id, contactId, answerText: questionAnswers[q.id] ?? '',
+            }));
+          } else if (action === 'skip') {
+            questionMutations.push(skipQ.mutateAsync({ questionId: q.id, contactId }));
+          } else if (action === 'drop') {
+            questionMutations.push(dropQ.mutateAsync({ questionId: q.id, contactId }));
+          }
+        }
+        for (const text of newQuestions) {
+          questionMutations.push(createQ.mutateAsync({ contactId, questionText: text }));
+        }
+      }
+
+      if (questionMutations.length > 0) {
+        const results = await Promise.allSettled(questionMutations);
+        const rejected = results.filter((r) => r.status === 'rejected');
+        if (rejected.length > 0) {
+          // eslint-disable-next-line no-console
+          console.warn('[MeetingDecisionDialog] question mutations failed:', rejected);
+          toast.warning(
+            `Decyzja zapisana, ale ${rejected.length} z ${results.length} operacji na pytaniach nie powiodło się`,
+          );
+        }
+      }
+
       onSuccess?.();
       onOpenChange(false);
     } catch {
