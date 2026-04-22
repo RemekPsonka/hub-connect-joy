@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { format, addDays } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
-  CalendarIcon, Loader2, ArrowRight, Clock, XCircle,
+  CalendarIcon, Loader2, ArrowRight, Clock, XCircle, Plus, Trash2,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -10,12 +10,25 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreateMeetingDecision } from '@/hooks/useMeetingDecisions';
+import {
+  useMeetingQuestions,
+  useCreateMeetingQuestion,
+  useAskMeetingQuestionAgain,
+  useAnswerMeetingQuestion,
+  useSkipMeetingQuestion,
+  useDropMeetingQuestion,
+  type MeetingQuestionRow,
+} from '@/hooks/useMeetingQuestions';
 
 type DecisionType = 'go' | 'postponed' | 'dead';
+type QuestionAction = 'askAgain' | 'answer' | 'skip' | 'drop';
 
 interface DecisionOption {
   value: DecisionType;
