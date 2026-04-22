@@ -519,6 +519,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [lostFromOffering, setLostFromOffering] = useState(false);
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
     prospect: 'recent',
@@ -858,6 +859,13 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
           onSuccess={() => setLostContact(null)}
         />
       )}
+
+      <MeetingDecisionDialog
+        contactId={meetingDoneContact?.id ?? ''}
+        contactDisplayName={meetingDoneContact?.contact?.full_name ?? 'kontakt'}
+        open={!!meetingDoneContact}
+        onOpenChange={(v) => { if (!v) setMeetingDoneContact(null); }}
+      />
 
       <SaveMeetingDialog
         open={showMeetingDialog}
