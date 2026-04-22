@@ -365,6 +365,23 @@ function InteractivePipelineStageRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </MetaRow>
+
+      {contactId && (
+        <MeetingDecisionDialog
+          open={meetingDecisionOpen}
+          onOpenChange={setMeetingDecisionOpen}
+          contactId={contactId}
+          contactDisplayName={contactName || 'kontakt'}
+          onSuccess={async () => {
+            setMeetingDecisionOpen(false);
+            try {
+              await updateTask.mutateAsync({ id: taskId, status: 'completed' });
+            } catch (err) {
+              console.error('[HOTFIX-OS2] Failed to close task after meeting decision', err);
+            }
+          }}
+        />
+      )}
     </>
   );
 }
@@ -765,10 +782,17 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
 
             {/* Pipeline stage info */}
             {isPipelineTask && (
-              <InteractivePipelineStageRow teamContactId={pipelineTeamContactId} teamId={pipelineTeamId} onTitleChange={async (newTitle) => {
+              <InteractivePipelineStageRow
+                teamContactId={pipelineTeamContactId}
+                teamId={pipelineTeamId}
+                contactId={pipelineContactId}
+                contactName={pipelineContactName}
+                taskId={task.id}
+                onTitleChange={async (newTitle) => {
                 setTitleValue(newTitle);
                 await updateTask.mutateAsync({ id: task.id, title: newTitle });
-              }} />
+                }}
+              />
             )}
 
             {/* Due date */}
