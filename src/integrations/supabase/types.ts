@@ -3847,6 +3847,7 @@ export type Database = {
           ai_brief: string | null
           ai_brief_generated_at: string | null
           assigned_to: string | null
+          audit_done_at: string | null
           category: string
           category_changed_at: string | null
           client_complexity: Json | null
@@ -3857,6 +3858,7 @@ export type Database = {
           deal_stage: string | null
           estimated_value: number | null
           expected_annual_premium_gr: number | null
+          handshake_at: string | null
           id: string
           is_lost: boolean | null
           k1_meeting_done_at: string | null
@@ -3875,6 +3877,7 @@ export type Database = {
           next_meeting_with: string | null
           notes: string | null
           offering_stage: string | null
+          poa_signed_at: string | null
           potential_communication_gr: number | null
           potential_financial_gr: number | null
           potential_life_group_gr: number | null
@@ -3894,11 +3897,13 @@ export type Database = {
           tenant_id: string
           updated_at: string | null
           value_currency: string | null
+          won_at: string | null
         }
         Insert: {
           ai_brief?: string | null
           ai_brief_generated_at?: string | null
           assigned_to?: string | null
+          audit_done_at?: string | null
           category?: string
           category_changed_at?: string | null
           client_complexity?: Json | null
@@ -3909,6 +3914,7 @@ export type Database = {
           deal_stage?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
+          handshake_at?: string | null
           id?: string
           is_lost?: boolean | null
           k1_meeting_done_at?: string | null
@@ -3927,6 +3933,7 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           offering_stage?: string | null
+          poa_signed_at?: string | null
           potential_communication_gr?: number | null
           potential_financial_gr?: number | null
           potential_life_group_gr?: number | null
@@ -3946,11 +3953,13 @@ export type Database = {
           tenant_id: string
           updated_at?: string | null
           value_currency?: string | null
+          won_at?: string | null
         }
         Update: {
           ai_brief?: string | null
           ai_brief_generated_at?: string | null
           assigned_to?: string | null
+          audit_done_at?: string | null
           category?: string
           category_changed_at?: string | null
           client_complexity?: Json | null
@@ -3961,6 +3970,7 @@ export type Database = {
           deal_stage?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
+          handshake_at?: string | null
           id?: string
           is_lost?: boolean | null
           k1_meeting_done_at?: string | null
@@ -3979,6 +3989,7 @@ export type Database = {
           next_meeting_with?: string | null
           notes?: string | null
           offering_stage?: string | null
+          poa_signed_at?: string | null
           potential_communication_gr?: number | null
           potential_financial_gr?: number | null
           potential_life_group_gr?: number | null
@@ -3998,6 +4009,7 @@ export type Database = {
           tenant_id?: string
           updated_at?: string | null
           value_currency?: string | null
+          won_at?: string | null
         }
         Relationships: [
           {
