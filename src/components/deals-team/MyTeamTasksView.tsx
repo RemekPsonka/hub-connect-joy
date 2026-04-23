@@ -153,6 +153,10 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   };
 
   const overdueCount = buckets.overdue.length;
+  const myClientsCount = useMemo(
+    () => teamContacts.filter((tc) => tc.assigned_to === director?.id).length,
+    [teamContacts, director?.id],
+  );
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
@@ -329,7 +333,21 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             <AlertTriangle className="h-3 w-3" />{overdueCount} przeterminowanych
           </Badge>
         )}
-        <span className="text-xs text-muted-foreground">{filtered.length} zadań</span>
+        {filterMember === 'mine' ? (
+          <span className="text-xs text-muted-foreground">
+            Twój dzień: <span className="font-medium text-foreground">{myClientsCount}</span> klientów
+            {' · '}
+            <span className="font-medium text-foreground">{filtered.length}</span> zadań aktywnych
+            {overdueCount > 0 && (
+              <>
+                {' · '}
+                <span className="font-medium text-destructive">{overdueCount}</span> zaległych
+              </>
+            )}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{filtered.length} zadań</span>
+        )}
       </div>
 
       {/* ─── Empty state ──────────────────────────────── */}
@@ -347,6 +365,12 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       {/* ─── VIEW: Grouped (4 time buckets) ────────────── */}
       {filtered.length > 0 && viewMode === 'grouped' && (
         <div className="space-y-3">
+          {filterMember === 'mine' && (
+            <MyClientsSection
+              teamId={teamId}
+              onClientClick={(contactId) => navigate(`/contacts/${contactId}`)}
+            />
+          )}
           {renderSection('Dzisiaj', buckets.today, true, 'today')}
           {renderSection('Zaległe', buckets.overdue, buckets.overdue.length > 0, 'overdue')}
           {renderSection('Nadchodzące 7 dni', buckets.upcoming, false, 'upcoming')}
