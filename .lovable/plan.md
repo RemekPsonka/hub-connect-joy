@@ -1,85 +1,81 @@
 
 
-# REVERT-NAV-1 — Klik w kafelek kanbana otwiera drawer AKCJE (ContactTasksSheet)
+# REVERT-NAV-2 — Klik w KORPUS karty kanbana otwiera drawer (zamiast `/sgu/klienci`)
 
 ## Problem
 
-Poprzedni patch (klik karty → `/contacts/:id?tab=more&sub=tasks-full`) okazał się błędny UX-owo. User chce wrócić do oryginalnego zachowania:
+REVERT-NAV-1 podpiął drawer pod handlery `onMoreClick` w `UnifiedKanban.tsx` (parent), ale **`UnifiedKanbanCard.tsx` ma własny `onClick` na korpusie `<Card>`**, który nawiguje do `/sgu/klienci?contactId=...`. Większość kliknięć usera (w nazwisko, firmę, puste miejsce karty) trafia w ten handler — drawer nigdy się nie otwiera, user ląduje w "Klienci".
 
-**Klik w kafelek kanbana → `ContactTasksSheet` (boczny drawer)** — który zawiera sekcję **Akcje** z 10 kafelkami (`ContactActionButtons`, w tym świeży "Spotkanie odbyte" z B-FIX.15).
+## Recon
 
-Nawigacja do pełnej karty kontaktu pozostaje dostępna z poziomu `ContactTasksSheet` (link "Otwórz pełną kartę" już tam jest).
-
-## Recon (potwierdzone)
-
-- `ContactTasksSheet` istnieje i nadal jest używany w `ClientsTab.tsx` + `KanbanBoard.tsx` — komponent żywy, wystarczy go z powrotem podpiąć w kanbanie.
-- `ContactTasksSheet` w sekcji "Akcje" (linia 233-239) renderuje `<ContactActionButtons ... />` z pełnym setem 10 akcji, w tym `meeting_done` (B-FIX.15).
-- `UnifiedKanbanCard` przyjmuje propsy `onMoreClick: () => void` (footer ⋯ + status pill + button "Add task") i `onContactClick` w `SnoozedContactsBar`.
-
-## Zmiany — 1 plik
-
-`src/components/sgu/sales/UnifiedKanban.tsx`
-
-### Krok 1: Przywróć import + state
+**`src/components/sgu/sales/UnifiedKanbanCard.tsx`** — linie 71-77:
 ```tsx
-import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
-// ...
-const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+const handleCardClick = () => {
+  navigate(`/sgu/klienci?contactId=${contact.contact_id}`);
+};
+
+return <Card onClick={handleCardClick} ...>
 ```
 
-### Krok 2: Zamień handler `onMoreClick` (kafelek) z navigate na setSheetContact
+Wszystkie wewnętrzne strefy interaktywne (footer, status pill, mini-banner, AssigneeAvatars, badges) już mają `e.stopPropagation()` i wołają `onMoreClick` — więc po naprawie korpus karty ma się zachować TAK SAMO jak te elementy: otwierać drawer.
+
+`onMoreClick` jest już propsem komponentu (linia 28), przekazywanym z parenta jako `setSheetContact(c)`. Wystarczy go wywołać z korpusu zamiast `navigate(...)`.
+
+## Zmiana — 1 plik
+
+**`src/components/sgu/sales/UnifiedKanbanCard.tsx`**
+
+### Krok 1: Usuń `useNavigate` (niewykorzystywany po zmianie)
 ```tsx
-onMoreClick={() => setSheetContact(c)}
+// USUŃ:
+import { useNavigate } from 'react-router-dom';
+// USUŃ:
+const navigate = useNavigate();
 ```
 
-### Krok 3: Zamień handler `onContactClick` w `SnoozedContactsBar` z navigate na setSheetContact
+### Krok 2: Zamień `handleCardClick` na wywołanie `onMoreClick`
 ```tsx
-onContactClick={(c) => setSheetContact(c)}
+const handleCardClick = () => {
+  onMoreClick();
+};
 ```
 
-### Krok 4: Render `<ContactTasksSheet>` (przed `</DndContext>` lub w drzewie tam gdzie był wcześniej)
-```tsx
-<ContactTasksSheet
-  contact={sheetContact}
-  teamId={teamId}
-  open={!!sheetContact}
-  onOpenChange={(open) => !open && setSheetContact(null)}
-/>
-```
-
-### Krok 5: Usuń `useNavigate` jeśli niewykorzystywany w innych miejscach pliku
-- Sprawdzić w execute: jeśli `navigate(...)` nie jest używany nigdzie indziej w tym pliku, usunąć import i deklarację.
+(albo bezpośrednio `onClick={onMoreClick}` na `<Card>` — wybór stylistyczny w execute)
 
 ## ZERO zmian w
-- `ContactTasksSheet.tsx` (tylko consumer)
-- `ContactActionButtons.tsx` (B-FIX.15 z 10. kafelkiem już wdrożony)
-- `ContactDetail.tsx` — whitelist `more` + `getDefaultSubTab()` z poprzedniego patcha **zostaje** (nie szkodzi, przyda się do ewentualnych deep-linków z innych miejsc np. emaili/Sovry)
-- Routach, migracjach, innych komponentach kanbana
+- `UnifiedKanban.tsx` (REVERT-NAV-1 już prawidłowy — parent dobrze przekazuje `setSheetContact`)
+- `ContactTasksSheet.tsx`
+- `ContactActionButtons.tsx` (B-FIX.15 OK)
+- `ContactDetail.tsx` (deep-link `?tab=more&sub=tasks-full` zostaje na przyszłość)
+- Routach, migracjach, `SnoozedContactsBar`
 
 ## Pre-flight
-1. `grep -n "ContactTasksSheet\|setSheetContact\|sheetContact" src/components/sgu/sales/UnifiedKanban.tsx` → import + state declare/setter + render + 2 handlery (≥6 hits)
-2. `grep -n "navigate(" src/components/sgu/sales/UnifiedKanban.tsx` → 0 hits (lub tylko niezwiązane z klikiem karty); usuń `useNavigate` jeśli pusto
+1. `grep -n "useNavigate\|navigate(" src/components/sgu/sales/UnifiedKanbanCard.tsx` → 0 hits po zmianie
+2. `grep -n "onMoreClick" src/components/sgu/sales/UnifiedKanbanCard.tsx` → ≥4 hits (footer, pill, banner, AssigneeAvatars + nowy w handleCardClick)
 3. `npx tsc --noEmit` → 0 nowych errors
 4. Lint zmodyfikowanego pliku → 0 nowych warnings
 
 ## STOP conditions
-- TYLKO 1 plik tknięty (`UnifiedKanban.tsx`)
-- Bez zmian w `ContactTasksSheet`, `ContactActionButtons`, `ContactDetail.tsx`
-- Klik karty (footer ⋯, status pill, "Add task") oraz klik w `SnoozedContactsBar` → `ContactTasksSheet` (drawer z prawej)
-- W drawer dostępna sekcja "Akcje" z 10 kafelkami, w tym "Spotkanie odbyte" → otwiera `MeetingDecisionDialog`
+- TYLKO 1 plik tknięty (`UnifiedKanbanCard.tsx`)
+- Zachowanie po zmianie: klik w **dowolne miejsce karty** (korpus, footer ⋯, status pill, mini-banner, avatar +) → `ContactTasksSheet` (drawer z prawej)
+- Drag karty nadal działa (korpus karty jest też drag-handle z `useDraggable` w parencie — `dnd-kit` z `activationConstraint.distance: 6` rozpoznaje drag vs click)
+- Klik w ✓ (Spotkanie odbyte) → `MeetingDecisionDialog` (bez zmian)
+- Klik w ✕ (Lost) → `LostReasonDialog` (bez zmian)
 
 ## Edge cases
 | Scenariusz | Zachowanie |
 |---|---|
-| `c.contact_id` null | Drawer otwiera się z dostępnymi danymi (DealTeamContact ma własne pola) — ContactActionButtons działa, sekcje wymagające `contact_id` graceful-fallback (już zaimplementowane) |
-| User chce pełną kartę | Link "Otwórz pełną kartę" w `ContactTasksSheet` (już istnieje) → `/contacts/:id` |
-| Drag karty | Bez zmian — drag handle nie odpala onMoreClick (`stopPropagation`) |
+| `c.contact_id` null | `onMoreClick` → `setSheetContact(c)` → drawer otwiera się z dostępnymi polami `DealTeamContact` (graceful) |
+| User chce pełną kartę kontaktu | Link "Otwórz pełną kartę" w `ContactTasksSheet` (już istnieje) |
+| Drag nad inną kolumnę | dnd-kit pochłania pointer events, `onClick` nie odpala (już działa) |
+| Klik w badges (Temperature/Source/Stage) | Mają własny `e.stopPropagation()` → otwierają popovery edycji, nie drawer |
 
 ## Raport po execute
-1. Diff `UnifiedKanban.tsx` (~+10/-5)
+1. Diff `UnifiedKanbanCard.tsx` (~+1/-3 linie: usunięcie importu + zmiana 1 linii w handleCardClick)
 2. Pre-flight #1-#4 wyniki
-3. Manual smoke: `/sgu/sprzedaz` → klik kafelek Pawełczyka → drawer z prawej → sekcja "Akcje" → kafelek "Spotkanie odbyte" widoczny → klik → `MeetingDecisionDialog` otwarty
+3. Manual smoke (user): `/sgu/sprzedaz` → klik w nazwisko Pawełczyka (środek karty) → drawer z prawej (NIE `/sgu/klienci`) → sekcja "Akcje" → "Spotkanie odbyte" widoczne
 
-## Backlog (nie ten sprint)
-- **B-FIX.18** — Decyzja UX: czy w drawerze dodać prominent "Otwórz pełną kartę → Zadania" button (jeśli user często chce trafić do listy wszystkich tasków kontaktu). Na razie linkuje do default tab.
+## Backlog (osobne sprinty)
+- **B-FIX.18** — Decyzja UX: czy w drawerze dodać prominent "Otwórz pełną kartę → Zadania" (deep-link `?tab=more&sub=tasks-full` jest już gotowy w `ContactDetail.tsx`)
+- **B-FIX.19** — Audit innych kanban-cards w projekcie (KanbanBoard, ClientsTab) czy mają ten sam pattern `onClick={() => navigate(...)}` na korpusie
 
