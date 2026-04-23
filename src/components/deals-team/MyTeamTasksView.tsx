@@ -45,16 +45,31 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlBucket = searchParams.get('bucket') as
     | 'today' | 'overdue' | 'upcoming' | 'done_today' | 'mine_clients' | null;
 
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
-  const [filterMember, setFilterMember] = useState<string>('mine');
-  const [filterStatus, setFilterStatus] = useState<string>('active');
-  const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [restOpen, setRestOpen] = useState(false);
+
+  const filterMember = searchParams.get('member') ?? 'mine';
+  const filterStatus = searchParams.get('status') ?? 'active';
+  const filterPriority = searchParams.get('priority') ?? 'all';
+
+  const setUrlParam = useCallback(
+    (key: string, value: string, defaultValue: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (value === defaultValue) next.delete(key);
+      else next.set(key, value);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const setFilterMember = (v: string) => setUrlParam('member', v, 'mine');
+  const setFilterStatus = (v: string) => setUrlParam('status', v, 'active');
+  const setFilterPriority = (v: string) => setUrlParam('priority', v, 'all');
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);

@@ -35,7 +35,7 @@ export function TasksHeader() {
     }
     const todayStart = startOfDay(new Date()).toISOString();
     const doneToday = mine.filter(
-      (a) => a.status === 'completed' && (a.completed_at ?? a.created_at ?? '') >= todayStart,
+      (a) => a.status === 'completed' && !!a.completed_at && a.completed_at >= todayStart,
     ).length;
     const mineClients = teamContacts.filter((tc) => tc.assigned_to === director?.id).length;
     return { mineClients, today, overdue, upcoming, doneToday };
