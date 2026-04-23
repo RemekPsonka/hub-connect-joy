@@ -1,97 +1,81 @@
 
 
-# SGU-MÓJ-DZIEŃ v1 — naprawa liczników + sekcja "Twoi klienci"
+# SGU-MÓJ-DZIEŃ v1.1 — polerka po v1 (completed_at + filtry w URL)
 
 ## Cel
-Widok `/sgu/zadania` (Dziennik) ma 4 kafelki, które kłamią (pokazują 0 mimo 18 zaległych na liście). Naprawiamy źródło danych liczników + dokładamy 5. kafelek "Pod opieką" + nową sekcję "Twoi klienci w lejku" (rozwijalne karty z otwartymi zadaniami klienta).
+Domknąć 2 luki po v1:
+1. Kafel "Zrobione dziś" ma fallback na `created_at` → fałszywe trafienia. Liczyć tylko po `completed_at`.
+2. Kafle filtrują przez URL (`?bucket=`), ale `member`/`status`/`priority` siedzą w `useState` → reset po F5, niedzielenie linkiem. Ujednolicić: 4 filtry w URL.
 
-## Diagnoza
-W `tasks` są 2 kolumny "kto wykonuje":
-- `assigned_to` (→ `directors.id`) — używane wszędzie aktywnie (`MyTeamTasksView`, `useMyTeamAssignments`, trigger DB)
-- `assigned_to_user_id` (→ `auth.users.id`) — **legacy**, prawie nigdy niewypełniana
+## Pliki dotykane (2)
 
-`TasksHeader` + `useSGUTasks` filtrują po `assigned_to_user_id === user.id` → 0 trafień. `MyTeamTasksView` filtruje po `assigned_to === director.id` → 18 zaległych. Fix: liczniki idą po tym samym hooku co lista (`useMyTeamAssignments`).
+### 1. `src/components/sgu/headers/TasksHeader.tsx` — fix `doneToday`
+W `useMemo counts` zamienić:
+```ts
+const doneToday = mine.filter(
+  a => a.status === 'completed' && (a.completed_at ?? a.created_at ?? '') >= todayStart
+).length;
+```
+na:
+```ts
+const doneToday = mine.filter(
+  a => a.status === 'completed' && !!a.completed_at && a.completed_at >= todayStart
+).length;
+```
+Zero nowych importów. To jedyna zmiana w pliku.
 
-## Pliki dotykane (4)
-
-### 1. `src/lib/sguTaskBuckets.ts` (NOWY) — refactor DRY
-Wyciągnięcie funkcji `bucketOf` z `MyTeamTasksView.tsx` (linie 38-50) do reusable utila. Eksport: `bucketOfTask(task) → 'today' | 'overdue' | 'upcoming' | 'rest'`. W `MyTeamTasksView` zaimportować i usunąć lokalną kopię.
-
-### 2. `src/components/sgu/headers/TasksHeader.tsx` — przepisanie
-- Usunąć: `useSGUTasks`, ręczne `supabase.from('tasks')` po `assigned_to_user_id`
-- Dodać: `useMyTeamAssignments(sguTeamId)` + `useTeamContacts(sguTeamId)` + `useSGUTeamId()` + `useAuth()` (dla `director.id`)
-- Liczyć w `useMemo`: `mineClients` (z `teamContacts.filter(tc => tc.assigned_to === director.id)`), `today`/`overdue`/`upcoming` (przez `bucketOfTask` na `assignments.filter(mine)`), `doneToday` (`status === 'completed' && completed_at >= startOfDay(today)`)
-- Grid `md:grid-cols-5` (z 4) — **5 kafelków**:
-  1. **Pod opieką** (Users icon, amber) — liczba klientów
-  2. **Dziś** (CalendarDays, emerald)
-  3. **Zaległe** (AlertCircle, destructive jeśli >0)
-  4. **Najbliższe 7 dni** (CalendarRange, sky)
-  5. **Zrobione dziś** (CheckCircle2, violet)
-- Każdy kafelek = `<button>` → toggle `?bucket=<key>` w URL (`useSearchParams`)
-- Aktywny kafelek dostaje `ring-2 ring-primary`
-
-### 3. `src/components/deals-team/MyTeamTasksView.tsx` — reagowanie na URL + sekcja klientów + podsumowanie
-- Import `useSearchParams`, `bucketOfTask` z `@/lib/sguTaskBuckets`, `MyClientsSection`
-- Dodać `const [searchParams] = useSearchParams(); const urlBucket = searchParams.get('bucket')`
-- W `useMemo filtered` — po istniejących filtrach dodać filtr po bucket:
-  - `today` / `overdue` / `upcoming` → `result.filter(a => bucketOfTask(a) === urlBucket)`
-  - `done_today` → `result.filter(a => a.status === 'completed' && (a.completed_at ?? '') >= startOfDay(today).toISOString())` (przy tym bucketcie ignorować `filterStatus === 'active'` — wewnętrzny override)
-  - `mine_clients` → bez wpływu na listę zadań (działa tylko na widoczności sekcji klientów)
-- Dodać `urlBucket` do deps `useMemo`
-- Wyrenderować `<MyClientsSection teamId={teamId} onClientClick={(contactId) => navigate(`/contacts/${contactId}`)} />` **tylko gdy `filterMember === 'mine'` i `viewMode === 'grouped'`**, nad `renderSection('Dzisiaj', ...)`
-- Pasek podsumowania (zamiana `<span>{filtered.length} zadań</span>` w member filter bar): gdy `filterMember === 'mine'` → `Twój dzień: X klientów · Y zadań aktywnych · Z zaległych` (X = `myClients.length` lokalnie liczone, Y = `filtered.length`, Z = `overdueCount`)
-
-### 4. `src/components/sgu/MyClientsSection.tsx` (NOWY)
-- Props: `{ teamId: string; onClientClick: (contactId: string) => void }`
-- Hooks: `useTeamContacts(teamId)` + `useMyTeamAssignments(teamId)` + `useAuth()`
-- `myClients = teamContacts.filter(tc => tc.assigned_to === director.id)`
-- Render: `<Card>` z nagłówkiem "Twoi klienci w lejku" + badge z licznikiem; lista `Collapsible` per klient
-- Każdy klient: `CollapsibleTrigger` z imieniem (button → `e.stopPropagation()` + `onClientClick(client.contact_id)`), firmą, badgem `client.category`, datą `next_action_date`, badgem "{N} zadań" (gdzie N = `assignments.filter(a => a.deal_team_contact_id === client.id && status !== completed/cancelled).length`)
-- `CollapsibleContent`: lista `<UnifiedTaskRow>` dla otwartych zadań tego klienta (sygnatura jak w `MyTeamTasksView.renderTaskRow` — bez deal stage badge, bez handlerów workflow w v1, klik na row → no-op lub log; w v2 podepniemy detail sheet)
-- Empty state per klient: "Brak otwartych zadań"
-- Jeśli `myClients.length === 0` → `return null`
+### 2. `src/components/deals-team/MyTeamTasksView.tsx` — filtry do URL
+- Zachować `useSearchParams` (już jest po v1) i dodać `setSearchParams` do destrukturyzacji.
+- **Usunąć** 3 `useState`: `filterMember`, `filterStatus`, `filterPriority`.
+- **Zachować** `useState` dla: `searchQuery` (debounce per-litera = osobny temat) i `viewMode` (preferencja osobista).
+- Zastąpić odczytami z URL z defaultami:
+  ```ts
+  const filterMember = searchParams.get('member') ?? 'mine';
+  const filterStatus = searchParams.get('status') ?? 'active';
+  const filterPriority = searchParams.get('priority') ?? 'all';
+  ```
+- Helper `setUrlParam` w `useCallback` (deps: `searchParams`, `setSearchParams`) — usuwa parametr gdy `value === defaultValue`, w przeciwnym razie ustawia. `setSearchParams(next, { replace: true })`.
+- Settery: `setFilterMember = (v) => setUrlParam('member', v, 'mine')` (analogicznie status/priority).
+- W JSX: nazwy zmiennych i setterów się nie zmieniają → wszystkie istniejące wywołania (`onClick`, `onValueChange`, odczyty w filtrach) działają bez zmian.
+- `useMemo filtered` — deps zostają (`filterMember`, `filterStatus`, `filterPriority`, `urlBucket` itd.), zmienia się tylko źródło wartości.
 
 ## ZERO zmian w
-- Bazie danych (żadnych migracji)
-- `useSGUTasks` (zostaje, może używać go dashboard)
-- Kanban, ContactDetail, ContactTasksSheet, routach
-- `TaskModal`, `NextActionDialog`, `SnoozeDialog`, `ConvertToClientDialog` — workflow zadań działa bez zmian
+- `searchQuery` (zostaje useState)
+- `viewMode` (zostaje useState)
+- `urlBucket` z v1 (działa dalej, koegzystuje z 3 nowymi paramami)
+- `useSGUTasks`, `useMyTeamAssignments`, `useTeamContacts`
+- `sguTaskBuckets.ts`, `MyClientsSection.tsx`
+- DB (żadnych migracji, żadnego backfillu `completed_at`)
 
 ## Acceptance criteria
 
-**Liczniki:**
-- 5 kafelków = dokładnie liczby z odpowiadających sekcji listy
-- "Pod opieką" = liczba klientów (NIE zadań)
-- "Zrobione dziś" = moje completed od 00:00
-- Klik kafelka → `?bucket=...` filtruje listę
-- Klik aktywnego drugi raz → reset
-- Refresh strony → filtr z URL nadal działa
+**Fix `doneToday`:**
+- Kafel liczy tylko `status='completed' && completed_at != null && completed_at >= startOfDay(today)`
+- Tasky completed bez `completed_at` NIE wpadają (nawet gdy `created_at` = dziś)
 
-**Sekcja "Twoi klienci":**
-- Widoczna tylko gdy `filterMember === 'mine'` i `viewMode === 'grouped'` i ≥1 klient
-- Każda karta: nazwisko, firma, badge etapu, next_action_date, licznik zadań
-- Rozwinięcie → lista otwartych zadań przez `UnifiedTaskRow`
-- Klik nazwiska → nawigacja do `/contacts/:id`
-
-**Podsumowanie:**
-- Pasek (gdy `mine`): "Twój dzień: X klientów · Y zadań · Z zaległych"
-
-**Refactor:**
-- `bucketOf` tylko w `src/lib/sguTaskBuckets.ts` (zero duplikatu)
+**Filtry w URL:**
+- Klik "Wszyscy" → `?member=all`; klik "Moje" → URL traci `member` (default)
+- Klik członek zespołu → `?member={director-id}`
+- Status "Zakończone" → `?status=completed`; powrót "Aktywne" → URL traci `status`
+- Priorytet "Wysoki" → `?priority=high`; powrót "Wszystkie" → URL traci `priority`
+- 4 parametry koegzystują: `?member=all&status=all&priority=high&bucket=overdue`
+- F5 → filtry zostają; kopia linka → ten sam stan w innej sesji
 
 **Nie psujemy:**
-- Lista zadań działa identycznie dla "Wszyscy" / innych członków / wszystkich filtrów
-- Workflow (Next Action / Snooze / Convert) bez zmian
+- "Szukaj" działa per-litera (useState)
+- viewMode (Grupowane/Lista/Kanban/Zespół) w useState
+- Kafle z v1 + sekcja "Twoi klienci" działają dalej
+- Pozostałe 4 kafle (Pod opieką, Dziś, Zaległe, Najbliższe 7 dni) bez zmian
 - `tsc` + `eslint` clean
 
 ## Pre-flight
-1. `grep -n "assigned_to_user_id" src/components/sgu/headers/TasksHeader.tsx` → 0 hits po patchu
-2. `grep -n "function bucketOf\|bucketOfTask" src/components/deals-team/MyTeamTasksView.tsx` → tylko import + użycia (brak lokalnej definicji)
+1. `grep -n "useState.*filter\(Member\|Status\|Priority\)" src/components/deals-team/MyTeamTasksView.tsx` → 0 hits po patchu
+2. `grep -n "completed_at ?? a.created_at" src/components/sgu/headers/TasksHeader.tsx` → 0 hits
 3. `npx tsc --noEmit` → 0 nowych errors
-4. Manual smoke (user): `/sgu/zadania` → liczby na 5 kafelkach = liczby w sekcjach listy → klik "Zaległe" → URL `?bucket=overdue` → lista zwężona → przełącznik "Moje" + viewMode "Grupowane" → widoczna sekcja "Twoi klienci" → rozwinięcie → otwarte zadania klienta
+4. Manual smoke: `/sgu/zadania` → klik "Wszyscy"+"Wysoki"+"Zaległe" → URL ma 3 paramy → F5 → stan zachowany
 
 ## Backlog (nie ten sprint)
-- **B-FIX.20** — Klik `UnifiedTaskRow` w `MyClientsSection` → otworzyć `TaskDetailSheet` (na razie no-op)
-- **B-FIX.21** — `parent_task_id` w `tasks` (wariant C — odłożone do drugiego lejka)
-- **B-FIX.22** — Decyzja: czy `useSGUTasks` jest gdzieś jeszcze używany — jeśli nie, deprecate
+- **B-FIX.23** — `searchQuery` do URL z debounce 300ms
+- **B-FIX.24** — Audyt rekordów `tasks` z `status='completed' AND completed_at IS NULL` (tech-debt, ewentualny backfill)
+- **B-FIX.25** — `viewMode` do localStorage per-user (preferencja perzystentna)
 
