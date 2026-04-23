@@ -1,94 +1,51 @@
-# BLOK 1 — Domknięcie lejka SGU (drift + OS2 verify + B-FIX.13) — REVISED
 
-## Odpowiedzi na 3 zastrzeżenia Remka (2026-04-23)
 
-### 1. Linia 248-252 w `TaskDetailSheet.tsx` — DLACZEGO NIE WYMAGA FIXA
-To **inny case**: linia 248-252 to handler `handleColumnChange` (zmiana etapu workflow przez dropdown). Jedyne co robi to `setMeetingDecisionOpen(true); return;` — **przerywa przed `updateContact.mutate`** i otwiera dialog. Cała decyzja (go/postponed/dead) i ewentualne zamknięcie taska dzieje się w `onSuccess` dialogu (linie 375-382). Patch części B dotyka właśnie tego `onSuccess` i to jest jedyne miejsce gdzie task dostaje `status='completed'`. Linia 248-252 **nie zamyka tasku** — tylko otwiera dialog. Bug jest tylko w 375-382.
+# BLOK 2 — Milestones K1-K4
 
-### 2. `MeetingDecisionDialog.onSuccess` sygnatura — wybór: opcja (a) update wszystkich callerów
-Pre-flight `grep -rn "MeetingDecisionDialog" src/` daje **3 callerów**:
-- `src/components/tasks/TaskDetailSheet.tsx:370` — `onSuccess={async () => { ...; updateTask({status:'completed'}) }}` (TO JEST BUG — zamyka dla każdej decyzji)
-- `src/components/deals-team/ContactTasksSheet.tsx:764` — `onSuccess={() => setShowMeetingDecision(false)}` (no-op po stronie taska)
-- `src/components/sgu/sales/UnifiedKanban.tsx:865` — **brak `onSuccess`** (dialog sam wywoła `?.()`, bezpieczne)
+## Pre-flight wyniki
 
-**Decyzja:** opcja (a) — zmieniam sygnaturę na `onSuccess?: (decisionType: DecisionType) => void` (NIE optional `decisionType?`, tylko required arg). Update'uję wszystkich callerów:
-- `MeetingDecisionDialog.tsx` linia 215: `onSuccess?.(decisionType)` (mam już `decisionType` w scope)
-- `ContactTasksSheet.tsx:769` — `onSuccess={() => setShowMeetingDecision(false)}` → `onSuccess={(_decisionType) => setShowMeetingDecision(false)}` (ignoruje arg, bez zmian behavior)
-- `UnifiedKanban.tsx:865` — bez zmian (nie ma onSuccess)
-- `TaskDetailSheet.tsx:375` — `onSuccess={async (decisionType) => { ...; if (decisionType === 'go') updateTask({status:'completed'}) }}`
+| Sprawdzenie | Wynik |
+|---|---|
+| **A** `ADD COLUMN k1_meeting_done_at` w migracjach | ❌ 0 hits (drift potwierdzony — kolumna używana przez `apply_meeting_decision()` w `20260422171024` i `20260422172920`, ale nigdy `ADD COLUMN`). Live DB: kolumna istnieje. |
+| **B** K2-K4 cols (`handshake_at`/`poa_signed_at`/`audit_done_at`/`won_at`) na `deal_team_contacts` | ❌ 0 hits (jeden hit `won_at` w `20260206061741` dotyczy legacy tabeli `deals` — nie naszej). Live DB: brak tych 4 kolumn. |
+| **C** trigger `trg_set_milestone_timestamps` / funkcja `set_milestone_timestamps` | ❌ 0 hits (do dodania) |
+| **CHECK whitelist** offering_stage (z `20260422173609`) | ✅ **14 wartości**: `decision_meeting`, `handshake`, `power_of_attorney`, `audit`, `offer_sent`, `negotiation`, `won`, `lost`, `meeting_plan`, `meeting_scheduled`, `meeting_done`, `audit_plan`, `audit_scheduled`, `audit_done`. Wszystkie nasze trigger-targets (`meeting_done`, `handshake`, `power_of_attorney`, `audit_done`, `won`) są w whitelist. |
+| **D** Skala backfill (live counts) | `handshake`=119, `decision_meeting`=24, `meeting_done`=1, NULL=1. Total=145. Backfill K2a strzeli w 119 wierszy; K1 w 120 (handshake+meeting_done — bo handshake implikuje wcześniejsze K1). K2b/K3/K4=0 (brak kontaktów na tych stage'ach). |
 
-Eksportuję typ `DecisionType` z `MeetingDecisionDialog.tsx` żeby caller mógł go zaimportować.
+## Zakres (1 plik migracji, 4 sekcje)
 
-### 3. RLS na `meeting_decisions` — komentarz append-only
-Dopisuję w migracji jasny komentarz:
-```sql
--- INTENCJONALNIE BRAK POLICY UPDATE/DELETE: tabela append-only (audit trail decyzji
--- spotkaniowych). Decyzja jest zdarzeniem historycznym — korekta = nowa decyzja
--- (kolejny INSERT), nigdy edycja istniejącej. Trigger trg_apply_meeting_decision
--- ustawia stan deal_team_contacts wyłącznie na podstawie tych nieedytowalnych zdarzeń.
--- NIE DODAWAJ policies UPDATE/DELETE bez explicite zgody product ownera.
-```
+**Plik:** `supabase/migrations/20260423180000_blok2_milestones_k1_k4.sql` (~140 LOC)
 
----
+### A — Drift fix (~3 LOC)
+`ALTER TABLE deal_team_contacts ADD COLUMN IF NOT EXISTS k1_meeting_done_at timestamptz;` — domyka P0 drift, żeby `db reset` nie wywalał triggera `apply_meeting_decision`.
 
-## Cel
-Załatać 3 luki po SGU-REFACTOR-IA / HOTFIX-OS1 zanim ruszymy dalej:
-- **A** — schema drift: `meeting_decisions` + `meeting_questions` w live, brak w migracjach (P0).
-- **B** — HOTFIX-OS2: zamykanie taska po decyzji spotkaniowej tylko dla `decisionType === 'go'`.
-- **C** — B-FIX.13 dokończenie: backfill (no-op) + AFTER UPDATE trigger propagujący opiekuna.
+### B — Nowe kolumny K2-K4 (~10 LOC)
+`ADD COLUMN IF NOT EXISTS` dla `handshake_at`, `poa_signed_at`, `audit_done_at`, `won_at` (wszystkie `timestamptz`, nullable, bez default) + `COMMENT ON COLUMN` dla wszystkich 5 milestone'ów.
 
-## Pliki dotykane (4)
+### C — Trigger `set_milestone_timestamps` (~40 LOC)
+`BEFORE UPDATE OF offering_stage` z `WHEN (NEW.offering_stage IS DISTINCT FROM OLD.offering_stage)`. `SECURITY DEFINER`, `search_path=public`. Mapping stage→column z `COALESCE(NEW.col, now())` (idempotent — pierwsze wejście wygrywa, ręcznie wpisana data historyczna zostaje). **POA implikuje handshake** (stempluje oba). Koegzystuje bez konfliktu z `apply_meeting_decision()` (oba używają COALESCE na `k1_meeting_done_at`, różne triggery na różnych tabelach).
 
-| Plik | Status | LOC |
-|---|---|---|
-| `supabase/migrations/20260423120000_schema_drift_meeting_tables.sql` | NEW | ~120 |
-| `supabase/migrations/20260423120100_bfix13_backfill_and_propagation.sql` | NEW | ~50 |
-| `src/components/deals-team/MeetingDecisionDialog.tsx` | EDIT (export type + signature + call) | +3/-1 |
-| `src/components/tasks/TaskDetailSheet.tsx` | EDIT (warunkowe close) | +5/-3 |
-| `src/components/deals-team/ContactTasksSheet.tsx` | EDIT (caller arg) | +1/-1 |
+### D — Backfill best-effort (~50 LOC)
+5 osobnych `UPDATE`-ów (idempotent: `COALESCE` + `IS NULL` guard) używających `last_status_update` → `updated_at` → `created_at` jako kaskadowy fallback. Dla każdego K-poziomu inkluzywna lista późniejszych stage'ów (np. K1 stempluje wszystkich od `meeting_done` w górę po `won`). Kończy się `RAISE NOTICE` z licznikami K1-K4.
 
-Razem ~180 LOC.
-
-## CZĘŚĆ A — migracja schema drift
-Idempotentnie odtworzyć z live: `meeting_decisions` (15 kolumn z `tenant_id`, `team_id`, `meeting_date`, `next_action_date`, `postponed_until`, `dead_reason` itd.) + `meeting_questions` (15 kolumn z `question_text`, `status text DEFAULT 'open'`, `ask_count`, `last_asked_*`). RLS policies: SELECT + INSERT (z `created_by = auth.uid()` w WITH CHECK) + UPDATE tylko na `meeting_questions`. Komentarz "append-only" na `meeting_decisions`. Trigger `set_meeting_questions_updated_at` (BEFORE UPDATE). Indeksy na FK. **NIE replikujemy** triggera `trg_apply_meeting_decision` ani funkcji `apply_meeting_decision()` — są w `20260422171024_*.sql`. **NIE tworzymy enuma** `meeting_question_status` — w live jest text, zostaje text (decyzja Remka).
-
-## CZĘŚĆ B — HOTFIX-OS2 patch
-1. `MeetingDecisionDialog.tsx`:
-   - Dodaj `export type DecisionType = 'go' | 'postponed' | 'dead';` (linia 35).
-   - Zmień `onSuccess?: () => void` → `onSuccess?: (decisionType: DecisionType) => void` (linia 56).
-   - Linia 215: `onSuccess?.()` → `onSuccess?.(decisionType)` (`decisionType` jest już w scope, non-null bo guard `if (!decisionType || !isValid) return`).
-2. `ContactTasksSheet.tsx:769` — `onSuccess={() => setShowMeetingDecision(false)}` → `onSuccess={(_decisionType) => setShowMeetingDecision(false)}`.
-3. `TaskDetailSheet.tsx:375-382` — warunkowe zamknięcie:
-   ```ts
-   onSuccess={async (decisionType) => {
-     setMeetingDecisionOpen(false);
-     if (decisionType !== 'go') return;
-     try { await updateTask.mutateAsync({ id: taskId, status: 'completed' }); }
-     catch (err) { console.error('[HOTFIX-OS2] Failed to close task after meeting decision', err); }
-   }}
-   ```
-   Import: `import { MeetingDecisionDialog, type DecisionType } from '@/components/deals-team/MeetingDecisionDialog';` (linia 158).
-
-`UnifiedKanban.tsx:865` bez zmian (nie używa `onSuccess`).
-
-## CZĘŚĆ C — backfill + propagation trigger
-Migracja `20260423120100_bfix13_backfill_and_propagation.sql`:
-1. Backfill UPDATE z `RAISE NOTICE` (no-op przy obecnym count=0, ale zostaje dla przyszłych edge case'ów).
-2. Funkcja `propagate_assigned_to_to_open_tasks()` — `SECURITY DEFINER`, `search_path=public`.
-3. Trigger `trg_propagate_assigned_to` — `AFTER UPDATE OF assigned_to ON deal_team_contacts FOR EACH ROW WHEN (NEW.assigned_to IS DISTINCT FROM OLD.assigned_to)`.
-4. ROLLBACK w komentarzu.
+## ZERO zmian w
+- Kod TS (`types.ts` regen automatycznie)
+- Trigger `apply_meeting_decision()` (zostaje, jego logika K1 koegzystuje)
+- CHECK whitelist `offering_stage` (już zawiera potrzebne wartości)
+- RLS, inne migracje
 
 ## Acceptance criteria
+1. `\d+ deal_team_contacts` po `db reset` → 5 kolumn milestone (`k1_meeting_done_at`, `handshake_at`, `poa_signed_at`, `audit_done_at`, `won_at`).
+2. `SELECT 1 FROM pg_trigger WHERE tgname='trg_set_milestone_timestamps'` → 1 row.
+3. Backfill log po deploy: `K1≈120, K2a≈119, K2b=0, K3=0, K4=0`.
+4. Smoke SQL: UPDATE stage→`handshake` stempluje `handshake_at`; potem UPDATE→`power_of_attorney` zostawia `handshake_at` (COALESCE) i ustawia `poa_signed_at`.
+5. `npx tsc --noEmit` clean (po regen `types.ts`).
 
-**A:** plik migracji idempotentny; `\d+ meeting_decisions` po reset = live (15 kol, RLS ON, 2 policy SELECT+INSERT, append-only komentarz); `\d+ meeting_questions` = live (15 kol, RLS ON, 3 policy + trigger updated_at); `tsc --noEmit` clean.
+## ROLLBACK (w komentarzu na końcu pliku)
+DROP TRIGGER + DROP FUNCTION + ALTER TABLE DROP COLUMN dla 4 nowych (K1 zostaje — był w live).
 
-**B:** `decisionType='go'` → task completed; `'postponed'` → task zostaje; `'dead'` → task zostaje. Wszyscy 3 callerzy `MeetingDecisionDialog` kompilują się i działają (ContactTasksSheet zamyka dialog, UnifiedKanban no-op, TaskDetailSheet warunkowo zamyka task).
-
-**C:** backfill no-op; `pg_trigger WHERE tgname='trg_propagate_assigned_to'` = 1; manualny smoke (po deploy): zmiana `dtc.assigned_to` → propagacja do otwartych tasków natychmiast.
-
-## Backlog (nie ten sprint)
-- Milestone timestampy (`meeting_scheduled_at`, `handshake_at`, `poa_signed_at`)
-- Process continuity CHECK (`next_action_at NOT NULL` gdy stage=offering)
-- Odprawa SGU (greenfield, BLOK 3)
-- Decyzja: czy `meeting_questions.status` → enum (osobna migracja, wymaga konwersji danych)
+## Backlog (BLOK 3+)
+- UI K1-K4: timeline w ContactDetail, badge na UnifiedKanbanCard, KPI funnel conversion.
+- BLOK 3: Odprawa SGU (greenfield).
+- BLOK 4: process continuity CHECK + cleanup `estimated_value` legacy + decyzja enum dla `meeting_questions.status`.
 
