@@ -52,8 +52,6 @@ export function UnifiedKanbanCard({
   isDragging,
   taskInfo,
 }: UnifiedKanbanCardProps) {
-  const navigate = useNavigate();
-
   const status: TaskStatus = taskInfo?.status ?? 'none';
 
   const fullName = contact.contact?.full_name ?? 'Bez nazwy';
@@ -68,7 +66,7 @@ export function UnifiedKanbanCard({
     (contact.potential_life_group_gr ?? 0);
 
   const handleCardClick = () => {
-    navigate(`/sgu/klienci?contactId=${contact.contact_id}`);
+    onMoreClick();
   };
 
   return (
