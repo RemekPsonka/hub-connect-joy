@@ -1,7 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, MoreHorizontal, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
 import { TemperatureBadge } from './TemperatureBadge';
