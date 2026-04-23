@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import { isPast, isToday, isTomorrow, addDays, startOfDay } from 'date-fns';
+import { startOfDay } from 'date-fns';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2, Plus, Search, ChevronDown, ChevronRight, Filter, AlertTriangle,
   List, LayoutGrid,
@@ -27,27 +28,14 @@ import { UnifiedTaskRow, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskR
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { bucketOfTask } from '@/lib/sguTaskBuckets';
+import { MyClientsSection } from '@/components/sgu/MyClientsSection';
 
 interface MyTeamTasksViewProps {
   teamId: string;
 }
 
 type ViewMode = 'grouped' | 'list';
-
-// ─── Time bucket helper ─────────────────────────────────────
-type Bucket = 'today' | 'overdue' | 'upcoming' | 'rest';
-
-function bucketOf(task: DealTeamAssignment): Bucket {
-  const isDone = task.status === 'completed' || task.status === 'cancelled';
-  if (!task.due_date) return 'rest';
-  const d = new Date(task.due_date);
-  if (isToday(d)) return 'today';
-  if (isPast(d) && !isDone) return 'overdue';
-  const tomorrow = startOfDay(addDays(new Date(), 1));
-  const in7d = startOfDay(addDays(new Date(), 8));
-  if (d >= tomorrow && d < in7d) return 'upcoming';
-  return 'rest';
-}
 
 // ─── Main View ────────────────────────────────────────
 export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
@@ -56,6 +44,10 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const { data: members = [] } = useTeamMembers(teamId);
   const { data: teamContacts = [] } = useTeamContacts(teamId);
   const updateAssignment = useUpdateAssignment();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlBucket = searchParams.get('bucket') as
+    | 'today' | 'overdue' | 'upcoming' | 'done_today' | 'mine_clients' | null;
 
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [filterMember, setFilterMember] = useState<string>('mine');
@@ -83,7 +75,8 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     } else if (filterMember !== 'all') {
       result = result.filter((a) => a.assigned_to === filterMember);
     }
-    if (filterStatus === 'active') {
+    const bucketIsDoneToday = urlBucket === 'done_today';
+    if (filterStatus === 'active' && !bucketIsDoneToday) {
       result = result.filter((a) => a.status !== 'completed' && a.status !== 'cancelled');
     } else if (filterStatus !== 'all') {
       result = result.filter((a) => a.status === filterStatus);
@@ -100,8 +93,16 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         a.contact_company?.toLowerCase().includes(q)
       );
     }
+    if (urlBucket === 'today' || urlBucket === 'overdue' || urlBucket === 'upcoming') {
+      result = result.filter((a) => bucketOfTask(a) === urlBucket);
+    } else if (urlBucket === 'done_today') {
+      const startIso = startOfDay(new Date()).toISOString();
+      result = result.filter(
+        (a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso,
+      );
+    }
     return result;
-  }, [assignments, filterMember, filterStatus, filterPriority, searchQuery, director?.id]);
+  }, [assignments, filterMember, filterStatus, filterPriority, searchQuery, director?.id, urlBucket]);
 
   // Time-based grouping
   const buckets = useMemo(() => {
@@ -110,7 +111,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     const upcoming: DealTeamAssignment[] = [];
     const rest: DealTeamAssignment[] = [];
     for (const t of filtered) {
-      const b = bucketOf(t);
+      const b = bucketOfTask(t);
       if (b === 'today') today.push(t);
       else if (b === 'overdue') overdue.push(t);
       else if (b === 'upcoming') upcoming.push(t);
@@ -152,6 +153,10 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   };
 
   const overdueCount = buckets.overdue.length;
+  const myClientsCount = useMemo(
+    () => teamContacts.filter((tc) => tc.assigned_to === director?.id).length,
+    [teamContacts, director?.id],
+  );
 
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
@@ -328,7 +333,21 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             <AlertTriangle className="h-3 w-3" />{overdueCount} przeterminowanych
           </Badge>
         )}
-        <span className="text-xs text-muted-foreground">{filtered.length} zadań</span>
+        {filterMember === 'mine' ? (
+          <span className="text-xs text-muted-foreground">
+            Twój dzień: <span className="font-medium text-foreground">{myClientsCount}</span> klientów
+            {' · '}
+            <span className="font-medium text-foreground">{filtered.length}</span> zadań aktywnych
+            {overdueCount > 0 && (
+              <>
+                {' · '}
+                <span className="font-medium text-destructive">{overdueCount}</span> zaległych
+              </>
+            )}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{filtered.length} zadań</span>
+        )}
       </div>
 
       {/* ─── Empty state ──────────────────────────────── */}
@@ -346,6 +365,12 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       {/* ─── VIEW: Grouped (4 time buckets) ────────────── */}
       {filtered.length > 0 && viewMode === 'grouped' && (
         <div className="space-y-3">
+          {filterMember === 'mine' && (
+            <MyClientsSection
+              teamId={teamId}
+              onClientClick={(contactId) => navigate(`/contacts/${contactId}`)}
+            />
+          )}
           {renderSection('Dzisiaj', buckets.today, true, 'today')}
           {renderSection('Zaległe', buckets.overdue, buckets.overdue.length > 0, 'overdue')}
           {renderSection('Nadchodzące 7 dni', buckets.upcoming, false, 'upcoming')}
