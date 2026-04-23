@@ -32,7 +32,7 @@ import {
   getEscalationIcon,
 } from '@/lib/meetingQuestions';
 
-type DecisionType = 'go' | 'postponed' | 'dead';
+export type DecisionType = 'go' | 'postponed' | 'dead';
 type QuestionAction = 'askAgain' | 'answer' | 'skip' | 'drop';
 
 interface DecisionOption {
@@ -53,7 +53,7 @@ interface MeetingDecisionDialogProps {
   contactDisplayName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  onSuccess?: (decisionType: DecisionType) => void;
 }
 
 export function MeetingDecisionDialog({
@@ -212,7 +212,7 @@ export function MeetingDecisionDialog({
         }
       }
 
-      onSuccess?.();
+      onSuccess?.(decisionType);
       onOpenChange(false);
     } catch {
       // Toast already shown by hook onError

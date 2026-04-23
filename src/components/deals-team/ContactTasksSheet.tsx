@@ -766,7 +766,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
           onOpenChange={setShowMeetingDecision}
           contactId={contact.contact_id}
           contactDisplayName={contact.contact?.full_name ?? 'kontakt'}
-          onSuccess={() => setShowMeetingDecision(false)}
+          onSuccess={(_decisionType) => setShowMeetingDecision(false)}
         />
       )}
 

@@ -155,7 +155,7 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
 import type { DealCategory, OfferingStage } from '@/types/dealTeam';
-import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
+import { MeetingDecisionDialog, type DecisionType } from '@/components/deals-team/MeetingDecisionDialog';
 
 function InteractivePipelineStageRow({
   teamContactId,
@@ -372,8 +372,11 @@ function InteractivePipelineStageRow({
           onOpenChange={setMeetingDecisionOpen}
           contactId={contactId}
           contactDisplayName={contactName || 'kontakt'}
-          onSuccess={async () => {
+          onSuccess={async (decisionType: DecisionType) => {
             setMeetingDecisionOpen(false);
+            // HOTFIX-OS2: tylko 'go' zamyka task. 'postponed' = task zostaje (next_action_date
+            // ustawia trigger apply_meeting_decision); 'dead' = user manualnie decyduje.
+            if (decisionType !== 'go') return;
             try {
               await updateTask.mutateAsync({ id: taskId, status: 'completed' });
             } catch (err) {
