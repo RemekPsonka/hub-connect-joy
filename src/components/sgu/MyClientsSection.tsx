@@ -31,7 +31,7 @@ export function MyClientsSection({ teamId, onClientClick }: MyClientsSectionProp
   return (
     <Card className="overflow-hidden">
       <div className="px-3 py-2 bg-muted/50 border-b flex items-center gap-2">
-        <Users className="h-4 w-4 text-amber-600" />
+        <Users className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Twoi klienci w lejku</span>
         <Badge variant="secondary" className="text-xs ml-auto">{myClients.length}</Badge>
       </div>
@@ -94,6 +94,9 @@ export function MyClientsSection({ teamId, onClientClick }: MyClientsSectionProp
                         companyName={t.contact_company || undefined}
                         members={members}
                         showAssignee
+                        onStatusChange={() => {
+                          /* v1: handled in main task list; no-op here */
+                        }}
                       />
                     ))}
                   </div>
