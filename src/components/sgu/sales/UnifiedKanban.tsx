@@ -219,7 +219,7 @@ function DraggableCard({
     : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="min-w-0">
+    <div ref={setNodeRef} style={style} className="min-w-0">
       <UnifiedKanbanCard
         contact={contact}
         stage={stage}
@@ -236,6 +236,8 @@ function DraggableCard({
         isStalled={isStalled}
         stalledDaysSinceUpdate={stalledDaysSinceUpdate}
         stalledStageLabel={stalledStageLabel}
+        dragListeners={listeners}
+        dragAttributes={attributes}
       />
     </div>
   );
