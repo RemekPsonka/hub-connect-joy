@@ -11,6 +11,7 @@ import { PremiumQuickEdit } from './PremiumQuickEdit';
 import { TaskStatusPill } from './TaskStatusPill';
 import { AssigneeAvatars } from './AssigneeAvatars';
 import { MilestoneBadge } from './MilestoneBadge';
+import { StalledBadge } from './StalledBadge';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
 import type { TaskContactInfo, TaskStatus } from '@/hooks/useActiveTaskContacts';
 
@@ -29,6 +30,9 @@ interface UnifiedKanbanCardProps {
   onMeetingDoneClick?: () => void;
   isDragging?: boolean;
   taskInfo?: TaskContactInfo;
+  isStalled?: boolean;
+  stalledDaysSinceUpdate?: number;
+  stalledStageLabel?: string;
 }
 
 const borderClass: Record<TaskStatus, string> = {
@@ -52,6 +56,9 @@ export function UnifiedKanbanCard({
   onMeetingDoneClick,
   isDragging,
   taskInfo,
+  isStalled,
+  stalledDaysSinceUpdate,
+  stalledStageLabel,
 }: UnifiedKanbanCardProps) {
   const status: TaskStatus = taskInfo?.status ?? 'none';
 
@@ -108,6 +115,12 @@ export function UnifiedKanbanCard({
       >
         <div className="flex-1 min-w-0 flex items-center gap-1 flex-wrap">
           <TaskStatusPill info={taskInfo} onClick={onMoreClick} />
+          {isStalled && (
+            <StalledBadge
+              stageLabel={stalledStageLabel ?? 'lejku'}
+              daysSinceUpdate={stalledDaysSinceUpdate ?? 0}
+            />
+          )}
           {stage === 'lead' && (
             <TemperatureBadge
               value={contact.temperature}

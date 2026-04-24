@@ -30,6 +30,7 @@ import { AlertCircle, ArrowUpDown, Filter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamContacts, useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useActiveTaskContacts, type TaskContactInfo } from '@/hooks/useActiveTaskContacts';
+import { useStalledContacts } from '@/hooks/sgu-dashboard/useStalledContacts';
 import { useCurrentDirector } from '@/hooks/useDirectors';
 import {
   useLastTeamMeeting,
@@ -190,6 +191,9 @@ function DraggableCard({
   onMoreClick,
   onMeetingDoneClick,
   taskInfo,
+  isStalled,
+  stalledDaysSinceUpdate,
+  stalledStageLabel,
 }: {
   contact: DealTeamContact;
   stage: DealStage;
@@ -202,6 +206,9 @@ function DraggableCard({
   onMoreClick: () => void;
   onMeetingDoneClick?: () => void;
   taskInfo?: TaskContactInfo;
+  isStalled?: boolean;
+  stalledDaysSinceUpdate?: number;
+  stalledStageLabel?: string;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -226,6 +233,9 @@ function DraggableCard({
         onMeetingDoneClick={onMeetingDoneClick}
         isDragging={isDragging}
         taskInfo={taskInfo}
+        isStalled={isStalled}
+        stalledDaysSinceUpdate={stalledDaysSinceUpdate}
+        stalledStageLabel={stalledStageLabel}
       />
     </div>
   );
@@ -250,6 +260,7 @@ function DroppableColumn({
   onMeetingDoneClick,
   taskInfoMap,
   columnProgress,
+  stalledMap,
 }: {
   col: ColumnDef;
   contacts: DealTeamContact[];
@@ -269,6 +280,7 @@ function DroppableColumn({
   onMeetingDoneClick?: (c: DealTeamContact) => void;
   taskInfoMap?: Map<string, TaskContactInfo>;
   columnProgress?: { total: number; done: number };
+  stalledMap?: Map<string, { daysSinceUpdate: number; stageLabel: string }>;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.stage });
 
@@ -319,6 +331,9 @@ function DroppableColumn({
       onMoreClick={() => onMoreClick(c)}
       onMeetingDoneClick={onMeetingDoneClick ? () => onMeetingDoneClick(c) : undefined}
       taskInfo={taskInfoMap?.get(c.id)}
+      isStalled={stalledMap?.has(c.id)}
+      stalledDaysSinceUpdate={stalledMap?.get(c.id)?.daysSinceUpdate}
+      stalledStageLabel={stalledMap?.get(c.id)?.stageLabel}
     />
   );
 
@@ -510,6 +525,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   }, [openSnoozedSignal]);
   const { data: taskInfoMap } = useActiveTaskContacts(teamId);
+  const { data: stalledData } = useStalledContacts(teamId);
   const { data: currentDirector } = useCurrentDirector();
   const { data: lastMeeting } = useLastTeamMeeting(teamId);
   const { data: meetingProgress } = useMeetingProgress(lastMeeting?.id);
@@ -553,6 +569,15 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     });
   const clearFilterFor = (stage: DealStage) =>
     setFilterByStage((prev) => ({ ...prev, [stage]: new Set() }));
+
+  const stalledMap = useMemo(() => {
+    const m = new Map<string, { daysSinceUpdate: number; stageLabel: string }>();
+    if (!stalledData) return m;
+    for (const c of stalledData.contacts) {
+      m.set(c.id, { daysSinceUpdate: c.days_since_update, stageLabel: c.offering_stage_label });
+    }
+    return m;
+  }, [stalledData]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
