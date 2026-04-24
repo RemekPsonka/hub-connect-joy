@@ -38,7 +38,10 @@ export function ReportPreview({ snapshotId }: ReportPreviewProps) {
 
   const pieData = useMemo(() => {
     if (!snapshot) return [];
-    return (snapshot.data.commission_breakdown ?? []).map((r) => ({
+    const breakdown = Array.isArray(snapshot.data?.commission_breakdown)
+      ? snapshot.data.commission_breakdown
+      : [];
+    return breakdown.map((r) => ({
       name: r.recipient_label,
       value: r.amount_pln / 100,
     }));
