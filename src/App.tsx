@@ -70,6 +70,8 @@ const SGUPipelineRoute = lazy(() => import("./pages/sgu/SGUPipelineRoute"));
 const SGUTasks = lazy(() => import("./pages/sgu/SGUTasks"));
 const SGUClients = lazy(() => import("./pages/sgu/SGUClients"));
 const SGURedirect = lazy(() => import("./pages/sgu/SGURedirect"));
+const SGUOdprawa = lazy(() => import("./pages/sgu/SGUOdprawa"));
+const SGUOdprawaHistoria = lazy(() => import("./pages/sgu/SGUOdprawaHistoria"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -167,6 +169,8 @@ const App = () => (
                   <Route path="/sgu/sprzedaz" element={<SGUPipelineRoute />} />
                   <Route path="/sgu/klienci" element={<SGUClients />} />
                   <Route path="/sgu/zadania" element={<SGUTasks />} />
+                  <Route path="/sgu/odprawa" element={<SGUOdprawa />} />
+                  <Route path="/sgu/odprawa/historia" element={<SGUOdprawaHistoria />} />
                   <Route path="/sgu/raporty" element={<SGUReports />} />
                   <Route path="/sgu/raporty/:period" element={<SGUReports />} />
                   <Route path="/sgu/team" element={<SGUTeam />} />
