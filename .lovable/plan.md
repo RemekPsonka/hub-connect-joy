@@ -1,56 +1,48 @@
-# Plan: Klienci utraceni w Raportach + przywracanie do lejka
-
 ## Cel
-W `/sgu/reports` dodać kartę **"Klienci utraceni"** — listę kontaktów z `deal_team_contacts.is_lost = true` z akcją **"Przywróć do lejka"**, gdzie użytkownik wybiera docelowy etap (kategorię) i kontakt wraca do aktywnego flow.
+Dodać przycisk „10x" (ikona płomienia) do siatki akcji w `ContactActionButtons.tsx`, aby umożliwić aktywne przeniesienie kontaktu do kategorii `10x` bez używania mechanizmu odkładania (snooze). Naprawić również `isActive` dla „Odłóż", aby świeciło się tylko dla faktycznie odłożonych kontaktów (a nie dla całej kategorii `10x`).
 
-## Pre-flight (zweryfikowane)
-- Pole utraty: `deal_team_contacts.is_lost` (bool), `lost_reason` (text), `lost_at` (timestamp), `status='lost'`, dla offering `offering_stage='lost'`. Mechanizm zapisu istnieje w `LostReasonDialog.tsx`.
-- Stage = pole `category` (`DealCategory`), wyższy poziom `stage` (`DealStage`) jest GENERATED z `category`.
-- Strona Raportów: `src/pages/sgu/SGUReports.tsx` — ma już `FunnelKpiCard` i `StalledContactsCard`. Nowa karta wleci obok.
-- Hooki: `useDealsTeamContacts.ts` ma już mutację z polami `is_lost / lost_reason / lost_at` (pattern do reuse / odwrócenia).
-- ContactTasksSheet — nie potrzebny tutaj (to inny flow), tu tylko lista + akcja.
+## Zakres
+Zmieniany jest **tylko jeden plik**:
+- `src/components/deals-team/ContactActionButtons.tsx`
 
-## Co zbudować
+## Zmiany techniczne
 
-### 1. Hook: `src/hooks/useLostClients.ts`
-- `useLostClients(teamId)` — React Query, `queryKey: ['lost-clients', teamId]`.
-- Query: `deal_team_contacts` filtr `team_id = teamId`, `is_lost = true`, join `contacts(full_name, company)`, sort `lost_at desc`, limit 200.
-- Zwraca: `id` (PK dtc), `contact_id`, `contact_name`, `company`, `lost_reason`, `lost_at`, `category` (poprzednia), `offering_stage`.
-- `useRestoreFromLost()` — mutacja: update `deal_team_contacts` po `id`:
-  - `is_lost=false`, `lost_reason=null`, `lost_at=null`, `status='active'`, `category=<wybrana>`, jeśli stage offering nie pasuje → `offering_stage=null`, `last_status_update=now()`.
-  - invalidate: `['lost-clients']`, `['deal-team-contacts', teamId]`, `['unified-kanban-data']`, `['sgu-funnel']`.
+1. **Import ikony** (linie 4–7): dodać `Flame` do importów z `lucide-react`.
 
-### 2. Komponent: `src/components/sgu/reports/LostClientsCard.tsx`
-- `Card` z nagłówkiem "Klienci utraceni" + licznik.
-- `Table`: Imię i firma | Powód utraty (truncate) | Data utraty (DD.MM.YYYY) | Akcje.
-- Akcja: przycisk "Przywróć" otwiera `RestoreToFunnelDialog`.
-- Skeleton + empty state ("Brak utraconych klientów.").
-- Paginacja: pokazujemy first 50, link "Pokaż wszystkie" → expand (proste, bez serwerowej paginacji).
+2. **Typ `ActionType`** (linie 24–34): dodać wariant `'ten_x'` przed `'snooze'`.
 
-### 3. Komponent: `src/components/sgu/reports/RestoreToFunnelDialog.tsx`
-- `Dialog` z `Select` (etap docelowy):
-  - opcje z `STAGE_LABELS` zawężone do aktywnych: `prospect`, `lead`, `offering`, `client` (bez `lost`).
-  - Dla wybranego stage podpowiadamy `category` mapping: prospect→`cold`, lead→`hot` (default), offering→`offering`, client→`client`. Drugi `Select` z konkretną kategorią (DealCategory) pre-fillem.
-- Tekstowo: "Kontakt wróci do lejka. Powód utraty zostanie wyczyszczony, ale historia zachowana w `audit_log`."
-- Confirm → `useRestoreFromLost` → toast + close.
+3. **Tablica `ACTIONS`** (linie 45–64):
+   - Dodać nowy wpis `ten_x` przed `snooze`:
+     ```ts
+     { value: 'ten_x', label: '10x', icon: Flame, needsDate: false,
+       isActive: (c) => c.category === '10x' && !c.snoozed_until },
+     ```
+   - Zmienić `isActive` dla `snooze` na:
+     ```ts
+     isActive: (c) => !!c.snoozed_until && new Date(c.snoozed_until) > new Date()
+     ```
 
-### 4. Integracja: `src/pages/sgu/SGUReports.tsx`
-- Pod `<StalledContactsCard />` dorzucić `<LostClientsCard />` opakowane w `useSGUTeamId()` (wzór jak w innych kartach SGU).
+4. **`handleClick`** (linie 97–113): dodać gałąź dla `ten_x` przed gałęzią `lost`:
+   ```ts
+   if (action.value === 'ten_x') {
+     updateContact.mutate(
+       { id: contact.id, teamId, category: '10x' as DealCategory },
+       { onSuccess: () => toast.success('Przeniesiono do 10x') }
+     );
+     return;
+   }
+   ```
 
-## Zmienione/nowe pliki
-- `src/hooks/useLostClients.ts` (NEW)
-- `src/components/sgu/reports/LostClientsCard.tsx` (NEW)
-- `src/components/sgu/reports/RestoreToFunnelDialog.tsx` (NEW)
-- `src/pages/sgu/SGUReports.tsx` (1-liniowy import + render)
+## Czego NIE ruszamy
+- `handleConfirm` (switch) — `ten_x` nie potrzebuje daty.
+- `SnoozeDialog`/`onSnooze` — semantyka odkładania bez zmian.
+- Gałąź `lost` — bez zmian.
+- Grid pozostaje `grid-cols-3` (11 przycisków = 4 rzędy, ostatni niepełny).
 
-## Bez zmian
-- Brak migracji DB (wszystkie potrzebne pola istnieją).
-- Brak zmian w RPC.
-- Brak zmian w `LostReasonDialog` ani w kanbanie.
+## Known limitation (do osobnego ticketu)
+Kliknięcie „10x" na kontakcie odłożonym ustawi `category='10x'`, ale `snoozed_until` zostanie nietknięty. Czyszczenie `snoozed_until` przy ręcznym przeniesieniu do 10x = osobny ticket.
 
-## Edge cases
-- `lost_at IS NULL` (legacy) — pokazujemy "—" w kolumnie daty, sort z NULL na końcu.
-- RLS: `deal_team_contacts` ma już RLS per team — list query po `team_id` jest bezpieczny.
-- Brak `teamId` → karta nie renderuje się.
-
-Czekam na GO/NO GO.
+## QA po wdrożeniu
+- `tsc` i `eslint` clean.
+- Smoke test w `ContactTasksSheet`: kliknięcie „10x" → toast „Przeniesiono do 10x", podświetlenie „10x", brak podświetlenia „Odłóż".
+- Po „Odłóż" z datą: podświetla się „Odłóż", „10x" gaśnie.
