@@ -580,7 +580,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   }, [stalledData]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   const { visible, snoozedActive } = useMemo(() => {
