@@ -7,6 +7,8 @@ import {
   BarChart3,
   Settings,
   ArrowRightLeft,
+  PlayCircle,
+  History,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -33,12 +35,14 @@ interface NavItemDef {
   title: string;
   url: string;
   icon: IconType;
+  exact?: boolean;
 }
 
 function NavItem({ item }: { item: NavItemDef }) {
   const location = useLocation();
-  const isActive =
-    item.url === '/sgu'
+  const isActive = item.exact
+    ? location.pathname === item.url
+    : item.url === '/sgu'
       ? location.pathname === '/sgu'
       : location.pathname.startsWith(item.url);
 
@@ -52,7 +56,7 @@ function NavItem({ item }: { item: NavItemDef }) {
       <SidebarMenuButton asChild tooltip={item.title}>
         <NavLink
           to={item.url}
-          end={item.url === '/sgu'}
+          end={item.url === '/sgu' || item.exact}
           className={`${baseClass} ${isActive ? activeClass : ''}`}
         >
           <item.icon className="h-4 w-4 shrink-0" />
@@ -80,12 +84,14 @@ export function SGUSidebar() {
       { title: 'Sprzedaż', url: '/sgu/sprzedaz', icon: LayoutGrid, show: true },
       { title: 'Klienci', url: '/sgu/klienci', icon: UserCheck, show: true },
       { title: 'Zadania', url: '/sgu/zadania', icon: ClipboardList, show: true },
+      { title: 'Odprawa', url: '/sgu/odprawa', icon: PlayCircle, show: true, exact: true },
+      { title: 'Historia odpraw', url: '/sgu/odprawa/historia', icon: History, show: true },
       { title: 'Raporty', url: '/sgu/raporty', icon: BarChart3, show: showReports },
       { title: 'Admin', url: '/sgu/admin', icon: Settings, show: showAdmin },
     ] as Array<NavItemDef & { show: boolean }>
   )
     .filter((i) => i.show)
-    .map(({ title, url, icon }) => ({ title, url, icon }));
+    .map(({ title, url, icon, exact }) => ({ title, url, icon, exact }));
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
