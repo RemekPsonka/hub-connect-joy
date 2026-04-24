@@ -44,7 +44,7 @@ export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
           .maybeSingle(),
         supabase
           .from('deal_team_contacts')
-          .select('id, team_id, category, status, expected_annual_premium_gr, updated_at')
+          .select('id, team_id, category, deal_stage, status, is_lost, snoozed_until, expected_annual_premium_gr, updated_at')
           .eq('contact_id', contactId),
         supabase
           .from('tasks')
@@ -163,9 +163,7 @@ export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
 
       <Section icon={Star} title="SGU">
         {sguDeal ? (
-          <div className="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs">
-            ✓ W SGU ({fmtPLN(sguDeal.expected_annual_premium_gr)})
-          </div>
+          <SGUDealBadge deal={sguDeal} />
         ) : (
           <Button variant="outline" size="sm" className="w-full" onClick={() => setSguOpen(true)}>
             ⭐ Przekaż do lejka
