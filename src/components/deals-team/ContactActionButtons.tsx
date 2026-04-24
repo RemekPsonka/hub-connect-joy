@@ -19,7 +19,7 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import type { DealTeamContact, DealCategory, OfferingStage } from '@/types/dealTeam';
+import type { DealTeamContact, DealCategory, OfferingStage, Temperature } from '@/types/dealTeam';
 
 type ActionType =
   | 'schedule_meeting'
@@ -57,7 +57,7 @@ const ACTIONS: ActionDef[] = [
   { value: 'call', label: 'Zadzwoń', icon: PhoneCall, needsDate: true },
   { value: 'send_email', label: 'Wyślij mail', icon: Send, needsDate: true },
   { value: 'ten_x', label: '10x', icon: Flame, needsDate: false,
-    isActive: (c) => c.category === '10x' && !c.snoozed_until },
+    isActive: (c) => (c.category === '10x' || c.temperature === '10x') && !c.snoozed_until },
   { value: 'snooze', label: 'Odłóż', icon: Moon, needsDate: false,
     isActive: (c) => !!c.snoozed_until && new Date(c.snoozed_until) > new Date() },
   { value: 'client', label: 'Klient', icon: UserCheck, needsDate: false,
@@ -103,7 +103,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
     if (action.value === 'meeting_done') { onMeetingDone(); return; }
     if (action.value === 'ten_x') {
       updateContact.mutate(
-        { id: contact.id, teamId, category: '10x' as DealCategory },
+        { id: contact.id, teamId, category: '10x' as DealCategory, temperature: '10x' as Temperature },
         { onSuccess: () => toast.success('Przeniesiono do 10x') }
       );
       return;
