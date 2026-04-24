@@ -200,13 +200,11 @@ export function UnifiedKanbanCard({
       {/* Milestones K1-K4 — auto-hides if all null */}
       <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
         <MilestoneBadge
-          milestones={{
-            k1: contact.k1_meeting_done_at,
-            k2a: contact.handshake_at,
-            k2b: contact.poa_signed_at,
-            k3: contact.audit_done_at,
-            k4: contact.won_at,
-          }}
+          k1MeetingDoneAt={contact.k1_meeting_done_at ?? null}
+          k2HandshakeAt={contact.handshake_at ?? null}
+          k2PoaSignedAt={contact.poa_signed_at ?? null}
+          k3AuditDoneAt={contact.audit_done_at ?? null}
+          k4WonAt={contact.won_at ?? null}
         />
       </div>
 
