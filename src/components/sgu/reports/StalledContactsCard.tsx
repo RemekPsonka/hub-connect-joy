@@ -79,7 +79,7 @@ export function StalledContactsCard() {
                       </TableCell>
                       <TableCell>
                         <Button asChild variant="ghost" size="sm" className="h-7">
-                          <Link to="/sgu/sprzedaz">
+                          <Link to={`/contacts/${c.id}`}>
                             Otwórz <ArrowRight className="h-3 w-3 ml-1" />
                           </Link>
                         </Button>
