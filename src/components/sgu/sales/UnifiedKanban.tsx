@@ -859,6 +859,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
               }
               taskInfoMap={taskInfoMap}
               columnProgress={meetingProgress?.by_column[col.stage]}
+              stalledMap={stalledMap}
             />
           ))}
         </div>
