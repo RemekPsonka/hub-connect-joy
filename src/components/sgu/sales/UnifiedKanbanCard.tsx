@@ -92,13 +92,13 @@ export function UnifiedKanbanCard({
         isDragging && 'opacity-50',
       )}
     >
-      {/* Drag handle — only this element initiates drag */}
+      {/* Drag handle — only this element initiates drag. Left side to avoid avatar overlap. */}
       <button
         type="button"
         {...(dragAttributes ?? {})}
         {...(dragListeners ?? {})}
         onClick={(e) => e.stopPropagation()}
-        className="absolute top-1 right-1 z-10 p-0.5 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+        className="absolute top-1 left-0.5 z-10 p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
         title="Przeciągnij, aby zmienić etap"
         aria-label="Przeciągnij kartę"
       >
