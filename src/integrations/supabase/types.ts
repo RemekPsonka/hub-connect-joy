@@ -6494,6 +6494,70 @@ export type Database = {
           },
         ]
       }
+      odprawa_sessions: {
+        Row: {
+          covered_contact_ids: string[]
+          created_at: string
+          ended_at: string | null
+          id: string
+          started_at: string
+          started_by: string
+          status: string
+          summary: string | null
+          team_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          covered_contact_ids?: string[]
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+          started_by: string
+          status?: string
+          summary?: string | null
+          team_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          covered_contact_ids?: string[]
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+          started_by?: string
+          status?: string
+          summary?: string | null
+          team_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odprawa_sessions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "odprawa_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "odprawa_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offers: {
         Row: {
           category_path: unknown
@@ -10483,6 +10547,27 @@ export type Database = {
               total_contacts: number
             }[]
           }
+      get_odprawa_agenda: {
+        Args: { p_team_id: string }
+        Returns: {
+          assigned_to: string
+          category: string
+          company_name: string
+          contact_id: string
+          contact_name: string
+          deal_team_contact_id: string
+          has_active_task: boolean
+          is_stalled: boolean
+          last_decision_at: string
+          last_status_update: string
+          next_action_date: string
+          offering_stage: string
+          open_questions_count: number
+          priority_bucket: number
+          status: string
+          temperature: string
+        }[]
+      }
       get_sales_representative_id: {
         Args: { _user_id: string }
         Returns: string
