@@ -65,7 +65,7 @@ export function AgendaItemCard({ item, isCovered, onMarkCovered, onOpenDetails }
               {formatRelative(item.last_status_update)}
             </span>
             {item.is_stalled && (
-              <span className="text-orange-600 dark:text-orange-400 font-medium">zalega</span>
+              <span className="text-destructive font-medium">zalega</span>
             )}
           </div>
         </div>
