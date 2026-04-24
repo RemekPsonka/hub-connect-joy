@@ -6494,6 +6494,56 @@ export type Database = {
           },
         ]
       }
+      odprawa_sessions: {
+        Row: {
+          agenda_snapshot: Json
+          created_at: string
+          ended_at: string | null
+          id: string
+          mode: string
+          notes: string | null
+          started_at: string
+          started_by: string
+          status: Database["public"]["Enums"]["odprawa_session_status"]
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          agenda_snapshot?: Json
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          mode?: string
+          notes?: string | null
+          started_at?: string
+          started_by: string
+          status?: Database["public"]["Enums"]["odprawa_session_status"]
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          agenda_snapshot?: Json
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          mode?: string
+          notes?: string | null
+          started_at?: string
+          started_by?: string
+          status?: Database["public"]["Enums"]["odprawa_session_status"]
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odprawa_sessions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offers: {
         Row: {
           category_path: unknown
@@ -10483,6 +10533,22 @@ export type Database = {
               total_contacts: number
             }[]
           }
+      get_odprawa_agenda: {
+        Args: { p_mode?: string; p_team_id: string }
+        Returns: {
+          active_task_count: number
+          company_name: string
+          contact_id: string
+          contact_name: string
+          is_lost: boolean
+          last_status_update: string
+          next_action_date: string
+          priority_bucket: string
+          priority_rank: number
+          stage: string
+          temperature: string
+        }[]
+      }
       get_sales_representative_id: {
         Args: { _user_id: string }
         Returns: string
@@ -10847,6 +10913,7 @@ export type Database = {
     }
     Enums: {
       app_role: "owner" | "admin" | "director" | "sgu"
+      odprawa_session_status: "active" | "completed" | "abandoned"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -10975,6 +11042,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["owner", "admin", "director", "sgu"],
+      odprawa_session_status: ["active", "completed", "abandoned"],
     },
   },
 } as const
