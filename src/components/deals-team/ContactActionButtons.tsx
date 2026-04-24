@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import {
   CalendarIcon, Loader2, PhoneCall, FileText, Send, Moon, UserCheck, XCircle,
-  Handshake, ClipboardCheck, CheckCircle2,
+  Handshake, ClipboardCheck, CheckCircle2, Flame,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ type ActionType =
   | 'send_offer'
   | 'call'
   | 'send_email'
+  | 'ten_x'
   | 'snooze'
   | 'client'
   | 'lost';
@@ -55,8 +56,10 @@ const ACTIONS: ActionDef[] = [
     isActive: (c) => c.category === 'offering' },
   { value: 'call', label: 'Zadzwoń', icon: PhoneCall, needsDate: true },
   { value: 'send_email', label: 'Wyślij mail', icon: Send, needsDate: true },
+  { value: 'ten_x', label: '10x', icon: Flame, needsDate: false,
+    isActive: (c) => c.category === '10x' && !c.snoozed_until },
   { value: 'snooze', label: 'Odłóż', icon: Moon, needsDate: false,
-    isActive: (c) => c.category === '10x' },
+    isActive: (c) => !!c.snoozed_until && new Date(c.snoozed_until) > new Date() },
   { value: 'client', label: 'Klient', icon: UserCheck, needsDate: false,
     isActive: (c) => c.category === 'client' },
   { value: 'lost', label: 'Utracony', icon: XCircle, needsDate: false,
@@ -98,6 +101,13 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
     if (action.value === 'snooze') { onSnooze(); return; }
     if (action.value === 'client') { onConvertToClient(); return; }
     if (action.value === 'meeting_done') { onMeetingDone(); return; }
+    if (action.value === 'ten_x') {
+      updateContact.mutate(
+        { id: contact.id, teamId, category: '10x' as DealCategory },
+        { onSuccess: () => toast.success('Przeniesiono do 10x') }
+      );
+      return;
+    }
     if (action.value === 'lost') {
       // Direct update — no extra data needed
       updateContact.mutate(
