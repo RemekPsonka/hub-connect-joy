@@ -1,6 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Link } from 'react-router-dom';
 import { PriorityBadge } from './PriorityBadge';
 import { ListChecks } from 'lucide-react';
 import type { OdprawaAgendaRow } from '@/hooks/useOdprawaAgenda';
@@ -8,6 +7,7 @@ import type { OdprawaAgendaRow } from '@/hooks/useOdprawaAgenda';
 interface Props {
   rows: OdprawaAgendaRow[] | undefined;
   isLoading: boolean;
+  onSelect?: (row: OdprawaAgendaRow) => void;
 }
 
 function formatDate(iso: string | null): string {
@@ -16,7 +16,7 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function AgendaList({ rows, isLoading }: Props) {
+export function AgendaList({ rows, isLoading, onSelect }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -40,16 +40,23 @@ export function AgendaList({ rows, isLoading }: Props) {
   return (
     <div className="space-y-2">
       {rows.map((row) => (
-        <Card key={row.contact_id} className="hover:bg-muted/40 transition-colors">
+        <Card
+          key={row.contact_id}
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelect?.(row)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect?.(row);
+            }
+          }}
+          className="hover:bg-muted/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <CardContent className="p-3 flex items-center gap-3">
             <PriorityBadge bucket={row.priority_bucket} />
             <div className="flex-1 min-w-0">
-              <Link
-                to={`/contacts/${row.contact_id}`}
-                className="text-sm font-medium hover:underline truncate block"
-              >
-                {row.contact_name}
-              </Link>
+              <div className="text-sm font-medium truncate">{row.contact_name}</div>
               {row.company_name && (
                 <div className="text-xs text-muted-foreground truncate">{row.company_name}</div>
               )}
