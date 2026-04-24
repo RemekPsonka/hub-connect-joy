@@ -121,7 +121,8 @@ export function StalledContactsCard() {
         <ContactTasksSheet
           contact={sheetContactQ.data}
           open={!!selectedDtcId && sheetContactQ.isSuccess}
-          onClose={() => setSelectedDtcId(null)}
+          teamId={sheetContactQ.data.team_id}
+          onOpenChange={(o) => !o && setSelectedDtcId(null)}
         />
       )}
     </>
