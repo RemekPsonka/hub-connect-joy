@@ -93,6 +93,14 @@ export default function SGUOdprawa() {
         )}
       </div>
 
+      {agendaQ.error && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Nie udało się pobrać agendy: {agendaQ.error instanceof Error ? agendaQ.error.message : String(agendaQ.error)}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {active && (
         <Card className="border-primary/40 bg-primary/5">
           <CardContent className="p-3 flex items-center gap-3 text-sm">
