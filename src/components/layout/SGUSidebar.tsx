@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   ArrowRightLeft,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -81,6 +82,7 @@ export function SGUSidebar() {
       { title: 'Klienci', url: '/sgu/klienci', icon: UserCheck, show: true },
       { title: 'Zadania', url: '/sgu/zadania', icon: ClipboardList, show: true },
       { title: 'Raporty', url: '/sgu/raporty', icon: BarChart3, show: showReports },
+      { title: 'Odprawa', url: '/sgu/odprawa', icon: ClipboardCheck, show: true },
       { title: 'Admin', url: '/sgu/admin', icon: Settings, show: showAdmin },
     ] as Array<NavItemDef & { show: boolean }>
   )
