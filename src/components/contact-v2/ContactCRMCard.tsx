@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
+import { STAGE_LABELS, type DealStage } from '@/types/dealTeam';
 
 interface ContactCRMCardProps {
   contactId: string;
@@ -27,6 +28,51 @@ function Section({ icon: Icon, title, children }: { icon: typeof Wallet; title: 
 function fmtPLN(gr: number | null | undefined) {
   if (!gr) return '0 PLN';
   return `${(Number(gr) / 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })} PLN`;
+}
+
+interface SGUDealBadgeProps {
+  deal: {
+    deal_stage?: string | null;
+    status?: string | null;
+    is_lost?: boolean | null;
+    snoozed_until?: string | null;
+    expected_annual_premium_gr?: number | null;
+  };
+}
+
+function SGUDealBadge({ deal }: SGUDealBadgeProps) {
+  const isOnHold =
+    deal.status === 'on_hold' ||
+    (deal.snoozed_until && new Date(deal.snoozed_until).getTime() > Date.now());
+  const isLost = deal.is_lost || deal.status === 'lost';
+
+  const stageLabel = isLost
+    ? 'Przegrane'
+    : isOnHold
+      ? 'Odłożone'
+      : (deal.deal_stage && STAGE_LABELS[deal.deal_stage as DealStage]) || '—';
+
+  const stageTone = isLost
+    ? 'bg-destructive/10 text-destructive border-destructive/30'
+    : isOnHold
+      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+      : 'bg-primary/10 text-primary border-primary/30';
+
+  return (
+    <div className="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${stageTone}`}
+        >
+          {stageLabel}
+        </span>
+        <span className="font-medium tabular-nums">
+          {fmtPLN(deal.expected_annual_premium_gr)}
+        </span>
+      </div>
+      <div className="text-[11px] text-muted-foreground">✓ W SGU</div>
+    </div>
+  );
 }
 
 export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
