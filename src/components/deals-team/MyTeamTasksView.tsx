@@ -113,7 +113,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
     } else if (urlBucket === 'done_today') {
       const startIso = startOfDay(new Date()).toISOString();
       result = result.filter(
-        (a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso,
+        (a) => a.status === 'completed' && !!a.completed_at && a.completed_at >= startIso,
       );
     }
     return result;

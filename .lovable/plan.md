@@ -1,53 +1,68 @@
-## Diagnoza
+## Status: oba fixy są już w kodzie — proponowana zmiana = 1 mikropoprawka spójności
 
-Kontakt **Gerard Wawrzak** został poprawnie zaktualizowany w bazie:
-- `category = '10x'` ✅
-- `deal_stage = 'lead'` ✅
-- `temperature = NULL` ❌ ← tu jest problem
-- `snoozed_until = NULL`, `status = 'active'`, `team_id = 9842c3d4…`
+### Recon (kroki 0.1–0.4)
 
-Czyli rekord żyje, jest w lejku LEAD. Ale w `UnifiedKanban` (kolumna LEAD) podgrupowanie kart idzie po polu **`temperature`**, nie po `category` (`SUBGROUP_CONFIG.lead.getter = (c) => c.temperature`, kolejność `['hot', 'top', '10x', 'cold']`). Skoro `temperature=NULL`, kontakt trafia do podsekcji „bez temperatury" (`__none__`), a nie do oczekiwanej sekcji „🔄 10x" — stąd wrażenie, że „nigdzie go nie ma".
+1. **TasksHeader.tsx** → `src/components/sgu/headers/TasksHeader.tsx`
+2. **MyTeamTasksView.tsx** → `src/components/deals-team/MyTeamTasksView.tsx`
+3. W `MyTeamTasksView.tsx`:
+   - **NIE MA** już `useState` dla `filterMember` / `filterStatus` / `filterPriority` — są czytane z URL (linie 56–58).
+   - `useSearchParams` zaimportowane (linia 3), `setSearchParams` w destrukturyzacji (linia 48).
+   - Helper `setUrlParam` istnieje (linie 60–68), settery `setFilterMember/Status/Priority` (linie 70–72).
+   - Param `bucket` czytany jako `urlBucket` (linia 49).
+4. W `TasksHeader.tsx` linia 37–39 — `doneToday` już liczy:
+   ```ts
+   mine.filter(a => a.status === 'completed' && !!a.completed_at && a.completed_at >= todayStart).length
+   ```
+   Bez fallbacku na `created_at`.
 
-To samo zaniedbanie ma `WeeklyStatusForm` (linia 256: ustawia tylko `category`), ale tam to pojedyncze miejsce. Dla naszego nowego, dedykowanego przycisku „10x" semantyka jest jasna: użytkownik mówi „to jest aktywny lead 10x" → ustawiamy też temperaturę.
+### Wnioski z weryfikacji
 
-## Fix (1 plik)
+- `grep "useState.*filter(Member|Status|Priority)"` w MyTeamTasksView.tsx → **0 hits** ✓
+- `grep "completed_at ?? a.created_at"` w TasksHeader.tsx → **0 hits** ✓
+- Sprint **B-FIX (1) + (2) został już wdrożony** w poprzednich iteracjach.
 
-**`src/components/deals-team/ContactActionButtons.tsx`** — w gałęzi `handleClick` dla `ten_x` ustawić również `temperature: '10x'`:
+### Jedyna pozostała niespójność (mikro)
 
+W `MyTeamTasksView.tsx` linia 116, branch `urlBucket === 'done_today'`, używa luźniejszego porównania:
 ```ts
-if (action.value === 'ten_x') {
-  updateContact.mutate(
-    { id: contact.id, teamId, category: '10x' as DealCategory, temperature: '10x' as Temperature },
-    { onSuccess: () => toast.success('Przeniesiono do 10x') }
-  );
-  return;
-}
+(a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso
+```
+Pusty string `''` jako fallback jest `< startIso` więc zachowanie jest poprawne, ale styl rozjeżdża się z TasksHeader. Dla spójności zaostrzymy do tego samego wzorca.
+
+### Plan zmian (1 plik, 1 linia)
+
+**`src/components/deals-team/MyTeamTasksView.tsx`** — linia 116:
+
+```diff
+-        (a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso,
++        (a) => a.status === 'completed' && !!a.completed_at && a.completed_at >= startIso,
 ```
 
-Dodać import `Temperature` z `@/types/dealTeam` (obok istniejących `DealCategory`, `OfferingStage`).
+Zero nowych importów, zero zmian w hookach, zero zmian DB.
 
-`isActive` dla przycisku „10x" rozszerzyć, by łapał też kontakty oznaczone w starym stylu (sam `temperature='10x'`) lub nowym (`category='10x'`):
+### Weryfikacja
 
-```ts
-{ value: 'ten_x', label: '10x', icon: Flame, needsDate: false,
-  isActive: (c) => (c.category === '10x' || c.temperature === '10x') && !c.snoozed_until },
+- `npm run lint` + `npm run typecheck` — clean.
+- Smoke: kliknięcie kafla "Zrobione dziś" w `/sgu/zadania` pokazuje wyłącznie zadania z faktycznym `completed_at >= today` (zero false positives).
+
+### Commit
+
+```
+fix(sgu/dziennik): ujednolicenie filtra done_today w MyTeamTasksView
+
+Sprint B-FIX (1)+(2) z briefu został już wdrożony wcześniej:
+  - TasksHeader.tsx: doneToday liczy tylko completed && completed_at >= today
+  - MyTeamTasksView.tsx: member/status/priority już w URL (setUrlParam)
+
+Domknięta jedna niespójność: branch done_today w filtered useMemo używał
+(completed_at ?? '') >= startIso. Zaostrzone do !!completed_at &&
+completed_at >= startIso — ten sam wzorzec co w TasksHeader.
+
+Dotknięte pliki: 1
 ```
 
-## Pre-flight
+### Czego NIE robię (i dlaczego)
 
-- `Temperature` w `src/types/dealTeam.ts` zawiera `'10x'` ✅ (linia 12)
-- `useUpdateTeamContact` przyjmuje `temperature` jako pole — sprawdzę szybko przed edycją; jeśli nie przyjmuje, dorzucam mapowanie analogicznie do `category`.
-
-## Naprawa istniejącego rekordu (Wawrzak)
-
-Po wgraniu fixa wystarczy raz kliknąć ponownie „10x" na karcie Wawrzaka, żeby uzupełnić `temperature='10x'` i pokazał się we właściwej sekcji. Alternatywnie mogę puścić jednorazową aktualizację SQL na wszystkie kontakty z `category='10x' AND temperature IS NULL` (zazwyczaj 1–kilka rekordów) — powiedz, czy chcesz.
-
-## Czego NIE ruszamy
-
-- Logiki Kanbana (subgrupowanie po `temperature` zostaje — to jest świadoma decyzja produktowa).
-- `WeeklyStatusForm` (osobny ticket, jeśli chcesz, by tygodniowe statusy też ustawiały `temperature`).
-- Mechanizmu „Odłóż" / `lost` / `client`.
-
-## Komentarz do warningu w konsoli
-
-`Warning: Function components cannot be given refs … Check the render method of ContactActionButtons` — to ostrzeżenie pochodzi z komponentu `Dialog` osadzonego wewnątrz, prawdopodobnie zwracana przez nas wartość `<>{…}</>` ląduje gdzieś, gdzie rodzic forwarduje ref. To pre-existing, niezwiązany z brakiem widoczności kontaktu i nie blokuje. Mogę zająć się osobno (owinąć całość w `forwardRef` lub `<div>` z ref-forwardem), jeśli chcesz.
+- Nie dotykam `TasksHeader.tsx` — fix już tam jest.
+- Nie refaktoryzuję filtrów do URL — już są.
+- Nie ruszam `searchQuery` ani `viewMode` (zgodnie z briefem zostają w `useState`).
