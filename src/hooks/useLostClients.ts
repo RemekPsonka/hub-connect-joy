@@ -24,7 +24,7 @@ export function useLostClients(teamId: string | null) {
           'id, contact_id, lost_reason, lost_at, category, offering_stage, contacts:contact_id (full_name, company)',
         )
         .eq('team_id', teamId!)
-        .eq('is_lost', true)
+        .or('is_lost.eq.true,status.eq.lost,category.eq.lost')
         .order('lost_at', { ascending: false, nullsFirst: false })
         .limit(200);
       if (error) throw error;
