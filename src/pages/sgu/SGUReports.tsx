@@ -21,6 +21,7 @@ import { ReportPreview } from '@/components/sgu/ReportPreview';
 import { ExportPDFButton } from '@/components/sgu/ExportPDFButton';
 import { FunnelKpiCard } from '@/components/sgu/reports/FunnelKpiCard';
 import { StalledContactsCard } from '@/components/sgu/reports/StalledContactsCard';
+import { LostClientsCard } from '@/components/sgu/reports/LostClientsCard';
 import {
   PERIOD_TYPE_LABELS,
   type SGUPeriodType,
@@ -106,6 +107,8 @@ export default function SGUReports({ period }: SGUReportsProps = {}) {
       <FunnelKpiCard />
 
       <StalledContactsCard />
+
+      <LostClientsCard />
 
       <Card>
         <CardHeader>
