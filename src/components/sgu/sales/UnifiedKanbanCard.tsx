@@ -10,6 +10,7 @@ import { ComplexityChips } from './ComplexityChips';
 import { PremiumQuickEdit } from './PremiumQuickEdit';
 import { TaskStatusPill } from './TaskStatusPill';
 import { AssigneeAvatars } from './AssigneeAvatars';
+import { MilestoneBadge } from './MilestoneBadge';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
 import type { TaskContactInfo, TaskStatus } from '@/hooks/useActiveTaskContacts';
 
@@ -164,6 +165,19 @@ export function UnifiedKanbanCard({
 
       {/* Row 3: complexity chips on their own row */}
       <ComplexityChips complexity={contact.client_complexity} />
+
+      {/* Milestones K1-K4 — auto-hides if all null */}
+      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <MilestoneBadge
+          milestones={{
+            k1: contact.k1_meeting_done_at,
+            k2a: contact.handshake_at,
+            k2b: contact.poa_signed_at,
+            k3: contact.audit_done_at,
+            k4: contact.won_at,
+          }}
+        />
+      </div>
 
       {/* Mini-banner: always shown — overdue / next / placeholder */}
       {taskInfo?.oldestOverdue ? (
