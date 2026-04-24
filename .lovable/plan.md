@@ -1,51 +1,86 @@
+# Plan-v1: Klikalna agenda → ContactTasksSheet (B2 lazy-fetch)
 
+## Cel
+Klik w wiersz agendy w `/sgu/odprawa` otwiera ten sam `ContactTasksSheet`, którego używa kanban SGU. Snapshot agendy zostaje zamrożony, ale Sheet pokazuje aktualne dane kontaktu (lazy fetch z `deal_team_contacts`).
 
-# BLOK 2 — Milestones K1-K4
+## Pre-flight v2 — weryfikacja
 
-## Pre-flight wyniki
+### (a) Hook do reuse — brak idealnego, robimy nowy
+- **Istnieje** `useTeamContact(dtc_id)` w `src/hooks/useDealsTeamContacts.ts` (linie 111-165), ale przyjmuje PK z `deal_team_contacts`, a nasz RPC `get_odprawa_agenda` zwraca tylko `contact_id`.
+- **Nowy hook**: `useDealTeamContactByContactId(contactId, teamId)` w `src/hooks/useOdprawaAgenda.ts` (dorzucamy do istniejącego pliku — jeden temat domenowy). Powiela strukturę `useTeamContact`, ale z filtrem `(contact_id, team_id)` zamiast `(id)`.
+- **Zwraca** pełny obiekt `DealTeamContact` (z join `contact` + `assigned_director`), gotowy do przekazania do `ContactTasksSheet`.
 
-| Sprawdzenie | Wynik |
-|---|---|
-| **A** `ADD COLUMN k1_meeting_done_at` w migracjach | ❌ 0 hits (drift potwierdzony — kolumna używana przez `apply_meeting_decision()` w `20260422171024` i `20260422172920`, ale nigdy `ADD COLUMN`). Live DB: kolumna istnieje. |
-| **B** K2-K4 cols (`handshake_at`/`poa_signed_at`/`audit_done_at`/`won_at`) na `deal_team_contacts` | ❌ 0 hits (jeden hit `won_at` w `20260206061741` dotyczy legacy tabeli `deals` — nie naszej). Live DB: brak tych 4 kolumn. |
-| **C** trigger `trg_set_milestone_timestamps` / funkcja `set_milestone_timestamps` | ❌ 0 hits (do dodania) |
-| **CHECK whitelist** offering_stage (z `20260422173609`) | ✅ **14 wartości**: `decision_meeting`, `handshake`, `power_of_attorney`, `audit`, `offer_sent`, `negotiation`, `won`, `lost`, `meeting_plan`, `meeting_scheduled`, `meeting_done`, `audit_plan`, `audit_scheduled`, `audit_done`. Wszystkie nasze trigger-targets (`meeting_done`, `handshake`, `power_of_attorney`, `audit_done`, `won`) są w whitelist. |
-| **D** Skala backfill (live counts) | `handshake`=119, `decision_meeting`=24, `meeting_done`=1, NULL=1. Total=145. Backfill K2a strzeli w 119 wierszy; K1 w 120 (handshake+meeting_done — bo handshake implikuje wcześniejsze K1). K2b/K3/K4=0 (brak kontaktów na tych stage'ach). |
+### (b) Pola, których ContactTasksSheet używa z propa `contact`
+Z grep recon (`src/components/deals-team/ContactTasksSheet.tsx`):
 
-## Zakres (1 plik migracji, 4 sekcje)
+| Pole | Źródło | Status w `deal_team_contacts` |
+|---|---|---|
+| `id` (dtc PK) | dtc | ✅ |
+| `contact_id` | dtc | ✅ |
+| `notes` | dtc | ✅ |
+| `temperature` | dtc | ✅ |
+| `prospect_source` | dtc | ✅ |
+| `client_status` | dtc | ✅ |
+| `offering_stage` | dtc | ✅ |
+| `category` | dtc | ✅ |
+| `status` | dtc | ✅ |
+| `priority` | dtc | ✅ |
+| `expected_annual_premium_gr` | dtc | ✅ |
+| `estimated_value`, `value_currency` | dtc | ✅ |
+| `next_action`, `next_action_date`, `next_meeting_date` | dtc | ✅ |
+| `status_overdue`, `last_status_update` | dtc | ✅ |
+| `assigned_to` | dtc | ✅ |
+| `contact` (zagnieżdżony obiekt z `contacts`) | join | ✅ — robimy osobny select (`id, full_name, company, position, email, phone, city, company_id`) |
+| `assigned_director` (z `directors`) | join | ✅ — opcjonalny, fetch po `assigned_to` |
 
-**Plik:** `supabase/migrations/20260423180000_blok2_milestones_k1_k4.sql` (~140 LOC)
+**Wszystkie pola istnieją.** Zero ryzyka „brakujący kontrakt".
 
-### A — Drift fix (~3 LOC)
-`ALTER TABLE deal_team_contacts ADD COLUMN IF NOT EXISTS k1_meeting_done_at timestamptz;` — domyka P0 drift, żeby `db reset` nie wywalał triggera `apply_meeting_decision`.
+### (c) Co dotyka FE
+1 plik nowy hook (a właściwie dorzucony export do istniejącego), 2 pliki edytowane:
 
-### B — Nowe kolumny K2-K4 (~10 LOC)
-`ADD COLUMN IF NOT EXISTS` dla `handshake_at`, `poa_signed_at`, `audit_done_at`, `won_at` (wszystkie `timestamptz`, nullable, bez default) + `COMMENT ON COLUMN` dla wszystkich 5 milestone'ów.
+```text
+src/hooks/useOdprawaAgenda.ts             [+ export useDealTeamContactByContactId]
+src/components/sgu/odprawa/AgendaList.tsx [wiersz klikalny: Card → button-like, onClick]
+src/pages/sgu/SGUOdprawa.tsx              [state + render <ContactTasksSheet>]
+```
 
-### C — Trigger `set_milestone_timestamps` (~40 LOC)
-`BEFORE UPDATE OF offering_stage` z `WHEN (NEW.offering_stage IS DISTINCT FROM OLD.offering_stage)`. `SECURITY DEFINER`, `search_path=public`. Mapping stage→column z `COALESCE(NEW.col, now())` (idempotent — pierwsze wejście wygrywa, ręcznie wpisana data historyczna zostaje). **POA implikuje handshake** (stempluje oba). Koegzystuje bez konfliktu z `apply_meeting_decision()` (oba używają COALESCE na `k1_meeting_done_at`, różne triggery na różnych tabelach).
+## Implementacja
 
-### D — Backfill best-effort (~50 LOC)
-5 osobnych `UPDATE`-ów (idempotent: `COALESCE` + `IS NULL` guard) używających `last_status_update` → `updated_at` → `created_at` jako kaskadowy fallback. Dla każdego K-poziomu inkluzywna lista późniejszych stage'ów (np. K1 stempluje wszystkich od `meeting_done` w górę po `won`). Kończy się `RAISE NOTICE` z licznikami K1-K4.
+### 1. Nowy hook (`src/hooks/useOdprawaAgenda.ts`, dopisane na końcu)
+- `useDealTeamContactByContactId(contactId: string | null, teamId: string | null)`
+- `queryKey: ['deal_team_contact_for_agenda', contactId, teamId]`
+- `enabled: !!contactId && !!teamId`
+- Pipeline: select z `deal_team_contacts` po `(contact_id, team_id) .maybeSingle()` → jeśli null, zwróć null; w przeciwnym razie dorzuć join `contact` (`contacts.full_name, company, position, email, phone, city, company_id`) + ewentualny fallback na `companies.name` gdy `contact.company` puste + `assigned_director` po `dealContact.assigned_to`.
+- Return: `DealTeamContact | null` (typ z `@/types/dealTeam`).
+- `staleTime: 60_000`. Drugi klik w ten sam kontakt = cache hit, 0 requestów.
 
-## ZERO zmian w
-- Kod TS (`types.ts` regen automatycznie)
-- Trigger `apply_meeting_decision()` (zostaje, jego logika K1 koegzystuje)
-- CHECK whitelist `offering_stage` (już zawiera potrzebne wartości)
-- RLS, inne migracje
+### 2. AgendaList — wiersze klikalne
+- Zmiana: zamiast `<Link to={/contacts/...}>` w nazwisku, cały `Card` dostaje `role="button"`, `tabIndex={0}`, `cursor-pointer`, `hover:bg-muted/40` (już jest), `onClick={() => onSelect(row)}`, `onKeyDown` dla Enter/Space.
+- Nazwa kontaktu przestaje być linkiem (link „Otwórz pełną kartę" już jest w samym Sheet).
+- Nowy prop: `onSelect: (row: OdprawaAgendaRow) => void`.
 
-## Acceptance criteria
-1. `\d+ deal_team_contacts` po `db reset` → 5 kolumn milestone (`k1_meeting_done_at`, `handshake_at`, `poa_signed_at`, `audit_done_at`, `won_at`).
-2. `SELECT 1 FROM pg_trigger WHERE tgname='trg_set_milestone_timestamps'` → 1 row.
-3. Backfill log po deploy: `K1≈120, K2a≈119, K2b=0, K3=0, K4=0`.
-4. Smoke SQL: UPDATE stage→`handshake` stempluje `handshake_at`; potem UPDATE→`power_of_attorney` zostawia `handshake_at` (COALESCE) i ustawia `poa_signed_at`.
-5. `npx tsc --noEmit` clean (po regen `types.ts`).
+### 3. SGUOdprawa.tsx
+- State: `const [selectedAgendaRow, setSelectedAgendaRow] = useState<OdprawaAgendaRow | null>(null);`
+- Wywołanie hooka: `const sheetContactQ = useDealTeamContactByContactId(selectedAgendaRow?.contact_id ?? null, teamId);`
+- Przekaz do `<AgendaList rows={agenda} isLoading={agendaQ.isLoading} onSelect={setSelectedAgendaRow} />`
+- Render Sheeta na końcu strony:
+  - `contact={sheetContactQ.data ?? null}`
+  - `teamId={teamId}`
+  - `open={!!selectedAgendaRow && sheetContactQ.isSuccess && !!sheetContactQ.data}`
+  - `onOpenChange={(open) => { if (!open) setSelectedAgendaRow(null); }}`
+- Loading UX: gdy `selectedAgendaRow && sheetContactQ.isFetching && !sheetContactQ.data` → Sheet zostaje zamknięty (próg subiektywny, fetch zwykle <300ms na cache).
+- Error UX: `useEffect` wokół `sheetContactQ.error` → `toast.error('Nie udało się wczytać kontaktu')` + `setSelectedAgendaRow(null)`.
 
-## ROLLBACK (w komentarzu na końcu pliku)
-DROP TRIGGER + DROP FUNCTION + ALTER TABLE DROP COLUMN dla 4 nowych (K1 zostaje — był w live).
+## Co NIE robimy
+- Brak zmian w `get_odprawa_agenda` (RPC i typy).
+- Brak zmian w `ContactTasksSheet.tsx` ani w `useTeamContact`.
+- Brak zmian w schemacie DB.
+- Snapshot agendy w `odprawa_sessions.agenda_snapshot` zostaje zamrożony (po Start) — Sheet pokazuje **live** dane, intencjonalnie.
 
-## Backlog (BLOK 3+)
-- UI K1-K4: timeline w ContactDetail, badge na UnifiedKanbanCard, KPI funnel conversion.
-- BLOK 3: Odprawa SGU (greenfield).
-- BLOK 4: process continuity CHECK + cleanup `estimated_value` legacy + decyzja enum dla `meeting_questions.status`.
+## QA po deploy (smoke Remka)
+1. `/sgu/odprawa` → kliknij dowolny wiersz agendy → otwiera się Sheet z kontaktem + zakładkami zadań/notatek.
+2. Drugi klik w ten sam wiersz po zamknięciu → otwiera natychmiast (cache).
+3. Klik w inny wiersz → fetch → Sheet z innymi danymi.
+4. Z otwartą sesją (Startuj odprawę) → klikalność dalej działa.
 
+Czekam na GO/NO GO.
