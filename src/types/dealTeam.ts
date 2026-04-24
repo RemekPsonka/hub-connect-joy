@@ -149,6 +149,12 @@ export interface DealTeamContact {
   lost_reason?: string | null;
   lost_at?: string | null;
   client_complexity?: ClientComplexity | Record<string, unknown> | null;
+  // BLOK 2/3 — milestones K1-K4 (timestamps stamped by trg_set_milestone_timestamps)
+  k1_meeting_done_at?: string | null;
+  handshake_at?: string | null;
+  poa_signed_at?: string | null;
+  audit_done_at?: string | null;
+  won_at?: string | null;
   created_at: string;
   updated_at: string;
   // JOIN z contacts

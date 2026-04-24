@@ -19,6 +19,7 @@ import { useSGUReports } from '@/hooks/useSGUReports';
 import { GenerateSnapshotDialog } from '@/components/sgu/GenerateSnapshotDialog';
 import { ReportPreview } from '@/components/sgu/ReportPreview';
 import { ExportPDFButton } from '@/components/sgu/ExportPDFButton';
+import { FunnelKpiCard } from '@/components/sgu/reports/FunnelKpiCard';
 import {
   PERIOD_TYPE_LABELS,
   type SGUPeriodType,
@@ -100,6 +101,8 @@ export default function SGUReports({ period }: SGUReportsProps = {}) {
           Generuj teraz
         </Button>
       </div>
+
+      <FunnelKpiCard />
 
       <Card>
         <CardHeader>

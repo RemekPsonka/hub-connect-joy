@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { UnifiedTaskRow } from '@/components/tasks/UnifiedTaskRow';
 import { ContactKnowledgeTimeline } from '@/components/contacts/ContactKnowledgeTimeline';
 import { WeeklyStatusForm } from '@/components/deals-team/WeeklyStatusForm';
+import { ContactMilestoneTimeline } from '@/components/deals-team/ContactMilestoneTimeline';
 import { useDealContactAllTasks } from '@/hooks/useDealsTeamAssignments';
 import { useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
@@ -229,6 +230,14 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
             <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
                 <div className="px-6 py-4 space-y-5">
+                  {/* Kamienie milowe K1-K4 */}
+                  <section>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      🏁 Kamienie milowe
+                    </h4>
+                    <ContactMilestoneTimeline contact={contact} />
+                  </section>
+
                   {/* Akcje — zawsze widoczne, niezależnie od zadań */}
                   <section>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
