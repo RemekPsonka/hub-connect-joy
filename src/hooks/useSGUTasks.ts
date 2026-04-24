@@ -62,7 +62,10 @@ export function useSGUTaskMutations() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sgu-tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
+      qc.invalidateQueries({ queryKey: ['stalled-contacts'] });
+    },
   });
 
   const snoozeOneDay = useMutation({
@@ -73,7 +76,10 @@ export function useSGUTaskMutations() {
       const { error } = await supabase.from('tasks').update({ due_date: next }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sgu-tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
+      qc.invalidateQueries({ queryKey: ['stalled-contacts'] });
+    },
   });
 
   const updateNote = useMutation({
@@ -81,7 +87,10 @@ export function useSGUTaskMutations() {
       const { error } = await supabase.from('tasks').update({ description }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sgu-tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
+      qc.invalidateQueries({ queryKey: ['stalled-contacts'] });
+    },
   });
 
   return { markDone, snoozeOneDay, updateNote };
