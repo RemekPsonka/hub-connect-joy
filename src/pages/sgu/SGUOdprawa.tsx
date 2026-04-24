@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Play, CheckCircle2, Clock } from 'lucide-react';
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
-import { useOdprawaAgenda } from '@/hooks/useOdprawaAgenda';
+import {
+  useOdprawaAgenda,
+  useDealTeamContactByContactId,
+  type OdprawaAgendaRow,
+} from '@/hooks/useOdprawaAgenda';
 import {
   useActiveOdprawaSession,
   useStartOdprawa,
   useFinishOdprawa,
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
+import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
 import { toast } from 'sonner';
 
 function formatTime(iso: string): string {
@@ -27,6 +32,19 @@ export default function SGUOdprawa() {
   const finishMut = useFinishOdprawa();
 
   const [busy, setBusy] = useState(false);
+  const [selectedAgendaRow, setSelectedAgendaRow] = useState<OdprawaAgendaRow | null>(null);
+
+  const sheetContactQ = useDealTeamContactByContactId(
+    selectedAgendaRow?.contact_id ?? null,
+    teamId,
+  );
+
+  useEffect(() => {
+    if (sheetContactQ.error) {
+      toast.error('Nie udało się wczytać kontaktu');
+      setSelectedAgendaRow(null);
+    }
+  }, [sheetContactQ.error]);
 
   if (loadingTeam) return null;
 
@@ -123,9 +141,24 @@ export default function SGUOdprawa() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <AgendaList rows={agenda} isLoading={agendaQ.isLoading} />
+          <AgendaList
+            rows={agenda}
+            isLoading={agendaQ.isLoading}
+            onSelect={setSelectedAgendaRow}
+          />
         </CardContent>
       </Card>
+
+      {teamId && (
+        <ContactTasksSheet
+          contact={sheetContactQ.data ?? null}
+          teamId={teamId}
+          open={!!selectedAgendaRow && sheetContactQ.isSuccess && !!sheetContactQ.data}
+          onOpenChange={(open) => {
+            if (!open) setSelectedAgendaRow(null);
+          }}
+        />
+      )}
     </div>
   );
 }
