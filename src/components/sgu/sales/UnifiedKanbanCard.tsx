@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, MoreHorizontal, X } from 'lucide-react';
+import { CheckCircle2, GripVertical, MoreHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StageBadge } from './StageBadge';
 import { TemperatureBadge } from './TemperatureBadge';
@@ -14,6 +14,8 @@ import { MilestoneBadge } from './MilestoneBadge';
 import { StalledBadge } from './StalledBadge';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
 import type { TaskContactInfo, TaskStatus } from '@/hooks/useActiveTaskContacts';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 
 export type SubcategoryField = 'temperature' | 'prospect_source' | 'client_status';
 
@@ -33,6 +35,8 @@ interface UnifiedKanbanCardProps {
   isStalled?: boolean;
   stalledDaysSinceUpdate?: number;
   stalledStageLabel?: string;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
 }
 
 const borderClass: Record<TaskStatus, string> = {
@@ -59,6 +63,8 @@ export function UnifiedKanbanCard({
   isStalled,
   stalledDaysSinceUpdate,
   stalledStageLabel,
+  dragListeners,
+  dragAttributes,
 }: UnifiedKanbanCardProps) {
   const status: TaskStatus = taskInfo?.status ?? 'none';
 
@@ -81,11 +87,23 @@ export function UnifiedKanbanCard({
     <Card
       onClick={handleCardClick}
       className={cn(
-        'p-2.5 cursor-pointer hover:shadow-md transition-all border-l-4 min-w-0 overflow-hidden flex flex-col gap-1.5',
+        'relative p-2.5 cursor-pointer hover:shadow-md transition-all border-l-4 min-w-0 overflow-hidden flex flex-col gap-1.5',
         borderClass[status],
         isDragging && 'opacity-50',
       )}
     >
+      {/* Drag handle — only this element initiates drag */}
+      <button
+        type="button"
+        {...(dragAttributes ?? {})}
+        {...(dragListeners ?? {})}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute top-1 right-1 z-10 p-0.5 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+        title="Przeciągnij, aby zmienić etap"
+        aria-label="Przeciągnij kartę"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
       {/* Row 1: title + assignees */}
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
