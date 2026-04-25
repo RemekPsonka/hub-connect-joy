@@ -115,7 +115,9 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
     { key: 'prospect', label: 'Prospekci', value: prospectList.length, icon: Users, tone: 'text-sky-600' },
     { key: 'lead', label: 'Leady', value: leadList.length, icon: Flame, tone: 'text-amber-600' },
     { key: 'offering', label: 'Ofertowanie', value: offeringList.length, icon: Briefcase, tone: 'text-violet-600' },
-    { key: 'client', label: 'Klienci', value: clientList.length, icon: Star, tone: 'text-emerald-600' },
+    // CLEANUP-BUGS-01 #24: KPI "Klienci" usunięte z SalesHeader — klienci
+    // są w osobnym module /sgu/klienci (po AUDIT-FIX-01 useTeamContacts
+    // filtruje category='client', więc clientList było zawsze puste).
     { key: 'snoozed', label: 'Odłożone', value: snoozedContacts.length, icon: Moon, tone: 'text-indigo-600' },
   ] as const;
 
