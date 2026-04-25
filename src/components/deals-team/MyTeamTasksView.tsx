@@ -633,16 +633,23 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           ctx={stageDialog.ctx}
         />
       )}
-      {stageDialog?.stage === 'meeting_scheduled' && (
-        <MeetingOutcomeDialog
-          open={true}
-          onOpenChange={(o) => { if (!o) setStageDialog(null); }}
-          contactName={stageDialog.ctx.contactName}
-          contactId={stageDialog.ctx.contactId}
-          teamContactId={stageDialog.ctx.teamContactId}
-          teamId={teamId}
-        />
-      )}
+      {stageDialog?.stage === 'meeting_scheduled' && (() => {
+        const tc = teamContacts.find((c) => c.id === stageDialog.ctx.teamContactId);
+        return (
+          <MeetingOutcomeDialog
+            open={true}
+            onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+            contactName={stageDialog.ctx.contactName}
+            contactId={stageDialog.ctx.contactId}
+            teamContactId={stageDialog.ctx.teamContactId}
+            teamId={teamId}
+            currentCategory={tc?.category ?? 'lead'}
+            onConfirm={() => setStageDialog(null)}
+            onSnooze={() => setShowSnooze(true)}
+            onConvertToClient={() => setShowConvert(true)}
+          />
+        );
+      })()}
     </div>
   );
 }
