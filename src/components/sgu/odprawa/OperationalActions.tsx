@@ -9,11 +9,12 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Phone, Mail, StickyNote } from 'lucide-react';
+import { Phone, Mail, StickyNote, CalendarPlus, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { DealTeamContact } from '@/types/dealTeam';
 
 interface OperationalActionsProps {
@@ -31,6 +32,7 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
 
   const phone = contact.contact?.phone ?? '';
   const email = contact.contact?.email ?? '';
+  const is10x = contact.temperature === '10x';
 
   const submitNote = async () => {
     const text = noteText.trim();
@@ -58,6 +60,39 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
       toast.error(msg);
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  const setMeetingPlan = async () => {
+    try {
+      const { error } = await supabase
+        .from('deal_team_contacts')
+        .update({ offering_stage: 'meeting_plan' })
+        .eq('id', contact.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      toast.success('Status: umawiamy spotkanie');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Nie udało się zaktualizować';
+      toast.error(msg);
+    }
+  };
+
+  const toggle10x = async () => {
+    const newTemp = is10x ? null : '10x';
+    try {
+      const { error } = await supabase
+        .from('deal_team_contacts')
+        .update({ temperature: newTemp })
+        .eq('id', contact.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      toast.success(newTemp === '10x' ? 'Oznaczono 10x' : 'Usunięto 10x');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Nie udało się';
+      toast.error(msg);
     }
   };
 
@@ -107,6 +142,21 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
 
         <Button variant="outline" size="sm" onClick={() => setNoteOpen(true)}>
           <StickyNote className="h-4 w-4 mr-1" /> Notatka
+        </Button>
+
+        <Button variant="outline" size="sm" onClick={setMeetingPlan}>
+          <CalendarPlus className="h-4 w-4 mr-1" /> Umów spotkanie
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggle10x}
+          className={cn(
+            is10x && 'bg-violet-100 border-violet-400 text-violet-900 hover:bg-violet-200',
+          )}
+        >
+          <Sparkles className="h-4 w-4 mr-1" /> 10x
         </Button>
       </div>
 
