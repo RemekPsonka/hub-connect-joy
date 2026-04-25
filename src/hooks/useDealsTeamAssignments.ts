@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { STAGE_ACTIONS, buildTaskTitle, asSguStage, type SguStage } from '@/lib/sgu/stageActionMap';
 
 /**
  * Unified interface mapping tasks table fields to deal team assignment context.
@@ -194,13 +195,15 @@ export function useMyTeamAssignments(teamId: string | undefined) {
             .in('id', teamContactIds)
         : { data: [] as any[] } as any;
 
-      // Find SGU contacts in meeting_plan that have NO open task in this team —
-      // synthesize "ghost" rows so they show up in /sgu/zadania.
-      const { data: meetingPlanContacts } = await supabase
+      // Find SGU contacts in any tracked offering_stage that have NO open task in
+      // this team — synthesize "ghost" rows so they show up in /sgu/zadania for
+      // every stage of the funnel (meeting_plan → won).
+      const trackedStages = Object.keys(STAGE_ACTIONS) as SguStage[];
+      const { data: trackedContacts } = await supabase
         .from('deal_team_contacts')
         .select('id, contact_id, category, offering_stage, temperature, client_status, assigned_to, next_meeting_date, tenant_id')
         .eq('team_id', teamId)
-        .eq('offering_stage', 'meeting_plan')
+        .in('offering_stage', trackedStages)
         .not('status', 'in', '("won","lost","disqualified")');
 
       const teamContactIdsWithOpenTask = new Set(
@@ -209,7 +212,7 @@ export function useMyTeamAssignments(teamId: string | undefined) {
           .map((t: any) => t.deal_team_contact_id)
           .filter(Boolean),
       );
-      const ghostContacts = (meetingPlanContacts ?? []).filter(
+      const ghostContacts = (trackedContacts ?? []).filter(
         (tc: any) => !teamContactIdsWithOpenTask.has(tc.id),
       );
 
@@ -226,7 +229,9 @@ export function useMyTeamAssignments(teamId: string | undefined) {
       const contactMap = new Map((contacts || []).map((c: { id: string; full_name: string; company: string | null }) => [c.id, c]));
       const tcMap = new Map((teamContactsForTasks || []).map((tc: any) => [tc.id, tc]));
 
-      const realRows = safeTasks.map((t: any) => {
+      const realRows = safeTasks
+        .filter((t: any) => !!t.deal_team_contact_id)
+        .map((t: any) => {
         const tc: any = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
         const contact = tc?.contact_id ? contactMap.get(tc.contact_id) : null;
         return {
@@ -245,6 +250,12 @@ export function useMyTeamAssignments(teamId: string | undefined) {
       const ghostRows: DealTeamAssignment[] = ghostContacts.map((tc: any) => {
         const contact = contactMap.get(tc.contact_id);
         const fullName = contact?.full_name || 'Kontakt';
+        const company = contact?.company ?? null;
+        const stage = asSguStage(tc.offering_stage);
+        const title = stage
+          ? buildTaskTitle(stage, fullName, company)
+          : `Działanie — ${fullName}`;
+        const action = stage ? STAGE_ACTIONS[stage] : null;
         return {
           id: `ghost:${tc.id}`,
           deal_team_contact_id: tc.id,
@@ -252,8 +263,8 @@ export function useMyTeamAssignments(teamId: string | undefined) {
           tenant_id: tc.tenant_id ?? '',
           assigned_to: tc.assigned_to ?? null,
           owner_id: null,
-          title: `Umówić spotkanie z ${fullName}`,
-          description: 'Etap „Umawiamy spotkanie" — kliknij, aby ustawić datę.',
+          title,
+          description: action ? `Etap „${action.taskTitleBase}" — kliknij, aby ${action.buttonLabel.toLowerCase()}.` : null,
           due_date: tc.next_meeting_date ?? null,
           status: 'todo',
           priority: 'medium',
