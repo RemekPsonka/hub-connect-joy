@@ -217,7 +217,25 @@ ZASADY ANTI-HALUCYNACJI:
 - Nie wymyślaj rozmów, spotkań ani dat — operujesz tylko na danych z input JSON.
 - Kwoty PLN — TYLKO jeśli pojawiają się w policies/dtc (premium, expected_annual_premium_gr).
 - Nie używaj zwrotów "dzwonił/spotkał się/rozmawiał" jeśli nie ma rekordu w recent_decisions/upcoming_meetings.
-- Zwięźle, sentence case, bez emoji.`;
+- Zwięźle, sentence case, bez emoji.
+
+OPCJONALNIE — PROPOZYCJE AKCJI (write):
+Jeżeli sugerowana akcja jest konkretna i wykonalna jako jedno z poniższych narzędzi, dołącz NA SAMYM KOŃCU odpowiedzi (po sekcji Pytania wspierające) blok kodu:
+
+\`\`\`proposal
+{ "tool": "<nazwa>", "args": { ... }, "rationale": "krótkie uzasadnienie po polsku" }
+\`\`\`
+
+Dostępne narzędzia (max 1 propozycja na odpowiedź):
+- create_task — args: { "title": string, "due_date": "YYYY-MM-DD" | null, "description": string | null }
+- update_contact_stage — args: { "category": "prospect"|"lead"|"client"|"deferred"|"lost" }
+- update_contact_temperature — args: { "temperature": "cold"|"warm"|"hot"|"10x"|null }
+- log_decision — args: { "decision": "push"|"pivot"|"park"|"kill", "notes": string | null }
+
+ZASADY PROPOZYCJI:
+- Tylko jeśli dane uzasadniają działanie. Nie proponuj akcji "na siłę".
+- Brak bloku \`\`\`proposal\`\`\` jest poprawną odpowiedzią — preferuj brak nad zgadywaniem.
+- JSON musi być valid (cudzysłowy podwójne, bez komentarzy, bez trailing comma).`;
 
 // ──────────────────────────────────────────────────────────────────────
 // R1/R2 validators (post-stream, on accumulated text)
