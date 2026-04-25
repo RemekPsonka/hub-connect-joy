@@ -8,6 +8,8 @@ interface Props {
   rows: OdprawaAgendaRow[] | undefined;
   isLoading: boolean;
   onSelect?: (row: OdprawaAgendaRow) => void;
+  currentContactId?: string | null;
+  discussedContactIds?: Set<string>;
 }
 
 function formatDate(iso: string | null): string {
@@ -16,7 +18,13 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function AgendaList({ rows, isLoading, onSelect }: Props) {
+export function AgendaList({
+  rows,
+  isLoading,
+  onSelect,
+  currentContactId = null,
+  discussedContactIds,
+}: Props) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -40,37 +48,59 @@ export function AgendaList({ rows, isLoading, onSelect }: Props) {
   return (
     <div className="space-y-2">
       {rows.map((row) => (
-        <Card
-          key={row.contact_id}
-          role="button"
-          tabIndex={0}
-          onClick={() => onSelect?.(row)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onSelect?.(row);
-            }
-          }}
-          className="hover:bg-muted/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <CardContent className="p-3 flex items-center gap-3">
-            <PriorityBadge bucket={row.priority_bucket} />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">{row.contact_name}</div>
-              {row.company_name && (
-                <div className="text-xs text-muted-foreground truncate">{row.company_name}</div>
-              )}
-            </div>
-            <div className="hidden md:flex items-center gap-4 text-xs text-muted-foreground">
-              {row.stage && <span className="capitalize">{row.stage}</span>}
-              <span className="flex items-center gap-1">
-                <ListChecks className="h-3 w-3" />
-                {row.active_task_count}
+        (() => {
+          const isCurrent = currentContactId === row.contact_id;
+          const isDiscussed =
+            !isCurrent && !!discussedContactIds?.has(row.contact_id);
+          const containerCls = [
+            'w-full flex items-center gap-3 p-3 rounded-md border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            isCurrent
+              ? 'border-primary bg-primary/5'
+              : isDiscussed
+              ? 'border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 opacity-70'
+              : 'border-border hover:bg-muted/50',
+          ].join(' ');
+          const markerCls = [
+            'flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium',
+            isCurrent
+              ? 'bg-primary text-primary-foreground'
+              : isDiscussed
+              ? 'bg-emerald-500 text-white'
+              : 'bg-muted text-muted-foreground',
+          ].join(' ');
+          return (
+            <button
+              key={row.contact_id}
+              type="button"
+              onClick={() => onSelect?.(row)}
+              className={containerCls}
+            >
+              <span className={markerCls} aria-hidden>
+                {isCurrent ? '▶' : isDiscussed ? '✓' : '·'}
               </span>
-              <span>Akt.: {formatDate(row.last_status_update)}</span>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  {row.contact_name || row.company_name || '(bez nazwy)'}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {row.company_name && row.company_name !== row.contact_name
+                    ? `${row.company_name} · `
+                    : ''}
+                  {row.last_status_update
+                    ? `Akt. ${formatDate(row.last_status_update)}`
+                    : 'brak akt.'}
+                </div>
+              </div>
+              <div className="hidden md:flex flex-col items-end gap-1 flex-shrink-0 text-xs text-muted-foreground">
+                <PriorityBadge bucket={row.priority_bucket} />
+                <span className="flex items-center gap-1">
+                  <ListChecks className="h-3 w-3" />
+                  {row.active_task_count}
+                </span>
+              </div>
+            </button>
+          );
+        })()
       ))}
     </div>
   );
