@@ -176,6 +176,7 @@ Reguły:
 - Każdy contact_id MAX w 1 sekcji. Priorytet: urgent > 10x > stalled > followup > new_prospects.
 - Pomiń puste sekcje (NIE dołączaj ich do output).
 - Per kontakt: 1 zdanie uzasadnienia po polsku (max 80 znaków), oparte WYŁĄCZNIE na danych wejściowych.
+- Jeśli kandydat ma 'last_note' (notatka z poprzedniej odprawy), uwzględnij ją w klasyfikacji i — gdy istotna — wpleć jej sens w uzasadnienie.
 - NIE wymyślaj faktów. NIE używaj kwot PLN. Format daty DD.MM.
 - W polach 'label' i 'icon' używaj DOKŁADNIE: 🔥 "Pilne dziś", 🎯 "10x", ⚠️ "Stalled", 📞 "Follow-upy", 🆕 "Nowi prospekci".`;
 
