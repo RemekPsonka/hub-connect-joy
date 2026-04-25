@@ -182,34 +182,51 @@ export function useMyTeamAssignments(teamId: string | undefined) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (!tasks || tasks.length === 0) return [];
+      const safeTasks = tasks ?? [];
 
-      // Fetch contact names for each deal_team_contact_id
-      const teamContactIds = [...new Set(tasks.map((t: any) => t.deal_team_contact_id).filter(Boolean))];
-      
-      if (teamContactIds.length === 0) {
-        return tasks.map((t: any) => ({
-          ...t,
-          contact_name: 'Kontakt',
-          contact_company: null,
-        })) as DealTeamAssignment[];
-      }
+      // Fetch contact names for each deal_team_contact_id present in tasks
+      const teamContactIds = [...new Set(safeTasks.map((t: any) => t.deal_team_contact_id).filter(Boolean))];
 
-      const { data: teamContacts } = await supabase
+      const { data: teamContactsForTasks } = teamContactIds.length > 0
+        ? await supabase
+            .from('deal_team_contacts')
+            .select('id, contact_id, category, offering_stage, temperature, client_status, assigned_to')
+            .in('id', teamContactIds)
+        : { data: [] as any[] } as any;
+
+      // Find SGU contacts in meeting_plan that have NO open task in this team —
+      // synthesize "ghost" rows so they show up in /sgu/zadania.
+      const { data: meetingPlanContacts } = await supabase
         .from('deal_team_contacts')
-        .select('id, contact_id, category, offering_stage, temperature, client_status')
-        .in('id', teamContactIds);
+        .select('id, contact_id, category, offering_stage, temperature, client_status, assigned_to, next_meeting_date, tenant_id')
+        .eq('team_id', teamId)
+        .eq('offering_stage', 'meeting_plan')
+        .not('status', 'in', '("won","lost","disqualified")');
 
-      const contactIds = [...new Set((teamContacts || []).map((tc: any) => tc.contact_id))];
+      const teamContactIdsWithOpenTask = new Set(
+        safeTasks
+          .filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled')
+          .map((t: any) => t.deal_team_contact_id)
+          .filter(Boolean),
+      );
+      const ghostContacts = (meetingPlanContacts ?? []).filter(
+        (tc: any) => !teamContactIdsWithOpenTask.has(tc.id),
+      );
+
+      const allTeamContacts = [
+        ...(teamContactsForTasks || []),
+        ...ghostContacts,
+      ];
+      const contactIds = [...new Set(allTeamContacts.map((tc: any) => tc.contact_id))];
       const { data: contacts } = await supabase
         .from('contacts')
         .select('id, full_name, company')
         .in('id', contactIds);
 
       const contactMap = new Map((contacts || []).map((c: { id: string; full_name: string; company: string | null }) => [c.id, c]));
-      const tcMap = new Map((teamContacts || []).map((tc: any) => [tc.id, tc]));
+      const tcMap = new Map((teamContactsForTasks || []).map((tc: any) => [tc.id, tc]));
 
-      return tasks.map((t: any) => {
+      const realRows = safeTasks.map((t: any) => {
         const tc: any = t.deal_team_contact_id ? tcMap.get(t.deal_team_contact_id) : null;
         const contact = tc?.contact_id ? contactMap.get(tc.contact_id) : null;
         return {
@@ -223,6 +240,36 @@ export function useMyTeamAssignments(teamId: string | undefined) {
           contact_id: tc?.contact_id || null,
         };
       }) as DealTeamAssignment[];
+
+      // Synthesize ghost rows for meeting_plan contacts without open tasks
+      const ghostRows: DealTeamAssignment[] = ghostContacts.map((tc: any) => {
+        const contact = contactMap.get(tc.contact_id);
+        const fullName = contact?.full_name || 'Kontakt';
+        return {
+          id: `ghost:${tc.id}`,
+          deal_team_contact_id: tc.id,
+          deal_team_id: teamId,
+          tenant_id: tc.tenant_id ?? '',
+          assigned_to: tc.assigned_to ?? null,
+          owner_id: null,
+          title: `Umówić spotkanie z ${fullName}`,
+          description: 'Etap „Umawiamy spotkanie" — kliknij, aby ustawić datę.',
+          due_date: tc.next_meeting_date ?? null,
+          status: 'todo',
+          priority: 'medium',
+          completed_at: null,
+          created_at: null,
+          contact_name: fullName,
+          contact_company: contact?.company || null,
+          contact_category: tc.category || null,
+          contact_offering_stage: tc.offering_stage || null,
+          contact_temperature: tc.temperature || null,
+          contact_client_status: tc.client_status || null,
+          contact_id: tc.contact_id || null,
+        };
+      });
+
+      return [...realRows, ...ghostRows];
     },
     enabled: !!teamId,
     staleTime: 60 * 1000,
