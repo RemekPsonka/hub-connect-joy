@@ -58,6 +58,7 @@ export function useLogDecision() {
     },
     onSuccess: ({ contactId, teamId }) => {
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
       qc.invalidateQueries({ queryKey: ['decision-history', contactId] });
       qc.invalidateQueries({ queryKey: ['team-contacts', teamId] });
       qc.invalidateQueries({ queryKey: ['meeting-decisions', contactId] });

@@ -17,6 +17,7 @@ import {
   useAdvanceOdprawaContact,
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
+import { useOdprawaSessionDecisions } from '@/hooks/odprawa/useOdprawaSessionDecisions';
 import { ContactTimeline } from '@/components/sgu/odprawa/ContactTimeline';
 import { DecisionButtons } from '@/components/sgu/odprawa/DecisionButtons';
 import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
@@ -49,6 +50,10 @@ export default function SGUOdprawa() {
     teamId,
   );
   const timelineState = useContactTimelineState(sheetContactQ.data ?? null);
+  const sessionDecisions = useOdprawaSessionDecisions(
+    activeQ.data?.id ?? null,
+    teamId,
+  );
 
   useEffect(() => {
     if (sheetContactQ.error) {
@@ -222,6 +227,8 @@ export default function SGUOdprawa() {
               rows={agenda}
               isLoading={agendaQ.isLoading}
               onSelect={setSelectedAgendaRow}
+              currentContactId={selectedAgendaRow?.contact_id ?? null}
+              discussedContactIds={sessionDecisions.discussedContactIds}
             />
           </CardContent>
         </Card>
