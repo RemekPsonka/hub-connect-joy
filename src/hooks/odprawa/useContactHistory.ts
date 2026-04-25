@@ -219,7 +219,7 @@ export function useContactHistory(
           timestamp: a.created_at,
           label: 'Notatka',
           detail: note || null,
-          actorName: (a.actor_id && nameByUserId.get(a.actor_id)) || 'Użytkownik',
+          actorName: (a.actor_id && nameByDirectorId.get(a.actor_id)) || 'Użytkownik',
         });
       }
 
