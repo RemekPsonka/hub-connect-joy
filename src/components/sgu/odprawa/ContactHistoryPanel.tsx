@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, StickyNote, GitBranch } from 'lucide-react';
+import { Activity, CheckCircle2, StickyNote, GitBranch, Flag } from 'lucide-react';
 import { useContactHistory, type HistoryEventType } from '@/hooks/odprawa/useContactHistory';
 
 interface Props {
@@ -11,6 +11,7 @@ const ICONS: Record<HistoryEventType, typeof Activity> = {
   task_completed: CheckCircle2,
   note: StickyNote,
   stage_change: GitBranch,
+  milestone_reached: Flag,
 };
 
 function formatRelative(iso: string): string {

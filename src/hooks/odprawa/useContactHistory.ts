@@ -2,7 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { OFFERING_STAGE_LABEL, type OfferingStage } from '@/lib/offeringStageLabels';
 
-export type HistoryEventType = 'decision' | 'task_completed' | 'note' | 'stage_change';
+export type HistoryEventType =
+  | 'decision'
+  | 'task_completed'
+  | 'note'
+  | 'stage_change'
+  | 'milestone_reached';
 
 export interface HistoryEvent {
   id: string;
@@ -55,6 +60,12 @@ interface ActivityRow {
 
 interface ContactCurrent {
   offering_stage: string | null;
+  k1_meeting_done_at: string | null;
+  handshake_at: string | null;
+  poa_signed_at: string | null;
+  audit_done_at: string | null;
+  won_at: string | null;
+  lost_at: string | null;
 }
 
 const HISTORY_LIMIT = 20;
@@ -95,7 +106,9 @@ export function useContactHistory(
           .limit(50),
         supabase
           .from('deal_team_contacts')
-          .select('offering_stage')
+          .select(
+            'offering_stage, k1_meeting_done_at, handshake_at, poa_signed_at, audit_done_at, won_at, lost_at',
+          )
           .eq('id', dealTeamContactId)
           .maybeSingle(),
       ]);
@@ -224,6 +237,27 @@ export function useContactHistory(
           label: 'Notatka',
           detail: note || null,
           actorName: (a.actor_id && nameByUserId.get(a.actor_id)) || 'Użytkownik',
+        });
+      }
+
+      // 4) milestones reached (z deal_team_contacts.*_at)
+      const milestones: Array<{ col: string; label: string; value: string | null }> = [
+        { col: 'k1_meeting_done_at', label: 'K1 Spotkanie odbyte', value: current?.k1_meeting_done_at ?? null },
+        { col: 'handshake_at', label: 'K2 Handshake', value: current?.handshake_at ?? null },
+        { col: 'poa_signed_at', label: 'K2+ Pełnomocnictwo', value: current?.poa_signed_at ?? null },
+        { col: 'audit_done_at', label: 'K3 Audyt zrobiony', value: current?.audit_done_at ?? null },
+        { col: 'won_at', label: 'K4 Klient', value: current?.won_at ?? null },
+        { col: 'lost_at', label: 'Utracony', value: current?.lost_at ?? null },
+      ];
+      for (const m of milestones) {
+        if (!m.value) continue;
+        events.push({
+          id: `milestone:${m.col}`,
+          type: 'milestone_reached',
+          timestamp: m.value,
+          label: m.label,
+          detail: null,
+          actorName: 'System',
         });
       }
 
