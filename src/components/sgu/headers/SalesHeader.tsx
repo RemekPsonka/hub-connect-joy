@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Users, Flame, Briefcase, Moon, Star } from 'lucide-react';
+import { Users, Flame, Briefcase, Moon } from 'lucide-react';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { cn } from '@/lib/utils';
 import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
@@ -85,23 +85,6 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
   const leadList = visibleContacts.filter((c) => deriveStage(c) === 'lead');
   const offeringList = visibleContacts.filter((c) => deriveStage(c) === 'offering');
   const clientList = visibleContacts.filter((c) => deriveStage(c) === 'client');
-
-  const expectedPortfolioPLN = clientList.reduce(
-    (acc, c) =>
-      acc +
-      (((c.potential_property_gr ?? 0) +
-        (c.potential_financial_gr ?? 0) +
-        (c.potential_communication_gr ?? 0) +
-        (c.potential_life_group_gr ?? 0)) /
-        100),
-    0,
-  );
-  const formatPLN = (v: number) =>
-    new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      maximumFractionDigits: 0,
-    }).format(v);
 
   const badgesByKey: Record<string, BadgeItem[]> = {
     prospect: buildBadges(prospectList, 'prospect_source', PROSPECT_SOURCE_BADGES, PROSPECT_SOURCE_LABELS),
