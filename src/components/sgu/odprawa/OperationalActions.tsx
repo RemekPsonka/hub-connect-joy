@@ -9,21 +9,10 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  Phone,
-  Mail,
-  StickyNote,
-  ClipboardCheck,
-  Send,
-  Sparkles,
-  CalendarPlus,
-  CalendarCheck,
-  CalendarClock,
-} from 'lucide-react';
+import { Phone, Mail, StickyNote } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { toast } from 'sonner';
 import type { DealTeamContact } from '@/types/dealTeam';
 
@@ -36,7 +25,6 @@ interface OperationalActionsProps {
 export function OperationalActions({ contact, teamId, tenantId }: OperationalActionsProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const updateMut = useUpdateTeamContact();
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -73,50 +61,9 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
     }
   };
 
-  type OfferingStage =
-    | 'meeting_plan'
-    | 'meeting_scheduled'
-    | 'meeting_done'
-    | 'audit'
-    | 'offer_sent';
-
-  const stageLabels: Record<OfferingStage, string> = {
-    meeting_plan: 'Spotkanie umówiamy',
-    meeting_scheduled: 'Spotkanie umówione',
-    meeting_done: 'Spotkanie odbyte (K1)',
-    audit: 'Audyt zrobiony',
-    offer_sent: 'Oferta wysłana',
-  };
-
-  const setOfferingStage = (stage: OfferingStage) => {
-    updateMut.mutate(
-      { id: contact.id, teamId, offeringStage: stage },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
-          qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
-          toast.success(stageLabels[stage]);
-        },
-      },
-    );
-  };
-
-  const setTen10x = () => {
-    updateMut.mutate(
-      { id: contact.id, teamId, temperature: '10x' },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
-          qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
-          toast.success('Oznaczono 10x');
-        },
-      },
-    );
-  };
-
   return (
     <div className="space-y-2">
-      <div className="text-sm font-semibold">Akcje operacyjne</div>
+      <div className="text-sm font-semibold">Quick actions</div>
       <div className="flex flex-wrap gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -160,60 +107,6 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
 
         <Button variant="outline" size="sm" onClick={() => setNoteOpen(true)}>
           <StickyNote className="h-4 w-4 mr-1" /> Notatka
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending}
-          onClick={() => setOfferingStage('meeting_plan')}
-        >
-          <CalendarPlus className="h-4 w-4 mr-1" /> Umów spotkanie
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending}
-          onClick={() => setOfferingStage('meeting_scheduled')}
-        >
-          <CalendarClock className="h-4 w-4 mr-1" /> Spotkanie umówione
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending}
-          onClick={() => setOfferingStage('meeting_done')}
-        >
-          <CalendarCheck className="h-4 w-4 mr-1" /> Spotkanie odbyte
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending}
-          onClick={() => setOfferingStage('audit')}
-        >
-          <ClipboardCheck className="h-4 w-4 mr-1" /> Audyt zrobiony
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending}
-          onClick={() => setOfferingStage('offer_sent')}
-        >
-          <Send className="h-4 w-4 mr-1" /> Wyślij ofertę
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={updateMut.isPending || contact.temperature === '10x'}
-          onClick={setTen10x}
-        >
-          <Sparkles className="h-4 w-4 mr-1" /> 10x
         </Button>
       </div>
 

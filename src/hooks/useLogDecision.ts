@@ -16,6 +16,7 @@ export interface LogDecisionInput {
   notes?: string | null;
   postponedUntil?: string | null;
   deadReason?: string | null;
+  followUpTaskId?: string | null;
 }
 
 export function useLogDecision() {
@@ -50,6 +51,7 @@ export function useLogDecision() {
         prev_category: contact?.category ?? null,
         prev_offering_stage: contact?.offering_stage ?? null,
         prev_temperature: contact?.temperature ?? null,
+        follow_up_task_id: input.followUpTaskId ?? null,
         created_by: user.id,
       });
       if (error) throw error;

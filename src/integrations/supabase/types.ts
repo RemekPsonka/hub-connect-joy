@@ -6009,6 +6009,7 @@ export type Database = {
           dead_reason: string | null
           deal_team_contact_id: string
           decision_type: string
+          follow_up_task_id: string | null
           id: string
           meeting_date: string
           milestone_variant: string | null
@@ -6028,6 +6029,7 @@ export type Database = {
           dead_reason?: string | null
           deal_team_contact_id: string
           decision_type: string
+          follow_up_task_id?: string | null
           id?: string
           meeting_date: string
           milestone_variant?: string | null
@@ -6047,6 +6049,7 @@ export type Database = {
           dead_reason?: string | null
           deal_team_contact_id?: string
           decision_type?: string
+          follow_up_task_id?: string | null
           id?: string
           meeting_date?: string
           milestone_variant?: string | null
@@ -6066,6 +6069,13 @@ export type Database = {
             columns: ["deal_team_contact_id"]
             isOneToOne: false
             referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_decisions_follow_up_task_id_fkey"
+            columns: ["follow_up_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {
