@@ -11,6 +11,7 @@ Sovra write-access zawsze z confirm dialog. Tool calls przez `_shared/sovra-tool
 - [SGU stage→action map](mem://features/sgu/stage-action-map) — Centralna mapa etapów lejka, dialogi, ghost rows, format tytułów
 - [SGU reports flag](mem://features/sgu/reports-feature-flag) — Pozycja Raporty w sidebarze SGU za feature flagiem
 - [K2-K4 premium dialogs](mem://features/odprawa/k2-k4-premium-dialogs) — Milestones K2 (handshake) lead + EstimatedPremiumDialog
+- [Odprawa agenda sections](mem://features/odprawa/agenda-grouped-sections) — Pre-brief AI w 5 sekcjach (Pilne/Stalled/10x/Follow-up/Nowi) + sumka + sticky headers
 - [Background jobs](mem://features/background-jobs-system) — Pattern enqueue→worker→toast
 - [Unified meetings](mem://features/meetings/unified-view) — VIEW unified_meetings + useUnifiedMeetings
 - [Network graph](mem://features/network-graph) — connections + rpc_contact_neighbors

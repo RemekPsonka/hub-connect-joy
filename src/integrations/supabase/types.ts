@@ -19,6 +19,7 @@ export type Database = {
           error: string | null
           generated_at: string
           generated_by: string
+          grouped_sections: Json | null
           id: string
           llm_cost_cents: number | null
           llm_model: string | null
@@ -35,6 +36,7 @@ export type Database = {
           error?: string | null
           generated_at?: string
           generated_by?: string
+          grouped_sections?: Json | null
           id?: string
           llm_cost_cents?: number | null
           llm_model?: string | null
@@ -51,6 +53,7 @@ export type Database = {
           error?: string | null
           generated_at?: string
           generated_by?: string
+          grouped_sections?: Json | null
           id?: string
           llm_cost_cents?: number | null
           llm_model?: string | null
@@ -10719,6 +10722,9 @@ export type Database = {
         Returns: {
           active_task_count: number
           ai_reason: string
+          ai_section_icon: string
+          ai_section_key: string
+          ai_section_label: string
           company_name: string
           contact_id: string
           contact_name: string

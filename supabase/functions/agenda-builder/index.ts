@@ -29,6 +29,8 @@ interface ContactCandidate {
   active_tasks: number;
   overdue_tasks: number;
   days_since_update: number | null;
+  created_at: string | null;
+  days_since_created: number | null;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -52,7 +54,7 @@ async function gatherCandidates(
 ): Promise<ContactCandidate[]> {
   const { data: dtcs, error } = await supabase
     .from("deal_team_contacts")
-    .select("id, contact_id, category, temperature, last_status_update, next_action_date, is_lost")
+    .select("id, contact_id, category, temperature, last_status_update, next_action_date, is_lost, created_at")
     .eq("team_id", teamId)
     .eq("is_lost", false)
     .order("last_status_update", { ascending: true, nullsFirst: true })
@@ -117,25 +119,49 @@ async function gatherCandidates(
       active_tasks: t.active,
       overdue_tasks: t.overdue,
       days_since_update: daysSince(d.last_status_update),
+      created_at: d.created_at ?? null,
+      days_since_created: daysSince(d.created_at),
     };
   });
 }
 
-const SYSTEM_PROMPT = `Jesteś asystentem dyrektora sprzedaży na odprawie zespołowej (CRM ubezpieczeniowy).
-Z listy kontaktów wybierz TOP ${MAX_RANKED_OUTPUT} do omówienia DZIŚ. Priorytetyzuj:
-1. Kontakty 10x (temperature=10x lub stage=10x) — zawsze.
-2. Klienci na etapie 'offering' bez aktywnych zadań i bez next_action_date (utknięte).
-3. Zadania przeterminowane.
-4. Brak aktywności >14 dni dla aktywnych szans.
+const SECTION_PRIORITY: Record<string, number> = {
+  urgent: 0,
+  "10x": 1,
+  stalled: 2,
+  followup: 3,
+  new_prospects: 4,
+};
 
-Dla każdego kontaktu napisz JEDNO zdanie po polsku (max 80 znaków) — KONKRETNE uzasadnienie
-oparte na danych wejściowych. NIE wymyślaj faktów których nie ma w danych. NIE używaj kwot PLN.
-Format daty DD.MM.`;
+const SECTION_META: Record<string, { label: string; icon: string }> = {
+  urgent: { label: "Pilne dziś", icon: "🔥" },
+  "10x": { label: "10x", icon: "🎯" },
+  stalled: { label: "Stalled", icon: "⚠️" },
+  followup: { label: "Follow-upy", icon: "📞" },
+  new_prospects: { label: "Nowi prospekci", icon: "🆕" },
+};
+
+const SYSTEM_PROMPT = `Jesteś asystentem dyrektora sprzedaży na odprawie zespołowej (CRM ubezpieczeniowy).
+Z listy do ${MAX_CONTACTS_INPUT} kontaktów pogrupuj wybranych w sekcje pre-briefu (max ${MAX_RANKED_OUTPUT} kontaktów łącznie):
+
+🔥 urgent ("Pilne dziś") — overdue_tasks > 0, lub kontakt czeka >7 dni na akcję mimo aktywnego taska.
+🎯 10x ("10x") — temperature='10x' lub stage='10x'. Zawsze tu, jeśli nie pasuje do urgent.
+⚠️ stalled ("Stalled") — days_since_update > 14, brak active_tasks lub brak next_action_date. Ryzyko utraty.
+📞 followup ("Follow-upy") — kontakt z aktywnym taskiem na dziś/jutro (next_action_date w ciągu 2 dni), nie pasuje do urgent/10x.
+🆕 new_prospects ("Nowi prospekci") — days_since_created < 7 i brak interakcji (last_status_update IS NULL lub days_since_update > 5).
+
+Reguły:
+- Każdy contact_id MAX w 1 sekcji. Priorytet: urgent > 10x > stalled > followup > new_prospects.
+- Pomiń puste sekcje (NIE dołączaj ich do output).
+- Per kontakt: 1 zdanie uzasadnienia po polsku (max 80 znaków), oparte WYŁĄCZNIE na danych wejściowych.
+- NIE wymyślaj faktów. NIE używaj kwot PLN. Format daty DD.MM.
+- W polach 'label' i 'icon' używaj DOKŁADNIE: 🔥 "Pilne dziś", 🎯 "10x", ⚠️ "Stalled", 📞 "Follow-upy", 🆕 "Nowi prospekci".`;
 
 async function rankWithLLM(
   candidates: ContactCandidate[],
   context: { tenant_id: string; team_id: string; actor_id?: string; request_id: string },
 ): Promise<{
+  sections: { key: string; label: string; icon: string; contacts: { contact_id: string; reason: string }[] }[];
   ranked: { contact_id: string; reason: string }[];
   tokens_in: number;
   tokens_out: number;
@@ -146,25 +172,41 @@ async function rankWithLLM(
     {
       type: "function",
       function: {
-        name: "submit_ranking",
-        description: "Zwraca posortowaną listę top kontaktów do omówienia.",
+        name: "submit_grouped_agenda",
+        description: "Zwraca pogrupowane sekcje kontaktów do omówienia na odprawie.",
         parameters: {
           type: "object",
           properties: {
-            ranked: {
+            sections: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  contact_id: { type: "string", description: "UUID kontaktu z wejścia" },
-                  reason: { type: "string", description: "Krótkie uzasadnienie po polsku" },
+                  key: {
+                    type: "string",
+                    enum: ["urgent", "10x", "stalled", "followup", "new_prospects"],
+                  },
+                  label: { type: "string", description: "Etykieta PL" },
+                  icon: { type: "string", description: "Emoji ikona" },
+                  contacts: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        contact_id: { type: "string", description: "UUID kontaktu z wejścia" },
+                        reason: { type: "string", description: "1 zdanie PL, max 80 znaków" },
+                      },
+                      required: ["contact_id", "reason"],
+                      additionalProperties: false,
+                    },
+                  },
                 },
-                required: ["contact_id", "reason"],
+                required: ["key", "label", "icon", "contacts"],
                 additionalProperties: false,
               },
             },
           },
-          required: ["ranked"],
+          required: ["sections"],
           additionalProperties: false,
         },
       },
@@ -195,34 +237,79 @@ async function rankWithLLM(
     throw new Error(`LLM call failed: status=${result.status}`);
   }
 
-  // Parse tool call from text fallback OR from raw response
-  let ranked: { contact_id: string; reason: string }[] = [];
+  // Parse tool call output
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsed: any = null;
   try {
-    // result.text could be JSON args from tool call (provider-dependent)
-    const parsed = JSON.parse(result.text);
-    if (Array.isArray(parsed?.ranked)) ranked = parsed.ranked;
-    else if (Array.isArray(parsed)) ranked = parsed;
+    parsed = JSON.parse(result.text);
   } catch {
-    // Try extracting JSON object
     const match = result.text.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        const p = JSON.parse(match[0]);
-        if (Array.isArray(p?.ranked)) ranked = p.ranked;
+        parsed = JSON.parse(match[0]);
       } catch {
-        // give up — empty list will be persisted with error
+        parsed = null;
       }
     }
   }
 
-  // Validate: every contact_id must exist in candidates
   const valid = new Set(candidates.map((c) => c.contact_id));
-  ranked = ranked
-    .filter((r) => r?.contact_id && valid.has(r.contact_id))
-    .slice(0, MAX_RANKED_OUTPUT);
+  const seen = new Set<string>();
+  let sectionsOut: { key: string; label: string; icon: string; contacts: { contact_id: string; reason: string }[] }[] = [];
+  let rankedFlat: { contact_id: string; reason: string }[] = [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawSections: any[] = Array.isArray(parsed?.sections) ? parsed.sections : [];
+
+  if (rawSections.length > 0) {
+    // Sort sections by priority so dedup picks the higher-priority section
+    const sorted = [...rawSections].sort((a, b) => {
+      const pa = SECTION_PRIORITY[a?.key] ?? 99;
+      const pb = SECTION_PRIORITY[b?.key] ?? 99;
+      return pa - pb;
+    });
+
+    for (const s of sorted) {
+      const key = String(s?.key ?? "");
+      if (!(key in SECTION_PRIORITY)) continue;
+      const meta = SECTION_META[key];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contacts: { contact_id: string; reason: string }[] = Array.isArray(s?.contacts) ? s.contacts : [];
+      const cleaned: { contact_id: string; reason: string }[] = [];
+      for (const c of contacts) {
+        const cid = c?.contact_id;
+        if (!cid || !valid.has(cid) || seen.has(cid)) continue;
+        seen.add(cid);
+        cleaned.push({
+          contact_id: cid,
+          reason: String(c?.reason ?? "").slice(0, 200),
+        });
+        rankedFlat.push({ contact_id: cid, reason: String(c?.reason ?? "").slice(0, 200) });
+        if (rankedFlat.length >= MAX_RANKED_OUTPUT) break;
+      }
+      if (cleaned.length > 0) {
+        sectionsOut.push({
+          key,
+          label: typeof s?.label === "string" && s.label.trim() ? s.label : meta.label,
+          icon: typeof s?.icon === "string" && s.icon.trim() ? s.icon : meta.icon,
+          contacts: cleaned,
+        });
+      }
+      if (rankedFlat.length >= MAX_RANKED_OUTPUT) break;
+    }
+  } else if (Array.isArray(parsed?.ranked)) {
+    // Legacy fallback: model returned old shape
+    for (const r of parsed.ranked) {
+      if (!r?.contact_id || !valid.has(r.contact_id) || seen.has(r.contact_id)) continue;
+      seen.add(r.contact_id);
+      rankedFlat.push({ contact_id: r.contact_id, reason: String(r?.reason ?? "").slice(0, 200) });
+      if (rankedFlat.length >= MAX_RANKED_OUTPUT) break;
+    }
+  }
 
   return {
-    ranked,
+    sections: sectionsOut,
+    ranked: rankedFlat,
     tokens_in: result.tokens_in ?? 0,
     tokens_out: result.tokens_out ?? 0,
     cost_cents: result.cost_cents ?? calcCostCents(MODEL, result.tokens_in ?? 0, result.tokens_out ?? 0),
@@ -279,6 +366,7 @@ async function buildForTeam(
       generated_by: generatedBy,
       triggered_by: triggeredBy,
       ranked_contacts: llmRes.ranked,
+      grouped_sections: llmRes.sections.length > 0 ? llmRes.sections : null,
       llm_provider: llmRes.provider,
       llm_model: MODEL,
       llm_tokens_in: llmRes.tokens_in,
@@ -298,8 +386,13 @@ async function buildForTeam(
     team_id: teamId,
     user_id: triggeredBy,
     event_type: "llm_response",
-    tool_name: "agenda-builder.submit_ranking",
-    output: { ranked_count: llmRes.ranked.length, proposal_id: row?.id },
+    tool_name: "agenda-builder.submit_grouped_agenda",
+    output: {
+      ranked_count: llmRes.ranked.length,
+      sections_count: llmRes.sections.length,
+      total_contacts: llmRes.sections.reduce((acc, s) => acc + s.contacts.length, 0),
+      proposal_id: row?.id,
+    },
     llm_model: MODEL,
     llm_tokens_in: llmRes.tokens_in,
     llm_tokens_out: llmRes.tokens_out,
