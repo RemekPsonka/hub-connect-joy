@@ -15,6 +15,9 @@ export type OdprawaAgendaRow = {
   priority_rank: number;
   active_task_count: number;
   ai_reason?: string | null;
+  ai_section_key?: string | null;
+  ai_section_label?: string | null;
+  ai_section_icon?: string | null;
 };
 
 export function useOdprawaAgenda(teamId: string | null | undefined, mode: string = 'standard') {
