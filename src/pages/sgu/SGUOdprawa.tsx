@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, CheckCircle2, Clock, Building2, User } from 'lucide-react';
+import { Play, CheckCircle2, Clock, Building2, User, ArrowRight } from 'lucide-react';
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import {
   useOdprawaAgenda,
@@ -19,11 +19,12 @@ import {
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
 import { useOdprawaSessionDecisions } from '@/hooks/odprawa/useOdprawaSessionDecisions';
 import { ContactTimeline } from '@/components/sgu/odprawa/ContactTimeline';
-import { DecisionButtons } from '@/components/sgu/odprawa/DecisionButtons';
+import { MilestoneActionStrip } from '@/components/sgu/odprawa/MilestoneActionStrip';
+import { NextStepDialog } from '@/components/sgu/odprawa/NextStepDialog';
+import { OdprawaExceptionsBar } from '@/components/sgu/odprawa/OdprawaExceptionsBar';
 import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
 import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
-import type { DecisionKey } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -99,15 +100,12 @@ export default function SGUOdprawa() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.current_contact_id, agenda.length]);
 
-  const handleDecisionLogged = async (decision: DecisionKey) => {
+  const handleManualAdvance = async () => {
     if (!selectedAgendaRow || !active || !teamId) return;
-    // Auto-advance tylko dla push/pivot. park/kill/klient → karta zostaje.
-    if (decision !== 'push' && decision !== 'pivot') return;
     const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
     const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
     try {
       // FK: odprawa_sessions.current_contact_id -> deal_team_contacts.id
-      // Agenda RPC zwraca contacts.id, więc trzeba zamienić na PK deal_team_contacts.
       let nextDtcId: string | null = null;
       if (next?.contact_id) {
         const { data: nextDtc } = await supabase
@@ -256,7 +254,20 @@ export default function SGUOdprawa() {
           ) : (
             <Card>
               <CardHeader className="pb-3 space-y-1">
-                <CardTitle className="text-xl">{contactName || 'Kontakt'}</CardTitle>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="text-xl">{contactName || 'Kontakt'}</CardTitle>
+                  {active && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleManualAdvance}
+                      disabled={advanceMut.isPending}
+                    >
+                      Następny kontakt
+                      <ArrowRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   {companyName && (
                     <span className="inline-flex items-center gap-1">
@@ -275,14 +286,32 @@ export default function SGUOdprawa() {
                 <ContactTimeline state={timelineState} />
                 <ContactTasksInline contactId={dtc.contact_id} />
                 {active && (
-                  <DecisionButtons
-                    state={timelineState}
-                    contactId={dtc.id}
-                    teamId={teamId}
-                    tenantId={dtc.tenant_id}
-                    odprawaSessionId={active.id}
-                    onDecisionLogged={handleDecisionLogged}
-                  />
+                  <>
+                    <MilestoneActionStrip
+                      state={timelineState}
+                      contactId={dtc.id}
+                      teamId={teamId}
+                      tenantId={dtc.tenant_id}
+                      odprawaSessionId={active.id}
+                    />
+                    <NextStepDialog
+                      state={timelineState}
+                      dealTeamContactId={dtc.id}
+                      contactId={dtc.contact_id}
+                      teamId={teamId}
+                      tenantId={dtc.tenant_id}
+                      odprawaSessionId={active.id}
+                      defaultAssigneeId={dtc.assigned_to ?? null}
+                      onCreated={handleManualAdvance}
+                    />
+                    <OdprawaExceptionsBar
+                      state={timelineState}
+                      contactId={dtc.id}
+                      teamId={teamId}
+                      tenantId={dtc.tenant_id}
+                      odprawaSessionId={active.id}
+                    />
+                  </>
                 )}
                 <OperationalActions contact={dtc} teamId={teamId} tenantId={dtc.tenant_id} />
               </CardContent>
