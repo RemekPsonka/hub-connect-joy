@@ -277,7 +277,9 @@ export function AppSidebar() {
         { label: 'CRM', items: crmItems },
         { label: 'Projekty', items: projectItems },
         { label: 'Sprzedaż', items: salesItems },
-        { label: 'AI', items: aiItems },
+        // ODPRAWA-03 / SOVRA-HIDE-IN-SGU-01: Sovra is a CRM feature.
+        // Hide the AI group entirely on SGU routes (per OQ-5: dedicated SGU agent planned post MVP-1).
+        ...(location.pathname.startsWith('/sgu') ? [] : [{ label: 'AI', items: aiItems }]),
         { label: 'System', items: systemItems },
       ];
 
