@@ -81,7 +81,7 @@ export async function decryptRefreshToken(
   const key = await getEncryptionKey();
   const iv = base64ToBytes(ivB64);
   const cipher = base64ToBytes(ciphertextB64);
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, cipher as BufferSource);
   return new TextDecoder().decode(plain);
 }
 

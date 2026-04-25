@@ -193,7 +193,7 @@ Deno.serve(async (req: Request) => {
   const ctx: ToolContext = {
     tenantId: auth.tenantId,
     actorId: auth.directorId,
-    conversationId: conversationId,
+    conversationId: conversationId ?? '',
   };
 
   const t0 = Date.now();
