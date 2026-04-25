@@ -25,7 +25,10 @@ export interface ContactTimelineState {
   isWon: boolean;
   wonAt: string | null;
   temperature: string | null;
-  availableDecisions: DecisionKey[];
+  /** Nieosiągnięte milestone'y w kolejności lejka. K4 dopiero po K3. Pusta dla zamkniętych. */
+  availableMilestones: MilestoneKey[];
+  /** Pre-fill dla "+ Stwórz zadanie" — tytuł zadania per current stage + docelowy milestone. */
+  nextStepSuggestion: { title: string; stageKey: MilestoneKey | null };
 }
 
 const NEXT_MAP: Record<MilestoneKey, MilestoneKey | null> = {
@@ -51,21 +54,26 @@ function colorForDays(days: number): StalledColor {
 }
 
 export function useContactTimelineState(
-  contact: Pick<
-    DealTeamContact,
-    | 'created_at'
-    | 'updated_at'
-    | 'k1_meeting_done_at'
-    | 'handshake_at'
-    | 'poa_signed_at'
-    | 'audit_done_at'
-    | 'won_at'
-    | 'lost_at'
-    | 'is_lost'
-    | 'lost_reason'
-    | 'snoozed_until'
-    | 'temperature'
-  > | null | undefined,
+  contact:
+    | (Pick<
+        DealTeamContact,
+        | 'created_at'
+        | 'updated_at'
+        | 'k1_meeting_done_at'
+        | 'handshake_at'
+        | 'poa_signed_at'
+        | 'audit_done_at'
+        | 'won_at'
+        | 'lost_at'
+        | 'is_lost'
+        | 'lost_reason'
+        | 'snoozed_until'
+        | 'temperature'
+      > & {
+        contact?: { full_name?: string | null; company?: string | null } | null;
+      })
+    | null
+    | undefined,
 ): ContactTimelineState | null {
   return useMemo(() => {
     if (!contact) return null;
@@ -105,10 +113,46 @@ export function useContactTimelineState(
     const isLost = !!contact.is_lost;
     const isWon = !!contact.won_at;
 
-    let availableDecisions: DecisionKey[] = [];
+    const availableMilestones: MilestoneKey[] = [];
     if (!isWon && !isLost) {
-      availableDecisions = ['push', 'pivot', 'park', 'kill'];
-      if (contact.audit_done_at) availableDecisions.push('klient');
+      if (!contact.k1_meeting_done_at) availableMilestones.push('k1');
+      if (!contact.handshake_at) availableMilestones.push('k2');
+      if (!contact.poa_signed_at) availableMilestones.push('k2+');
+      if (!contact.audit_done_at) availableMilestones.push('k3');
+      if (contact.audit_done_at && !contact.won_at) availableMilestones.push('k4');
+    }
+
+    const fullName = contact.contact?.full_name ?? 'kontakt';
+    const company = contact.contact?.company ?? '';
+    const who = company || fullName;
+    let nextStepSuggestion: { title: string; stageKey: MilestoneKey | null } = {
+      title: '',
+      stageKey: null,
+    };
+    if (!isWon && !isLost) {
+      switch (currentMilestone) {
+        case 'prospect':
+          nextStepSuggestion = {
+            title: `Skontaktuj się z ${fullName}, umów spotkanie`,
+            stageKey: 'k1',
+          };
+          break;
+        case 'k1':
+          nextStepSuggestion = { title: `Domknij handshake z ${fullName}`, stageKey: 'k2' };
+          break;
+        case 'k2':
+          nextStepSuggestion = { title: `Wyślij POA do podpisu — ${who}`, stageKey: 'k2+' };
+          break;
+        case 'k2+':
+          nextStepSuggestion = { title: `Zaplanuj audyt dla ${who}`, stageKey: 'k3' };
+          break;
+        case 'k3':
+          nextStepSuggestion = { title: `Wyślij ofertę ${who}`, stageKey: 'k4' };
+          break;
+        case 'k4':
+          nextStepSuggestion = { title: '', stageKey: null };
+          break;
+      }
     }
 
     return {
@@ -124,7 +168,8 @@ export function useContactTimelineState(
       isWon,
       wonAt: contact.won_at ?? null,
       temperature: contact.temperature ?? null,
-      availableDecisions,
+      availableMilestones,
+      nextStepSuggestion,
     };
   }, [contact]);
 }
