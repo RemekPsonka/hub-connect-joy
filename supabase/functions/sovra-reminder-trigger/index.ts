@@ -73,7 +73,7 @@ async function checkDeadlineTomorrow(
   if (!tasks?.length) return [];
 
   // Filter out already-reminded today
-  const taskIds = tasks.map((t) => t.id);
+  const taskIds = tasks.map((t: any) => t.id);
   const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
   const todayEnd = new Date(new Date().setHours(24, 0, 0, 0)).toISOString();
 
@@ -85,11 +85,11 @@ async function checkDeadlineTomorrow(
     .gte("scheduled_at", todayStart)
     .lt("scheduled_at", todayEnd);
 
-  const existingIds = new Set((existing || []).map((e) => e.reference_id));
+  const existingIds = new Set((existing || []).map((e: any) => e.reference_id));
 
   return tasks
-    .filter((t) => !existingIds.has(t.id))
-    .map((t) => ({
+    .filter((t: any) => !existingIds.has(t.id))
+    .map((t: any) => ({
       tenant_id: tenantId,
       director_id: directorId,
       type: "deadline",
@@ -117,7 +117,7 @@ async function checkOverdue(
 
   if (!tasks?.length) return [];
 
-  const taskIds = tasks.map((t) => t.id);
+  const taskIds = tasks.map((t: any) => t.id);
   const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
   const todayEnd = new Date(new Date().setHours(24, 0, 0, 0)).toISOString();
 
@@ -129,12 +129,12 @@ async function checkOverdue(
     .gte("scheduled_at", todayStart)
     .lt("scheduled_at", todayEnd);
 
-  const existingIds = new Set((existing || []).map((e) => e.reference_id));
+  const existingIds = new Set((existing || []).map((e: any) => e.reference_id));
 
   const now = new Date();
   return tasks
-    .filter((t) => !existingIds.has(t.id))
-    .map((t) => {
+    .filter((t: any) => !existingIds.has(t.id))
+    .map((t: any) => {
       const dueDate = new Date(t.due_date!);
       const diffDays = Math.floor(
         (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -168,7 +168,7 @@ async function checkInactiveProjects(
 
   if (!projects?.length) return [];
 
-  const projectIds = projects.map((p) => p.id);
+  const projectIds = projects.map((p: any) => p.id);
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: existing } = await supabase
@@ -178,11 +178,11 @@ async function checkInactiveProjects(
     .in("reference_id", projectIds)
     .gte("scheduled_at", weekAgo);
 
-  const existingIds = new Set((existing || []).map((e) => e.reference_id));
+  const existingIds = new Set((existing || []).map((e: any) => e.reference_id));
 
   return projects
-    .filter((p) => !existingIds.has(p.id))
-    .map((p) => ({
+    .filter((p: any) => !existingIds.has(p.id))
+    .map((p: any) => ({
       tenant_id: tenantId,
       director_id: directorId,
       type: "inactive_project",
@@ -214,7 +214,7 @@ async function checkContactFollowUp(
 
   if (!contacts?.length) return [];
 
-  const contactIds = contacts.map((c) => c.id);
+  const contactIds = contacts.map((c: any) => c.id);
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: existing } = await supabase
@@ -224,11 +224,11 @@ async function checkContactFollowUp(
     .in("reference_id", contactIds)
     .gte("scheduled_at", twoWeeksAgo);
 
-  const existingIds = new Set((existing || []).map((e) => e.reference_id));
+  const existingIds = new Set((existing || []).map((e: any) => e.reference_id));
 
   return contacts
-    .filter((c) => !existingIds.has(c.id))
-    .map((c) => ({
+    .filter((c: any) => !existingIds.has(c.id))
+    .map((c: any) => ({
       tenant_id: tenantId,
       director_id: directorId,
       type: "contact",
