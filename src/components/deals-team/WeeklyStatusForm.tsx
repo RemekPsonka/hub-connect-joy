@@ -242,6 +242,7 @@ export function WeeklyStatusForm({
               });
               // Invalidate contact tasks cache
               queryClient.invalidateQueries({ queryKey: ['contact-tasks-with-cross', contactId] });
+              queryClient.invalidateQueries({ queryKey: ['stalled-contacts'] });
             }
           }
         }
