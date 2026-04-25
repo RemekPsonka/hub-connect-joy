@@ -191,7 +191,9 @@ export default function SGUOdprawa() {
           teamId={teamId}
           open={!!selectedAgendaRow && sheetContactQ.isSuccess && !!sheetContactQ.data}
           onOpenChange={(open) => {
-            if (!open) setSelectedAgendaRow(null);
+            // W trybie aktywnej odprawy NIE resetujemy selectedAgendaRow przy zamknięciu sheet —
+            // DecisionMatrix8 musi pozostać widoczny pod agendą do podjęcia decyzji.
+            if (!open && !active) setSelectedAgendaRow(null);
           }}
         />
       )}
