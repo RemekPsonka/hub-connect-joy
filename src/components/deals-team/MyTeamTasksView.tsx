@@ -86,7 +86,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
   // Stage-badge quick action: schedule meeting (offering_stage = meeting_plan)
   const [meetingScheduledFor, setMeetingScheduledFor] = useState<{
-    contactName: string; contactId: string; teamContactId: string;
+    contactName: string; contactId: string; teamContactId: string; sourceTaskId: string | null;
   } | null>(null);
 
   const filtered = useMemo(() => {
@@ -229,7 +229,23 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
       onTitleChange={(taskId, newTitle) => {
         updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
       }}
-      onClick={() => handleOpenDetail(task)}
+      onClick={() => {
+        // Ghost rows (synthesized for meeting_plan contacts without open tasks)
+        // open the meeting scheduling dialog directly.
+        if (task.id.startsWith('ghost:') && task.deal_team_contact_id) {
+          const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
+          if (tc) {
+            setMeetingScheduledFor({
+              contactName: tc.contact?.full_name || task.contact_name || '',
+              contactId: tc.contact_id,
+              teamContactId: tc.id,
+              sourceTaskId: null,
+            });
+            return;
+          }
+        }
+        handleOpenDetail(task);
+      }}
       onStageBadgeClick={
         task.contact_offering_stage === 'meeting_plan' && task.deal_team_contact_id
           ? () => {
@@ -239,6 +255,7 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
                 contactName: tc.contact?.full_name || task.contact_name || '',
                 contactId: tc.contact_id,
                 teamContactId: tc.id,
+                sourceTaskId: task.id.startsWith('ghost:') ? null : task.id,
               });
             }
           : undefined
@@ -461,7 +478,20 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           contactId={meetingScheduledFor.contactId}
           teamContactId={meetingScheduledFor.teamContactId}
           teamId={teamId}
-          onConfirm={() => setMeetingScheduledFor(null)}
+          onConfirm={() => {
+            // Close source "Umówić spotkanie" task if it exists, so it doesn't
+            // remain on the list as overdue.
+            const srcId = meetingScheduledFor.sourceTaskId;
+            const srcTeamContactId = meetingScheduledFor.teamContactId;
+            if (srcId) {
+              updateAssignment.mutate({
+                id: srcId,
+                teamContactId: srcTeamContactId,
+                status: 'completed',
+              });
+            }
+            setMeetingScheduledFor(null);
+          }}
         />
       )}
 
