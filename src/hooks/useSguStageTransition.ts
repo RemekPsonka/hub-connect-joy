@@ -75,6 +75,22 @@ export function useSguStageTransition() {
           .single();
         if (!director) throw new Error('Brak directora');
 
+        // Właściciel kontaktu = osoba odpowiedzialna za task. Fallback: klikający.
+        const { data: dtcOwner } = await supabase
+          .from('deal_team_contacts')
+          .select('assigned_to')
+          .eq('id', teamContactId)
+          .maybeSingle();
+        const assignedDirectorId: string = dtcOwner?.assigned_to ?? director.id;
+
+        // Mapuj director.id → user_id (filtr "Moje" w /sgu/zadania używa assigned_to_user_id).
+        const { data: assignedDirector } = await supabase
+          .from('directors')
+          .select('user_id')
+          .eq('id', assignedDirectorId)
+          .maybeSingle();
+        const assignedUserId: string = assignedDirector?.user_id ?? user.id;
+
         const title = buildTaskTitle(nextStage, contactName, contactCompany);
         const { data: newTask, error: tErr } = await supabase
           .from('tasks')
@@ -88,6 +104,8 @@ export function useSguStageTransition() {
             priority: 'medium',
             due_date: newTaskDueDate ?? null,
             visibility: 'team',
+            assigned_to: assignedDirectorId,
+            assigned_to_user_id: assignedUserId,
           })
           .select('id')
           .single();

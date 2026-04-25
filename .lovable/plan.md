@@ -1,35 +1,23 @@
-# Co się dzieje po kliknięciu "Umawiamy spotkanie"
+## Problem
+`useSguStageTransition` tworzy zadania bez `assigned_to` i `assigned_to_user_id`. Zakładka „Moje" w `/sgu/zadania` filtruje po `assigned_to_user_id = auth.uid()` → nowe taski tam nie wpadają.
 
-## Diagnoza (bez bugów — to świadomy design)
+## Rozwiązanie
+W `src/hooks/useSguStageTransition.ts` przy INSERT do `tasks`:
 
-Pasek "Co się stało od ostatniej odprawy?" zawiera dwa różne typy przycisków:
+1. Pobierz właściciela kontaktu z `deal_team_contacts.assigned_to` dla danego `teamContactId`.
+2. Jeśli null → fallback na directora klikającego użytkownika.
+3. Zmapuj `directors.id` → `directors.user_id` (potrzebne do `assigned_to_user_id`).
+4. Dodaj do INSERT:
+   - `assigned_to: <director.id właściciela>`
+   - `assigned_to_user_id: <user_id właściciela>`
 
-1. **Sub-stages** (przerywana ramka, kropka ●): `Spotkanie decyzyjne`, `Umawiamy spotkanie`, `Spotkanie umówione`, `Handshake`, `POA podpisane`, `Audyt zrobiony` — to **mikro-statusy** wewnątrz tego samego milestone'a (Prospekt / K2+ / K3).
-2. **Milestones** (pełna ramka): `Spotkanie odbyte`, `Klient` itd. — przeskakują na kolejny K.
+## Edge case
+Asystentka klikająca na odprawie tworzy task → trafi do dyrektora (właściciela kontaktu), nie do asystentki. Zgodnie z Twoją decyzją.
 
-Klik w "Umawiamy spotkanie" trafia do `MilestoneActionStrip.stampSubStage()` (linia 104), który:
+## Bez zmian
+- `owner_id` zostaje = director.id klikającego (audyt kto utworzył).
+- `due_date` nadal null (Twoja decyzja „bez terminu").
+- Stare zadania (już istniejące, bez `assigned_to_user_id`) nie zostaną tknięte. Jeśli chcesz, mogę dorzucić jednorazowy backfill UPDATE, ale to osobna decyzja.
 
-- robi `UPDATE deal_team_contacts SET offering_stage='meeting_planning'`
-- loguje decyzję `push` z notatką = label sub-stage'a do `deal_team_decisions`
-- invaliduje query agendy
-- pokazuje toast `Status: Umawiamy spotkanie`
-
-**Żaden dialog się nie otwiera — i nigdy nie miał.** Tylko milestone'y K2 i K4 otwierają dialog (`EstimatedPremiumDialog` / `WonPremiumBreakdownDialog`) przez callback `onPremiumPrompt`. Sub-stages są celowo "1 klik = zapis", bo to tylko zmiana mikro-statusu bez dodatkowych danych.
-
-## Dlaczego nie widać efektu w UI
-
-Po kliknięciu kontakt często wypada z agendy (zmiana `last_status_update` → spada w `priority_bucket`) i panel po prawej znika / przeskakuje na inny kontakt. Toast `Status: Umawiamy spotkanie` w prawym dolnym rogu jest jedynym widocznym potwierdzeniem.
-
-W screenshocie widać że "Spotkanie umówione" jest podświetlone żółto (= `currentOfferingStage`), więc poprzedni klik **zadziałał** — zapisał się w bazie.
-
-## Pytanie do Ciebie
-
-Co chcesz, żeby się działo po kliknięciu sub-stage'a?
-
-**A) Status quo (nic nie zmieniam)** — 1 klik = cichy zapis + toast. Szybko, ale mało wyraźnie.
-
-**B) Mini-dialog z polem daty/notatki** — np. "Umawiamy spotkanie" → dialog z polem "kiedy planowane?" + opcjonalna notatka. Daje to też okazję żeby od razu utworzyć task w `tasks` (zgodnie ze `STAGE_ACTIONS` mapą — `meeting_plan` → `MeetingScheduledDialog`).
-
-**C) Tylko mocniejszy feedback wizualny** — po zapisie zostań na kontakcie, podświetl nowy stan na timeline'ie, pokaż "Zapisano ✓" inline (bez dialogu).
-
-Daj znać który wariant — wtedy zaimplementuję. Domyślnie sugeruję **C** (najmniej tarcia, naprawia główny problem "nie widzę co się stało") z opcjonalnym przejściem do **B** dla `meeting_planning`/`meeting_scheduled` jeśli chcesz spinać to z taskami w `/sgu/zadania`.
+## Plik
+- `src/hooks/useSguStageTransition.ts` — ~10 linii w sekcji „3) create next task".
