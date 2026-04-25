@@ -24,6 +24,8 @@ import { NextStepDialog } from '@/components/sgu/odprawa/NextStepDialog';
 import { OdprawaExceptionsBar } from '@/components/sgu/odprawa/OdprawaExceptionsBar';
 import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
+import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,6 +47,19 @@ export default function SGUOdprawa() {
 
   const [busy, setBusy] = useState(false);
   const [selectedAgendaRow, setSelectedAgendaRow] = useState<OdprawaAgendaRow | null>(null);
+  const [premiumPrompt, setPremiumPrompt] = useState<{
+    kind: 'k2' | 'k4';
+    contactId: string;
+    teamId: string;
+    clientName?: string;
+    currentExpectedPremiumGr: number | null;
+    currentPotentials: {
+      property: number | null;
+      financial: number | null;
+      communication: number | null;
+      life_group: number | null;
+    };
+  } | null>(null);
 
   const sheetContactQ = useDealTeamContactByContactId(
     selectedAgendaRow?.contact_id ?? null,
@@ -293,14 +308,21 @@ export default function SGUOdprawa() {
                       teamId={teamId}
                       tenantId={dtc.tenant_id}
                       odprawaSessionId={active.id}
-                      clientName={dtc.contact?.full_name ?? undefined}
-                      currentExpectedPremiumGr={dtc.expected_annual_premium_gr ?? null}
-                      currentPotentials={{
-                        property: dtc.potential_property_gr ?? null,
-                        financial: dtc.potential_financial_gr ?? null,
-                        communication: dtc.potential_communication_gr ?? null,
-                        life_group: dtc.potential_life_group_gr ?? null,
-                      }}
+                      onPremiumPrompt={(kind) =>
+                        setPremiumPrompt({
+                          kind,
+                          contactId: dtc.id,
+                          teamId,
+                          clientName: dtc.contact?.full_name ?? undefined,
+                          currentExpectedPremiumGr: dtc.expected_annual_premium_gr ?? null,
+                          currentPotentials: {
+                            property: dtc.potential_property_gr ?? null,
+                            financial: dtc.potential_financial_gr ?? null,
+                            communication: dtc.potential_communication_gr ?? null,
+                            life_group: dtc.potential_life_group_gr ?? null,
+                          },
+                        })
+                      }
                     />
                     <NextStepDialog
                       state={timelineState}
@@ -327,6 +349,25 @@ export default function SGUOdprawa() {
           )}
         </div>
       </div>
+
+      {/* Dialogi składek otwierane po K2/K4 — renderowane na poziomie strony,
+          żeby nie odmontowały się przy invalidate agendy (gdy kontakt zmienia category). */}
+      <EstimatedPremiumDialog
+        open={premiumPrompt?.kind === 'k2'}
+        onOpenChange={(o) => !o && setPremiumPrompt(null)}
+        contactId={premiumPrompt?.contactId ?? ''}
+        teamId={premiumPrompt?.teamId ?? ''}
+        currentGr={premiumPrompt?.currentExpectedPremiumGr ?? null}
+        clientName={premiumPrompt?.clientName}
+      />
+      <WonPremiumBreakdownDialog
+        open={premiumPrompt?.kind === 'k4'}
+        onOpenChange={(o) => !o && setPremiumPrompt(null)}
+        contactId={premiumPrompt?.contactId ?? ''}
+        teamId={premiumPrompt?.teamId ?? ''}
+        current={premiumPrompt?.currentPotentials}
+        clientName={premiumPrompt?.clientName}
+      />
     </div>
   );
 }
