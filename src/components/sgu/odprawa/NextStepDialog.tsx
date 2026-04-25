@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -6,7 +6,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
-import { Plus } from 'lucide-react';
+import { Plus, Phone, Mail, CalendarPlus, FileSignature, Send } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -30,6 +29,13 @@ import type { ContactTimelineState } from '@/hooks/odprawa/useContactTimelineSta
 
 type DueOption = '7d' | 'next_odprawa' | 'custom' | 'none';
 
+interface ContactCtx {
+  full_name: string;
+  handshake_at: string | null;
+  poa_signed_at: string | null;
+  audit_done_at: string | null;
+}
+
 interface Props {
   state: ContactTimelineState;
   dealTeamContactId: string;
@@ -38,8 +44,61 @@ interface Props {
   tenantId: string;
   odprawaSessionId: string;
   defaultAssigneeId: string | null;
+  contactCtx: ContactCtx;
   onCreated: () => void;
 }
+
+interface Template {
+  key: string;
+  label: string;
+  Icon: typeof Phone;
+  /** Pre-fill tytuł */
+  title: (name: string) => string;
+  /** Jeśli ustawiony — po sukcesie ustawiamy offering_stage. */
+  stage: string | null;
+  /** Filtr widoczności per stan. */
+  visibleWhen?: (c: ContactCtx) => boolean;
+}
+
+const TEMPLATES: Template[] = [
+  {
+    key: 'call',
+    label: 'Zadzwoń',
+    Icon: Phone,
+    title: (n) => `Zadzwonić do ${n}`,
+    stage: null,
+  },
+  {
+    key: 'email',
+    label: 'Wyślij mail',
+    Icon: Mail,
+    title: (n) => `Wysłać maila do ${n}`,
+    stage: null,
+  },
+  {
+    key: 'meeting',
+    label: 'Umów spotkanie',
+    Icon: CalendarPlus,
+    title: (n) => `Umówić spotkanie z ${n}`,
+    stage: 'meeting_plan',
+  },
+  {
+    key: 'poa',
+    label: 'Wyślij POA',
+    Icon: FileSignature,
+    title: (n) => `Wysłać POA do ${n}`,
+    stage: 'power_of_attorney',
+    visibleWhen: (c) => !!c.handshake_at && !c.poa_signed_at,
+  },
+  {
+    key: 'offer',
+    label: 'Wyślij ofertę',
+    Icon: Send,
+    title: (n) => `Wysłać ofertę do ${n}`,
+    stage: 'offer_sent',
+    visibleWhen: (c) => !!c.audit_done_at,
+  },
+];
 
 function plusDays(n: number): string {
   const d = new Date();
@@ -55,6 +114,7 @@ export function NextStepDialog({
   tenantId,
   odprawaSessionId,
   defaultAssigneeId,
+  contactCtx,
   onCreated,
 }: Props) {
   const { user } = useAuth();
@@ -63,24 +123,37 @@ export function NextStepDialog({
   const directorsQ = useTeamDirectors(teamId);
 
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(state.nextStepSuggestion.title);
+  const [activeTpl, setActiveTpl] = useState<Template | null>(null);
+  const [title, setTitle] = useState('');
   const [assignee, setAssignee] = useState<string>('');
   const [dueOpt, setDueOpt] = useState<DueOption>('7d');
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setTitle(state.nextStepSuggestion.title);
-      setAssignee(defaultAssigneeId ?? user?.id ?? '');
-      setDueOpt('7d');
-      setCustomDate(undefined);
-      setNotes('');
-    }
-  }, [open, state.nextStepSuggestion.title, defaultAssigneeId, user?.id]);
+  const visibleTemplates = useMemo(
+    () => TEMPLATES.filter((t) => !t.visibleWhen || t.visibleWhen(contactCtx)),
+    [contactCtx],
+  );
 
-  if (!state.nextStepSuggestion.title) return null;
+  const openWithTemplate = (tpl: Template | null) => {
+    setActiveTpl(tpl);
+    setTitle(
+      tpl
+        ? tpl.title(contactCtx.full_name)
+        : state.nextStepSuggestion.title || '',
+    );
+    setAssignee(defaultAssigneeId ?? '');
+    setDueOpt('7d');
+    setCustomDate(undefined);
+    setNotes('');
+    setOpen(true);
+  };
+
+  // Reset state przy zamknięciu (oczyszczamy po ESC/click outside).
+  useEffect(() => {
+    if (!open) setActiveTpl(null);
+  }, [open]);
 
   const submit = async () => {
     const t = title.trim();
@@ -128,6 +201,14 @@ export function NextStepDialog({
       });
       if (linkErr) throw linkErr;
 
+      // Jeśli template ma stage → UPDATE offering_stage.
+      if (activeTpl?.stage) {
+        await supabase
+          .from('deal_team_contacts')
+          .update({ offering_stage: activeTpl.stage })
+          .eq('id', dealTeamContactId);
+      }
+
       await logMut.mutateAsync({
         contactId: dealTeamContactId,
         teamId,
@@ -142,6 +223,8 @@ export function NextStepDialog({
 
       qc.invalidateQueries({ queryKey: ['odprawa-contact-tasks', contactId] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       toast.success('Zadanie utworzone');
       setOpen(false);
@@ -157,15 +240,35 @@ export function NextStepDialog({
   return (
     <div className="space-y-2">
       <div className="text-sm font-semibold">Co dalej?</div>
+      <div className="flex flex-wrap gap-2">
+        {visibleTemplates.map((tpl) => {
+          const Icon = tpl.Icon;
+          return (
+            <Button
+              key={tpl.key}
+              variant="outline"
+              size="sm"
+              onClick={() => openWithTemplate(tpl)}
+            >
+              <Icon className="h-4 w-4 mr-1" /> {tpl.label}
+            </Button>
+          );
+        })}
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => openWithTemplate(null)}
+        >
+          <Plus className="h-4 w-4 mr-1" /> Inne zadanie
+        </Button>
+      </div>
+
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button variant="default" size="sm">
-            <Plus className="h-4 w-4 mr-1" /> Stwórz zadanie
-          </Button>
-        </DialogTrigger>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nowe zadanie follow-up</DialogTitle>
+            <DialogTitle>
+              {activeTpl ? activeTpl.label : 'Nowe zadanie follow-up'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -184,6 +287,11 @@ export function NextStepDialog({
                   <SelectValue placeholder="Wybierz wykonawcę" />
                 </SelectTrigger>
                 <SelectContent>
+                  {(directorsQ.data ?? []).length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      {directorsQ.isLoading ? 'Ładowanie…' : 'Brak członków zespołu'}
+                    </div>
+                  )}
                   {directorsQ.data?.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.full_name}
