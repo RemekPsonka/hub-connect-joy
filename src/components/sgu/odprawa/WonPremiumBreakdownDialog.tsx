@@ -72,7 +72,16 @@ export function WonPremiumBreakdownDialog({
         life_group: toPln(current?.life_group),
       });
     }
-  }, [open, current]);
+    // Stable primitive deps — `current` jest tworzone inline w parent i miałoby nową
+    // referencję przy każdym renderze, co kasowałoby wpisane wartości.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    open,
+    current?.property,
+    current?.financial,
+    current?.communication,
+    current?.life_group,
+  ]);
 
   const totalPln = useMemo(
     () => AREAS.reduce((sum, a) => sum + parsePln(values[a.key]), 0),
