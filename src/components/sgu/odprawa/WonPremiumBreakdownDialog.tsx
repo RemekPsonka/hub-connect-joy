@@ -111,8 +111,6 @@ export function WonPremiumBreakdownDialog({
         financial_active: finGr > 0,
         communication_active: comGr > 0,
         life_group_active: lifeGr > 0,
-        referrals_count: 0,
-        references_count: 0,
       },
     };
     update.mutate(payload, {
