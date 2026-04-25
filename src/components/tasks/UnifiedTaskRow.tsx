@@ -115,6 +115,7 @@ export interface UnifiedTaskRowProps {
   onAssigneeChange?: (taskId: string, newAssigneeId: string) => void;
   onTitleChange?: (taskId: string, newTitle: string) => void;
   onClick?: (taskId: string) => void;
+  onStageBadgeClick?: () => void;
   compact?: boolean;
   showSubtasks?: boolean;
   showAssignee?: boolean;
@@ -134,6 +135,7 @@ export function UnifiedTaskRow({
   onAssigneeChange,
   onTitleChange,
   onClick,
+  onStageBadgeClick,
   compact = false,
   showSubtasks = true,
   showAssignee = false,
@@ -271,7 +273,15 @@ export function UnifiedTaskRow({
 
         {/* Deal stage badge (between title and due date) */}
         {dealStageBadge && (
-          <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal">
+          <Badge
+            variant="outline"
+            onClick={onStageBadgeClick ? (e) => { e.stopPropagation(); onStageBadgeClick(); } : undefined}
+            title={onStageBadgeClick ? 'Kliknij, aby zaktualizować etap' : undefined}
+            className={cn(
+              'gap-1 text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal',
+              onStageBadgeClick && 'cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors',
+            )}
+          >
             <span>{STAGE_ICON[dealStageBadge.stage] ?? '📋'}</span>
             <span>{STAGE_LABEL[dealStageBadge.stage] ?? dealStageBadge.stage}</span>
             {dealStageBadge.subCategory && (
