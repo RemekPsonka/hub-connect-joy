@@ -141,11 +141,6 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
                   <it.icon className={cn('h-4 w-4', it.tone)} />
                 </div>
                 <div className="text-2xl font-semibold tabular-nums">{it.value}</div>
-                {it.key === 'client' && (
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    Σ oczek. {formatPLN(expectedPortfolioPLN)}
-                  </div>
-                )}
                 {badges && badges.length > 0 && (
                   <div className="flex items-center gap-1 flex-wrap pt-0.5">
                     {badges.map((b) => (
