@@ -1,8 +1,19 @@
+import { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PriorityBadge } from './PriorityBadge';
 import { ListChecks } from 'lucide-react';
 import type { OdprawaAgendaRow } from '@/hooks/useOdprawaAgenda';
+
+const SECTION_ORDER = ['urgent', '10x', 'stalled', 'followup', 'new_prospects', '_other'] as const;
+const SECTION_DEFAULTS: Record<string, { label: string; icon: string }> = {
+  urgent: { label: 'Pilne dziś', icon: '🔥' },
+  '10x': { label: '10x', icon: '🎯' },
+  stalled: { label: 'Stalled', icon: '⚠️' },
+  followup: { label: 'Follow-upy', icon: '📞' },
+  new_prospects: { label: 'Nowi prospekci', icon: '🆕' },
+  _other: { label: 'Pozostałe', icon: '·' },
+};
 
 interface Props {
   rows: OdprawaAgendaRow[] | undefined;
@@ -25,6 +36,38 @@ export function AgendaList({
   currentContactId = null,
   discussedContactIds,
 }: Props) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, OdprawaAgendaRow[]>();
+    const meta = new Map<string, { label: string; icon: string }>();
+    for (const row of rows ?? []) {
+      const key = row.ai_section_key ?? '_other';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
+      if (!meta.has(key)) {
+        meta.set(key, {
+          label: row.ai_section_label || SECTION_DEFAULTS[key]?.label || 'Pozostałe',
+          icon: row.ai_section_icon || SECTION_DEFAULTS[key]?.icon || '·',
+        });
+      }
+    }
+    // Stable order: known sections first, then any unknown keys
+    const orderedKeys: string[] = [];
+    for (const k of SECTION_ORDER) if (map.has(k)) orderedKeys.push(k);
+    for (const k of map.keys()) if (!orderedKeys.includes(k)) orderedKeys.push(k);
+    return { map, meta, orderedKeys };
+  }, [rows]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const k of SECTION_ORDER) c[k] = grouped.map.get(k)?.length ?? 0;
+    return c;
+  }, [grouped]);
+
+  const hasAnyAiSection = useMemo(
+    () => SECTION_ORDER.some((k) => k !== '_other' && (counts[k] ?? 0) > 0),
+    [counts],
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -45,10 +88,7 @@ export function AgendaList({
     );
   }
 
-  return (
-    <div className="space-y-2">
-      {rows.map((row) => (
-        (() => {
+  const renderRow = (row: OdprawaAgendaRow) => {
           const isCurrent = currentContactId === row.contact_id;
           const isDiscussed =
             !isCurrent && !!discussedContactIds?.has(row.contact_id);
@@ -105,8 +145,34 @@ export function AgendaList({
               </div>
             </button>
           );
-        })()
-      ))}
+  };
+
+  return (
+    <div className="space-y-4">
+      {hasAnyAiSection ? (
+        <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2 leading-relaxed">
+          Dziś:{' '}
+          <span className="font-medium text-foreground">{counts.urgent}</span> pilnych ·{' '}
+          <span className="font-medium text-foreground">{counts.stalled}</span> stalled ·{' '}
+          <span className="font-medium text-foreground">{counts['10x']}</span>× 10x ·{' '}
+          <span className="font-medium text-foreground">{counts.followup}</span> follow-upów ·{' '}
+          <span className="font-medium text-foreground">{counts.new_prospects}</span> nowych
+        </div>
+      ) : null}
+
+      {grouped.orderedKeys.map((key) => {
+        const sectionRows = grouped.map.get(key) ?? [];
+        if (sectionRows.length === 0) return null;
+        const meta = grouped.meta.get(key) ?? SECTION_DEFAULTS._other;
+        return (
+          <div key={key} className="space-y-1">
+            <div className="text-xs font-semibold text-muted-foreground sticky top-0 z-10 bg-background py-1">
+              {meta.icon} {meta.label} ({sectionRows.length})
+            </div>
+            <div className="space-y-2">{sectionRows.map(renderRow)}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
