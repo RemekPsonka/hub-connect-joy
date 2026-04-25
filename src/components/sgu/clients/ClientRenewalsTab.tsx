@@ -103,6 +103,7 @@ export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
     onSuccess: () => {
       toast.success('Zadanie utworzone');
       qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['stalled-contacts'] });
     },
     onError: (e) => toast.error('Błąd', { description: (e as Error).message }),
   });

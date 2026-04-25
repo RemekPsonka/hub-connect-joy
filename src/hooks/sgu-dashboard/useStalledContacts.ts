@@ -81,9 +81,13 @@ export function useStalledContacts(teamId?: string) {
       const stalled: StalledContact[] = [];
       const byStage: Partial<Record<OfferingStage, number>> = {};
 
+      // BLOK-TUNE-01: 3-day freshness threshold — kontakt aktualizowany w ciągu ostatnich 3 dni nie jest stalled
+      const freshnessThreshold = Date.now() - 3 * 86400000;
+
       for (const r of rows) {
         if (withActiveTask.has(r.id)) continue;
         if (r.next_action_date && r.next_action_date >= today) continue;
+        if (r.updated_at && new Date(r.updated_at).getTime() > freshnessThreshold) continue;
 
         const stage = r.offering_stage as OfferingStage | null;
         if (!stage) continue;
