@@ -1,106 +1,50 @@
+## Problem
 
-# ODPRAWA-SUBSTAGE-01 — sub-stage'y w karcie Odprawy
+W karcie kontaktu w `/sgu/odprawa` opiekun jest pokazany jako "👤 —" dla wszystkich 144 kontaktów teamu. Pre-flight DB potwierdza: `deal_team_contacts.assigned_to IS NULL` w 144/144 rekordach team SGU. Render działa (kod już czyta `dtc.assigned_director?.full_name`), ale pole nigdy nie jest ustawiane — bo nigdzie w UI Odprawy/Kanban/Klienci nie ma sposobu żeby je przypisać dla kontaktu typu lead/prospect (jest tylko w `PromoteDialog` przy promocji do klienta).
 
-## PRE-FLIGHT ✅
-- **0.1 CHECK constraint**: 14 wartości obecne — `decision_meeting, handshake, power_of_attorney, audit, offer_sent, negotiation, won, lost, meeting_plan, meeting_scheduled, meeting_done, audit_plan, audit_scheduled, audit_done`. ✅
-- **0.2 useLogDecision**: `milestoneVariant: MilestoneVariant` (bez null). Trzeba rozszerzyć do `MilestoneVariant | null` (wymagane gdy sub-stage zapisuje się będąc na milestone bez wariantu, np. `prospect`).
+Skutek: gdy klikasz "Spotkanie umówione" / "Handshake" / dowolne `Co dalej?` — system nie wie czyje to spotkanie. Audyt decyzji w `meeting_decisions` traci atrybucję per-director.
 
-## Scope adjustment
-- **Krok 5 (10x toggle) pomijam** — `OperationalActions.tsx` już ma pełną implementację (`Sparkles`, `toggle10x`, fioletowy state, invalidate agendy). Acceptance check `rg "Sparkles"` już zielony.
-- Reszta scope bez zmian.
+## Co zrobimy
 
-## Co dotykam (5 plików, 1 nowy)
+**1. Inline picker opiekuna w nagłówku karty (`SGUOdprawa.tsx`)**
 
-### A. NOWY: `src/lib/offeringStageLabels.ts`
-Eksport `OfferingStage` (union 14 wartości, zgodny z CHECK), `OFFERING_STAGE_LABEL` (mapa label→PL), oraz 3 grupy sub-stages:
-- `PRE_K1_SUBSTAGES = ['decision_meeting', 'meeting_plan', 'meeting_scheduled']`
-- `PRE_K3_SUBSTAGES = ['audit_plan', 'audit_scheduled']`
-- `POST_K3_SUBSTAGES = ['offer_sent', 'negotiation']`
+Zamiast statycznego `<User /> {ownerName}` — komponent klikalny:
 
-### B. `src/hooks/useLogDecision.ts`
-- `LogDecisionInput.milestoneVariant: MilestoneVariant | null` (rozszerzenie typu).
-- `meeting_decisions.milestone_variant` przyjmuje już null (kolumna nullable po stronie DB — zakładam, walidacja przy zapisie).
+- Brak opiekuna → przycisk-link "Przypisz opiekuna" (akcent kolorowy, żeby kłuł w oczy że jest pusto).
+- Jest opiekun → "👤 Anna Nowak" klikalne, hover otwiera popover z listą directorów teamu + "Bez opiekuna".
+- Po wyborze: `UPDATE deal_team_contacts SET assigned_to = X WHERE id = dtc.id`, invalidate `['deal_team_contact_for_agenda']`.
 
-### C. `src/hooks/odprawa/useContactTimelineState.ts`
-- Dorzucam do Pick: `'offering_stage'`.
-- Dorzucam do `ContactTimelineState`:
-  - `currentOfferingStage: OfferingStage | null`
-  - `currentOfferingStageLabel: string`
-  - `availableSubStages: OfferingStage[]` — kontekst per `currentMilestone`:
-    - `prospect` → `PRE_K1_SUBSTAGES.filter(s => s !== contact.offering_stage)`
-    - `k2+` → `PRE_K3_SUBSTAGES.filter(...)`
-    - `k3` → `POST_K3_SUBSTAGES.filter(...)`
-    - else → `[]`
-  - `showSubStageStrip: boolean` = `currentMilestone === 'prospect' || currentMilestone === 'k3'`
+Reużycie istniejącej infry: `useTeamDirectors(teamId)` (już naprawiony w poprzednim sprincie, zwraca 3 directorów teamu).
 
-### D. NOWY: `src/components/sgu/odprawa/OfferingStageStrip.tsx`
-Pasek pod osią. Render tylko gdy `state.showSubStageStrip`. Sekwencja 4 punktów:
-- **prospect**: `[Spotkanie decyzyjne] → [Umawiamy] → [Umówione] → [→ K1]`
-- **k3**: `[Audyt] → [Złożona oferta] → [Negocjacje] → [→ K4]`
+**2. Smart default dla `Co dalej?` templates**
 
-Marker:
-- aktualny (`stage === contact.offering_stage`) → wypełniony, podświetlony
-- przed aktualnym → szary z ✓
-- po aktualnym → pusta kropka
-- ostatni element to label kierunkowy bez kropki (`→ K1` / `→ K4`)
+W `NextStepDialog` `defaultAssigneeId` jest brane z `dtc.assigned_to`. Gdy NULL — dropdown wykonawcy startuje pusty i user musi wybrać. Po fixie #1 gdy opiekun ustawiony → dropdown auto-fill na opiekuna (już działa, ale zacznie być widoczne).
 
-Style: `text-[13px]`, neutralne kolory (border-secondary), spójne z `ContactTimeline`. Bez interakcji — czysto wizualne.
+**3. Bonus: badge ostrzegawczy gdy brak opiekuna**
 
-### E. `src/components/sgu/odprawa/MilestoneActionStrip.tsx`
-Rozszerzenie o sub-stage buttony. W jednym pasku flex-wrap:
-1. Najpierw `state.availableSubStages` jako buttony `variant="outline" size="sm"` z `text-muted-foreground` i ikoną `●` (rozróżnienie od milestone).
-2. Potem `state.availableMilestones` jak teraz.
+W `AgendaList` (lewa lista) — przy kontaktach bez opiekuna mała szara kropka/ikonka "?". Daje sygnał na liście że jest dziura w atrybucji. Opcjonalnie — powiedz czy chcesz, czy zostawić tylko #1+#2.
 
-Filter per current milestone (sub-stages tylko dla prospect/k2+/k3):
-- prospect → PRE_K1 + k1
-- k1, k2 → tylko milestone (brak sub-stages)
-- k2+ → PRE_K3 + k3
-- k3 → POST_K3 + k4
-- k4 → []
+## Czego NIE robimy
 
-`stampSubStage(stage)`:
-```ts
-await supabase.from('deal_team_contacts')
-  .update({ offering_stage: stage })
-  .eq('id', contactId);
+- **Brak migracji DB** — kolumna `assigned_to` istnieje, FK do `directors.id` istnieje, RLS na `directors` działa po poprzednim sprincie.
+- **Brak masowego back-fillu** — Remek sam ustawi opiekunów manualnie przez nowy picker. Auto-przypisanie "do tego kto ostatnio robił touchpoint" byłoby zgadywaniem.
+- **Brak zmian w Kanban / Klienci** — tam już jest `PromoteDialog` z assignee. Możemy w osobnym sprincie ujednolicić, ale teraz fokus na Odprawę.
 
-await logMut.mutateAsync({
-  contactId, teamId, tenantId,
-  decision: 'push',
-  milestoneVariant: state.currentMilestone === 'prospect' ? null : (state.currentMilestone as MilestoneVariant),
-  odprawaSessionId,
-  notes: OFFERING_STAGE_LABEL[stage],
-});
+## Pliki dotknięte
 
-qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
-qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
-qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
-toast.success(`Status: ${OFFERING_STAGE_LABEL[stage]}`);
-```
+- `src/pages/sgu/SGUOdprawa.tsx` — header karty: zamiana statycznego `ownerName` na komponent `<OwnerInlinePicker>`.
+- `src/components/sgu/odprawa/OwnerInlinePicker.tsx` (NEW) — Popover z listą directorów + mutacja UPDATE + toast.
+- `src/components/sgu/odprawa/AgendaList.tsx` — opcjonalnie: ikonka "brak opiekuna" obok kontaktu (do potwierdzenia w odpowiedzi).
 
-Zero milestone stamp, zero `category`/`status` change, zero `onPremiumPrompt`. Kontakt zostaje w agendzie (nie wypada z `currentMilestone`).
+## Acceptance
 
-### F. `src/pages/sgu/SGUOdprawa.tsx`
-Po `<ContactTimeline state={timelineState} />` dorzucam:
-```tsx
-<OfferingStageStrip state={timelineState} />
-```
-Reszta layoutu bez zmian.
+1. Wejdź na `/sgu/odprawa`, wybierz Janusza Urbańca → header pokazuje "Przypisz opiekuna" (bo `assigned_to` NULL).
+2. Klik → popover, lista 3 directorów teamu (Remek + 2 inne).
+3. Wybierz dyrektora → toast "Opiekun przypisany", header zmienia się na "👤 Imię Nazwisko".
+4. Reload strony — opiekun zachowany.
+5. Klik "+ Inne zadanie" w `Co dalej?` → dropdown "Wykonawca" auto-wybrany na opiekuna.
+6. W `meeting_decisions` audit — kolejne decyzje (push/handshake) niosą prawidłowe `created_by` (już działa) + atrybucja przez `assigned_to` na `deal_team_contacts`.
 
-### Czego NIE dotykam
-`useFinishOdprawa`, `useStartOdprawa`, `useAdvanceOdprawaContact`, `useOdprawaAgenda`, `ContactTimeline` (sama oś), `ContactTasksInline`, `NextStepDialog`, `OdprawaExceptionsBar`, `OperationalActions` (już ma 10x).
+## Pytanie do potwierdzenia
 
-## Weryfikacja
-- `npm run typecheck` clean
-- `rg "OFFERING_STAGE_LABEL" src/` ≥ 3 hity
-- `ls src/components/sgu/odprawa/OfferingStageStrip.tsx`, `ls src/lib/offeringStageLabels.ts`
-
-## Smoke (manual po deploy)
-1. /sgu/odprawa → kontakt na K3 (audit_done_at != NULL, won_at == NULL) → pasek `Audyt ✓ → ● Złożona oferta → ○ Negocjacje → ○ K4`
-2. "Co się stało" pokazuje `[Złożona oferta] [Negocjacje] [Klient]`
-3. Klik `[Złożona oferta]` → toast `Status: Złożona oferta`, marker w pasku przeskakuje, kontakt nie znika z agendy
-4. Kontakt na Prospekt → pasek `● Spotkanie decyzyjne → ○ Umawiamy → ○ Umówione → ○ K1`, buttony `[Spotkanie decyzyjne] [Umawiamy] [Umówione] [Spotkanie odbyte]`
-5. 10x toggle (już działa, smoke kontrolny)
-
-## Commit
-`feat(odprawa): ODPRAWA-SUBSTAGE-01 — sub-stage buttony + pasek pod osią`
+Czy dorzucamy bonus #3 (ikonka "brak opiekuna" w lewej liście agendy)? Tak / Nie. Domyślnie zrobię tylko #1+#2.
