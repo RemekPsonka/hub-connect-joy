@@ -417,7 +417,16 @@ export async function callLLM(opts: CallLLMOptions): Promise<LLMResult> {
   // ─── Non-streaming path: parse Lovable result, fallback if needed ───
   if (!lovableFailed && lovableResponse) {
     const data = await lovableResponse.json();
-    const text = data?.choices?.[0]?.message?.content ?? '';
+    const message = data?.choices?.[0]?.message;
+    let text: string = message?.content ?? '';
+    // Fallback: when tool_choice forces a tool call, content is empty and
+    // arguments live in tool_calls[0].function.arguments — surface as text
+    // so callers using tool_choice="required" can JSON.parse the result.
+    if (!text && Array.isArray(message?.tool_calls) && message.tool_calls.length > 0) {
+      const args = message.tool_calls[0]?.function?.arguments;
+      if (typeof args === 'string') text = args;
+      else if (args) text = JSON.stringify(args);
+    }
     const tokens_in = data?.usage?.prompt_tokens ?? 0;
     const tokens_out = data?.usage?.completion_tokens ?? 0;
     const cost_cents = calcCostCents(model, tokens_in, tokens_out);
