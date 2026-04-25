@@ -14,6 +14,7 @@ export type OdprawaAgendaRow = {
   priority_bucket: '10x' | 'stalled' | 'due_soon' | 'other';
   priority_rank: number;
   active_task_count: number;
+  ai_reason?: string | null;
 };
 
 export function useOdprawaAgenda(teamId: string | null | undefined, mode: string = 'standard') {

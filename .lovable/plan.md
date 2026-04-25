@@ -157,6 +157,15 @@ SELECT public.schedule_edge_function(
 ---
 
 ## Out of scope MVP-1
+
+---
+
+## Status implementacji (2026-04-25)
+- ✅ Sub-commit 1 (Sovra cleanup) — AppSidebar ukrywa link AI na trasach `/sgu/*`.
+- ✅ Sub-commit 2 (Faza B) — tabele `ai_agenda_proposals`, `ai_audit_log`, `get_odprawa_agenda` z `ai_reason`.
+- ✅ Sub-commit 3 (Faza C) — `agenda-builder` edge fn + button `AgendaAIRefreshButton` + cron `agenda_builder_daily_06` (Vault helper) + render `ai_reason` w `AgendaList`.
+- ⏳ Sub-commit 4 (Faza D1) — `live-copilot` + sidepanel read-only.
+- ⏳ Sub-commit 5 (Faza D2) — write tools z confirm dialog.
 - **Watchdog (Faza 3 master-spec)** → MVP-3.
 - **Voice input** → v2.
 - **schedule_meeting via GCal** w write tools → v2.

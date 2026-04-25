@@ -90,6 +90,11 @@ export function AgendaList({
                     ? `Akt. ${formatDate(row.last_status_update)}`
                     : 'brak akt.'}
                 </div>
+                {row.ai_reason ? (
+                  <div className="mt-0.5 text-xs italic text-primary/80 truncate">
+                    ✨ {row.ai_reason}
+                  </div>
+                ) : null}
               </div>
               <div className="hidden md:flex flex-col items-end gap-1 flex-shrink-0 text-xs text-muted-foreground">
                 <PriorityBadge bucket={row.priority_bucket} />
