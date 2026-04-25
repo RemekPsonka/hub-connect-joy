@@ -20,6 +20,7 @@ import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
 import { useOdprawaSessionDecisions } from '@/hooks/odprawa/useOdprawaSessionDecisions';
 import { ContactTimeline } from '@/components/sgu/odprawa/ContactTimeline';
 import { MilestoneActionStrip } from '@/components/sgu/odprawa/MilestoneActionStrip';
+import { OfferingStageStrip } from '@/components/sgu/odprawa/OfferingStageStrip';
 import { NextStepDialog } from '@/components/sgu/odprawa/NextStepDialog';
 import { OdprawaExceptionsBar } from '@/components/sgu/odprawa/OdprawaExceptionsBar';
 import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
@@ -299,6 +300,7 @@ export default function SGUOdprawa() {
               </CardHeader>
               <CardContent className="space-y-5">
                 <ContactTimeline state={timelineState} />
+                <OfferingStageStrip state={timelineState} />
                 <ContactTasksInline contactId={dtc.contact_id} />
                 {active && (
                   <>
