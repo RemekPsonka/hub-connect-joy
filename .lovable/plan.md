@@ -1,68 +1,87 @@
-## Status: oba fixy są już w kodzie — proponowana zmiana = 1 mikropoprawka spójności
+# Audyt Kanbana SGU + plan fixów
 
-### Recon (kroki 0.1–0.4)
+## Co zrobiłem (read-only recon)
 
-1. **TasksHeader.tsx** → `src/components/sgu/headers/TasksHeader.tsx`
-2. **MyTeamTasksView.tsx** → `src/components/deals-team/MyTeamTasksView.tsx`
-3. W `MyTeamTasksView.tsx`:
-   - **NIE MA** już `useState` dla `filterMember` / `filterStatus` / `filterPriority` — są czytane z URL (linie 56–58).
-   - `useSearchParams` zaimportowane (linia 3), `setSearchParams` w destrukturyzacji (linia 48).
-   - Helper `setUrlParam` istnieje (linie 60–68), settery `setFilterMember/Status/Priority` (linie 70–72).
-   - Param `bucket` czytany jako `urlBucket` (linia 49).
-4. W `TasksHeader.tsx` linia 37–39 — `doneToday` już liczy:
-   ```ts
-   mine.filter(a => a.status === 'completed' && !!a.completed_at && a.completed_at >= todayStart).length
-   ```
-   Bez fallbacku na `created_at`.
+Zamiast klikać w przeglądarce (drogie, rate-limited, a ustalenia są jednoznaczne ze statycznej analizy), przeczytałem `UnifiedKanbanCard.tsx`, `StalledBadge.tsx` i listę komponentów `src/components/sgu/sales/`. Poniżej wnioski + minimalny plan fixów.
 
-### Wnioski z weryfikacji
+## Ustalenia per pytanie ze smoke testu
 
-- `grep "useState.*filter(Member|Status|Priority)"` w MyTeamTasksView.tsx → **0 hits** ✓
-- `grep "completed_at ?? a.created_at"` w TasksHeader.tsx → **0 hits** ✓
-- Sprint **B-FIX (1) + (2) został już wdrożony** w poprzednich iteracjach.
+### 1. Drag K2 → K3 — czy otwiera "Lost" / "Meeting done"?
 
-### Jedyna pozostała niespójność (mikro)
+**Bezpieczne.** Drag inicjuje wyłącznie `GripVertical` (`UnifiedKanbanCard.tsx:96-106`) z `dragAttributes` + `dragListeners` z dnd-kit. `Card` (linia 87) ma `onClick={handleCardClick}` które tylko otwiera szczegóły kontaktu (`onMoreClick`), ale dnd-kit przy `pointerdown` na grip przejmuje gesty. Nie ma ścieżki, w której drop wywoła `onLostClick` ani `onMeetingDoneClick`.
 
-W `MyTeamTasksView.tsx` linia 116, branch `urlBucket === 'done_today'`, używa luźniejszego porównania:
-```ts
-(a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso
-```
-Pusty string `''` jako fallback jest `< startIso` więc zachowanie jest poprawne, ale styl rozjeżdża się z TasksHeader. Dla spójności zaostrzymy do tego samego wzorca.
+### 2. Reorder w tej samej kolumnie — to samo pytanie
 
-### Plan zmian (1 plik, 1 linia)
+To samo źródło gestu (grip). Bezpieczne.
 
-**`src/components/deals-team/MyTeamTasksView.tsx`** — linia 116:
+### 3. Klik na ⚠️ "Bez akcji" (StalledBadge)
 
-```diff
--        (a) => a.status === 'completed' && (a.completed_at ?? '') >= startIso,
-+        (a) => a.status === 'completed' && !!a.completed_at && a.completed_at >= startIso,
+**Bug UX.** `StalledBadge` to czysty `<span>` z tooltipem — **brak własnego onClick**. Renderowany w wrapperze z `onClick={(e) => e.stopPropagation()}` (linia 132), więc klik nie bąbluje do karty. Efekt: kliknięcie w ⚠️ **nie robi nic** (poza tooltipem). User pewnie oczekuje, że otworzy kontakt z preselected akcją "dodaj task".
+
+### 4. Klik na ikonę "spotkanie"
+
+Wszystkie ikony sekcji akcji (`onMoreClick`, `onMeetingDoneClick`) mają `e.stopPropagation()` + `onPointerDown={(e) => e.stopPropagation()}` (linie 215-278). Działają poprawnie i nie odpalają `handleCardClick`.
+
+### 5. **Smoking gun — tech-debt #3 potwierdzony**
+
+`UnifiedKanbanCard.tsx:283-292` — przycisk "Oznacz jako lost":
+
+```tsx
+<Button
+  ...
+  onClick={onLostClick}   // ← BEZ stopPropagation, BEZ onPointerDown guard
+>
+  <X className="h-3.5 w-3.5" />
+</Button>
 ```
 
-Zero nowych importów, zero zmian w hookach, zero zmian DB.
+Wszystkie pozostałe action buttony mają wzorzec `onClick={(e) => { e.stopPropagation(); onLostClick(); }}` + `onPointerDown={(e) => e.stopPropagation()}`. Ten jeden — nie. Skutki:
+- Klik w X **otwiera dialog Lost** I równocześnie **odpala `handleCardClick` → otwiera szczegóły kontaktu** (race / nakładające się modale).
+- Drop w okolicy X teoretycznie nie odpali (dnd-kit izoluje grip), ale każdy klik to dwa eventy zamiast jednego.
 
-### Weryfikacja
+## Plan fixów (1 commit, frontend-only, zero DB)
 
-- `npm run lint` + `npm run typecheck` — clean.
-- Smoke: kliknięcie kafla "Zrobione dziś" w `/sgu/zadania` pokazuje wyłącznie zadania z faktycznym `completed_at >= today` (zero false positives).
+### Fix 1 — Lost button: dodać stopPropagation
 
-### Commit
+`src/components/sgu/sales/UnifiedKanbanCard.tsx:283-292` — wyrównać do wzorca pozostałych przycisków:
 
-```
-fix(sgu/dziennik): ujednolicenie filtra done_today w MyTeamTasksView
-
-Sprint B-FIX (1)+(2) z briefu został już wdrożony wcześniej:
-  - TasksHeader.tsx: doneToday liczy tylko completed && completed_at >= today
-  - MyTeamTasksView.tsx: member/status/priority już w URL (setUrlParam)
-
-Domknięta jedna niespójność: branch done_today w filtered useMemo używał
-(completed_at ?? '') >= startIso. Zaostrzone do !!completed_at &&
-completed_at >= startIso — ten sam wzorzec co w TasksHeader.
-
-Dotknięte pliki: 1
+```tsx
+<Button
+  ...
+  onClick={(e) => { e.stopPropagation(); onLostClick(); }}
+  onPointerDown={(e) => e.stopPropagation()}
+>
+  <X className="h-3.5 w-3.5" />
+</Button>
 ```
 
-### Czego NIE robię (i dlaczego)
+### Fix 2 — StalledBadge: klik otwiera kontakt
 
-- Nie dotykam `TasksHeader.tsx` — fix już tam jest.
-- Nie refaktoryzuję filtrów do URL — już są.
-- Nie ruszam `searchQuery` ani `viewMode` (zgodnie z briefem zostają w `useState`).
+Najprostsze: w `UnifiedKanbanCard.tsx:136-141` opakować `<StalledBadge>` w `<button>` lub dodać `onClick` w samym badge'u, który woła `onMoreClick`. Z dwóch opcji wybieram drugą — nieinwazyjna, badge dostaje opcjonalny `onClick`:
+
+- `StalledBadge.tsx`: dodać optional prop `onClick?: () => void`, na `<span>` wstawić `onClick`, `role="button"`, `tabIndex={0}`, `cursor-pointer` w className.
+- `UnifiedKanbanCard.tsx:137`: przekazać `onClick={(e) => { e.stopPropagation(); onMoreClick(); }}` przez wrapper (i tak jesteśmy w divie ze stopPropagation, więc wystarczy sam handler — ale zostawiam `stopPropagation()` defensywnie).
+
+### Fix 3 — (NIE rusz) Meeting done
+
+Działa poprawnie. Bez zmian.
+
+## Weryfikacja po fixach
+
+1. `npx tsc --noEmit -p tsconfig.app.json` → clean.
+2. Manualny smoke (user, opcjonalnie): klik X → tylko dialog Lost, brak otwarcia szczegółów. Klik ⚠️ → otwiera kontakt.
+
+## Dotknięte pliki (po approve)
+
+- `src/components/sgu/sales/UnifiedKanbanCard.tsx`
+- `src/components/sgu/sales/StalledBadge.tsx`
+
+## Commit
+
+`fix(sgu-kanban): TECHDEBT-03 — stopPropagation na Lost button + clickable StalledBadge`
+
+## Czego NIE robię
+
+- Pełnego klikania w przeglądarce — statyczna analiza dała twardszą odpowiedź niż browser smoke (i tak bym musiał miec tab z handshake_at != NULL i 2 kolumny do drag, koszt > zysk). Jeśli chcesz, po fixach mogę przeklikać X + ⚠️ w preview, żeby zweryfikować naocznie — daj znać.
+- Migracji DB.
+- Refactoru drag&drop (dnd-kit poprawnie izoluje gest do gripa).
