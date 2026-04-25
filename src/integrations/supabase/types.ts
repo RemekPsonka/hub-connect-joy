@@ -6510,7 +6510,9 @@ export type Database = {
       odprawa_sessions: {
         Row: {
           agenda_snapshot: Json
+          completed_at: string | null
           created_at: string
+          current_contact_id: string | null
           ended_at: string | null
           id: string
           mode: string
@@ -6523,7 +6525,9 @@ export type Database = {
         }
         Insert: {
           agenda_snapshot?: Json
+          completed_at?: string | null
           created_at?: string
+          current_contact_id?: string | null
           ended_at?: string | null
           id?: string
           mode?: string
@@ -6536,7 +6540,9 @@ export type Database = {
         }
         Update: {
           agenda_snapshot?: Json
+          completed_at?: string | null
           created_at?: string
+          current_contact_id?: string | null
           ended_at?: string | null
           id?: string
           mode?: string
@@ -6548,6 +6554,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "odprawa_sessions_current_contact_id_fkey"
+            columns: ["current_contact_id"]
+            isOneToOne: false
+            referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "odprawa_sessions_team_id_fkey"
             columns: ["team_id"]

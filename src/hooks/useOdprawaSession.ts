@@ -13,6 +13,8 @@ export type OdprawaSession = {
   mode: string;
   agenda_snapshot: OdprawaAgendaRow[];
   notes: string | null;
+  current_contact_id: string | null;
+  completed_at: string | null;
 };
 
 export function useActiveOdprawaSession(teamId: string | null | undefined) {
@@ -74,6 +76,7 @@ export function useFinishOdprawa() {
         .update({
           status: 'completed',
           ended_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
           notes: params.notes ?? null,
         })
         .eq('id', params.sessionId);
@@ -81,6 +84,24 @@ export function useFinishOdprawa() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['odprawa-active-session', vars.teamId] });
+    },
+  });
+}
+
+export function useAdvanceOdprawaContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { sessionId: string; nextContactId: string | null }) => {
+      const { error } = await supabase
+        .from('odprawa_sessions')
+        .update({ current_contact_id: params.nextContactId })
+        .eq('id', params.sessionId);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['odprawa-active-session'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-session', vars.sessionId] });
     },
   });
 }
