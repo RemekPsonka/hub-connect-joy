@@ -41,6 +41,9 @@ export function useTeamContacts(
 
       if (category) {
         query = query.eq('category', category);
+      } else {
+        // AUDIT-FIX-01: Kanban/lejek sprzedaży nie pokazuje klientów (są w /sgu/klienci)
+        query = query.neq('category', 'client');
       }
 
       query = query
