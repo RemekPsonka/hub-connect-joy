@@ -79,9 +79,15 @@ export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
       if (!userId) throw new Error('Brak użytkownika');
-      const { data: dirData } = await supabase.from('directors').select('tenant_id').eq('user_id', userId).maybeSingle();
+      const { data: dirData } = await supabase
+        .from('directors')
+        .select('id, tenant_id')
+        .eq('user_id', userId)
+        .maybeSingle();
       const tenantId = dirData?.tenant_id;
       if (!tenantId) throw new Error('Brak tenant_id');
+      const ownerDirectorId = dirData?.id;
+      if (!ownerDirectorId) throw new Error('Brak powiązanego dyrektora dla użytkownika');
 
       const due = new Date(item.endDate);
       due.setDate(due.getDate() - 14);
@@ -92,7 +98,8 @@ export function ClientRenewalsTab({ rows, teamId, filter }: Props) {
         due_date: dueStr,
         deal_team_id: teamId,
         deal_team_contact_id: item.clientId,
-        owner_id: userId,
+        // owner_id = directors.id (FK tasks_owner_id_fkey). NIE auth.users.id.
+        owner_id: ownerDirectorId,
         assigned_to_user_id: userId,
         tenant_id: tenantId,
         task_type: 'renewal',
