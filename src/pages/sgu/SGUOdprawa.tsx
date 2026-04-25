@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, CheckCircle2, Clock, Building2, User, ArrowRight } from 'lucide-react';
+import { Play, CheckCircle2, Clock, Building2, ArrowRight } from 'lucide-react';
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import {
   useOdprawaAgenda,
@@ -181,7 +181,6 @@ export default function SGUOdprawa() {
   const dtc = sheetContactQ.data ?? null;
   const contactName = dtc?.contact?.full_name ?? selectedAgendaRow?.contact_name ?? '';
   const companyName = dtc?.contact?.company ?? selectedAgendaRow?.company_name ?? '';
-  const ownerName = dtc?.assigned_director?.full_name ?? '—';
   const daysInPipeline = dtc?.created_at
     ? Math.max(0, Math.floor((Date.now() - new Date(dtc.created_at).getTime()) / 86_400_000))
     : null;
@@ -292,10 +291,13 @@ export default function SGUOdprawa() {
                       {companyName}
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    {ownerName}
-                  </span>
+                  <OwnerInlinePicker
+                    dealTeamContactId={dtc.id}
+                    teamId={teamId}
+                    contactId={dtc.contact_id}
+                    currentAssigneeId={dtc.assigned_to ?? null}
+                    currentAssigneeName={dtc.assigned_director?.full_name ?? null}
+                  />
                   {daysInPipeline !== null && <span>{daysInPipeline} dni w lejku</span>}
                 </div>
               </CardHeader>
