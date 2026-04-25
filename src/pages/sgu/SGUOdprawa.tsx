@@ -24,6 +24,7 @@ import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline'
 import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
 import type { DecisionKey } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
@@ -71,12 +72,25 @@ export default function SGUOdprawa() {
   const agenda = agendaQ.data ?? [];
   const active = activeQ.data;
 
-  // F5-resilience: gdy sesja ma current_contact_id, przywróć selekcję z agendy
+  // F5-resilience: gdy sesja ma current_contact_id (PK z deal_team_contacts),
+  // odwzoruj na contacts.id i wybierz wiersz z agendy.
   useEffect(() => {
     if (!active?.current_contact_id || agenda.length === 0) return;
-    if (selectedAgendaRow?.contact_id === active.current_contact_id) return;
-    const row = agenda.find((r) => r.contact_id === active.current_contact_id);
-    if (row) setSelectedAgendaRow(row);
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('deal_team_contacts')
+        .select('contact_id')
+        .eq('id', active.current_contact_id as string)
+        .maybeSingle();
+      if (cancelled || !data?.contact_id) return;
+      if (selectedAgendaRow?.contact_id === data.contact_id) return;
+      const row = agenda.find((r) => r.contact_id === data.contact_id);
+      if (row) setSelectedAgendaRow(row);
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.current_contact_id, agenda.length]);
 
@@ -87,9 +101,21 @@ export default function SGUOdprawa() {
     const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
     const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
     try {
+      // FK: odprawa_sessions.current_contact_id -> deal_team_contacts.id
+      // Agenda RPC zwraca contacts.id, więc trzeba zamienić na PK deal_team_contacts.
+      let nextDtcId: string | null = null;
+      if (next?.contact_id) {
+        const { data: nextDtc } = await supabase
+          .from('deal_team_contacts')
+          .select('id')
+          .eq('contact_id', next.contact_id)
+          .eq('team_id', teamId)
+          .maybeSingle();
+        nextDtcId = nextDtc?.id ?? null;
+      }
       await advanceMut.mutateAsync({
         sessionId: active.id,
-        nextContactId: next?.contact_id ?? null,
+        nextContactId: nextDtcId,
       });
       if (next) {
         setSelectedAgendaRow(next);
