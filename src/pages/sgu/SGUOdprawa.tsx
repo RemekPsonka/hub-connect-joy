@@ -24,6 +24,7 @@ import { OfferingStageStrip } from '@/components/sgu/odprawa/OfferingStageStrip'
 import { NextStepDialog } from '@/components/sgu/odprawa/NextStepDialog';
 import { OdprawaExceptionsBar } from '@/components/sgu/odprawa/OdprawaExceptionsBar';
 import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
+import { ContactHistoryPanel } from '@/components/sgu/odprawa/ContactHistoryPanel';
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
 import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
@@ -355,6 +356,7 @@ export default function SGUOdprawa() {
                   </>
                 )}
                 <OperationalActions contact={dtc} teamId={teamId} tenantId={dtc.tenant_id} />
+                <ContactHistoryPanel dealTeamContactId={dtc.id} teamContactId={dtc.id} />
               </CardContent>
             </Card>
           )}
