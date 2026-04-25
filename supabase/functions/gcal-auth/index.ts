@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey) as any;
 
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
