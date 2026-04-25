@@ -346,6 +346,7 @@ Deno.serve(async (req) => {
     });
 
     // LLM streaming call
+    const proposalId = crypto.randomUUID();
     const userContent = `Kontekst kontaktu (JSON):\n${JSON.stringify(
       {
         dtc: ctx.dtc,
@@ -358,7 +359,7 @@ Deno.serve(async (req) => {
       },
       null,
       2,
-    )}`;
+    )}\n\nproposal_id (użyj DOKŁADNIE tego UUID jeśli emitujesz blok \`\`\`proposal\`\`\`): ${proposalId}`;
 
     const llmResult = await callLLM({
       model_hint: MODEL,
@@ -440,6 +441,31 @@ Deno.serve(async (req) => {
             },
             llm_model: MODEL,
           });
+
+          // If LLM emitted a `proposal` block — log tool_call_write (confirmed:null)
+          // so the audit trail is chronological even before the user reacts.
+          const propMatch = accumulated.match(/```proposal\s*([\s\S]*?)```/);
+          if (propMatch) {
+            try {
+              const parsedProp = JSON.parse(propMatch[1].trim());
+              if (parsedProp && typeof parsedProp.tool === "string" && parsedProp.args) {
+                await supabase.from("ai_audit_log").insert({
+                  tenant_id: auth.tenantId,
+                  team_id: teamId,
+                  odprawa_session_id: sessionId,
+                  user_id: auth.user.id,
+                  event_type: "tool_call_write",
+                  tool_name: parsedProp.tool,
+                  input: parsedProp.args,
+                  output: { proposal_id: parsedProp.proposal_id ?? proposalId },
+                  confirmed: null,
+                });
+              }
+            } catch (e) {
+              console.warn("[live-copilot] proposal JSON parse failed:", e);
+            }
+          }
+
           if (r1.length > 0 || r2.length > 0) {
             console.warn(
               `[live-copilot] anti-hallucination violations r1=${r1.length} r2=${r2.length} session=${sessionId}`,
