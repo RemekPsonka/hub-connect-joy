@@ -222,7 +222,7 @@ const SYSTEM_PROMPT = `Jesteś asystentem dyrektora sprzedaży na odprawie zespo
 Otrzymujesz JSON z kontekstem JEDNEGO kontaktu. Zwróć ODPOWIEDŹ DOKŁADNIE w 3 sekcjach:
 
 ## Kontekst
-- 3-4 bullet pointy z FAKTÓW z danych (etap, temperatura, ostatnie decyzje, otwarte zadania, polisy).
+- 3-4 bullet pointy z FAKTÓW z danych (etap, temperatura, ostatnie decyzje, otwarte zadania, polisy, ostatnie notatki z odprawy w polu recent_notes).
 - Format daty: DD.MM.YYYY. Tylko daty obecne w danych wejściowych.
 
 ## Sugerowana akcja
