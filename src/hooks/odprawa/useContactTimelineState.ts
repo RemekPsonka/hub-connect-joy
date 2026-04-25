@@ -80,11 +80,11 @@ export function useContactTimelineState(
 
     const milestones: MilestoneState[] = [
       { key: 'prospect', label: 'Prospekt', achieved: true, date: contact.created_at ?? null },
-      { key: 'k1', label: 'K1 spotkanie', achieved: !!contact.k1_meeting_done_at, date: contact.k1_meeting_done_at ?? null },
-      { key: 'k2', label: 'K2 handshake', achieved: !!contact.handshake_at, date: contact.handshake_at ?? null },
-      { key: 'k2+', label: 'K2+ POA', achieved: !!contact.poa_signed_at, date: contact.poa_signed_at ?? null },
-      { key: 'k3', label: 'K3 audyt', achieved: !!contact.audit_done_at, date: contact.audit_done_at ?? null },
-      { key: 'k4', label: 'K4 klient', achieved: !!contact.won_at, date: contact.won_at ?? null },
+      { key: 'k1', label: 'K1 Spotkanie', achieved: !!contact.k1_meeting_done_at, date: contact.k1_meeting_done_at ?? null },
+      { key: 'k2', label: 'K2 Handshake', achieved: !!contact.handshake_at, date: contact.handshake_at ?? null },
+      { key: 'k2+', label: 'K2+ Pełnomocnictwo', achieved: !!contact.poa_signed_at, date: contact.poa_signed_at ?? null },
+      { key: 'k3', label: 'K3 Audyt', achieved: !!contact.audit_done_at, date: contact.audit_done_at ?? null },
+      { key: 'k4', label: 'K4 Polisa wygrana', achieved: !!contact.won_at, date: contact.won_at ?? null },
     ];
 
     let currentMilestone: MilestoneKey = 'prospect';
