@@ -22,6 +22,7 @@ export type AIProposalTool =
   | 'log_decision';
 
 export interface AIProposal {
+  proposal_id?: string;
   tool: AIProposalTool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   args: Record<string, any>;
