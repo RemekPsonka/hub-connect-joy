@@ -24,6 +24,7 @@ import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
 import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
 import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
+import { MeetingScheduledDialog } from '@/components/deals-team/MeetingScheduledDialog';
 import { UnifiedTaskRow, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -81,6 +82,11 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const [workflowTask, setWorkflowTask] = useState<DealTeamAssignment | null>(null);
   const [workflowContact, setWorkflowContact] = useState<{
     contactName: string; contactId: string; teamContactId: string; category: string;
+  } | null>(null);
+
+  // Stage-badge quick action: schedule meeting (offering_stage = meeting_plan)
+  const [meetingScheduledFor, setMeetingScheduledFor] = useState<{
+    contactName: string; contactId: string; teamContactId: string;
   } | null>(null);
 
   const filtered = useMemo(() => {
@@ -224,6 +230,19 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
       }}
       onClick={() => handleOpenDetail(task)}
+      onStageBadgeClick={
+        task.contact_offering_stage === 'meeting_plan' && task.deal_team_contact_id
+          ? () => {
+              const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
+              if (!tc) return;
+              setMeetingScheduledFor({
+                contactName: tc.contact?.full_name || task.contact_name || '',
+                contactId: tc.contact_id,
+                teamContactId: tc.id,
+              });
+            }
+          : undefined
+      }
     />
   );
 
@@ -432,6 +451,19 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
 
       {/* ─── Create Task Modal ────────────────────────── */}
       <TaskModal open={showCreateModal} onOpenChange={setShowCreateModal} dealTeamId={teamId} />
+
+      {/* ─── Stage Quick Action: Schedule Meeting ──────── */}
+      {meetingScheduledFor && (
+        <MeetingScheduledDialog
+          open={!!meetingScheduledFor}
+          onOpenChange={(open) => { if (!open) setMeetingScheduledFor(null); }}
+          contactName={meetingScheduledFor.contactName}
+          contactId={meetingScheduledFor.contactId}
+          teamContactId={meetingScheduledFor.teamContactId}
+          teamId={teamId}
+          onConfirm={() => setMeetingScheduledFor(null)}
+        />
+      )}
 
       {/* ─── Universal Pipeline Workflow Dialogs ─────── */}
       {workflowContact && workflowTask && (
