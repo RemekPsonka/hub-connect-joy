@@ -92,7 +92,7 @@ async function gatherP0Context(
       supabase
         .from("deal_team_contacts")
         .select(
-          "id, contact_id, category, offering_stage, temperature, last_status_update, next_action_date, handshake_at, poa_signed_at, audit_done_at, contract_signed_at, expected_annual_premium_gr, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, assigned_to, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company, company_id, email, phone)",
+          "id, contact_id, category, offering_stage, temperature, last_status_update, next_action_date, handshake_at, poa_signed_at, audit_done_at, won_at, expected_annual_premium_gr, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, assigned_to, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company, company_id, email, phone)",
         )
         .eq("id", dealTeamContactId)
         .maybeSingle(),
@@ -233,7 +233,7 @@ Jedno zdanie po polsku — co dyrektor powinien dziś zrobić z tym kontaktem.
 2. Drugie pytanie.
 
 ZASADY ANTI-HALUCYNACJI:
-- Milestone date = WYŁĄCZNIE z kolumn *_at (handshake_at, poa_signed_at, audit_done_at, contract_signed_at). Nie wymyślaj.
+- Milestone date = WYŁĄCZNIE z kolumn *_at (handshake_at, poa_signed_at, audit_done_at, won_at). Nie wymyślaj.
 - Nie wymyślaj rozmów, spotkań ani dat — operujesz tylko na danych z input JSON.
 - Kwoty PLN — TYLKO jeśli pojawiają się w policies/dtc (premium, expected_annual_premium_gr).
 - Nie używaj zwrotów "dzwonił/spotkał się/rozmawiał" jeśli nie ma rekordu w recent_decisions/upcoming_meetings.
