@@ -1,4 +1,6 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient as createClientRaw } from "npm:@supabase/supabase-js@2";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const createClient = createClientRaw as unknown as (...args: Parameters<typeof createClientRaw>) => any;
 import { verifyAuth, isAuthError, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {

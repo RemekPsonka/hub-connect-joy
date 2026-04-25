@@ -195,7 +195,7 @@ async function handleCallback(
     const { error: upsertError } = await serviceClient
       .from("gcal_tokens")
       .upsert(
-        {
+        ({
           tenant_id: tenantId,
           director_id: directorId,
           refresh_token_encrypted: enc.ciphertext,
@@ -205,7 +205,7 @@ async function handleCallback(
           // expires_at kept as legacy column; we always re-refresh on demand
           expires_at: new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString(),
           updated_at: new Date().toISOString(),
-        },
+        }) as never,
         { onConflict: "tenant_id,director_id" },
       );
 

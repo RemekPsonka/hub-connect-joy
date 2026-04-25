@@ -365,7 +365,7 @@ Deno.serve(async (req: Request) => {
       ...corsHeaders,
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'X-Sovra-Conversation-Id': conversationId,
+      'X-Sovra-Conversation-Id': conversationId ?? '',
     },
   });
 });
