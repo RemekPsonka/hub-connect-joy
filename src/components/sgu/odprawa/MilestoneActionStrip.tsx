@@ -8,6 +8,10 @@ import type {
   MilestoneKey,
 } from '@/hooks/odprawa/useContactTimelineState';
 import { cn } from '@/lib/utils';
+import {
+  OFFERING_STAGE_LABEL,
+  type OfferingStage,
+} from '@/lib/offeringStageLabels';
 
 const LABEL: Record<MilestoneKey, string> = {
   prospect: 'Prospekt',
@@ -50,7 +54,7 @@ export function MilestoneActionStrip({
   const logMut = useLogDecision();
   const qc = useQueryClient();
 
-  if (state.availableMilestones.length === 0) {
+  if (state.availableMilestones.length === 0 && state.availableSubStages.length === 0) {
     return null;
   }
 
@@ -97,10 +101,54 @@ export function MilestoneActionStrip({
     }
   };
 
+  const stampSubStage = async (stage: OfferingStage) => {
+    try {
+      const { error: upErr } = await supabase
+        .from('deal_team_contacts')
+        .update({ offering_stage: stage })
+        .eq('id', contactId);
+      if (upErr) throw upErr;
+
+      await logMut.mutateAsync({
+        contactId,
+        teamId,
+        tenantId,
+        decision: 'push',
+        milestoneVariant:
+          state.currentMilestone === 'prospect'
+            ? null
+            : (state.currentMilestone as MilestoneVariant),
+        odprawaSessionId,
+        notes: OFFERING_STAGE_LABEL[stage],
+      });
+
+      qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
+      toast.success(`Status: ${OFFERING_STAGE_LABEL[stage]}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Nie udało się zapisać sub-stage';
+      toast.error(msg);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="text-sm font-semibold">Co się stało od ostatniej odprawy?</div>
       <div className="flex flex-wrap gap-2">
+        {state.availableSubStages.map((stage) => (
+          <Button
+            key={stage}
+            variant="outline"
+            size="sm"
+            disabled={logMut.isPending}
+            onClick={() => stampSubStage(stage)}
+            className="text-xs text-muted-foreground border-dashed"
+          >
+            <span className="mr-1.5 text-[10px]">●</span>
+            {OFFERING_STAGE_LABEL[stage]}
+          </Button>
+        ))}
         {state.availableMilestones.map((key) => (
           <Button
             key={key}
