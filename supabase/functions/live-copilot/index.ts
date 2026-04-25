@@ -223,7 +223,7 @@ OPCJONALNIE — PROPOZYCJE AKCJI (write):
 Jeżeli sugerowana akcja jest konkretna i wykonalna jako jedno z poniższych narzędzi, dołącz NA SAMYM KOŃCU odpowiedzi (po sekcji Pytania wspierające) blok kodu:
 
 \`\`\`proposal
-{ "tool": "<nazwa>", "args": { ... }, "rationale": "krótkie uzasadnienie po polsku" }
+{ "proposal_id": "<UUID który zostanie podany niżej>", "tool": "<nazwa>", "args": { ... }, "rationale": "krótkie uzasadnienie po polsku" }
 \`\`\`
 
 Dostępne narzędzia (max 1 propozycja na odpowiedź):
@@ -235,7 +235,8 @@ Dostępne narzędzia (max 1 propozycja na odpowiedź):
 ZASADY PROPOZYCJI:
 - Tylko jeśli dane uzasadniają działanie. Nie proponuj akcji "na siłę".
 - Brak bloku \`\`\`proposal\`\`\` jest poprawną odpowiedzią — preferuj brak nad zgadywaniem.
-- JSON musi być valid (cudzysłowy podwójne, bez komentarzy, bez trailing comma).`;
+- JSON musi być valid (cudzysłowy podwójne, bez komentarzy, bez trailing comma).
+- Pole proposal_id MUSI być dokładnie tym UUID, które otrzymasz w wiadomości użytkownika (NIE wymyślaj własnego).`;
 
 // ──────────────────────────────────────────────────────────────────────
 // R1/R2 validators (post-stream, on accumulated text)
