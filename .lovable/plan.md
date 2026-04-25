@@ -15,6 +15,35 @@
 - **#26**: Trigger `apply_meeting_decision` ma `NEW.lost_reason` w branchu `dead`, ale kolumna w `meeting_decisions` nazywa się `dead_reason` → INSERT z `decision_type='dead'` rzuca `42703`. Bug w trigerze (poza E/#23 scope). Do osobnego ticketu.
 - Pre-existing build errors w edge functions (`ai-stream`, `gcal-auth`, `gcal-sync-events`, `sovra`, `sovra-reminder-trigger`) — nie dotyczą tej zmiany.
 
+---
+
+# TRIGGER-DEAD-REASON-FIX (#27) — STATUS: ✅ COMPLETED
+
+Naprawiony trigger `apply_meeting_decision` dla `decision_type='dead'`:
+
+- **#27a**: `NEW.lost_reason` → `NEW.dead_reason` (kolumna na `meeting_decisions` to `dead_reason`).
+- **#27b** (ujawnione przez smoke): usunięto `SET deal_stage='lost'` — `deal_stage` jest `GENERATED ALWAYS` z `category` → ręczny UPDATE rzucał `428C9` i blokował CAŁĄ decyzję `dead`. Trigger w starej formie był niegrywalny.
+
+## Smoke test
+
+1. INSERT `meeting_decisions(decision_type='dead', dead_reason='SMOKE TEST #27 — dead_reason fix')` na kontakcie Osiewicz.
+2. SELECT po triggerze:
+   - `lost_reason='SMOKE TEST #27 — dead_reason fix'` ✅
+   - `is_lost=true`, `category='lost'`, `deal_stage='lost'` (auto), `status='disqualified'`, `lost_at=now()` ✅
+3. Cleanup: DELETE testowej decyzji + przywrócenie Osiewicza (`is_lost=false`, `category='prospect'`, `status='active'`). Zweryfikowane SELECT-em.
+
+## Pliki
+
+- nowa migracja `apply_meeting_decision` (CREATE OR REPLACE z fix #27a + #27b)
+
+## Pominięte z brief ODPRAWA-TEMPLATES-01 (już wdrożone wcześniej, sprawdzone w plikach)
+
+- Templates "Co dalej?" + `visibleWhen` POA/Oferta — `NextStepDialog.tsx` linie 60–98, render 264–292
+- Prefilled title + offering_stage update — `openWithTemplate` + linia ~230
+- OperationalActions: tylko Notatka + 10x — `OperationalActions.tsx` (komentarz potwierdza migrację)
+- Etykiety milestone (K1 Spotkanie / K2 Handshake / K2+ Pełnomocnictwo / K3 Audyt / K4 Polisa wygrana) — `useContactTimelineState.ts` linie 100–106
+- Trigger selective task close (#23) — wcześniejsza migracja CLEANUP-BUGS-01
+
 ## Pliki
 
 - `src/App.tsx` (A: import Navigate + redirect route)
