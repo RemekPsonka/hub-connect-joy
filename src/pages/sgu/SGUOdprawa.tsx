@@ -16,6 +16,7 @@ import {
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { DecisionMatrix8 } from '@/components/sgu/odprawa/DecisionMatrix8';
 import { toast } from 'sonner';
 
 function formatTime(iso: string): string {
@@ -38,6 +39,18 @@ export default function SGUOdprawa() {
     selectedAgendaRow?.contact_id ?? null,
     teamId,
   );
+
+  const handleAutoAdvance = () => {
+    if (!selectedAgendaRow) return;
+    const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
+    const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
+    if (next) {
+      setSelectedAgendaRow(next);
+    } else {
+      setSelectedAgendaRow(null);
+      toast.success('Koniec agendy — zakończ odprawę gdy gotowe.');
+    }
+  };
 
   useEffect(() => {
     if (sheetContactQ.error) {
@@ -158,6 +171,29 @@ export default function SGUOdprawa() {
             if (!open) setSelectedAgendaRow(null);
           }}
         />
+      )}
+
+      {active && teamId && selectedAgendaRow && sheetContactQ.data && (
+        <Card className="border-primary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Decyzja: {sheetContactQ.data.contact?.full_name ?? 'kontakt'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DecisionMatrix8
+              contact={{
+                id: sheetContactQ.data.id,
+                handshake_at: sheetContactQ.data.handshake_at ?? null,
+                poa_signed_at: sheetContactQ.data.poa_signed_at ?? null,
+              }}
+              teamId={teamId}
+              tenantId={sheetContactQ.data.tenant_id}
+              odprawaSessionId={active.id}
+              onDecisionLogged={handleAutoAdvance}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );

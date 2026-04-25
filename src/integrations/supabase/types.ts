@@ -6011,8 +6011,10 @@ export type Database = {
           decision_type: string
           id: string
           meeting_date: string
+          milestone_variant: string | null
           next_action_date: string | null
           notes: string | null
+          odprawa_session_id: string | null
           postponed_until: string | null
           prev_category: string | null
           prev_offering_stage: string | null
@@ -6028,8 +6030,10 @@ export type Database = {
           decision_type: string
           id?: string
           meeting_date: string
+          milestone_variant?: string | null
           next_action_date?: string | null
           notes?: string | null
+          odprawa_session_id?: string | null
           postponed_until?: string | null
           prev_category?: string | null
           prev_offering_stage?: string | null
@@ -6045,8 +6049,10 @@ export type Database = {
           decision_type?: string
           id?: string
           meeting_date?: string
+          milestone_variant?: string | null
           next_action_date?: string | null
           notes?: string | null
+          odprawa_session_id?: string | null
           postponed_until?: string | null
           prev_category?: string | null
           prev_offering_stage?: string | null
@@ -6060,6 +6066,13 @@ export type Database = {
             columns: ["deal_team_contact_id"]
             isOneToOne: false
             referencedRelation: "deal_team_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_decisions_odprawa_session_id_fkey"
+            columns: ["odprawa_session_id"]
+            isOneToOne: false
+            referencedRelation: "odprawa_sessions"
             referencedColumns: ["id"]
           },
           {
