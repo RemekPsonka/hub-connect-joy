@@ -73,7 +73,9 @@ const COLUMNS: ColumnDef[] = [
   { stage: 'prospect', title: 'Prospekt', icon: '🔍', borderClass: 'border-t-slate-400' },
   { stage: 'lead', title: 'Lead', icon: '🔥', borderClass: 'border-t-amber-500' },
   { stage: 'offering', title: 'Ofertowanie', icon: '💼', borderClass: 'border-t-blue-500' },
-  { stage: 'client', title: 'Klient', icon: '⭐', borderClass: 'border-t-emerald-500' },
+  // CLEANUP-BUGS-01 #24: kolumna 'client' usunięta — klienci żyją w /sgu/klienci
+  // (po AUDIT-FIX-01 useTeamContacts filtruje category='client'). Konwersja
+  // offering→client działa przez dialog wywoływany z karty (K4), nie przez DnD.
 ];
 
 export function deriveStage(c: DealTeamContact): DealStage {

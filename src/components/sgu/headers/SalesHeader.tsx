@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Users, Flame, Briefcase, Moon, Star } from 'lucide-react';
+import { Users, Flame, Briefcase, Moon } from 'lucide-react';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
 import { cn } from '@/lib/utils';
 import { deriveStage } from '@/components/sgu/sales/UnifiedKanban';
@@ -86,23 +86,6 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
   const offeringList = visibleContacts.filter((c) => deriveStage(c) === 'offering');
   const clientList = visibleContacts.filter((c) => deriveStage(c) === 'client');
 
-  const expectedPortfolioPLN = clientList.reduce(
-    (acc, c) =>
-      acc +
-      (((c.potential_property_gr ?? 0) +
-        (c.potential_financial_gr ?? 0) +
-        (c.potential_communication_gr ?? 0) +
-        (c.potential_life_group_gr ?? 0)) /
-        100),
-    0,
-  );
-  const formatPLN = (v: number) =>
-    new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      maximumFractionDigits: 0,
-    }).format(v);
-
   const badgesByKey: Record<string, BadgeItem[]> = {
     prospect: buildBadges(prospectList, 'prospect_source', PROSPECT_SOURCE_BADGES, PROSPECT_SOURCE_LABELS),
     lead: buildBadges(leadList, 'temperature', TEMPERATURE_BADGES, TEMPERATURE_LABELS),
@@ -115,7 +98,9 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
     { key: 'prospect', label: 'Prospekci', value: prospectList.length, icon: Users, tone: 'text-sky-600' },
     { key: 'lead', label: 'Leady', value: leadList.length, icon: Flame, tone: 'text-amber-600' },
     { key: 'offering', label: 'Ofertowanie', value: offeringList.length, icon: Briefcase, tone: 'text-violet-600' },
-    { key: 'client', label: 'Klienci', value: clientList.length, icon: Star, tone: 'text-emerald-600' },
+    // CLEANUP-BUGS-01 #24: KPI "Klienci" usunięte z SalesHeader — klienci
+    // są w osobnym module /sgu/klienci (po AUDIT-FIX-01 useTeamContacts
+    // filtruje category='client', więc clientList było zawsze puste).
     { key: 'snoozed', label: 'Odłożone', value: snoozedContacts.length, icon: Moon, tone: 'text-indigo-600' },
   ] as const;
 
@@ -139,11 +124,6 @@ export function SalesHeader({ teamId, onCardClick, activeKey }: SalesHeaderProps
                   <it.icon className={cn('h-4 w-4', it.tone)} />
                 </div>
                 <div className="text-2xl font-semibold tabular-nums">{it.value}</div>
-                {it.key === 'client' && (
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    Σ oczek. {formatPLN(expectedPortfolioPLN)}
-                  </div>
-                )}
                 {badges && badges.length > 0 && (
                   <div className="flex items-center gap-1 flex-wrap pt-0.5">
                     {badges.map((b) => (
