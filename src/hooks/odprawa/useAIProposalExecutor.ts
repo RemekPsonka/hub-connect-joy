@@ -37,9 +37,15 @@ async function logAudit(args: {
     event_type: args.eventType,
     tool_name: args.proposal.tool,
     input: args.proposal.args as unknown as Json,
-    output: (args.errorMessage
-      ? { error: args.errorMessage }
-      : (args.result ?? { ok: true })) as unknown as Json,
+    output: ({
+      proposal_id: args.proposal.proposal_id ?? null,
+      ...(args.errorMessage
+        ? { error: args.errorMessage }
+        : (typeof args.result === "object" && args.result !== null
+            ? args.result
+            : { result: args.result ?? true })),
+    }) as unknown as Json,
+    confirmed: args.eventType === "user_confirm" ? !args.errorMessage : false,
   };
   await supabase.from("ai_audit_log").insert(row);
 }
