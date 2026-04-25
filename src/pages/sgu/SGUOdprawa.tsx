@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +14,7 @@ import {
   useActiveOdprawaSession,
   useStartOdprawa,
   useFinishOdprawa,
+  useAdvanceOdprawaContact,
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
@@ -31,6 +33,8 @@ export default function SGUOdprawa() {
   const activeQ = useActiveOdprawaSession(teamId);
   const startMut = useStartOdprawa();
   const finishMut = useFinishOdprawa();
+  const advanceMut = useAdvanceOdprawaContact();
+  const navigate = useNavigate();
 
   const [busy, setBusy] = useState(false);
   const [selectedAgendaRow, setSelectedAgendaRow] = useState<OdprawaAgendaRow | null>(null);
@@ -39,18 +43,6 @@ export default function SGUOdprawa() {
     selectedAgendaRow?.contact_id ?? null,
     teamId,
   );
-
-  const handleAutoAdvance = () => {
-    if (!selectedAgendaRow) return;
-    const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
-    const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
-    if (next) {
-      setSelectedAgendaRow(next);
-    } else {
-      setSelectedAgendaRow(null);
-      toast.success('Koniec agendy — zakończ odprawę gdy gotowe.');
-    }
-  };
 
   useEffect(() => {
     if (sheetContactQ.error) {
@@ -73,6 +65,37 @@ export default function SGUOdprawa() {
 
   const agenda = agendaQ.data ?? [];
   const active = activeQ.data;
+
+  // F5-resilience: gdy sesja ma current_contact_id, przywróć selekcję z agendy
+  useEffect(() => {
+    if (!active?.current_contact_id || agenda.length === 0) return;
+    if (selectedAgendaRow?.contact_id === active.current_contact_id) return;
+    const row = agenda.find((r) => r.contact_id === active.current_contact_id);
+    if (row) setSelectedAgendaRow(row);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.current_contact_id, agenda.length]);
+
+  const handleDecisionLogged = async () => {
+    if (!selectedAgendaRow || !active || !teamId) return;
+    const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
+    const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
+    try {
+      await advanceMut.mutateAsync({
+        sessionId: active.id,
+        nextContactId: next?.contact_id ?? null,
+      });
+      if (next) {
+        setSelectedAgendaRow(next);
+      } else {
+        await finishMut.mutateAsync({ sessionId: active.id, teamId });
+        toast.success('Odprawa zakończona — przekierowanie do historii');
+        navigate('/sgu/odprawa/historia');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Nie udało się przejść do następnego kontaktu';
+      toast.error(msg);
+    }
+  };
 
   const handleStart = async () => {
     if (!teamId) return;
@@ -190,7 +213,7 @@ export default function SGUOdprawa() {
               teamId={teamId}
               tenantId={sheetContactQ.data.tenant_id}
               odprawaSessionId={active.id}
-              onDecisionLogged={handleAutoAdvance}
+              onDecisionLogged={handleDecisionLogged}
             />
           </CardContent>
         </Card>
