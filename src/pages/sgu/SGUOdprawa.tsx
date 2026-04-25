@@ -30,6 +30,7 @@ import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline'
 import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { OwnerInlinePicker } from '@/components/sgu/odprawa/OwnerInlinePicker';
+import { AICopilotSidepanel } from '@/components/sgu/odprawa/AICopilotSidepanel';
 import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -189,7 +190,7 @@ export default function SGUOdprawa() {
     : null;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4 p-4">
+    <div className="max-w-7xl 2xl:max-w-[1600px] mx-auto space-y-4 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Odprawa</h1>
@@ -230,7 +231,7 @@ export default function SGUOdprawa() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] 2xl:grid-cols-[280px_minmax(0,1fr)_360px] gap-4">
         {/* Lewa: agenda */}
         <Card className="self-start">
           <CardHeader className="pb-3 space-y-2">
@@ -365,6 +366,17 @@ export default function SGUOdprawa() {
               </CardContent>
             </Card>
           )}
+        </div>
+
+        {/* AI Copilot sidepanel — D1 read-only.
+            2xl: 3-col layout (sticky right).
+            <2xl: full width pod kartą kontaktu. */}
+        <div className="lg:col-span-2 2xl:col-span-1">
+          <AICopilotSidepanel
+            sessionId={active?.id ?? null}
+            contactId={selectedAgendaRow?.contact_id ?? null}
+            dealTeamContactId={dtc?.id ?? null}
+          />
         </div>
       </div>
 
