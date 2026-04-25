@@ -294,6 +294,7 @@ export function useUpdateTeamContact() {
       potentialFinancialGr,
       potentialCommunicationGr,
       potentialLifeGroupGr,
+      clientComplexity,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -343,6 +344,7 @@ export function useUpdateTeamContact() {
       if (potentialFinancialGr !== undefined) updates.potential_financial_gr = potentialFinancialGr;
       if (potentialCommunicationGr !== undefined) updates.potential_communication_gr = potentialCommunicationGr;
       if (potentialLifeGroupGr !== undefined) updates.potential_life_group_gr = potentialLifeGroupGr;
+      if (clientComplexity !== undefined) updates.client_complexity = clientComplexity;
 
       const { error } = await supabase
         .from('deal_team_contacts')
