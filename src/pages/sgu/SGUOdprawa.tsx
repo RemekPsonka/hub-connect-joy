@@ -332,6 +332,12 @@ export default function SGUOdprawa() {
                       tenantId={dtc.tenant_id}
                       odprawaSessionId={active.id}
                       defaultAssigneeId={dtc.assigned_to ?? null}
+                      contactCtx={{
+                        full_name: dtc.contact?.full_name ?? 'kontakt',
+                        handshake_at: dtc.handshake_at ?? null,
+                        poa_signed_at: dtc.poa_signed_at ?? null,
+                        audit_done_at: dtc.audit_done_at ?? null,
+                      }}
                       onCreated={handleManualAdvance}
                     />
                     <OdprawaExceptionsBar

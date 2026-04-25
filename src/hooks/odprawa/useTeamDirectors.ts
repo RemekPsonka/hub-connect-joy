@@ -13,16 +13,13 @@ export function useTeamDirectors(teamId: string | null | undefined) {
     enabled: !!teamId,
     staleTime: 60_000,
     queryFn: async (): Promise<TeamDirector[]> => {
-      const { data, error } = await supabase
-        .from('deal_team_members')
-        .select('director:directors!inner(id, full_name, email)')
-        .eq('team_id', teamId as string)
-        .eq('is_active', true);
+      // HOTFIX-ODPRAWA-2BUGS: Security definer RPC omija problemy z RLS na
+      // deal_team_members (dropdown był pusty dla niektórych userów).
+      const { data, error } = await supabase.rpc('get_team_directors', {
+        p_team_id: teamId as string,
+      });
       if (error) throw error;
-      const rows = (data ?? []) as Array<{ director: TeamDirector | null }>;
-      return rows
-        .map((r) => r.director)
-        .filter((d): d is TeamDirector => !!d && !!d.id);
+      return (data ?? []) as TeamDirector[];
     },
   });
 }
