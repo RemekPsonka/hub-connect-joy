@@ -352,9 +352,16 @@ Deno.serve(async (req) => {
     const teamId = body.team_id;
     if (!teamId) return jsonResponse({ error: "team_id required" }, 400);
 
-    // Membership check via RLS-safe RPC
-    const { data: membershipOk } = await serviceClient.rpc("is_deal_team_member", { p_team_id: teamId });
-    if (!membershipOk) return jsonResponse({ error: "Not a team member" }, 403);
+    // Membership check (service_role bypasses RLS, so check explicitly)
+    if (auth.directorId) {
+      const { data: m } = await serviceClient
+        .from("deal_team_members")
+        .select("id")
+        .eq("team_id", teamId)
+        .eq("director_id", auth.directorId)
+        .maybeSingle();
+      if (!m) return jsonResponse({ error: "Not a team member" }, 403);
+    }
 
     const r = await buildForTeam(
       serviceClient,
