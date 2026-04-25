@@ -137,6 +137,7 @@ export function UnifiedKanbanCard({
             <StalledBadge
               stageLabel={stalledStageLabel ?? 'lejku'}
               daysSinceUpdate={stalledDaysSinceUpdate ?? 0}
+              onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
             />
           )}
           {stage === 'lead' && (
@@ -286,7 +287,8 @@ export function UnifiedKanbanCard({
             className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
             title="Oznacz jako lost"
             aria-label="Oznacz jako lost"
-            onClick={onLostClick}
+            onClick={(e) => { e.stopPropagation(); onLostClick(); }}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <X className="h-3.5 w-3.5" />
           </Button>
