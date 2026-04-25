@@ -72,6 +72,7 @@ export default function SGUOdprawa() {
   const sessionDecisions = useOdprawaSessionDecisions(
     activeQ.data?.id ?? null,
     teamId,
+    activeQ.data?.started_at ?? null,
   );
 
   useEffect(() => {
