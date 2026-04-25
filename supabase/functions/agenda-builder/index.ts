@@ -329,7 +329,7 @@ Deno.serve(async (req) => {
       const { data: teams } = await serviceClient
         .from("deal_teams")
         .select("id, tenant_id")
-        .eq("active", true);
+        .eq("is_active", true);
 
       const results: Array<{ team_id: string; ranked: number; error?: string }> = [];
       for (const t of teams ?? []) {
