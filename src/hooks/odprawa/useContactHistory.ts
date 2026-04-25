@@ -123,44 +123,27 @@ export function useContactHistory(
       const activity = (activityRes.data ?? []) as ActivityRow[];
       const current = (contactRes.data as ContactCurrent | null) ?? null;
 
-      // Resolve actor names: director.id (decisions.created_by, tasks.assigned_to/owner_id)
-      // + auth.users.id (activity.actor_id) → directors.user_id.
+      // Wszystkie actor_id (decisions.created_by, tasks.assigned_to/owner_id, activity.actor_id)
+      // wskazują na directors.id (FK). Mapujemy jednym zapytaniem po directors.id.
       const directorIds = new Set<string>();
-      const userIds = new Set<string>();
       for (const d of decisions) if (d.created_by) directorIds.add(d.created_by);
       for (const t of tasks) {
         const a = t.assigned_to ?? t.owner_id;
         if (a) directorIds.add(a);
       }
-      for (const a of activity) if (a.actor_id) userIds.add(a.actor_id);
+      for (const a of activity) if (a.actor_id) directorIds.add(a.actor_id);
 
-      const [byIdRes, byUserIdRes] = await Promise.all([
-        directorIds.size
-          ? supabase
-              .from('directors')
-              .select('id, full_name')
-              .in('id', Array.from(directorIds))
-          : Promise.resolve({ data: [], error: null }),
-        userIds.size
-          ? supabase
-              .from('directors')
-              .select('user_id, full_name')
-              .in('user_id', Array.from(userIds))
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+      const byIdRes = directorIds.size
+        ? await supabase
+            .from('directors')
+            .select('id, full_name')
+            .in('id', Array.from(directorIds))
+        : { data: [] as Array<{ id: string; full_name: string | null }>, error: null };
       if ('error' in byIdRes && byIdRes.error) throw byIdRes.error;
-      if ('error' in byUserIdRes && byUserIdRes.error) throw byUserIdRes.error;
 
       const nameByDirectorId = new Map<string, string>();
       for (const r of (byIdRes.data ?? []) as Array<{ id: string; full_name: string | null }>) {
         nameByDirectorId.set(r.id, r.full_name ?? 'Dyrektor');
-      }
-      const nameByUserId = new Map<string, string>();
-      for (const r of (byUserIdRes.data ?? []) as Array<{
-        user_id: string;
-        full_name: string | null;
-      }>) {
-        nameByUserId.set(r.user_id, r.full_name ?? 'Dyrektor');
       }
 
       const events: HistoryEvent[] = [];
