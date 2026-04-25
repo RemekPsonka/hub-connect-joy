@@ -17,6 +17,7 @@ import {
   useAdvanceOdprawaContact,
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
+import { AgendaAIRefreshButton } from '@/components/sgu/odprawa/AgendaAIRefreshButton';
 import { useOdprawaSessionDecisions } from '@/hooks/odprawa/useOdprawaSessionDecisions';
 import { ContactTimeline } from '@/components/sgu/odprawa/ContactTimeline';
 import { MilestoneActionStrip } from '@/components/sgu/odprawa/MilestoneActionStrip';
@@ -232,11 +233,14 @@ export default function SGUOdprawa() {
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
         {/* Lewa: agenda */}
         <Card className="self-start">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Agenda{' '}
-              <span className="text-sm font-normal text-muted-foreground">({agenda.length})</span>
-            </CardTitle>
+          <CardHeader className="pb-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">
+                Agenda{' '}
+                <span className="text-sm font-normal text-muted-foreground">({agenda.length})</span>
+              </CardTitle>
+            </div>
+            <AgendaAIRefreshButton teamId={teamId} />
           </CardHeader>
           <CardContent className="max-h-[calc(100vh-260px)] overflow-y-auto">
             <AgendaList
