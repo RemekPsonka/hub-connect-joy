@@ -163,7 +163,7 @@ SELECT public.schedule_edge_function(
 ## Status implementacji (2026-04-25)
 - ✅ Sub-commit 1 (Sovra cleanup) — AppSidebar ukrywa link AI na trasach `/sgu/*`.
 - ✅ Sub-commit 2 (Faza B) — tabele `ai_agenda_proposals`, `ai_audit_log`, `get_odprawa_agenda` z `ai_reason`.
-- ✅ Sub-commit 3 (Faza C) — `agenda-builder` edge fn + button `AgendaAIRefreshButton` + cron `agenda_builder_daily_06` (Vault helper) + render `ai_reason` w `AgendaList`.
+- ✅ Sub-commit 3 (Faza C) — `agenda-builder` edge fn + button `AgendaAIRefreshButton` + render `ai_reason` w `AgendaList`. Cron WYŁĄCZONY (manual-only w MVP-1, decyzja w ADR-0020).
 - ⏳ Sub-commit 4 (Faza D1) — `live-copilot` + sidepanel read-only.
 - ⏳ Sub-commit 5 (Faza D2) — write tools z confirm dialog.
 - **Watchdog (Faza 3 master-spec)** → MVP-3.
