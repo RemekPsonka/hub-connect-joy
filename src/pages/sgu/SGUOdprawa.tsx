@@ -27,6 +27,7 @@ import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions'
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
 import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
+import { OwnerInlinePicker } from '@/components/sgu/odprawa/OwnerInlinePicker';
 import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
