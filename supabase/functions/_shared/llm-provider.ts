@@ -111,7 +111,8 @@ async function persistUsage(payload: {
   const ctx = payload.context;
   if (!ctx?.function_name) return;
 
-  await client.from('ai_usage_log').insert({
+  // Cast to `never` to avoid Deno TS overload mismatch on partitioned ai_usage_log table.
+  const row = {
     function_name: ctx.function_name,
     persona: ctx.persona ?? null,
     provider: payload.provider,
@@ -125,7 +126,8 @@ async function persistUsage(payload: {
     tenant_id: ctx.tenant_id ?? null,
     error: payload.error ?? null,
     metadata: payload.metadata ?? {},
-  });
+  };
+  await client.from('ai_usage_log').insert(row as never);
 }
 
 // ──────────────────────────────────────────────────────────────────────

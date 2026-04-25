@@ -14,6 +14,151 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_agenda_proposals: {
+        Row: {
+          error: string | null
+          generated_at: string
+          generated_by: string
+          id: string
+          llm_cost_cents: number | null
+          llm_model: string | null
+          llm_provider: string | null
+          llm_tokens_in: number | null
+          llm_tokens_out: number | null
+          ranked_contacts: Json
+          team_id: string
+          tenant_id: string
+          triggered_by: string | null
+          used_in_session_id: string | null
+        }
+        Insert: {
+          error?: string | null
+          generated_at?: string
+          generated_by?: string
+          id?: string
+          llm_cost_cents?: number | null
+          llm_model?: string | null
+          llm_provider?: string | null
+          llm_tokens_in?: number | null
+          llm_tokens_out?: number | null
+          ranked_contacts?: Json
+          team_id: string
+          tenant_id: string
+          triggered_by?: string | null
+          used_in_session_id?: string | null
+        }
+        Update: {
+          error?: string | null
+          generated_at?: string
+          generated_by?: string
+          id?: string
+          llm_cost_cents?: number | null
+          llm_model?: string | null
+          llm_provider?: string | null
+          llm_tokens_in?: number | null
+          llm_tokens_out?: number | null
+          ranked_contacts?: Json
+          team_id?: string
+          tenant_id?: string
+          triggered_by?: string | null
+          used_in_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agenda_proposals_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agenda_proposals_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agenda_proposals_used_in_session_id_fkey"
+            columns: ["used_in_session_id"]
+            isOneToOne: false
+            referencedRelation: "odprawa_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_audit_log: {
+        Row: {
+          confirmed: boolean | null
+          error: string | null
+          event_type: string
+          id: string
+          input: Json | null
+          llm_cost_cents: number | null
+          llm_model: string | null
+          llm_tokens_in: number | null
+          llm_tokens_out: number | null
+          odprawa_session_id: string | null
+          output: Json | null
+          team_id: string | null
+          tenant_id: string
+          timestamp: string
+          tool_name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          confirmed?: boolean | null
+          error?: string | null
+          event_type: string
+          id?: string
+          input?: Json | null
+          llm_cost_cents?: number | null
+          llm_model?: string | null
+          llm_tokens_in?: number | null
+          llm_tokens_out?: number | null
+          odprawa_session_id?: string | null
+          output?: Json | null
+          team_id?: string | null
+          tenant_id: string
+          timestamp?: string
+          tool_name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          confirmed?: boolean | null
+          error?: string | null
+          event_type?: string
+          id?: string
+          input?: Json | null
+          llm_cost_cents?: number | null
+          llm_model?: string | null
+          llm_tokens_in?: number | null
+          llm_tokens_out?: number | null
+          odprawa_session_id?: string | null
+          output?: Json | null
+          team_id?: string | null
+          tenant_id?: string
+          timestamp?: string
+          tool_name?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_audit_log_odprawa_session_id_fkey"
+            columns: ["odprawa_session_id"]
+            isOneToOne: false
+            referencedRelation: "odprawa_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_audit_log_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "deal_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_conversations: {
         Row: {
           actor_id: string
@@ -10573,6 +10718,7 @@ export type Database = {
         Args: { p_mode?: string; p_team_id: string }
         Returns: {
           active_task_count: number
+          ai_reason: string
           company_name: string
           contact_id: string
           contact_name: string

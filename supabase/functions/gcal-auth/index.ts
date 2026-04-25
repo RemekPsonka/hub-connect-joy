@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey) as any;
 
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -194,7 +195,7 @@ async function handleCallback(
     const { error: upsertError } = await serviceClient
       .from("gcal_tokens")
       .upsert(
-        {
+        ({
           tenant_id: tenantId,
           director_id: directorId,
           refresh_token_encrypted: enc.ciphertext,
@@ -204,7 +205,7 @@ async function handleCallback(
           // expires_at kept as legacy column; we always re-refresh on demand
           expires_at: new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString(),
           updated_at: new Date().toISOString(),
-        },
+        }) as never,
         { onConflict: "tenant_id,director_id" },
       );
 
