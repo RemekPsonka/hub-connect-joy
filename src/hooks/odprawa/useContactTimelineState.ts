@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
 import type { DealTeamContact } from '@/types/dealTeam';
+import {
+  OFFERING_STAGE_LABEL,
+  PRE_K1_SUBSTAGES,
+  PRE_K3_SUBSTAGES,
+  POST_K3_SUBSTAGES,
+  type OfferingStage,
+} from '@/lib/offeringStageLabels';
 
 export type MilestoneKey = 'prospect' | 'k1' | 'k2' | 'k2+' | 'k3' | 'k4';
 export type DecisionKey = 'push' | 'pivot' | 'park' | 'kill' | 'klient';
@@ -29,6 +36,14 @@ export interface ContactTimelineState {
   availableMilestones: MilestoneKey[];
   /** Pre-fill dla "+ Stwórz zadanie" — tytuł zadania per current stage + docelowy milestone. */
   nextStepSuggestion: { title: string; stageKey: MilestoneKey | null };
+  /** Aktualny offering_stage (sub-stage lub milestone-stage) — surowy. */
+  currentOfferingStage: OfferingStage | null;
+  /** Polski label aktualnego offering_stage. */
+  currentOfferingStageLabel: string;
+  /** Sub-stages dostępne do kliknięcia per kontekst (bez aktualnego). */
+  availableSubStages: OfferingStage[];
+  /** Czy renderować pasek sub-stage pod osią. */
+  showSubStageStrip: boolean;
 }
 
 const NEXT_MAP: Record<MilestoneKey, MilestoneKey | null> = {
@@ -69,6 +84,7 @@ export function useContactTimelineState(
         | 'lost_reason'
         | 'snoozed_until'
         | 'temperature'
+        | 'offering_stage'
       > & {
         contact?: { full_name?: string | null; company?: string | null } | null;
       })
@@ -155,6 +171,24 @@ export function useContactTimelineState(
       }
     }
 
+    const currentOfferingStage = (contact.offering_stage as OfferingStage | null) ?? null;
+    const currentOfferingStageLabel = currentOfferingStage
+      ? OFFERING_STAGE_LABEL[currentOfferingStage] ?? String(currentOfferingStage)
+      : '';
+
+    let availableSubStages: OfferingStage[] = [];
+    if (!isWon && !isLost) {
+      if (currentMilestone === 'prospect') {
+        availableSubStages = PRE_K1_SUBSTAGES.filter((s) => s !== currentOfferingStage);
+      } else if (currentMilestone === 'k2+') {
+        availableSubStages = PRE_K3_SUBSTAGES.filter((s) => s !== currentOfferingStage);
+      } else if (currentMilestone === 'k3') {
+        availableSubStages = POST_K3_SUBSTAGES.filter((s) => s !== currentOfferingStage);
+      }
+    }
+    const showSubStageStrip =
+      !isWon && !isLost && (currentMilestone === 'prospect' || currentMilestone === 'k3');
+
     return {
       milestones,
       currentMilestone,
@@ -170,6 +204,10 @@ export function useContactTimelineState(
       temperature: contact.temperature ?? null,
       availableMilestones,
       nextStepSuggestion,
+      currentOfferingStage,
+      currentOfferingStageLabel,
+      availableSubStages,
+      showSubStageStrip,
     };
   }, [contact]);
 }
