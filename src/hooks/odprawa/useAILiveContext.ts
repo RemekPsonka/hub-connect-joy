@@ -12,6 +12,20 @@ export interface AILiveContextState {
   questions: string;
   isStreaming: boolean;
   error: Error | null;
+  proposal: AIProposal | null;
+}
+
+export type AIProposalTool =
+  | 'create_task'
+  | 'update_contact_stage'
+  | 'update_contact_temperature'
+  | 'log_decision';
+
+export interface AIProposal {
+  tool: AIProposalTool;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: Record<string, any>;
+  rationale?: string;
 }
 
 interface Args {
@@ -27,7 +41,32 @@ const SECTION_HEADERS = {
   questions: "## Pytania wspierające",
 } as const;
 
-function parseSections(full: string): { context: string; action: string; questions: string } {
+function stripProposalBlock(full: string): string {
+  // Remove ```proposal ... ``` fenced block from streamed text before section parsing.
+  return full.replace(/```proposal[\s\S]*?(```|$)/g, '').trimEnd();
+}
+
+function extractProposal(full: string): AIProposal | null {
+  const m = full.match(/```proposal\s*([\s\S]*?)```/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    if (
+      parsed &&
+      typeof parsed.tool === 'string' &&
+      parsed.args &&
+      typeof parsed.args === 'object'
+    ) {
+      return parsed as AIProposal;
+    }
+  } catch {
+    // Stream may still be producing JSON — treat as no proposal yet.
+  }
+  return null;
+}
+
+function parseSections(rawFull: string): { context: string; action: string; questions: string } {
+  const full = stripProposalBlock(rawFull);
   const idxC = full.indexOf(SECTION_HEADERS.context);
   const idxA = full.indexOf(SECTION_HEADERS.action);
   const idxQ = full.indexOf(SECTION_HEADERS.questions);
@@ -54,19 +93,34 @@ export function useAILiveContext({
     questions: "",
     isStreaming: false,
     error: null,
+    proposal: null,
   });
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     abortRef.current?.abort();
     if (!enabled || !sessionId || !contactId || !dealTeamContactId) {
-      setState({ context: "", action: "", questions: "", isStreaming: false, error: null });
+      setState({
+        context: "",
+        action: "",
+        questions: "",
+        isStreaming: false,
+        error: null,
+        proposal: null,
+      });
       return;
     }
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    setState({ context: "", action: "", questions: "", isStreaming: true, error: null });
+    setState({
+      context: "",
+      action: "",
+      questions: "",
+      isStreaming: true,
+      error: null,
+      proposal: null,
+    });
 
     let cancelled = false;
     let full = "";
@@ -125,7 +179,8 @@ export function useAILiveContext({
               if (typeof delta === "string" && delta) {
                 full += delta;
                 const sections = parseSections(full);
-                setState((prev) => ({ ...prev, ...sections }));
+                const proposal = extractProposal(full);
+                setState((prev) => ({ ...prev, ...sections, proposal }));
               }
             } catch {
               // partial JSON across chunks — re-buffer
