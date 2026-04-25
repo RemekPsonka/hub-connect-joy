@@ -376,6 +376,8 @@ export default function SGUOdprawa() {
             sessionId={active?.id ?? null}
             contactId={selectedAgendaRow?.contact_id ?? null}
             dealTeamContactId={dtc?.id ?? null}
+            teamId={teamId}
+            tenantId={dtc?.tenant_id ?? null}
           />
         </div>
       </div>
