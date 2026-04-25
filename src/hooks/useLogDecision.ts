@@ -11,7 +11,7 @@ export interface LogDecisionInput {
   teamId: string;
   tenantId: string;
   decision: DecisionVerdict;
-  milestoneVariant: MilestoneVariant;
+  milestoneVariant: MilestoneVariant | null;
   odprawaSessionId: string | null;
   notes?: string | null;
   postponedUntil?: string | null;
