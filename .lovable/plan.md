@@ -1,146 +1,72 @@
-# AGENDA-SECTIONS-01 — pre-brief AI z sekcjami grupującymi
+# Naprawa zapisu notatek odprawy + AI czyta notatki
 
-Refactor lewej kolumny `/sgu/odprawa` z płaskiej listy 25 kontaktów na **5 priorytetowych sekcji** generowanych przez AI, ze sticky headerami i sumką u góry.
+## Diagnoza (z logów + DB)
 
-## Co zobaczy użytkownik
+1. **Notatki nie zapisują się — RLS blokuje**: `deal_team_activity_log` ma TYLKO politykę SELECT (`dtal_select`), brak INSERT. Dialog „Notatka z odprawy" w `OperationalActions` cicho fail-uje (toast errora wisi w katch). Tabela jest pusta — żadna notatka nigdy się nie zapisała.
 
-Zamiast obecnej płaskiej listy:
+2. **Live-copilot rzuca PGRST201**: ambiguous FK między `deal_team_contacts` a `contacts` (są dwa: `deal_team_contacts_contact_id_fkey` i `_source_contact_id_fkey`). `safeSelect` połyka błąd warningiem, więc cały kontekst kontaktu (`dtc`, polisy, gcal) leci PUSTY → AI generuje śmieci.
 
-```text
-🔥 Pilne dziś (3)
-  ▸ Adam Papiernik (Firma X)         ✨ Overdue task K3 od 12.04
-  ▸ Jan Kowalski (Acme)              ✨ Audyt zaplanowany 22.04, brak akcji
-  ▸ ...
-⚠️ Stalled (5)
-  ▸ ...
-🎯 10x (4)
-  ▸ ...
-📞 Follow-upy (8)
-  ▸ ...
-🆕 Nowi prospekci (2)
-  ▸ ...
-```
+3. **AI nie czyta notatek**: ani `live-copilot`, ani `agenda-builder` nigdy nie sięga do `deal_team_activity_log`. Notatki z odprawy są niewidoczne dla AI.
 
-Sumka na górze: `Dziś: 3 pilnych · 5 stalled · 4× 10x · 8 follow-upów · 2 nowych`.
+## Plan naprawy
 
-Backward-compat: stare proposals (z samym `ranked_contacts`) renderują się jako jedna sekcja „Pozostałe".
-
----
-
-## Plan techniczny
-
-### A. Migracja DB
-
-`supabase/migrations/<ts>_ai_agenda_grouped_sections.sql`:
+### A. Migracja DB — RLS INSERT na `deal_team_activity_log`
 
 ```sql
-ALTER TABLE public.ai_agenda_proposals
-  ADD COLUMN IF NOT EXISTS grouped_sections jsonb;
-
-COMMENT ON COLUMN public.ai_agenda_proposals.grouped_sections IS
-  'Sekcje pre-briefu: [{key,label,icon,contacts:[{contact_id,reason}]}]. NULL = legacy proposal (użyj ranked_contacts).';
+CREATE POLICY "dtal_insert_team_member"
+ON public.deal_team_activity_log
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  public.is_deal_team_member(team_id)
+  AND (actor_id IS NULL OR actor_id = auth.uid())
+);
 ```
 
-Brak DROP — `ranked_contacts` zostaje dla starych rekordów.
+`team_id`, `tenant_id`, `team_contact_id`, `action` są NOT NULL — komponent już je wysyła.
 
-### B. Edge function `agenda-builder`
+### B. Live-copilot: napraw FK + dociągnij notatki
+
+W `supabase/functions/live-copilot/index.ts`:
+
+1. **Fix PGRST201**: w `select(...)` dla `deal_team_contacts` zmień
+   `contact:contacts(...)` → `contact:contacts!deal_team_contacts_contact_id_fkey(...)`.
+
+2. **Dorzuć notatki do `P0Context`**:
+   ```ts
+   safeSelect(
+     supabase
+       .from("deal_team_activity_log")
+       .select("created_at, action, new_value, actor_id")
+       .eq("team_contact_id", dealTeamContactId)
+       .eq("action", "note_added")
+       .gte("created_at", fourteenDaysAgo)
+       .order("created_at", { ascending: false })
+       .limit(20),
+   )
+   ```
+   Mapuj na `recent_notes: [{date, text, actor_id}]` w P0Context i dodaj do JSON-a wysyłanego do LLM.
+
+3. **System prompt** (sekcja Kontekst): dopisz „… ostatnie notatki z odprawy (recent_notes)".
+
+### C. Agenda-builder: dorzuć ostatnią notatkę do kandydata
 
 W `supabase/functions/agenda-builder/index.ts`:
 
-1. **Nowy tool** `submit_grouped_agenda` (zastępuje `submit_ranking` jako `tool_choice`):
+1. W `gatherCandidates` dociągnij równolegle ostatnie wpisy `deal_team_activity_log` (`action='note_added'`) per `team_contact_id` → mapuj na pole `last_note: { date, text } | null`.
+2. Dodaj `last_note` do interfejsu `ContactCandidate` i do JSON-a dla LLM.
+3. Dopisz do system prompt: „Jeśli `last_note` istnieje, weź ją pod uwagę przy klasyfikacji do sekcji."
 
-```ts
-{
-  name: "submit_grouped_agenda",
-  parameters: {
-    sections: [{
-      key: "urgent" | "stalled" | "10x" | "followup" | "new_prospects",
-      label: string,    // "Pilne dziś"
-      icon: string,     // "🔥"
-      contacts: [{ contact_id: uuid, reason: string }]  // max 80 zn.
-    }]
-  }
-}
-```
+### D. Smoke
 
-2. **System prompt PL** (zastępuje obecny):
-   - 🔥 Pilne dziś — overdue tasks lub at-risk milestone (>7d bez akcji)
-   - ⚠️ Stalled — >14 dni bez ruchu, ryzyko utraty
-   - 🎯 10x — `temperature='10x'` lub `category='10x'`
-   - 📞 Follow-upy — open task na dziś/jutro
-   - 🆕 Nowi prospekci — utworzeni <7 dni temu, brak K1
-   - Każdy kontakt MAX w 1 sekcji (priorytet: urgent > 10x > stalled > followup > new)
-   - Pomiń puste sekcje, max ~25 kontaktów łącznie, format daty `DD.MM`, bez kwot PLN.
+1. `/sgu/odprawa` → otwórz kontakt → „Notatka" → wpisz tekst → „Zapisz" → toast „Notatka zapisana", insert do `deal_team_activity_log` (status 201).
+2. Otwórz live-copilot dla tego kontaktu → sekcja Kontekst zawiera notatkę.
+3. Wygeneruj agendę → SQL: `SELECT new_value->>'note', created_at FROM deal_team_activity_log WHERE action='note_added' ORDER BY created_at DESC LIMIT 5;` powinno mieć wpisy.
 
-3. **Persist**: zapis do `grouped_sections` (jsonb). `ranked_contacts: []` dla nowego flow. Walidacja: każdy `contact_id` musi być w wejściowych kandydatach; deduplikacja (kontakt w wielu sekcjach → zostawiamy w pierwszej wg priorytetu).
+## Pliki
 
-4. Audit log: `tool_name='agenda-builder.submit_grouped_agenda'`, output zawiera `sections_count` + `total_contacts`.
+- **Migracja**: `<ts>_dtal_insert_policy.sql` (1 policy)
+- **EDIT**: `supabase/functions/live-copilot/index.ts` (FK alias + nowy safeSelect + prompt)
+- **EDIT**: `supabase/functions/agenda-builder/index.ts` (last_note w kandydacie + prompt)
 
-5. Fallback: gdy `grouped_sections` puste a `ranked` niepusty (np. LLM zwrócił stary kształt) — zapisz oba.
-
-### C. RPC `get_odprawa_agenda`
-
-Dorzucone kolumny w RETURNS TABLE:
-- `ai_section_key text`
-- `ai_section_label text`
-- `ai_section_icon text`
-
-Logika:
-- Nowy CTE `ai_sections` rozwija `grouped_sections` przez podwójny `jsonb_array_elements` (sekcje × contacts), wyciąga `key/label/icon/contact_id/reason`.
-- Gdy `grouped_sections IS NOT NULL` → bierzemy z niego `ai_reason` (zamiast z `ranked_contacts`).
-- Gdy NULL → legacy fallback do istniejącego `ai_ranking` z `ranked_contacts`, sekcja = NULL (UI → „Pozostałe").
-- Sortowanie:
-  ```
-  ORDER BY
-    CASE ai_section_key
-      WHEN 'urgent' THEN 0
-      WHEN '10x' THEN 1
-      WHEN 'stalled' THEN 2
-      WHEN 'followup' THEN 3
-      WHEN 'new_prospects' THEN 4
-      ELSE 5
-    END,
-    priority_rank,
-    last_status_update DESC NULLS LAST
-  ```
-
-### D. UI `AgendaList.tsx`
-
-W `src/components/sgu/odprawa/AgendaList.tsx`:
-
-1. Rozszerzenie typu `OdprawaAgendaRow` (w `useOdprawaAgenda.ts`) o `ai_section_key | ai_section_label | ai_section_icon`.
-2. `useMemo` grupuje wiersze po `ai_section_key` + zachowuje kolejność z RPC (Map zachowuje insertion order).
-3. Render:
-   - **Sumka u góry** (mała ramka `bg-muted/50 rounded p-2 text-xs`): liczby per sekcja.
-   - **Per sekcja**: header `text-xs font-semibold sticky top-0 bg-background py-1` z `{icon} {label} ({count})`, pod nim aktualne `<button>` row-y (bez zmian wewnętrznego renderu).
-4. Zachowane: `currentContactId`, `discussedContactIds`, `onSelect`, ai_reason badge.
-5. Pusta sekcja AI (nie zwrócona przez LLM) → po prostu jej nie renderujemy.
-
-### E. Walidacja
-
-1. `npm run typecheck`
-2. Smoke `/sgu/odprawa`:
-   - Klik „Wygeneruj agendę AI" → toast 5–15s
-   - Lewa lista pokazuje ≥2 sekcje z headerami + sumkę
-   - Sticky header trzyma się na górze przy scrollu
-   - Klik kontaktu nadal otwiera ContactTasksSheet
-3. SQL check:
-   ```sql
-   SELECT generated_at, jsonb_array_length(grouped_sections)
-   FROM ai_agenda_proposals
-   WHERE team_id=? ORDER BY generated_at DESC LIMIT 1;
-   ```
-
-### Pliki
-
-- **NEW**: `supabase/migrations/<ts>_ai_agenda_grouped_sections.sql`
-- **NEW**: `supabase/migrations/<ts+1>_get_odprawa_agenda_sections.sql` (CREATE OR REPLACE FUNCTION)
-- **EDIT**: `supabase/functions/agenda-builder/index.ts`
-- **EDIT**: `src/hooks/useOdprawaAgenda.ts` (3 nowe pola w typie)
-- **EDIT**: `src/components/sgu/odprawa/AgendaList.tsx` (grupowanie + sumka + sticky)
-
-### Backward-compat
-
-- Stare `ai_agenda_proposals.grouped_sections IS NULL` → RPC zwraca `ai_section_key=NULL` → UI grupuje do `"_other"` z labelem „Pozostałe" i ikoną `·`.
-- `ranked_contacts` nadal czytane jako fallback źródła `ai_reason`.
-- Brak breaking change dla `useDealTeamContactByContactId` ani innych konsumentów RPC.
+Brak zmian w UI — `OperationalActions.tsx` już wysyła poprawny insert; problemem była wyłącznie RLS.

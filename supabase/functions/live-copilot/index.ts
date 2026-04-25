@@ -61,6 +61,7 @@ interface P0Context {
   prev_session_decisions: unknown[];
   ownership: unknown[];
   gcal_today: unknown[];
+  recent_notes: unknown[];
   counts: Record<string, number>;
 }
 
@@ -85,12 +86,13 @@ async function gatherP0Context(
     tasks,
     meetings,
     prevSession,
+    notes,
   ] = await Promise.all([
     safeSelect(
       supabase
         .from("deal_team_contacts")
         .select(
-          "id, contact_id, category, offering_stage, temperature, last_status_update, next_action_date, handshake_at, poa_signed_at, audit_done_at, contract_signed_at, expected_annual_premium_gr, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, assigned_to, contact:contacts(full_name, company, company_id, email, phone)",
+          "id, contact_id, category, offering_stage, temperature, last_status_update, next_action_date, handshake_at, poa_signed_at, audit_done_at, contract_signed_at, expected_annual_premium_gr, potential_property_gr, potential_financial_gr, potential_communication_gr, potential_life_group_gr, assigned_to, contact:contacts!deal_team_contacts_contact_id_fkey(full_name, company, company_id, email, phone)",
         )
         .eq("id", dealTeamContactId)
         .maybeSingle(),
@@ -131,6 +133,16 @@ async function gatherP0Context(
         .eq("status", "completed")
         .order("ended_at", { ascending: false })
         .limit(1),
+    ),
+    safeSelect(
+      supabase
+        .from("deal_team_activity_log")
+        .select("created_at, action, new_value, actor_id")
+        .eq("team_contact_id", dealTeamContactId)
+        .eq("action", "note_added")
+        .gte("created_at", fourteenDaysAgo)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ),
   ]);
 
@@ -184,6 +196,13 @@ async function gatherP0Context(
     prev_session_decisions: prevSessionDecisions,
     ownership: [], // table not present yet
     gcal_today: gcalToday,
+    recent_notes: (notes as Array<{ created_at: string; new_value: unknown }>).map((n) => ({
+      date: n.created_at,
+      text:
+        n.new_value && typeof n.new_value === "object"
+          ? String((n.new_value as Record<string, unknown>).note ?? "")
+          : "",
+    })).filter((n) => n.text),
     counts: {
       decisions: decisions.length,
       tasks: tasks.length,
@@ -191,6 +210,7 @@ async function gatherP0Context(
       policies: policies.length,
       prev_decisions: prevSessionDecisions.length,
       gcal: gcalToday.length,
+      notes: notes.length,
     },
   };
 }
@@ -202,7 +222,7 @@ const SYSTEM_PROMPT = `Jesteś asystentem dyrektora sprzedaży na odprawie zespo
 Otrzymujesz JSON z kontekstem JEDNEGO kontaktu. Zwróć ODPOWIEDŹ DOKŁADNIE w 3 sekcjach:
 
 ## Kontekst
-- 3-4 bullet pointy z FAKTÓW z danych (etap, temperatura, ostatnie decyzje, otwarte zadania, polisy).
+- 3-4 bullet pointy z FAKTÓW z danych (etap, temperatura, ostatnie decyzje, otwarte zadania, polisy, ostatnie notatki z odprawy w polu recent_notes).
 - Format daty: DD.MM.YYYY. Tylko daty obecne w danych wejściowych.
 
 ## Sugerowana akcja

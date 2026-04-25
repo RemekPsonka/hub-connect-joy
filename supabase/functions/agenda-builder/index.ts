@@ -31,6 +31,7 @@ interface ContactCandidate {
   days_since_update: number | null;
   created_at: string | null;
   days_since_created: number | null;
+  last_note: { date: string; text: string } | null;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -78,6 +79,26 @@ async function gatherCandidates(
       .not("status", "in", '("completed","cancelled")'),
   ]);
 
+  // Pobierz ostatnie notatki z odprawy per team_contact_id (action='note_added')
+  const notesRes = await supabase
+    .from("deal_team_activity_log")
+    .select("team_contact_id, created_at, new_value")
+    .in("team_contact_id", dtcIds)
+    .eq("action", "note_added")
+    .order("created_at", { ascending: false });
+
+  const lastNoteMap = new Map<string, { date: string; text: string }>();
+  for (const row of notesRes.data ?? []) {
+    if (lastNoteMap.has(row.team_contact_id)) continue; // pierwsza = najnowsza
+    const text =
+      row.new_value && typeof row.new_value === "object"
+        ? String((row.new_value as Record<string, unknown>).note ?? "")
+        : "";
+    if (text) {
+      lastNoteMap.set(row.team_contact_id, { date: row.created_at, text });
+    }
+  }
+
   const companyIds = (contactsRes.data ?? [])
     .map((c: any) => c.company_id)
     .filter(Boolean);
@@ -121,6 +142,7 @@ async function gatherCandidates(
       days_since_update: daysSince(d.last_status_update),
       created_at: d.created_at ?? null,
       days_since_created: daysSince(d.created_at),
+      last_note: lastNoteMap.get(d.id) ?? null,
     };
   });
 }
@@ -154,6 +176,7 @@ Reguły:
 - Każdy contact_id MAX w 1 sekcji. Priorytet: urgent > 10x > stalled > followup > new_prospects.
 - Pomiń puste sekcje (NIE dołączaj ich do output).
 - Per kontakt: 1 zdanie uzasadnienia po polsku (max 80 znaków), oparte WYŁĄCZNIE na danych wejściowych.
+- Jeśli kandydat ma 'last_note' (notatka z poprzedniej odprawy), uwzględnij ją w klasyfikacji i — gdy istotna — wpleć jej sens w uzasadnienie.
 - NIE wymyślaj faktów. NIE używaj kwot PLN. Format daty DD.MM.
 - W polach 'label' i 'icon' używaj DOKŁADNIE: 🔥 "Pilne dziś", 🎯 "10x", ⚠️ "Stalled", 📞 "Follow-upy", 🆕 "Nowi prospekci".`;
 
