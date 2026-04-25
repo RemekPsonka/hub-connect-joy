@@ -50,6 +50,10 @@ export default function SGUOdprawa() {
     teamId,
   );
   const timelineState = useContactTimelineState(sheetContactQ.data ?? null);
+  const sessionDecisions = useOdprawaSessionDecisions(
+    activeQ.data?.id ?? null,
+    teamId,
+  );
 
   useEffect(() => {
     if (sheetContactQ.error) {
@@ -223,6 +227,8 @@ export default function SGUOdprawa() {
               rows={agenda}
               isLoading={agendaQ.isLoading}
               onSelect={setSelectedAgendaRow}
+              currentContactId={selectedAgendaRow?.contact_id ?? null}
+              discussedContactIds={sessionDecisions.discussedContactIds}
             />
           </CardContent>
         </Card>
