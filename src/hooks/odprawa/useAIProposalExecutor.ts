@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLogDecision, type DecisionVerdict } from "@/hooks/useLogDecision";
 import { toast } from "sonner";
 import type { AIProposal } from "@/hooks/odprawa/useAILiveContext";
+import type { Json } from "@/integrations/supabase/types";
 
 interface ExecuteArgs {
   proposal: AIProposal;
@@ -28,18 +29,19 @@ async function logAudit(args: {
   result?: unknown;
   errorMessage?: string;
 }) {
-  await supabase.from("ai_audit_log").insert({
+  const row = {
     tenant_id: args.tenantId,
     team_id: args.teamId,
     odprawa_session_id: args.sessionId,
     user_id: args.userId,
     event_type: args.eventType,
     tool_name: args.proposal.tool,
-    input: args.proposal.args,
-    output: args.errorMessage
+    input: args.proposal.args as unknown as Json,
+    output: (args.errorMessage
       ? { error: args.errorMessage }
-      : (args.result ?? { ok: true }),
-  });
+      : (args.result ?? { ok: true })) as unknown as Json,
+  };
+  await supabase.from("ai_audit_log").insert(row);
 }
 
 export function useAIProposalExecutor() {
