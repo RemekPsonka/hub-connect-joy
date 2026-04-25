@@ -93,13 +93,27 @@ export function WonPremiumBreakdownDialog({
       toast.error('Wpisz przynajmniej jedną kwotę');
       return;
     }
+    const propGr = Math.round(parsePln(values.property) * 100);
+    const finGr = Math.round(parsePln(values.financial) * 100);
+    const comGr = Math.round(parsePln(values.communication) * 100);
+    const lifeGr = Math.round(parsePln(values.life_group) * 100);
     const payload: UpdateTeamContactInput = {
       id: contactId,
       teamId,
-      potentialPropertyGr: Math.round(parsePln(values.property) * 100),
-      potentialFinancialGr: Math.round(parsePln(values.financial) * 100),
-      potentialCommunicationGr: Math.round(parsePln(values.communication) * 100),
-      potentialLifeGroupGr: Math.round(parsePln(values.life_group) * 100),
+      potentialPropertyGr: propGr,
+      potentialFinancialGr: finGr,
+      potentialCommunicationGr: comGr,
+      potentialLifeGroupGr: lifeGr,
+      // AUDIT-FIX-01: sync potential_*_gr → client_complexity.*_active.
+      // Klient jest "kompleksowy" w obszarze tylko jeśli ma realną składkę.
+      clientComplexity: {
+        property_active: propGr > 0,
+        financial_active: finGr > 0,
+        communication_active: comGr > 0,
+        life_group_active: lifeGr > 0,
+        referrals_count: 0,
+        references_count: 0,
+      },
     };
     update.mutate(payload, {
       onSuccess: () => {
