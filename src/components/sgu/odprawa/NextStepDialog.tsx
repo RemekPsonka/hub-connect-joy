@@ -177,6 +177,28 @@ export function NextStepDialog({
 
     setSubmitting(true);
     try {
+      // OWNER vs ASSIGNEE: owner_id = director który tworzy task (zalogowany user → director),
+      // assigned_to = director który ma to wykonać (z dropdown). Oba mapują na directors.id (FK
+      // tasks_owner_id_fkey i tasks_assigned_to_fkey). NIE wkładać tu auth.users.id.
+      // Memory: project_tasks_schema_notes.
+      if (!user?.id) {
+        toast.error('Brak zalogowanego użytkownika');
+        setSubmitting(false);
+        return;
+      }
+      const { data: directorRow, error: dirErr } = await supabase
+        .from('directors')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (dirErr) throw dirErr;
+      if (!directorRow?.id) {
+        toast.error('Nie znaleziono powiązanego dyrektora dla tego użytkownika.');
+        setSubmitting(false);
+        return;
+      }
+      const ownerDirectorId = directorRow.id;
+
       const { data: task, error: taskErr } = await supabase
         .from('tasks')
         .insert({
@@ -185,7 +207,7 @@ export function NextStepDialog({
           description: notes.trim() || null,
           status: 'open',
           assigned_to: assignee,
-          owner_id: user?.id ?? null,
+          owner_id: ownerDirectorId,
           due_date: dueDate,
           deal_team_id: teamId,
           deal_team_contact_id: dealTeamContactId,
