@@ -4,13 +4,25 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sparkles, Lightbulb, MessageCircleQuestion, AlertCircle } from "lucide-react";
+import {
+  Sparkles,
+  Lightbulb,
+  MessageCircleQuestion,
+  AlertCircle,
+  Wand2,
+} from "lucide-react";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { useAILiveContext } from "@/hooks/odprawa/useAILiveContext";
+import { useAIProposalExecutor } from "@/hooks/odprawa/useAIProposalExecutor";
+import { AIProposalDialog } from "./AIProposalDialog";
 
 interface Props {
   sessionId: string | null;
   contactId: string | null;
   dealTeamContactId: string | null;
+  teamId?: string | null;
+  tenantId?: string | null;
 }
 
 function renderMarkdownBlock(text: string): JSX.Element {
@@ -49,14 +61,58 @@ function renderMarkdownBlock(text: string): JSX.Element {
   return <div className="space-y-2 text-sm">{elements}</div>;
 }
 
-export function AICopilotSidepanel({ sessionId, contactId, dealTeamContactId }: Props) {
+export function AICopilotSidepanel({
+  sessionId,
+  contactId,
+  dealTeamContactId,
+  teamId,
+  tenantId,
+}: Props) {
   const enabled = !!sessionId && !!contactId && !!dealTeamContactId;
-  const { context, action, questions, isStreaming, error } = useAILiveContext({
+  const { context, action, questions, isStreaming, error, proposal } = useAILiveContext({
     sessionId,
     contactId,
     dealTeamContactId,
     enabled,
   });
+  const { execute, reject } = useAIProposalExecutor();
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Reset dialog when contact changes.
+  useEffect(() => {
+    setDialogOpen(false);
+  }, [contactId]);
+
+  const canExecuteProposal =
+    !!proposal && !!sessionId && !!contactId && !!dealTeamContactId && !!teamId && !!tenantId;
+
+  const runConfirm = () => {
+    if (!canExecuteProposal || !proposal) return;
+    execute.mutate(
+      {
+        proposal,
+        contactId: contactId!,
+        dealTeamContactId: dealTeamContactId!,
+        teamId: teamId!,
+        tenantId: tenantId!,
+        sessionId: sessionId!,
+      },
+      { onSettled: () => setDialogOpen(false) },
+    );
+  };
+
+  const runReject = () => {
+    if (!canExecuteProposal || !proposal) return;
+    reject.mutate({
+      proposal,
+      contactId: contactId!,
+      dealTeamContactId: dealTeamContactId!,
+      teamId: teamId!,
+      tenantId: tenantId!,
+      sessionId: sessionId!,
+    });
+    setDialogOpen(false);
+  };
 
   if (!enabled) {
     return (
@@ -119,11 +175,23 @@ export function AICopilotSidepanel({ sessionId, contactId, dealTeamContactId }: 
             Sugerowana akcja
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           {!action && isStreaming ? (
             <Skeleton className="h-3 w-full" />
           ) : (
             renderMarkdownBlock(action)
+          )}
+          {proposal && !isStreaming && canExecuteProposal && (
+            <Button
+              size="sm"
+              variant="default"
+              className="w-full"
+              onClick={() => setDialogOpen(true)}
+              disabled={execute.isPending}
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Propozycja: {proposal.tool.replace(/_/g, ' ')}
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -146,6 +214,15 @@ export function AICopilotSidepanel({ sessionId, contactId, dealTeamContactId }: 
           )}
         </CardContent>
       </Card>
+
+      <AIProposalDialog
+        proposal={proposal}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onConfirm={runConfirm}
+        onReject={runReject}
+        isExecuting={execute.isPending}
+      />
     </div>
   );
 }
