@@ -1,72 +1,61 @@
-# Naprawa zapisu notatek odprawy + AI czyta notatki
+## Diagnoza
 
-## Diagnoza (z logów + DB)
+Notatka nadal nie zapisuje się nie przez RLS, tylko przez zły identyfikator autora.
 
-1. **Notatki nie zapisują się — RLS blokuje**: `deal_team_activity_log` ma TYLKO politykę SELECT (`dtal_select`), brak INSERT. Dialog „Notatka z odprawy" w `OperationalActions` cicho fail-uje (toast errora wisi w katch). Tabela jest pusta — żadna notatka nigdy się nie zapisała.
+Aktualny request kończy się błędem bazy:
 
-2. **Live-copilot rzuca PGRST201**: ambiguous FK między `deal_team_contacts` a `contacts` (są dwa: `deal_team_contacts_contact_id_fkey` i `_source_contact_id_fkey`). `safeSelect` połyka błąd warningiem, więc cały kontekst kontaktu (`dtc`, polisy, gcal) leci PUSTY → AI generuje śmieci.
+```text
+23503: insert/update on deal_team_activity_log violates foreign key constraint deal_team_activity_log_actor_id_fkey
+Key is not present in table "directors".
+```
 
-3. **AI nie czyta notatek**: ani `live-copilot`, ani `agenda-builder` nigdy nie sięga do `deal_team_activity_log`. Notatki z odprawy są niewidoczne dla AI.
+Frontend wysyła:
+
+```ts
+actor_id: user.id
+```
+
+ale kolumna `deal_team_activity_log.actor_id` wskazuje na `directors.id`, a nie na auth `user.id`. Dla Remka poprawny `directors.id` to inny UUID niż `user.id`, więc FK blokuje zapis.
 
 ## Plan naprawy
 
-### A. Migracja DB — RLS INSERT na `deal_team_activity_log`
+1. Poprawić zapis notatki w `OperationalActions.tsx`
+   - użyć `director?.id` z `useAuth()` jako `actor_id`, zamiast `user?.id`;
+   - dla asystentki zostawić bezpieczny fallback `null`, jeśli nie ma rekordu directora;
+   - dodać czytelny komunikat, jeśli brakuje kontekstu użytkownika/zespołu.
+
+2. Poprawić RLS policy dodaną w ostatnim hotfixie
+   - obecna policy porównuje `actor_id = auth.uid()`, czyli dalej miesza `directors.id` z `user.id`;
+   - zastąpić ją warunkiem:
 
 ```sql
-CREATE POLICY "dtal_insert_team_member"
-ON public.deal_team_activity_log
-FOR INSERT
-TO authenticated
-WITH CHECK (
-  public.is_deal_team_member(team_id)
-  AND (actor_id IS NULL OR actor_id = auth.uid())
-);
+public.is_deal_team_member(team_id)
+AND (
+  actor_id IS NULL
+  OR actor_id = public.get_current_director_id()
+)
 ```
 
-`team_id`, `tenant_id`, `team_contact_id`, `action` są NOT NULL — komponent już je wysyła.
+3. Ujednolicić odczyt nazw autorów w historii kontaktu
+   - `useContactHistory.ts` teraz traktuje `activity.actor_id` jak `auth.users.id`;
+   - po zmianie zapisu trzeba mapować `actor_id` po `directors.id`;
+   - dzięki temu notatki będą pokazywać właściwego autora.
 
-### B. Live-copilot: napraw FK + dociągnij notatki
+4. Zachować integrację z AI
+   - istniejące zmiany w `live-copilot` i `agenda-builder` czytają `deal_team_activity_log` z `action='note_added'`;
+   - po naprawie zapisu notatki zaczną trafiać do tej samej tabeli, więc AI będzie mogła je czytać bez zmiany modelu danych.
 
-W `supabase/functions/live-copilot/index.ts`:
+5. Walidacja po wdrożeniu
+   - sprawdzić request POST do `deal_team_activity_log`, czy zwraca 201/200 zamiast 409;
+   - sprawdzić, czy notatka pojawia się w historii kontaktu;
+   - sprawdzić, czy `live-copilot`/agenda-builder widzą ostatnie notatki w kontekście.
 
-1. **Fix PGRST201**: w `select(...)` dla `deal_team_contacts` zmień
-   `contact:contacts(...)` → `contact:contacts!deal_team_contacts_contact_id_fkey(...)`.
+## Pliki do zmiany
 
-2. **Dorzuć notatki do `P0Context`**:
-   ```ts
-   safeSelect(
-     supabase
-       .from("deal_team_activity_log")
-       .select("created_at, action, new_value, actor_id")
-       .eq("team_contact_id", dealTeamContactId)
-       .eq("action", "note_added")
-       .gte("created_at", fourteenDaysAgo)
-       .order("created_at", { ascending: false })
-       .limit(20),
-   )
-   ```
-   Mapuj na `recent_notes: [{date, text, actor_id}]` w P0Context i dodaj do JSON-a wysyłanego do LLM.
+- `src/components/sgu/odprawa/OperationalActions.tsx`
+- `src/hooks/odprawa/useContactHistory.ts`
+- nowa migracja SQL dla policy `deal_team_activity_log`
 
-3. **System prompt** (sekcja Kontekst): dopisz „… ostatnie notatki z odprawy (recent_notes)".
+## Uwagi techniczne
 
-### C. Agenda-builder: dorzuć ostatnią notatkę do kandydata
-
-W `supabase/functions/agenda-builder/index.ts`:
-
-1. W `gatherCandidates` dociągnij równolegle ostatnie wpisy `deal_team_activity_log` (`action='note_added'`) per `team_contact_id` → mapuj na pole `last_note: { date, text } | null`.
-2. Dodaj `last_note` do interfejsu `ContactCandidate` i do JSON-a dla LLM.
-3. Dopisz do system prompt: „Jeśli `last_note` istnieje, weź ją pod uwagę przy klasyfikacji do sekcji."
-
-### D. Smoke
-
-1. `/sgu/odprawa` → otwórz kontakt → „Notatka" → wpisz tekst → „Zapisz" → toast „Notatka zapisana", insert do `deal_team_activity_log` (status 201).
-2. Otwórz live-copilot dla tego kontaktu → sekcja Kontekst zawiera notatkę.
-3. Wygeneruj agendę → SQL: `SELECT new_value->>'note', created_at FROM deal_team_activity_log WHERE action='note_added' ORDER BY created_at DESC LIMIT 5;` powinno mieć wpisy.
-
-## Pliki
-
-- **Migracja**: `<ts>_dtal_insert_policy.sql` (1 policy)
-- **EDIT**: `supabase/functions/live-copilot/index.ts` (FK alias + nowy safeSelect + prompt)
-- **EDIT**: `supabase/functions/agenda-builder/index.ts` (last_note w kandydacie + prompt)
-
-Brak zmian w UI — `OperationalActions.tsx` już wysyła poprawny insert; problemem była wyłącznie RLS.
+Nie będę zmieniać `src/integrations/supabase/types.ts` ani klienta Lovable Cloud. Migracja będzie tylko zmianą policy, bez kasowania danych.

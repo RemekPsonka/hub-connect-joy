@@ -29,7 +29,7 @@ interface OperationalActionsProps {
  * do "Co dalej?" templates (tworzą zadania zamiast nieśledzonych klików).
  */
 export function OperationalActions({ contact, teamId, tenantId }: OperationalActionsProps) {
-  const { user } = useAuth();
+  const { director } = useAuth();
   const qc = useQueryClient();
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -49,12 +49,14 @@ export function OperationalActions({ contact, teamId, tenantId }: OperationalAct
         team_id: teamId,
         tenant_id: tenantId,
         team_contact_id: contact.id,
-        actor_id: user?.id ?? null,
+        // actor_id wskazuje na directors.id (FK), więc używamy director.id, a nie auth user.id
+        actor_id: director?.id ?? null,
         action: 'note_added',
         new_value: { note: text, source: 'odprawa' },
       });
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['deal_team_activity_log'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-contact-history'] });
       toast.success('Notatka zapisana');
       setNoteOpen(false);
       setNoteText('');
