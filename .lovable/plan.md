@@ -1,60 +1,146 @@
+# AGENDA-SECTIONS-01 — pre-brief AI z sekcjami grupującymi
 
-# Spójny system zadań i akcji dla lejka SGU
+Refactor lewej kolumny `/sgu/odprawa` z płaskiej listy 25 kontaktów na **5 priorytetowych sekcji** generowanych przez AI, ze sticky headerami i sumką u góry.
 
-## Diagnoza tego co widać na screenach
+## Co zobaczy użytkownik
 
-W `/sgu/zadania` widać 3 zaległe taski z pustymi tytułami ("Umówić spotkanie", "Umówić spotkanie z . ."). Powód: to **stare orphan-taski bez `deal_team_contact_id`** (brak powiązania z kontaktem). W bazie zespołu SGU jest aktualnie:
+Zamiast obecnej płaskiej listy:
 
-- **3 orphan-taski** ("Umówić spotkanie" × 2, "Umówić spotkanie z . ." × 1) — bez kontaktu
-- **2 realne taski Karczewskiego** (won) — "Wyślij ofertę mailem", "Spotkanie — podpisanie polisy"
-- **Papiernik (meeting_plan)** — pojawia się jako ghost row
-- **16 kontaktów w `handshake`, 1 w `audit_scheduled`, 1 w `power_of_attorney`, 3 w `meeting_done`** — wszyscy bez aktywnych tasków, niewidoczni w `/sgu/zadania`
+```text
+🔥 Pilne dziś (3)
+  ▸ Adam Papiernik (Firma X)         ✨ Overdue task K3 od 12.04
+  ▸ Jan Kowalski (Acme)              ✨ Audyt zaplanowany 22.04, brak akcji
+  ▸ ...
+⚠️ Stalled (5)
+  ▸ ...
+🎯 10x (4)
+  ▸ ...
+📞 Follow-upy (8)
+  ▸ ...
+🆕 Nowi prospekci (2)
+  ▸ ...
+```
 
-## Cel
+Sumka na górze: `Dziś: 3 pilnych · 5 stalled · 4× 10x · 8 follow-upów · 2 nowych`.
 
-Każdy kontakt w lejku ma **dokładnie jeden aktywny task** odpowiadający jego etapowi. Klik w task otwiera dialog adekwatny do etapu, który po potwierdzeniu zamyka task i przesuwa kontakt do kolejnego etapu (tworząc nowy task).
+Backward-compat: stare proposals (z samym `ranked_contacts`) renderują się jako jedna sekcja „Pozostałe".
 
-## Mapowanie etapów na akcje
+---
 
-| Etap (offering_stage) | Tytuł zadania | Przycisk w wierszu | Akcja po kliknięciu | Następny etap |
-|---|---|---|---|---|
-| `meeting_plan` | Umówić spotkanie z {kontakt} | **Umów spotkanie** (Calendar) | `MeetingScheduledDialog` — pole: data spotkania | → `meeting_scheduled` + nowy task "Spotkanie z {kontakt} — {data}" |
-| `meeting_scheduled` | Spotkanie z {kontakt} — {data} | **Spotkanie odbyte** (CheckCircle) | `MeetingOutcomeDialog` — radio: handshake / audyt / odłóż / utracony | wg wyboru |
-| `meeting_done` | Decyzja po spotkaniu z {kontakt} | **Co dalej?** (ArrowRight) | `NextActionDialog` — handshake / audyt / odłóż / utracony | wg wyboru |
-| `handshake` | Oszacuj składkę dla {kontakt} | **Wpisz składkę** (Banknote) | `EstimatedPremiumDialog` *(NOWY)* — pole: szacowana składka PLN | → `audit_scheduled` + task "Umów audyt z {kontakt}" |
-| `audit_scheduled` | Umów audyt z {kontakt} | **Ustaw datę audytu** (ClipboardCheck) | `AuditScheduleDialog` *(NOWY)* — pole: data audytu | → `audit_done` + task "Zbierz pełnomocnictwo od {kontakt}" |
-| `audit_done` | Zbierz dokumenty od {kontakt} | **Wyślij ofertę** (FileText) | `SendOfferDialog` *(NOWY)* — pole: data wysłania, kanał | → `power_of_attorney` + task "Pełnomocnictwo — {kontakt}" |
-| `power_of_attorney` | Pełnomocnictwo od {kontakt} | **Podpisane** (Handshake) | `PoaSignedDialog` *(NOWY)* — checkbox potwierdzenia | → `won` + task "Wyślij ofertę mailem — {kontakt}" |
-| `won` | Wyślij ofertę / Podpisanie polisy | **Konwertuj na klienta** (UserCheck) | `ConvertToClientDialog` (istnieje) | → `client` (kontakt zostaje w bazie klientów, task zamknięty) |
-| `lost` / `snoozed` | — | brak (kontakt znika z `/sgu/zadania`) | — | — |
+## Plan techniczny
 
-## Co zrobić w kodzie
+### A. Migracja DB
 
-### A. Naprawa wyświetlania (priorytet 1)
-1. **Fix orphan-tasków**: w `useDealsTeamAssignments.ts` w `useMyTeamAssignments` filtrować `tasks` które mają `deal_team_contact_id IS NOT NULL`. Orphany pokazywać w osobnej sekcji "Bez przypisania" z przyciskiem "Powiąż z kontaktem" lub "Usuń".
-2. **Migracja czyszcząca** (po archiwizacji): dla 3 obecnych orphanów — albo manualnie powiązać z kontaktem, albo `status='cancelled'`.
-3. **Tytuły z nazwiskiem**: w ghost-rows i przy tworzeniu nowych tasków zawsze format `{akcja} z {full_name}` (np. "Umówić spotkanie z Papiernik").
+`supabase/migrations/<ts>_ai_agenda_grouped_sections.sql`:
 
-### B. Rozszerzenie ghost-rows na wszystkie etapy (priorytet 2)
-4. W `useMyTeamAssignments` zmienić query: zamiast tylko `meeting_plan`, generować ghost-rows dla **każdego kontaktu w lejku bez aktywnego tasku**, z tytułem zależnym od `offering_stage` (mapa z tabeli powyżej).
-5. Dodać DB-trigger `ensure_active_task_per_lead`: po INSERT/UPDATE `deal_team_contacts.offering_stage`, jeśli nie ma aktywnego tasku — utwórz odpowiedni z mapy.
+```sql
+ALTER TABLE public.ai_agenda_proposals
+  ADD COLUMN IF NOT EXISTS grouped_sections jsonb;
 
-### C. Mapa etap → dialog w wierszu (priorytet 3)
-6. W `MyTeamTasksView.renderTaskRow` zastąpić obecny `onClick`/`onStageBadgeClick` jedną funkcją `getStageAction(task)` która zwraca `{label, icon, dialog}` zgodnie z mapą.
-7. Dodać kolumnę **"Następny krok"** w wierszu tasku (zamiast pustego badge) — ikona + label akcji (np. "Wpisz składkę", "Ustaw datę audytu").
-8. Klik w tytuł tasku otwiera `TaskDetailSheet` (jak teraz). Klik w przycisk "Następny krok" otwiera odpowiedni dialog.
+COMMENT ON COLUMN public.ai_agenda_proposals.grouped_sections IS
+  'Sekcje pre-briefu: [{key,label,icon,contacts:[{contact_id,reason}]}]. NULL = legacy proposal (użyj ranked_contacts).';
+```
 
-### D. Nowe dialogi (priorytet 4)
-9. Stworzyć 4 brakujące dialogi: `EstimatedPremiumDialog`, `AuditScheduleDialog`, `SendOfferDialog`, `PoaSignedDialog`. Każdy: 1-2 pola formularza + przycisk "Potwierdź" → zamyka stary task (status=`completed`), aktualizuje `offering_stage`, tworzy nowy task na kolejny etap.
+Brak DROP — `ranked_contacts` zostaje dla starych rekordów.
 
-### E. Spójność (priorytet 5)
-10. `ContactActionButtons` (kafelki etapów na karcie kontaktu) — używać tych samych dialogów co `/sgu/zadania`. Wycofać duplikat logiki tworzenia tasków z `ContactActionButtons` na rzecz wspólnego hooka `useStageTransition(stage, contactId)`.
+### B. Edge function `agenda-builder`
 
-## Pytania do Ciebie zanim zacznę kodować
+W `supabase/functions/agenda-builder/index.ts`:
 
-1. **Etap `handshake`** — czy "Oszacuj składkę" ma być przed audytem (jak w memory `mem://features/odprawa/k2-k4-premium-dialogs`) czy po? Pytam bo w bazie jest 16 kontaktów w handshake i nie wiem czy to znaczy "uścisk dłoni = wstępna decyzja klienta" czy "K2 = lead".
-2. **Czy `audit_done` istnieje** jako etap, czy po audycie idziemy bezpośrednio do `power_of_attorney`? W enum widziałem tylko: `meeting_plan`, `meeting_done`, `handshake`, `audit_scheduled`, `power_of_attorney`, `won` — brak `audit_done`. Mam pominąć ten etap (audyt → POA bez stanu pośredniego)?
-3. **Tytuły tasków** — preferujesz "Umówić spotkanie z **Papiernik**" czy "Umówić spotkanie z **Adam Papiernik (Firma X)**"?
-4. **Orphan-taski** (3 stare) — kasujemy (`status=cancelled`) czy próbujemy odgadnąć kontakt z tytułu i przypisać manualnie?
+1. **Nowy tool** `submit_grouped_agenda` (zastępuje `submit_ranking` jako `tool_choice`):
 
-Po Twoich odpowiedziach (TAK/NIE/zmień przy każdym wierszu z mapy) wchodzę w implementację.
+```ts
+{
+  name: "submit_grouped_agenda",
+  parameters: {
+    sections: [{
+      key: "urgent" | "stalled" | "10x" | "followup" | "new_prospects",
+      label: string,    // "Pilne dziś"
+      icon: string,     // "🔥"
+      contacts: [{ contact_id: uuid, reason: string }]  // max 80 zn.
+    }]
+  }
+}
+```
+
+2. **System prompt PL** (zastępuje obecny):
+   - 🔥 Pilne dziś — overdue tasks lub at-risk milestone (>7d bez akcji)
+   - ⚠️ Stalled — >14 dni bez ruchu, ryzyko utraty
+   - 🎯 10x — `temperature='10x'` lub `category='10x'`
+   - 📞 Follow-upy — open task na dziś/jutro
+   - 🆕 Nowi prospekci — utworzeni <7 dni temu, brak K1
+   - Każdy kontakt MAX w 1 sekcji (priorytet: urgent > 10x > stalled > followup > new)
+   - Pomiń puste sekcje, max ~25 kontaktów łącznie, format daty `DD.MM`, bez kwot PLN.
+
+3. **Persist**: zapis do `grouped_sections` (jsonb). `ranked_contacts: []` dla nowego flow. Walidacja: każdy `contact_id` musi być w wejściowych kandydatach; deduplikacja (kontakt w wielu sekcjach → zostawiamy w pierwszej wg priorytetu).
+
+4. Audit log: `tool_name='agenda-builder.submit_grouped_agenda'`, output zawiera `sections_count` + `total_contacts`.
+
+5. Fallback: gdy `grouped_sections` puste a `ranked` niepusty (np. LLM zwrócił stary kształt) — zapisz oba.
+
+### C. RPC `get_odprawa_agenda`
+
+Dorzucone kolumny w RETURNS TABLE:
+- `ai_section_key text`
+- `ai_section_label text`
+- `ai_section_icon text`
+
+Logika:
+- Nowy CTE `ai_sections` rozwija `grouped_sections` przez podwójny `jsonb_array_elements` (sekcje × contacts), wyciąga `key/label/icon/contact_id/reason`.
+- Gdy `grouped_sections IS NOT NULL` → bierzemy z niego `ai_reason` (zamiast z `ranked_contacts`).
+- Gdy NULL → legacy fallback do istniejącego `ai_ranking` z `ranked_contacts`, sekcja = NULL (UI → „Pozostałe").
+- Sortowanie:
+  ```
+  ORDER BY
+    CASE ai_section_key
+      WHEN 'urgent' THEN 0
+      WHEN '10x' THEN 1
+      WHEN 'stalled' THEN 2
+      WHEN 'followup' THEN 3
+      WHEN 'new_prospects' THEN 4
+      ELSE 5
+    END,
+    priority_rank,
+    last_status_update DESC NULLS LAST
+  ```
+
+### D. UI `AgendaList.tsx`
+
+W `src/components/sgu/odprawa/AgendaList.tsx`:
+
+1. Rozszerzenie typu `OdprawaAgendaRow` (w `useOdprawaAgenda.ts`) o `ai_section_key | ai_section_label | ai_section_icon`.
+2. `useMemo` grupuje wiersze po `ai_section_key` + zachowuje kolejność z RPC (Map zachowuje insertion order).
+3. Render:
+   - **Sumka u góry** (mała ramka `bg-muted/50 rounded p-2 text-xs`): liczby per sekcja.
+   - **Per sekcja**: header `text-xs font-semibold sticky top-0 bg-background py-1` z `{icon} {label} ({count})`, pod nim aktualne `<button>` row-y (bez zmian wewnętrznego renderu).
+4. Zachowane: `currentContactId`, `discussedContactIds`, `onSelect`, ai_reason badge.
+5. Pusta sekcja AI (nie zwrócona przez LLM) → po prostu jej nie renderujemy.
+
+### E. Walidacja
+
+1. `npm run typecheck`
+2. Smoke `/sgu/odprawa`:
+   - Klik „Wygeneruj agendę AI" → toast 5–15s
+   - Lewa lista pokazuje ≥2 sekcje z headerami + sumkę
+   - Sticky header trzyma się na górze przy scrollu
+   - Klik kontaktu nadal otwiera ContactTasksSheet
+3. SQL check:
+   ```sql
+   SELECT generated_at, jsonb_array_length(grouped_sections)
+   FROM ai_agenda_proposals
+   WHERE team_id=? ORDER BY generated_at DESC LIMIT 1;
+   ```
+
+### Pliki
+
+- **NEW**: `supabase/migrations/<ts>_ai_agenda_grouped_sections.sql`
+- **NEW**: `supabase/migrations/<ts+1>_get_odprawa_agenda_sections.sql` (CREATE OR REPLACE FUNCTION)
+- **EDIT**: `supabase/functions/agenda-builder/index.ts`
+- **EDIT**: `src/hooks/useOdprawaAgenda.ts` (3 nowe pola w typie)
+- **EDIT**: `src/components/sgu/odprawa/AgendaList.tsx` (grupowanie + sumka + sticky)
+
+### Backward-compat
+
+- Stare `ai_agenda_proposals.grouped_sections IS NULL` → RPC zwraca `ai_section_key=NULL` → UI grupuje do `"_other"` z labelem „Pozostałe" i ikoną `·`.
+- `ranked_contacts` nadal czytane jako fallback źródła `ai_reason`.
+- Brak breaking change dla `useDealTeamContactByContactId` ani innych konsumentów RPC.
