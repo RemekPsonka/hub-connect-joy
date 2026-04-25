@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, CheckCircle2, Clock } from 'lucide-react';
+import { Play, CheckCircle2, Clock, Building2, User } from 'lucide-react';
 import { useSGUTeamId } from '@/hooks/useSGUTeamId';
 import {
   useOdprawaAgenda,
@@ -17,8 +17,12 @@ import {
   useAdvanceOdprawaContact,
 } from '@/hooks/useOdprawaSession';
 import { AgendaList } from '@/components/sgu/odprawa/AgendaList';
-import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
-import { DecisionMatrix8 } from '@/components/sgu/odprawa/DecisionMatrix8';
+import { ContactTimeline } from '@/components/sgu/odprawa/ContactTimeline';
+import { DecisionButtons } from '@/components/sgu/odprawa/DecisionButtons';
+import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions';
+import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
+import { useContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
+import type { DecisionKey } from '@/hooks/odprawa/useContactTimelineState';
 import { toast } from 'sonner';
 
 function formatTime(iso: string): string {
@@ -43,6 +47,7 @@ export default function SGUOdprawa() {
     selectedAgendaRow?.contact_id ?? null,
     teamId,
   );
+  const timelineState = useContactTimelineState(sheetContactQ.data ?? null);
 
   useEffect(() => {
     if (sheetContactQ.error) {
@@ -75,8 +80,10 @@ export default function SGUOdprawa() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.current_contact_id, agenda.length]);
 
-  const handleDecisionLogged = async () => {
+  const handleDecisionLogged = async (decision: DecisionKey) => {
     if (!selectedAgendaRow || !active || !teamId) return;
+    // Auto-advance tylko dla push/pivot. park/kill/klient → karta zostaje.
+    if (decision !== 'push' && decision !== 'pivot') return;
     const idx = agenda.findIndex((r) => r.contact_id === selectedAgendaRow.contact_id);
     const next = idx >= 0 ? agenda[idx + 1] ?? null : null;
     try {
@@ -125,8 +132,16 @@ export default function SGUOdprawa() {
     }
   };
 
+  const dtc = sheetContactQ.data ?? null;
+  const contactName = dtc?.contact?.full_name ?? selectedAgendaRow?.contact_name ?? '';
+  const companyName = dtc?.contact?.company ?? selectedAgendaRow?.company_name ?? '';
+  const ownerName = dtc?.assigned_director?.full_name ?? '—';
+  const daysInPipeline = dtc?.created_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(dtc.created_at).getTime()) / 86_400_000))
+    : null;
+
   return (
-    <div className="max-w-5xl mx-auto space-y-4 p-4">
+    <div className="max-w-7xl mx-auto space-y-4 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Odprawa</h1>
@@ -167,59 +182,81 @@ export default function SGUOdprawa() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">
-            Agenda na dziś{' '}
-            <span className="text-sm font-normal text-muted-foreground">
-              ({agenda.length})
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AgendaList
-            rows={agenda}
-            isLoading={agendaQ.isLoading}
-            onSelect={setSelectedAgendaRow}
-          />
-        </CardContent>
-      </Card>
-
-      {teamId && (
-        <ContactTasksSheet
-          contact={sheetContactQ.data ?? null}
-          teamId={teamId}
-          open={!!selectedAgendaRow && sheetContactQ.isSuccess && !!sheetContactQ.data}
-          onOpenChange={(open) => {
-            // W trybie aktywnej odprawy NIE resetujemy selectedAgendaRow przy zamknięciu sheet —
-            // DecisionMatrix8 musi pozostać widoczny pod agendą do podjęcia decyzji.
-            if (!open && !active) setSelectedAgendaRow(null);
-          }}
-        />
-      )}
-
-      {active && teamId && selectedAgendaRow && sheetContactQ.data && (
-        <Card className="border-primary/30">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
-              Decyzja: {sheetContactQ.data.contact?.full_name ?? 'kontakt'}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+        {/* Lewa: agenda */}
+        <Card className="self-start">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              Agenda{' '}
+              <span className="text-sm font-normal text-muted-foreground">({agenda.length})</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <DecisionMatrix8
-              contact={{
-                id: sheetContactQ.data.id,
-                handshake_at: sheetContactQ.data.handshake_at ?? null,
-                poa_signed_at: sheetContactQ.data.poa_signed_at ?? null,
-              }}
-              teamId={teamId}
-              tenantId={sheetContactQ.data.tenant_id}
-              odprawaSessionId={active.id}
-              onDecisionLogged={handleDecisionLogged}
+          <CardContent className="max-h-[calc(100vh-260px)] overflow-y-auto">
+            <AgendaList
+              rows={agenda}
+              isLoading={agendaQ.isLoading}
+              onSelect={setSelectedAgendaRow}
             />
           </CardContent>
         </Card>
-      )}
+
+        {/* Prawa: karta kontaktu */}
+        <div>
+          {!selectedAgendaRow ? (
+            <Card>
+              <CardContent className="p-12 text-center text-sm text-muted-foreground">
+                Wybierz kontakt z agendy, aby otworzyć kartę odprawy.
+              </CardContent>
+            </Card>
+          ) : sheetContactQ.isLoading ? (
+            <Card>
+              <CardContent className="p-12 text-center text-sm text-muted-foreground">
+                Wczytywanie kontaktu…
+              </CardContent>
+            </Card>
+          ) : !dtc || !timelineState ? (
+            <Card>
+              <CardContent className="p-12 text-center text-sm text-muted-foreground">
+                Nie udało się wczytać karty kontaktu.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="pb-3 space-y-1">
+                <CardTitle className="text-xl">{contactName || 'Kontakt'}</CardTitle>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  {companyName && (
+                    <span className="inline-flex items-center gap-1">
+                      <Building2 className="h-3 w-3" />
+                      {companyName}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {ownerName}
+                  </span>
+                  {daysInPipeline !== null && <span>{daysInPipeline} dni w lejku</span>}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <ContactTimeline state={timelineState} />
+                <ContactTasksInline contactId={dtc.contact_id} />
+                {active && (
+                  <DecisionButtons
+                    state={timelineState}
+                    contactId={dtc.id}
+                    teamId={teamId}
+                    tenantId={dtc.tenant_id}
+                    odprawaSessionId={active.id}
+                    onDecisionLogged={handleDecisionLogged}
+                  />
+                )}
+                <OperationalActions contact={dtc} teamId={teamId} tenantId={dtc.tenant_id} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

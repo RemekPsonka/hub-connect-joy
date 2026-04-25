@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export type DecisionVerdict = 'push' | 'pivot' | 'park' | 'kill';
-export type MilestoneVariant = 'k2' | 'k2+';
+export type MilestoneVariant = 'k1' | 'k2' | 'k2+' | 'k3' | 'k4';
 
 export interface LogDecisionInput {
   contactId: string;
