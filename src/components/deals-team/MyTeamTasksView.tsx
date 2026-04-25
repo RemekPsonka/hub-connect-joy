@@ -31,6 +31,14 @@ import {
 } from '@/components/ui/collapsible';
 import { bucketOfTask } from '@/lib/sguTaskBuckets';
 import { MyClientsSection } from '@/components/sgu/MyClientsSection';
+import { STAGE_ACTIONS, asSguStage, type SguStage } from '@/lib/sgu/stageActionMap';
+import { EstimatedPremiumDialog, type PremiumDialogContext } from '@/components/sgu/stage-dialogs/EstimatedPremiumDialog';
+import { PoaSignedDialog } from '@/components/sgu/stage-dialogs/PoaSignedDialog';
+import { AuditScheduleDialog } from '@/components/sgu/stage-dialogs/AuditScheduleDialog';
+import { AuditDoneDialog } from '@/components/sgu/stage-dialogs/AuditDoneDialog';
+import { SendOfferDialog } from '@/components/sgu/stage-dialogs/SendOfferDialog';
+import { MeetingOutcomeDialog } from '@/components/deals-team/MeetingOutcomeDialog';
+
 
 interface MyTeamTasksViewProps {
   teamId: string;
@@ -88,6 +96,9 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
   const [meetingScheduledFor, setMeetingScheduledFor] = useState<{
     contactName: string; contactId: string; teamContactId: string; sourceTaskId: string | null;
   } | null>(null);
+
+  // Universal stage-action dispatcher (handshake / POA / audit / offer ...)
+  const [stageDialog, setStageDialog] = useState<{ stage: SguStage; ctx: PremiumDialogContext } | null>(null);
 
   const filtered = useMemo(() => {
     let result = [...assignments];
@@ -230,35 +241,98 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
         updateAssignment.mutate({ id: taskId, teamContactId: task.deal_team_contact_id || '', title: newTitle });
       }}
       onClick={() => {
-        // Ghost rows (synthesized for meeting_plan contacts without open tasks)
-        // open the meeting scheduling dialog directly.
+        // Ghost rows: open the stage-specific dialog (no underlying task to view).
         if (task.id.startsWith('ghost:') && task.deal_team_contact_id) {
+          const stage = asSguStage(task.contact_offering_stage);
           const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
-          if (tc) {
-            setMeetingScheduledFor({
+          if (stage && tc) {
+            const ctx: PremiumDialogContext = {
               contactName: tc.contact?.full_name || task.contact_name || '',
+              contactCompany: tc.contact?.company ?? task.contact_company ?? null,
               contactId: tc.contact_id,
               teamContactId: tc.id,
+              teamId,
               sourceTaskId: null,
-            });
+            };
+            if (stage === 'meeting_plan') {
+              setMeetingScheduledFor({
+                contactName: ctx.contactName,
+                contactId: ctx.contactId,
+                teamContactId: ctx.teamContactId,
+                sourceTaskId: null,
+              });
+              return;
+            }
+            if (stage === 'meeting_done') {
+              setWorkflowTask(task);
+              setWorkflowContact({
+                contactName: ctx.contactName,
+                contactId: ctx.contactId,
+                teamContactId: ctx.teamContactId,
+                category: tc.category,
+              });
+              setNextActionOpen(true);
+              return;
+            }
+            setStageDialog({ stage, ctx });
             return;
           }
         }
         handleOpenDetail(task);
       }}
       onStageBadgeClick={
-        task.contact_offering_stage === 'meeting_plan' && task.deal_team_contact_id
-          ? () => {
-              const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
-              if (!tc) return;
+        (() => {
+          const stage = asSguStage(task.contact_offering_stage);
+          if (!stage || !task.deal_team_contact_id) return undefined;
+          return () => {
+            const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
+            if (!tc) return;
+            const ctx: PremiumDialogContext = {
+              contactName: tc.contact?.full_name || task.contact_name || '',
+              contactCompany: tc.contact?.company ?? task.contact_company ?? null,
+              contactId: tc.contact_id,
+              teamContactId: tc.id,
+              teamId,
+              sourceTaskId: task.id.startsWith('ghost:') ? null : task.id,
+            };
+            // meeting_plan keeps using existing MeetingScheduledDialog;
+            // meeting_done uses existing NextActionDialog flow.
+            if (stage === 'meeting_plan') {
               setMeetingScheduledFor({
-                contactName: tc.contact?.full_name || task.contact_name || '',
-                contactId: tc.contact_id,
-                teamContactId: tc.id,
-                sourceTaskId: task.id.startsWith('ghost:') ? null : task.id,
+                contactName: ctx.contactName,
+                contactId: ctx.contactId,
+                teamContactId: ctx.teamContactId,
+                sourceTaskId: ctx.sourceTaskId,
               });
+              return;
             }
-          : undefined
+            if (stage === 'meeting_done') {
+              setWorkflowTask(task);
+              setWorkflowContact({
+                contactName: ctx.contactName,
+                contactId: ctx.contactId,
+                teamContactId: ctx.teamContactId,
+                category: tc.category,
+              });
+              setNextActionOpen(true);
+              return;
+            }
+            if (stage === 'won') {
+              setWorkflowTask(task);
+              setWorkflowContact({
+                contactName: ctx.contactName,
+                contactId: ctx.contactId,
+                teamContactId: ctx.teamContactId,
+                category: tc.category,
+              });
+              setShowConvert(true);
+              return;
+            }
+            // handshake / power_of_attorney / audit_scheduled / audit_done /
+            // meeting_scheduled — uniwersalny dispatcher
+            setStageDialog({ stage, ctx });
+          };
+        })()
       }
     />
   );
@@ -529,6 +603,53 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           />
         </>
       )}
+
+      {/* ─── Universal Stage Dialog Dispatcher ───────── */}
+      {stageDialog?.stage === 'handshake' && (
+        <EstimatedPremiumDialog
+          open={true}
+          onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+          ctx={stageDialog.ctx}
+        />
+      )}
+      {stageDialog?.stage === 'power_of_attorney' && (
+        <PoaSignedDialog
+          open={true}
+          onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+          ctx={stageDialog.ctx}
+        />
+      )}
+      {stageDialog?.stage === 'audit_scheduled' && (
+        <AuditScheduleDialog
+          open={true}
+          onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+          ctx={stageDialog.ctx}
+        />
+      )}
+      {stageDialog?.stage === 'audit_done' && (
+        <AuditDoneDialog
+          open={true}
+          onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+          ctx={stageDialog.ctx}
+        />
+      )}
+      {stageDialog?.stage === 'meeting_scheduled' && (() => {
+        const tc = teamContacts.find((c) => c.id === stageDialog.ctx.teamContactId);
+        return (
+          <MeetingOutcomeDialog
+            open={true}
+            onOpenChange={(o) => { if (!o) setStageDialog(null); }}
+            contactName={stageDialog.ctx.contactName}
+            contactId={stageDialog.ctx.contactId}
+            teamContactId={stageDialog.ctx.teamContactId}
+            teamId={teamId}
+            currentCategory={tc?.category ?? 'lead'}
+            onConfirm={() => setStageDialog(null)}
+            onSnooze={() => setShowSnooze(true)}
+            onConvertToClient={() => setShowConvert(true)}
+          />
+        );
+      })()}
     </div>
   );
 }
