@@ -1,61 +1,35 @@
-## Diagnoza
+# Co się dzieje po kliknięciu "Umawiamy spotkanie"
 
-Notatka nadal nie zapisuje się nie przez RLS, tylko przez zły identyfikator autora.
+## Diagnoza (bez bugów — to świadomy design)
 
-Aktualny request kończy się błędem bazy:
+Pasek "Co się stało od ostatniej odprawy?" zawiera dwa różne typy przycisków:
 
-```text
-23503: insert/update on deal_team_activity_log violates foreign key constraint deal_team_activity_log_actor_id_fkey
-Key is not present in table "directors".
-```
+1. **Sub-stages** (przerywana ramka, kropka ●): `Spotkanie decyzyjne`, `Umawiamy spotkanie`, `Spotkanie umówione`, `Handshake`, `POA podpisane`, `Audyt zrobiony` — to **mikro-statusy** wewnątrz tego samego milestone'a (Prospekt / K2+ / K3).
+2. **Milestones** (pełna ramka): `Spotkanie odbyte`, `Klient` itd. — przeskakują na kolejny K.
 
-Frontend wysyła:
+Klik w "Umawiamy spotkanie" trafia do `MilestoneActionStrip.stampSubStage()` (linia 104), który:
 
-```ts
-actor_id: user.id
-```
+- robi `UPDATE deal_team_contacts SET offering_stage='meeting_planning'`
+- loguje decyzję `push` z notatką = label sub-stage'a do `deal_team_decisions`
+- invaliduje query agendy
+- pokazuje toast `Status: Umawiamy spotkanie`
 
-ale kolumna `deal_team_activity_log.actor_id` wskazuje na `directors.id`, a nie na auth `user.id`. Dla Remka poprawny `directors.id` to inny UUID niż `user.id`, więc FK blokuje zapis.
+**Żaden dialog się nie otwiera — i nigdy nie miał.** Tylko milestone'y K2 i K4 otwierają dialog (`EstimatedPremiumDialog` / `WonPremiumBreakdownDialog`) przez callback `onPremiumPrompt`. Sub-stages są celowo "1 klik = zapis", bo to tylko zmiana mikro-statusu bez dodatkowych danych.
 
-## Plan naprawy
+## Dlaczego nie widać efektu w UI
 
-1. Poprawić zapis notatki w `OperationalActions.tsx`
-   - użyć `director?.id` z `useAuth()` jako `actor_id`, zamiast `user?.id`;
-   - dla asystentki zostawić bezpieczny fallback `null`, jeśli nie ma rekordu directora;
-   - dodać czytelny komunikat, jeśli brakuje kontekstu użytkownika/zespołu.
+Po kliknięciu kontakt często wypada z agendy (zmiana `last_status_update` → spada w `priority_bucket`) i panel po prawej znika / przeskakuje na inny kontakt. Toast `Status: Umawiamy spotkanie` w prawym dolnym rogu jest jedynym widocznym potwierdzeniem.
 
-2. Poprawić RLS policy dodaną w ostatnim hotfixie
-   - obecna policy porównuje `actor_id = auth.uid()`, czyli dalej miesza `directors.id` z `user.id`;
-   - zastąpić ją warunkiem:
+W screenshocie widać że "Spotkanie umówione" jest podświetlone żółto (= `currentOfferingStage`), więc poprzedni klik **zadziałał** — zapisał się w bazie.
 
-```sql
-public.is_deal_team_member(team_id)
-AND (
-  actor_id IS NULL
-  OR actor_id = public.get_current_director_id()
-)
-```
+## Pytanie do Ciebie
 
-3. Ujednolicić odczyt nazw autorów w historii kontaktu
-   - `useContactHistory.ts` teraz traktuje `activity.actor_id` jak `auth.users.id`;
-   - po zmianie zapisu trzeba mapować `actor_id` po `directors.id`;
-   - dzięki temu notatki będą pokazywać właściwego autora.
+Co chcesz, żeby się działo po kliknięciu sub-stage'a?
 
-4. Zachować integrację z AI
-   - istniejące zmiany w `live-copilot` i `agenda-builder` czytają `deal_team_activity_log` z `action='note_added'`;
-   - po naprawie zapisu notatki zaczną trafiać do tej samej tabeli, więc AI będzie mogła je czytać bez zmiany modelu danych.
+**A) Status quo (nic nie zmieniam)** — 1 klik = cichy zapis + toast. Szybko, ale mało wyraźnie.
 
-5. Walidacja po wdrożeniu
-   - sprawdzić request POST do `deal_team_activity_log`, czy zwraca 201/200 zamiast 409;
-   - sprawdzić, czy notatka pojawia się w historii kontaktu;
-   - sprawdzić, czy `live-copilot`/agenda-builder widzą ostatnie notatki w kontekście.
+**B) Mini-dialog z polem daty/notatki** — np. "Umawiamy spotkanie" → dialog z polem "kiedy planowane?" + opcjonalna notatka. Daje to też okazję żeby od razu utworzyć task w `tasks` (zgodnie ze `STAGE_ACTIONS` mapą — `meeting_plan` → `MeetingScheduledDialog`).
 
-## Pliki do zmiany
+**C) Tylko mocniejszy feedback wizualny** — po zapisie zostań na kontakcie, podświetl nowy stan na timeline'ie, pokaż "Zapisano ✓" inline (bez dialogu).
 
-- `src/components/sgu/odprawa/OperationalActions.tsx`
-- `src/hooks/odprawa/useContactHistory.ts`
-- nowa migracja SQL dla policy `deal_team_activity_log`
-
-## Uwagi techniczne
-
-Nie będę zmieniać `src/integrations/supabase/types.ts` ani klienta Lovable Cloud. Migracja będzie tylko zmianą policy, bez kasowania danych.
+Daj znać który wariant — wtedy zaimplementuję. Domyślnie sugeruję **C** (najmniej tarcia, naprawia główny problem "nie widzę co się stało") z opcjonalnym przejściem do **B** dla `meeting_planning`/`meeting_scheduled` jeśli chcesz spinać to z taskami w `/sgu/zadania`.

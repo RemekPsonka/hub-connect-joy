@@ -12,6 +12,8 @@ import {
   OFFERING_STAGE_LABEL,
   type OfferingStage,
 } from '@/lib/offeringStageLabels';
+import { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
 
 const LABEL: Record<MilestoneKey, string> = {
   prospect: 'Prospekt',
@@ -53,6 +55,13 @@ export function MilestoneActionStrip({
 }: Props) {
   const logMut = useLogDecision();
   const qc = useQueryClient();
+  // Świeżo kliknięty sub-stage — podświetlamy przez ~1.5s żeby user zobaczył efekt zapisu.
+  const [justSavedStage, setJustSavedStage] = useState<OfferingStage | null>(null);
+  useEffect(() => {
+    if (!justSavedStage) return;
+    const t = setTimeout(() => setJustSavedStage(null), 1500);
+    return () => clearTimeout(t);
+  }, [justSavedStage]);
 
   if (state.availableMilestones.length === 0 && state.availableSubStages.length === 0) {
     return null;
@@ -125,7 +134,8 @@ export function MilestoneActionStrip({
       qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
-      toast.success(`Status: ${OFFERING_STAGE_LABEL[stage]}`);
+      setJustSavedStage(stage);
+      toast.success(`Zapisano: ${OFFERING_STAGE_LABEL[stage]}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Nie udało się zapisać sub-stage';
       toast.error(msg);
@@ -136,6 +146,20 @@ export function MilestoneActionStrip({
     <div className="space-y-2">
       <div className="text-sm font-semibold">Co się stało od ostatniej odprawy?</div>
       <div className="flex flex-wrap gap-2">
+        {/* Aktualny sub-stage (read-only chip) — żeby user widział co już jest zapisane */}
+        {state.currentOfferingStage && state.showSubStageStrip && (
+          <div
+            className={cn(
+              'inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium',
+              'bg-amber-50 border-amber-300 text-amber-900',
+              justSavedStage === state.currentOfferingStage &&
+                'ring-2 ring-amber-400 ring-offset-1 animate-pulse',
+            )}
+          >
+            <Check className="h-3 w-3 mr-1" />
+            {state.currentOfferingStageLabel}
+          </div>
+        )}
         {state.availableSubStages.map((stage) => (
           <Button
             key={stage}
@@ -143,7 +167,10 @@ export function MilestoneActionStrip({
             size="sm"
             disabled={logMut.isPending}
             onClick={() => stampSubStage(stage)}
-            className="text-xs text-muted-foreground border-dashed"
+            className={cn(
+              'text-xs text-muted-foreground border-dashed',
+              justSavedStage === stage && 'ring-2 ring-amber-400 ring-offset-1',
+            )}
           >
             <span className="mr-1.5 text-[10px]">●</span>
             {OFFERING_STAGE_LABEL[stage]}
