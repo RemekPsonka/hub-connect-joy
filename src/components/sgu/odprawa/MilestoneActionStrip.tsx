@@ -14,6 +14,8 @@ import {
 } from '@/lib/offeringStageLabels';
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
+import { useSguStageTransition } from '@/hooks/useSguStageTransition';
+import { asSguStage, buildTaskTitle, type SguStage } from '@/lib/sgu/stageActionMap';
 
 const LABEL: Record<MilestoneKey, string> = {
   prospect: 'Prospekt',
@@ -41,6 +43,12 @@ interface Props {
   teamId: string;
   tenantId: string;
   odprawaSessionId: string;
+  /** contacts.id (osoba) — potrzebne do task_contacts join. */
+  contactRecordId: string;
+  /** Display name kontaktu — do tytułu zadania. */
+  contactName: string;
+  /** Firma kontaktu — do tytułu zadania (opcjonalnie). */
+  contactCompany?: string | null;
   /** Triggered after successful K2/K4 milestone — parent opens the premium dialog. */
   onPremiumPrompt?: (kind: 'k2' | 'k4') => void;
 }
@@ -51,9 +59,13 @@ export function MilestoneActionStrip({
   teamId,
   tenantId,
   odprawaSessionId,
+  contactRecordId,
+  contactName,
+  contactCompany,
   onPremiumPrompt,
 }: Props) {
   const logMut = useLogDecision();
+  const transitionMut = useSguStageTransition();
   const qc = useQueryClient();
   // Świeżo kliknięty sub-stage — podświetlamy przez ~1.5s żeby user zobaczył efekt zapisu.
   const [justSavedStage, setJustSavedStage] = useState<OfferingStage | null>(null);
@@ -67,24 +79,57 @@ export function MilestoneActionStrip({
     return null;
   }
 
+  /**
+   * Znajdź aktualnie aktywne zadanie dla tego kontaktu (do zamknięcia przy tranzycji).
+   * Zwraca null gdy brak — wtedy hook po prostu utworzy nowe.
+   */
+  const findActiveSourceTaskId = async (): Promise<string | null> => {
+    const { data } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('deal_team_contact_id', contactId)
+      .in('status', ['todo', 'pending', 'in_progress'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.id ?? null;
+  };
+
+  const runTransition = async (
+    nextStage: SguStage | null,
+    contactPatch: Record<string, unknown>,
+  ) => {
+    const sourceTaskId = await findActiveSourceTaskId();
+    await transitionMut.mutateAsync({
+      teamId,
+      teamContactId: contactId,
+      contactId: contactRecordId,
+      contactName,
+      contactCompany: contactCompany ?? null,
+      nextStage,
+      sourceTaskId,
+      newTaskDueDate: null,
+      contactPatch,
+    });
+  };
+
   const stamp = async (key: MilestoneKey) => {
     const stage = OFFERING_STAGE_MAP[key];
     if (!stage) return;
+    const sguNext = asSguStage(stage);
     try {
-      const update: Record<string, unknown> = { offering_stage: stage };
+      const patch: Record<string, unknown> = { offering_stage: stage };
       if (key === 'k2') {
         // K2 (handshake) = kwalifikacja biznesowa — kontakt staje się leadem
-        update.category = 'lead';
+        patch.category = 'lead';
       }
       if (key === 'k4') {
-        update.status = 'won';
-        update.category = 'client';
+        patch.status = 'won';
+        patch.category = 'client';
       }
-      const { error: upErr } = await supabase
-        .from('deal_team_contacts')
-        .update(update)
-        .eq('id', contactId);
-      if (upErr) throw upErr;
+
+      // Zamknij stary task + utwórz nowy + update kontaktu (atomicznie po stronie hooka).
+      await runTransition(sguNext, patch);
 
       await logMut.mutateAsync({
         contactId,
@@ -98,7 +143,14 @@ export function MilestoneActionStrip({
       qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
-      toast.success(`Zaznaczono: ${LABEL[key]}`);
+      qc.invalidateQueries({ queryKey: ['active-task-contacts'] });
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
+      const nextTitle = sguNext ? buildTaskTitle(sguNext, contactName, contactCompany) : null;
+      toast.success(
+        nextTitle
+          ? `${LABEL[key]} · utworzono zadanie: ${nextTitle}`
+          : `Zaznaczono: ${LABEL[key]}`,
+      );
 
       // Po pełnym zapisie milestone+category → poproś rodzica o otwarcie dialogu składek.
       // (state lokalny zniknąłby po invalidate, gdy kontakt wypada z agendy → unmount)
@@ -111,12 +163,10 @@ export function MilestoneActionStrip({
   };
 
   const stampSubStage = async (stage: OfferingStage) => {
+    const sguNext = asSguStage(stage);
     try {
-      const { error: upErr } = await supabase
-        .from('deal_team_contacts')
-        .update({ offering_stage: stage })
-        .eq('id', contactId);
-      if (upErr) throw upErr;
+      // Zamknij stary task + utwórz nowy task pod nowy etap + zaktualizuj offering_stage.
+      await runTransition(sguNext, { offering_stage: stage });
 
       await logMut.mutateAsync({
         contactId,
@@ -134,8 +184,15 @@ export function MilestoneActionStrip({
       qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
+      qc.invalidateQueries({ queryKey: ['active-task-contacts'] });
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
       setJustSavedStage(stage);
-      toast.success(`Zapisano: ${OFFERING_STAGE_LABEL[stage]}`);
+      const nextTitle = sguNext ? buildTaskTitle(sguNext, contactName, contactCompany) : null;
+      toast.success(
+        nextTitle
+          ? `${OFFERING_STAGE_LABEL[stage]} · utworzono zadanie: ${nextTitle}`
+          : `Zapisano: ${OFFERING_STAGE_LABEL[stage]}`,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Nie udało się zapisać sub-stage';
       toast.error(msg);
@@ -165,7 +222,7 @@ export function MilestoneActionStrip({
             key={stage}
             variant="outline"
             size="sm"
-            disabled={logMut.isPending}
+            disabled={logMut.isPending || transitionMut.isPending}
             onClick={() => stampSubStage(stage)}
             className={cn(
               'text-xs text-muted-foreground border-dashed',
@@ -181,7 +238,7 @@ export function MilestoneActionStrip({
             key={key}
             variant={key === 'k4' ? 'default' : 'outline'}
             size="sm"
-            disabled={logMut.isPending}
+            disabled={logMut.isPending || transitionMut.isPending}
             onClick={() => stamp(key)}
             className={cn(
               key === 'k4' && 'bg-emerald-600 text-white hover:bg-emerald-700',

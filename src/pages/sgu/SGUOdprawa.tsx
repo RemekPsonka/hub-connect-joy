@@ -320,6 +320,9 @@ export default function SGUOdprawa() {
                       teamId={teamId}
                       tenantId={dtc.tenant_id}
                       odprawaSessionId={active.id}
+                      contactRecordId={dtc.contact_id}
+                      contactName={dtc.contact?.full_name ?? contactName ?? 'Kontakt'}
+                      contactCompany={dtc.contact?.company ?? companyName ?? null}
                       onPremiumPrompt={(kind) =>
                         setPremiumPrompt({
                           kind,
