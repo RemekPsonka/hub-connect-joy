@@ -293,6 +293,14 @@ export default function SGUOdprawa() {
                       teamId={teamId}
                       tenantId={dtc.tenant_id}
                       odprawaSessionId={active.id}
+                      clientName={dtc.contact?.full_name ?? undefined}
+                      currentExpectedPremiumGr={dtc.expected_annual_premium_gr ?? null}
+                      currentPotentials={{
+                        property: dtc.potential_property_gr ?? null,
+                        financial: dtc.potential_financial_gr ?? null,
+                        communication: dtc.potential_communication_gr ?? null,
+                        life_group: dtc.potential_life_group_gr ?? null,
+                      }}
                     />
                     <NextStepDialog
                       state={timelineState}

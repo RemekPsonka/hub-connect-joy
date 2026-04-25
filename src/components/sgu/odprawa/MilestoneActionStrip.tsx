@@ -8,6 +8,9 @@ import type {
   MilestoneKey,
 } from '@/hooks/odprawa/useContactTimelineState';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
+import { EstimatedPremiumDialog } from './EstimatedPremiumDialog';
+import { WonPremiumBreakdownDialog } from './WonPremiumBreakdownDialog';
 
 const LABEL: Record<MilestoneKey, string> = {
   prospect: 'Prospekt',
@@ -35,6 +38,15 @@ interface Props {
   teamId: string;
   tenantId: string;
   odprawaSessionId: string;
+  /** Optional context for premium dialogs (K2 + K4) */
+  clientName?: string;
+  currentExpectedPremiumGr?: number | null;
+  currentPotentials?: {
+    property?: number | null;
+    financial?: number | null;
+    communication?: number | null;
+    life_group?: number | null;
+  };
 }
 
 export function MilestoneActionStrip({
@@ -43,9 +55,13 @@ export function MilestoneActionStrip({
   teamId,
   tenantId,
   odprawaSessionId,
+  clientName,
+  currentExpectedPremiumGr,
+  currentPotentials,
 }: Props) {
   const logMut = useLogDecision();
   const qc = useQueryClient();
+  const [premiumDialog, setPremiumDialog] = useState<'k2' | 'k4' | null>(null);
 
   if (state.availableMilestones.length === 0) {
     return null;
@@ -56,6 +72,10 @@ export function MilestoneActionStrip({
     if (!stage) return;
     try {
       const update: Record<string, unknown> = { offering_stage: stage };
+      if (key === 'k2') {
+        // K2 (handshake) = kwalifikacja biznesowa — kontakt staje się leadem
+        update.category = 'lead';
+      }
       if (key === 'k4') {
         update.status = 'won';
         update.category = 'client';
@@ -79,6 +99,10 @@ export function MilestoneActionStrip({
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
       toast.success(`Zaznaczono: ${LABEL[key]}`);
+
+      // Po pełnym zapisie milestone+category → otwórz dialog składek
+      if (key === 'k2') setPremiumDialog('k2');
+      if (key === 'k4') setPremiumDialog('k4');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Nie udało się zapisać milestone';
       toast.error(msg);
@@ -86,24 +110,43 @@ export function MilestoneActionStrip({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="text-sm font-semibold">Co się stało od ostatniej odprawy?</div>
-      <div className="flex flex-wrap gap-2">
-        {state.availableMilestones.map((key) => (
-          <Button
-            key={key}
-            variant={key === 'k4' ? 'default' : 'outline'}
-            size="sm"
-            disabled={logMut.isPending}
-            onClick={() => stamp(key)}
-            className={cn(
-              key === 'k4' && 'bg-emerald-600 text-white hover:bg-emerald-700',
-            )}
-          >
-            {LABEL[key]}
-          </Button>
-        ))}
+    <>
+      <div className="space-y-2">
+        <div className="text-sm font-semibold">Co się stało od ostatniej odprawy?</div>
+        <div className="flex flex-wrap gap-2">
+          {state.availableMilestones.map((key) => (
+            <Button
+              key={key}
+              variant={key === 'k4' ? 'default' : 'outline'}
+              size="sm"
+              disabled={logMut.isPending}
+              onClick={() => stamp(key)}
+              className={cn(
+                key === 'k4' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+              )}
+            >
+              {LABEL[key]}
+            </Button>
+          ))}
+        </div>
       </div>
-    </div>
+
+      <EstimatedPremiumDialog
+        open={premiumDialog === 'k2'}
+        onOpenChange={(o) => !o && setPremiumDialog(null)}
+        contactId={contactId}
+        teamId={teamId}
+        currentGr={currentExpectedPremiumGr}
+        clientName={clientName}
+      />
+      <WonPremiumBreakdownDialog
+        open={premiumDialog === 'k4'}
+        onOpenChange={(o) => !o && setPremiumDialog(null)}
+        contactId={contactId}
+        teamId={teamId}
+        current={currentPotentials}
+        clientName={clientName}
+      />
+    </>
   );
 }
