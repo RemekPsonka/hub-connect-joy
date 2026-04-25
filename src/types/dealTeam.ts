@@ -344,6 +344,8 @@ export interface UpdateTeamContactInput {
   potentialFinancialGr?: number | null;
   potentialCommunicationGr?: number | null;
   potentialLifeGroupGr?: number | null;
+  // AUDIT-FIX-01: pozwala synchronizować client_complexity (np. z dialogu K4)
+  clientComplexity?: Record<string, unknown> | null;
 }
 
 export interface PromoteContactInput {

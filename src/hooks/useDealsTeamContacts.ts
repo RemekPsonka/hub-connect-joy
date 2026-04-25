@@ -41,6 +41,9 @@ export function useTeamContacts(
 
       if (category) {
         query = query.eq('category', category);
+      } else {
+        // AUDIT-FIX-01: Kanban/lejek sprzedaży nie pokazuje klientów (są w /sgu/klienci)
+        query = query.neq('category', 'client');
       }
 
       query = query
@@ -291,6 +294,7 @@ export function useUpdateTeamContact() {
       potentialFinancialGr,
       potentialCommunicationGr,
       potentialLifeGroupGr,
+      clientComplexity,
     }: UpdateTeamContactInput) => {
       const updates: Record<string, unknown> = {};
 
@@ -340,6 +344,16 @@ export function useUpdateTeamContact() {
       if (potentialFinancialGr !== undefined) updates.potential_financial_gr = potentialFinancialGr;
       if (potentialCommunicationGr !== undefined) updates.potential_communication_gr = potentialCommunicationGr;
       if (potentialLifeGroupGr !== undefined) updates.potential_life_group_gr = potentialLifeGroupGr;
+      if (clientComplexity !== undefined) {
+        // AUDIT-FIX-01: merge z istniejącym JSON (zachowaj np. referrals_count)
+        const { data: existing } = await supabase
+          .from('deal_team_contacts')
+          .select('client_complexity')
+          .eq('id', id)
+          .maybeSingle();
+        const prev = (existing?.client_complexity ?? {}) as Record<string, unknown>;
+        updates.client_complexity = { ...prev, ...clientComplexity };
+      }
 
       const { error } = await supabase
         .from('deal_team_contacts')
