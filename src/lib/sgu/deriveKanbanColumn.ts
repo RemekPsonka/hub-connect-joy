@@ -51,9 +51,10 @@ export function kanbanColumnToCardStage(col: KanbanColumn): DealStage {
 }
 
 export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
+  const cat = dtc.category as string;
   if (dtc.is_lost) return null;
-  if (dtc.category === 'client' || dtc.won_at) return null;
-  if (dtc.category === 'prospect') return 'prospect';
+  if (cat === 'client' || dtc.won_at) return null;
+  if (cat === 'prospect') return 'prospect';
   if (dtc.poa_signed_at) return 'hot';
   if (
     dtc.k1_meeting_done_at ||
@@ -65,6 +66,6 @@ export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
   if (dtc.next_meeting_date || dtc.offering_stage === 'meeting_scheduled') {
     return 'lead';
   }
-  if (dtc.category === 'lead') return 'cold';
+  if (cat === 'lead') return 'cold';
   return null;
 }
