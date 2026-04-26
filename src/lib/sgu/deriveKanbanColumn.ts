@@ -69,3 +69,32 @@ export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
   if (cat === 'lead') return 'cold';
   return null;
 }
+
+/**
+ * Sprint S7-v2 fix — pre-update simulator dla DnD transitions.
+ * Każdy patch reprezentuje minimalną zmianę, jaką wykona transition action
+ * (mutation lub potwierdzenie w dialogu). Używane w `handleDragEnd` do
+ * walidacji: `deriveKanbanColumn({ ...contact, ...patch }) === toCol`.
+ * Jeśli nie — kontakt ma markery, które wyprowadzą go gdzie indziej i
+ * trzeba zablokować przejście (zero DB write).
+ */
+export const TRANSITION_PATCH: Record<
+  KanbanColumn,
+  Partial<Record<KanbanColumn, Partial<DealTeamContact>>>
+> = {
+  prospect: { cold: { category: 'lead' } },
+  cold: { lead: { offering_stage: 'meeting_scheduled' } },
+  lead: {
+    top: {
+      offering_stage: 'meeting_done',
+      k1_meeting_done_at: new Date().toISOString(),
+    },
+  },
+  top: {
+    hot: {
+      offering_stage: 'power_of_attorney',
+      poa_signed_at: new Date().toISOString(),
+    },
+  },
+  hot: {},
+};
