@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { NextActionDialog } from './NextActionDialog';
 import { SnoozeDialog } from './SnoozeDialog';
-import { ConvertToClientDialog } from './ConvertToClientDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { MeetingDecisionDialog } from './MeetingDecisionDialog';
 import { ContactActionButtons } from './ContactActionButtons';
 import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
@@ -754,17 +754,23 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
         />
       )}
 
-      {/* Convert to Client Dialog */}
+      {/* Convert to Client Dialog (UNIFY-CONVERT-CLIENT S2) */}
       {contact && (
-        <ConvertToClientDialog
+        <WonPremiumBreakdownDialog
           open={showConvert}
           onOpenChange={(v) => {
             setShowConvert(v);
             if (!v) { setPendingCompleteTaskId(null); setPendingCompleteTaskTitle(''); }
           }}
-          teamContactId={contact.id}
+          contactId={contact.id}
           teamId={teamId}
-          contactName={c.full_name}
+          clientName={c.full_name}
+          current={{
+            property: contact.potential_property_gr,
+            financial: contact.potential_financial_gr,
+            communication: contact.potential_communication_gr,
+            life_group: contact.potential_life_group_gr,
+          }}
         />
       )}
 

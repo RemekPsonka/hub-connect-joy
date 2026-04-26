@@ -24,7 +24,7 @@ import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskDetailSheet } from '@/components/tasks/TaskDetailSheet';
 import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
 import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
-import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { MeetingScheduledDialog } from '@/components/deals-team/MeetingScheduledDialog';
 import { UnifiedTaskRow, PRIORITY_CONFIG } from '@/components/tasks/UnifiedTaskRow';
 import {
@@ -612,15 +612,15 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
             contactName={workflowContact.contactName}
             onSnooze={() => { setShowSnooze(false); setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }}
           />
-          <ConvertToClientDialog
+          <WonPremiumBreakdownDialog
             open={showConvert}
             onOpenChange={(open) => {
               setShowConvert(open);
               if (!open) { setNextActionOpen(false); setWorkflowTask(null); setWorkflowContact(null); }
             }}
-            teamContactId={workflowContact.teamContactId}
+            contactId={workflowContact.teamContactId}
             teamId={teamId}
-            contactName={workflowContact.contactName}
+            clientName={workflowContact.contactName}
           />
         </>
       )}

@@ -98,7 +98,7 @@ import { STATUS_CONFIG, PRIORITY_CONFIG } from './UnifiedTaskRow';
 import { useProjectMilestones } from '@/hooks/useProjectMilestones';
 import { NextActionDialog } from '@/components/deals-team/NextActionDialog';
 import { SnoozeDialog } from '@/components/deals-team/SnoozeDialog';
-import { ConvertToClientDialog } from '@/components/deals-team/ConvertToClientDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useDirectors } from '@/hooks/useDirectors';
@@ -1158,12 +1158,12 @@ export function TaskDetailSheet({ open, onOpenChange, task, onEdit, onTaskSwitch
             } catch { toast.error('Wystąpił błąd'); }
           }}
         />
-        <ConvertToClientDialog
+        <WonPremiumBreakdownDialog
           open={showConvert}
           onOpenChange={setShowConvert}
-          teamContactId={pipelineTeamContactId}
+          contactId={pipelineTeamContactId}
           teamId={pipelineTeamId}
-          contactName={pipelineContactName}
+          clientName={pipelineContactName}
         />
       </>
     )}
