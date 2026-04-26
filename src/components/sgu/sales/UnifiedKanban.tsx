@@ -44,8 +44,6 @@ import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { LostReasonDialog } from './LostReasonDialog';
-import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
-import { SignPoaDialog } from './SignPoaDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
@@ -57,6 +55,15 @@ import {
   type DealTeamContact,
   type DealStage,
 } from '@/types/dealTeam';
+import {
+  deriveKanbanColumn,
+  kanbanColumnToCardStage,
+  KANBAN_COLUMN_ORDER,
+  KANBAN_COLUMN_LABELS,
+  KANBAN_COLUMN_ICONS,
+  KANBAN_COLUMN_BORDER,
+  type KanbanColumn,
+} from '@/lib/sgu/deriveKanbanColumn';
 
 interface UnifiedKanbanProps {
   teamId: string;
@@ -65,20 +72,20 @@ interface UnifiedKanbanProps {
 }
 
 interface ColumnDef {
-  stage: DealStage;
+  column: KanbanColumn;
   title: string;
   icon: string;
   borderClass: string;
 }
 
-const COLUMNS: ColumnDef[] = [
-  { stage: 'prospect', title: 'Prospekt', icon: '🔍', borderClass: 'border-t-slate-400' },
-  { stage: 'lead', title: 'Lead', icon: '🔥', borderClass: 'border-t-amber-500' },
-  { stage: 'offering', title: 'Ofertowanie', icon: '💼', borderClass: 'border-t-blue-500' },
-  // CLEANUP-BUGS-01 #24: kolumna 'client' usunięta — klienci żyją w /sgu/klienci
-  // (po AUDIT-FIX-01 useTeamContacts filtruje category='client'). Konwersja
-  // offering→client działa przez dialog wywoływany z karty (K4), nie przez DnD.
-];
+// Sprint S6.5 — 5 kolumn (Prospekt / Cold / Lead / Top / Hot).
+// Klient: w /sgu/klienci (NIE w Kanbanie). Lost: ukryty (po Etap 5 osobna zakładka).
+const COLUMNS: ColumnDef[] = KANBAN_COLUMN_ORDER.map((c) => ({
+  column: c,
+  title: KANBAN_COLUMN_LABELS[c],
+  icon: KANBAN_COLUMN_ICONS[c],
+  borderClass: KANBAN_COLUMN_BORDER[c],
+}));
 
 export function deriveStage(c: DealTeamContact): DealStage {
   if (c.deal_stage) return c.deal_stage;
@@ -96,18 +103,28 @@ interface SubgroupConfig {
   order: string[];
 }
 
-const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
+const SUBGROUP_CONFIG: Record<KanbanColumn, SubgroupConfig> = {
   prospect: {
     getter: (c) => c.prospect_source,
     labels: PROSPECT_SOURCE_LABELS as Record<string, string>,
     order: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
+  },
+  cold: {
+    getter: (c) => c.temperature,
+    labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
   },
   lead: {
     getter: (c) => c.temperature,
     labels: TEMPERATURE_LABELS as Record<string, string>,
     order: ['hot', 'top', '10x', 'cold'],
   },
-  offering: {
+  top: {
+    getter: (c) => c.temperature,
+    labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
+  },
+  hot: {
     getter: (c) => c.offering_stage,
     labels: OFFERING_STAGE_LABELS as Record<string, string>,
     order: [
@@ -120,16 +137,6 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
       'won',
       'lost',
     ],
-  },
-  client: {
-    getter: (c) => c.client_status,
-    labels: CLIENT_STATUS_LABELS as Record<string, string>,
-    order: ['ambassador', 'standard', 'lost'],
-  },
-  lost: {
-    getter: () => null,
-    labels: {},
-    order: [],
   },
 };
 
@@ -288,9 +295,9 @@ function DroppableColumn({
   columnProgress?: { total: number; done: number };
   stalledMap?: Map<string, { daysSinceUpdate: number; stageLabel: string }>;
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id: col.stage });
+  const { isOver, setNodeRef } = useDroppable({ id: col.column });
 
-  const cfg = SUBGROUP_CONFIG[col.stage];
+  const cfg = SUBGROUP_CONFIG[col.column];
 
   const filtered = useMemo(() => {
     if (statusFilter.size === 0) return contacts;
@@ -302,21 +309,11 @@ function DroppableColumn({
 
   const sorted = useMemo(() => sortContacts(filtered, sort), [filtered, sort]);
 
-  // Klient: suma oczekiwanych składek z 4 obszarów (potential_*_gr).
-  // Pozostałe stage'y: suma expected_annual_premium_gr (jak było).
-  const sumPLN =
-    col.stage === 'client'
-      ? sorted.reduce(
-          (acc, c) =>
-            acc +
-            (((c.potential_property_gr ?? 0) +
-              (c.potential_financial_gr ?? 0) +
-              (c.potential_communication_gr ?? 0) +
-              (c.potential_life_group_gr ?? 0)) /
-              100),
-          0,
-        )
-      : sorted.reduce((acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100), 0);
+  // S6.5: Klient nie pojawia się w Kanbanie — suma wyłącznie z expected_annual_premium_gr.
+  const sumPLN = sorted.reduce(
+    (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
+    0,
+  );
   const plnFormatter = new Intl.NumberFormat('pl-PL', {
     style: 'currency',
     currency: 'PLN',
@@ -327,7 +324,7 @@ function DroppableColumn({
     <DraggableCard
       key={c.id}
       contact={c}
-      stage={col.stage}
+      stage={kanbanColumnToCardStage(col.column)}
       teamId={teamId}
       onLostClick={() => onLostClick(c)}
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
@@ -548,34 +545,32 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
-  const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
-  const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
-  const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
+  const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
+    cold: 'recent',
     lead: 'recent',
-    offering: 'recent',
-    client: 'recent',
-    lost: 'recent',
+    top: 'recent',
+    hot: 'recent',
   });
-  const [filterByStage, setFilterByStage] = useState<Record<DealStage, Set<string>>>({
+  const [filterByStage, setFilterByStage] = useState<Record<KanbanColumn, Set<string>>>({
     prospect: new Set(),
+    cold: new Set(),
     lead: new Set(),
-    offering: new Set(),
-    client: new Set(),
-    lost: new Set(),
+    top: new Set(),
+    hot: new Set(),
   });
 
-  const setSortFor = (stage: DealStage, s: SortKey) =>
+  const setSortFor = (stage: KanbanColumn, s: SortKey) =>
     setSortByStage((prev) => ({ ...prev, [stage]: s }));
-  const toggleFilterFor = (stage: DealStage, key: string) =>
+  const toggleFilterFor = (stage: KanbanColumn, key: string) =>
     setFilterByStage((prev) => {
       const next = new Set(prev[stage]);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return { ...prev, [stage]: next };
     });
-  const clearFilterFor = (stage: DealStage) =>
+  const clearFilterFor = (stage: KanbanColumn) =>
     setFilterByStage((prev) => ({ ...prev, [stage]: new Set() }));
 
   const stalledMap = useMemo(() => {
@@ -632,22 +627,33 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   }, [contacts, search, myOverdueOnly, currentDirector?.id, taskInfoMap]);
 
   const grouped = useMemo(() => {
-    const map: Record<DealStage, DealTeamContact[]> = {
+    const map: Record<KanbanColumn, DealTeamContact[]> = {
       prospect: [],
+      cold: [],
       lead: [],
-      offering: [],
-      client: [],
-      lost: [],
+      top: [],
+      hot: [],
     };
     for (const c of visible) {
-      const s = deriveStage(c);
-      if (map[s]) map[s].push(c);
+      const k = deriveKanbanColumn(c);
+      if (k) map[k].push(c);
     }
     return map;
   }, [visible]);
 
   const visibleColumns = useMemo(
-    () => (filter ? COLUMNS.filter((c) => c.stage === filter) : COLUMNS),
+    () => {
+      if (!filter) return COLUMNS;
+      // Map legacy 4-stage filter prop → 5-column subset.
+      const map: Record<NonNullable<UnifiedKanbanProps['filter']>, KanbanColumn[]> = {
+        prospect: ['prospect'],
+        lead: ['cold', 'lead'],
+        offering: ['top', 'hot'],
+        client: [],
+      };
+      const allowed = new Set<KanbanColumn>(map[filter] ?? []);
+      return COLUMNS.filter((c) => allowed.has(c.column));
+    },
     [filter],
   );
 
@@ -701,60 +707,15 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   };
 
-  // Sprint S7 — DnD transition matrix (3-column Kanban: prospect | lead | offering).
-  // Cancel of any dialog = no DB write → @dnd-kit naturally leaves card in source.
-  const COLUMN_ORDER: DealStage[] = ['prospect', 'lead', 'offering', 'client'];
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
-
-    const contact = visible.find((c) => c.id === active.id);
-    if (!contact) return;
-
-    const fromStage = deriveStage(contact);
-    const toStage = over.id as DealStage;
-    if (fromStage === toStage) return;
-
-    const fromIdx = COLUMN_ORDER.indexOf(fromStage);
-    const toIdx = COLUMN_ORDER.indexOf(toStage);
-
-    // Block backwards
-    if (toIdx !== -1 && fromIdx !== -1 && toIdx < fromIdx) {
-      toast.error('Nie można cofnąć kontaktu w Kanbanie. Użyj akcji na karcie kontaktu.');
-      return;
-    }
-    // Block skip > 1
-    if (toIdx !== -1 && fromIdx !== -1 && toIdx > fromIdx + 1) {
-      toast.error("Wymaga wykonania pośrednich milestone'ów.");
-      return;
-    }
-
-    // prospect → lead: no dialog, inline category bump (existing behavior)
-    if (fromStage === 'prospect' && toStage === 'lead') {
-      updateContact.mutate({ id: contact.id, teamId, category: 'lead' });
-      return;
-    }
-    // lead → offering: open ScheduleMeetingDialog (NEW); no DB write until save
-    if (fromStage === 'lead' && toStage === 'offering') {
-      setScheduleMeetingContact(contact);
-      return;
-    }
-    // offering → client: canonical conversion via WonPremiumBreakdownDialog
-    if (fromStage === 'offering' && toStage === 'client') {
-      setConvertContact(contact);
-      return;
-    }
-
-    toast.info('Przejście niedostępne — użyj akcji na karcie');
+  // Sprint S6.5 — DnD świadomie wyłączony (rollback S7). Wraca w S7-v2
+  // z 5-kolumnowym matrix opartym o KanbanColumn.
+  function handleDragEnd(_event: DragEndEvent) {
+    /* no-op: DnD przywróci się w S7-v2 */
   }
 
   function handleOfferingStageChange(c: DealTeamContact, next: string) {
-    // S7: power_of_attorney requires confirmation (POA date) → SignPoaDialog
-    if (next === 'power_of_attorney') {
-      setSignPoaContact(c);
-      return;
-    }
+    // S6.5: SignPoaDialog tymczasowo odpięty — sub-chip aktualizuje pole
+    // bezpośrednio. Dialog handshake→POA wraca w S7-v2 jako badge-click w Hot.
     updateContact.mutate({
       id: c.id,
       teamId,
@@ -861,16 +822,16 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
             <DroppableColumn
-              key={col.stage}
+              key={col.column}
               col={col}
-              contacts={grouped[col.stage]}
+              contacts={grouped[col.column]}
               groupBy={groupBySubcategory}
               teamId={teamId}
-              sort={sortByStage[col.stage]}
-              onSortChange={(s) => setSortFor(col.stage, s)}
-              statusFilter={filterByStage[col.stage]}
-              onStatusFilterToggle={(k) => toggleFilterFor(col.stage, k)}
-              onStatusFilterClear={() => clearFilterFor(col.stage)}
+              sort={sortByStage[col.column]}
+              onSortChange={(s) => setSortFor(col.column, s)}
+              statusFilter={filterByStage[col.column]}
+              onStatusFilterToggle={(k) => toggleFilterFor(col.column, k)}
+              onStatusFilterClear={() => clearFilterFor(col.column)}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);
@@ -887,7 +848,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
               taskInfoMap={taskInfoMap}
-              columnProgress={meetingProgress?.by_column[col.stage]}
+              columnProgress={meetingProgress?.by_column[col.column]}
               stalledMap={stalledMap}
             />
           ))}
@@ -944,27 +905,6 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         open={!!sheetContact}
         onOpenChange={(open) => !open && setSheetContact(null)}
       />
-
-      {scheduleMeetingContact && (
-        <ScheduleMeetingDialog
-          open={!!scheduleMeetingContact}
-          onOpenChange={(o) => !o && setScheduleMeetingContact(null)}
-          dealTeamContactId={scheduleMeetingContact.id}
-          teamId={teamId}
-          contactName={scheduleMeetingContact.contact?.full_name ?? 'kontakt'}
-        />
-      )}
-
-      {signPoaContact && (
-        <SignPoaDialog
-          open={!!signPoaContact}
-          onOpenChange={(o) => !o && setSignPoaContact(null)}
-          dealTeamContactId={signPoaContact.id}
-          teamId={teamId}
-          contactName={signPoaContact.contact?.full_name ?? 'kontakt'}
-          alreadyHandshaken={!!signPoaContact.handshake_at}
-        />
-      )}
     </>
   );
 }
