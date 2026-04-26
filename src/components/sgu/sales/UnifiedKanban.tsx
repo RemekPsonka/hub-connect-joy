@@ -42,7 +42,7 @@ import {
 import { MeetingProgressBar } from './MeetingProgressBar';
 import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
-import { ConvertWonToClientDialog } from './ConvertWonToClientDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
@@ -870,12 +870,18 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
       </DndContext>
 
       {convertContact && (
-        <ConvertWonToClientDialog
+        <WonPremiumBreakdownDialog
           open={!!convertContact}
           onOpenChange={(o) => !o && setConvertContact(null)}
           contactId={convertContact.id}
-          contactName={convertContact.contact?.full_name ?? 'kontakt'}
           teamId={teamId}
+          clientName={convertContact.contact?.full_name ?? 'kontakt'}
+          current={{
+            property: convertContact.potential_property_gr,
+            financial: convertContact.potential_financial_gr,
+            communication: convertContact.potential_communication_gr,
+            life_group: convertContact.potential_life_group_gr,
+          }}
           onSuccess={() => setConvertContact(null)}
         />
       )}
