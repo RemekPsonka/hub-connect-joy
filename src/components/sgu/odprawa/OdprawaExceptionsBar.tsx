@@ -1,16 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -18,12 +8,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
-import { Textarea } from '@/components/ui/textarea';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLogDecision, type MilestoneVariant } from '@/hooks/useLogDecision';
 import type { ContactTimelineState, MilestoneKey } from '@/hooks/odprawa/useContactTimelineState';
+import { LostReasonDialog } from '@/components/sgu/sales/LostReasonDialog';
 
 function variantFor(current: MilestoneKey): MilestoneVariant {
   switch (current) {
@@ -44,6 +33,7 @@ function variantFor(current: MilestoneKey): MilestoneVariant {
 interface Props {
   state: ContactTimelineState;
   contactId: string;
+  contactName: string;
   teamId: string;
   tenantId: string;
   odprawaSessionId: string;
@@ -52,6 +42,7 @@ interface Props {
 export function OdprawaExceptionsBar({
   state,
   contactId,
+  contactName,
   teamId,
   tenantId,
   odprawaSessionId,
@@ -60,20 +51,19 @@ export function OdprawaExceptionsBar({
   const qc = useQueryClient();
   const variant = variantFor(state.currentMilestone);
 
-  const [parkOpen, setParkOpen] = useState(false);
-  const [parkDate, setParkDate] = useState<Date | undefined>(() => {
+  const [pushOpen, setPushOpen] = useState(false);
+  const [pushDate, setPushDate] = useState<Date | undefined>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     return d;
   });
 
-  const [killOpen, setKillOpen] = useState(false);
-  const [killReason, setKillReason] = useState('');
+  const [lostOpen, setLostOpen] = useState(false);
 
   if (state.isLost || state.isWon) return null;
 
-  const submitPark = async () => {
-    if (!parkDate) {
+  const submitPush = async () => {
+    if (!pushDate) {
       toast.error('Wybierz datę');
       return;
     }
@@ -82,59 +72,35 @@ export function OdprawaExceptionsBar({
         contactId,
         teamId,
         tenantId,
-        decision: 'park',
+        decision: 'push',
         milestoneVariant: variant,
         odprawaSessionId,
-        postponedUntil: parkDate.toISOString().slice(0, 10),
+        postponedUntil: pushDate.toISOString().slice(0, 10),
       });
-      await supabase
-        .from('deal_team_contacts')
-        .update({ snoozed_until: parkDate.toISOString().slice(0, 10) })
-        .eq('id', contactId);
       qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
       qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
-      setParkOpen(false);
-      toast.success('Odłożone');
+      setPushOpen(false);
+      toast.success('Przesunięto');
     } catch {
       /* toast w hooku */
     }
   };
 
-  const submitKill = async () => {
-    const reason = killReason.trim();
-    if (!reason) {
-      toast.error('Powód jest wymagany');
-      return;
-    }
-    try {
-      await logMut.mutateAsync({
-        contactId,
-        teamId,
-        tenantId,
-        decision: 'kill',
-        milestoneVariant: variant,
-        odprawaSessionId,
-        deadReason: reason,
-      });
-      await supabase
-        .from('deal_team_contacts')
-        .update({
-          is_lost: true,
-          lost_reason: reason,
-          lost_at: new Date().toISOString(),
-          status: 'lost',
-        })
-        .eq('id', contactId);
-      qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
-      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
-      qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
-      setKillOpen(false);
-      setKillReason('');
-      toast.success('Oznaczono jako Utracony');
-    } catch {
-      /* */
-    }
+  const handleLostSuccess = () => {
+    // Audit trail w meeting_decisions (LostReasonDialog sam aktualizuje deal_team_contacts).
+    logMut.mutate({
+      contactId,
+      teamId,
+      tenantId,
+      decision: 'kill',
+      milestoneVariant: variant,
+      odprawaSessionId,
+      deadReason: 'Oznaczono jako utracony w odprawie',
+    });
+    qc.invalidateQueries({ queryKey: ['deal_team_contact_for_agenda'] });
+    qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+    qc.invalidateQueries({ queryKey: ['odprawa-session-decisions'] });
   };
 
   return (
@@ -144,31 +110,31 @@ export function OdprawaExceptionsBar({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setParkOpen(true)}
+          onClick={() => setPushOpen(true)}
           disabled={logMut.isPending}
         >
-          Odłóż
+          Przesuń
         </Button>
         <Button
           variant="destructive"
           size="sm"
-          onClick={() => setKillOpen(true)}
+          onClick={() => setLostOpen(true)}
           disabled={logMut.isPending}
         >
           Utracony
         </Button>
       </div>
 
-      <Dialog open={parkOpen} onOpenChange={setParkOpen}>
+      <Dialog open={pushOpen} onOpenChange={setPushOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Odłóż do kiedy?</DialogTitle>
+            <DialogTitle>Przesuń decyzję na</DialogTitle>
           </DialogHeader>
           <div className="flex justify-center">
             <Calendar
               mode="single"
-              selected={parkDate}
-              onSelect={setParkDate}
+              selected={pushDate}
+              onSelect={setPushDate}
               disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
               className="p-3 pointer-events-auto"
             />
@@ -176,47 +142,26 @@ export function OdprawaExceptionsBar({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setParkOpen(false)}
+              onClick={() => setPushOpen(false)}
               disabled={logMut.isPending}
             >
               Anuluj
             </Button>
-            <Button onClick={submitPark} disabled={logMut.isPending || !parkDate}>
-              Odłóż
+            <Button onClick={submitPush} disabled={logMut.isPending || !pushDate}>
+              Przesuń
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={killOpen} onOpenChange={setKillOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Oznaczyć jako Utracony?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Kontakt zostanie zamknięty jako utracony. Powód jest wymagany.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Textarea
-            placeholder="Powód (wymagane)"
-            value={killReason}
-            onChange={(e) => setKillReason(e.target.value)}
-            className="min-h-[80px]"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={logMut.isPending}>Anuluj</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                submitKill();
-              }}
-              disabled={logMut.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Oznacz jako utracony
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LostReasonDialog
+        open={lostOpen}
+        onOpenChange={setLostOpen}
+        contactId={contactId}
+        contactName={contactName}
+        teamId={teamId}
+        onSuccess={handleLostSuccess}
+      />
     </div>
   );
 }

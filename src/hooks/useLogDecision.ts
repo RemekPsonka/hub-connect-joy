@@ -45,7 +45,9 @@ export function useLogDecision() {
         meeting_date: new Date().toISOString().slice(0, 10),
         notes: input.notes ?? null,
         postponed_until:
-          input.decision === 'park' ? input.postponedUntil ?? null : null,
+          input.decision === 'park' || input.decision === 'push'
+            ? input.postponedUntil ?? null
+            : null,
         dead_reason:
           input.decision === 'kill' ? input.deadReason ?? null : null,
         prev_category: contact?.category ?? null,

@@ -358,6 +358,7 @@ export default function SGUOdprawa() {
                     <OdprawaExceptionsBar
                       state={timelineState}
                       contactId={dtc.id}
+                      contactName={dtc.contact?.full_name ?? 'kontakt'}
                       teamId={teamId}
                       tenantId={dtc.tenant_id}
                       odprawaSessionId={active.id}
