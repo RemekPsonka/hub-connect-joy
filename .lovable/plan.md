@@ -61,3 +61,16 @@ Hot → klient pozostaje przez K4 button na karcie (poza DnD).
 - Drop dialog cancel → kontakt wraca
 - Sub-chip handshake→power_of_attorney w Hot → SignPoaDialog
 - tsc + eslint clean
+
+
+## S7-v2 (DONE)
+
+5-kolumnowy DnD transition matrix przywrócony:
+- prospect→cold: inline category=lead
+- cold→lead: ScheduleMeetingDialog
+- lead→top: MeetingDecisionDialog (S5)
+- top→hot: SignPoaDialog
+- wstecz / skip>1: toast blokady
+
+Sub-chip handshake→power_of_attorney intercept przywrócony (otwiera SignPoaDialog).
+Dialogi z S7-v1 + S5 reused bez modyfikacji API.
