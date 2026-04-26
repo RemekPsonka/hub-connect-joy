@@ -295,9 +295,9 @@ function DroppableColumn({
   columnProgress?: { total: number; done: number };
   stalledMap?: Map<string, { daysSinceUpdate: number; stageLabel: string }>;
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id: col.stage });
+  const { isOver, setNodeRef } = useDroppable({ id: col.column });
 
-  const cfg = SUBGROUP_CONFIG[col.stage];
+  const cfg = SUBGROUP_CONFIG[col.column];
 
   const filtered = useMemo(() => {
     if (statusFilter.size === 0) return contacts;
@@ -312,7 +312,7 @@ function DroppableColumn({
   // Klient: suma oczekiwanych składek z 4 obszarów (potential_*_gr).
   // Pozostałe stage'y: suma expected_annual_premium_gr (jak było).
   const sumPLN =
-    col.stage === 'client'
+    col.column === 'client'
       ? sorted.reduce(
           (acc, c) =>
             acc +
@@ -334,7 +334,7 @@ function DroppableColumn({
     <DraggableCard
       key={c.id}
       contact={c}
-      stage={col.stage}
+      stage={col.column}
       teamId={teamId}
       onLostClick={() => onLostClick(c)}
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
@@ -868,16 +868,16 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         <div className={cn('grid gap-3', gridCols)}>
           {visibleColumns.map((col) => (
             <DroppableColumn
-              key={col.stage}
+              key={col.column}
               col={col}
-              contacts={grouped[col.stage]}
+              contacts={grouped[col.column]}
               groupBy={groupBySubcategory}
               teamId={teamId}
-              sort={sortByStage[col.stage]}
-              onSortChange={(s) => setSortFor(col.stage, s)}
-              statusFilter={filterByStage[col.stage]}
-              onStatusFilterToggle={(k) => toggleFilterFor(col.stage, k)}
-              onStatusFilterClear={() => clearFilterFor(col.stage)}
+              sort={sortByStage[col.column]}
+              onSortChange={(s) => setSortFor(col.column, s)}
+              statusFilter={filterByStage[col.column]}
+              onStatusFilterToggle={(k) => toggleFilterFor(col.column, k)}
+              onStatusFilterClear={() => clearFilterFor(col.column)}
               onLostClick={(c) => {
                 setLostFromOffering(deriveStage(c) === 'offering');
                 setLostContact(c);
@@ -894,7 +894,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
               taskInfoMap={taskInfoMap}
-              columnProgress={meetingProgress?.by_column[col.stage]}
+              columnProgress={meetingProgress?.by_column[col.column]}
               stalledMap={stalledMap}
             />
           ))}
