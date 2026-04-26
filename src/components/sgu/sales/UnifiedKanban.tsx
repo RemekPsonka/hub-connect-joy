@@ -86,7 +86,6 @@ const COLUMNS: ColumnDef[] = KANBAN_COLUMN_ORDER.map((c) => ({
   icon: KANBAN_COLUMN_ICONS[c],
   borderClass: KANBAN_COLUMN_BORDER[c],
 }));
-];
 
 export function deriveStage(c: DealTeamContact): DealStage {
   if (c.deal_stage) return c.deal_stage;
