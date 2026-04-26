@@ -545,34 +545,32 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
-  const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
-  const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
-  const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
+  const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
+    cold: 'recent',
     lead: 'recent',
-    offering: 'recent',
-    client: 'recent',
-    lost: 'recent',
+    top: 'recent',
+    hot: 'recent',
   });
-  const [filterByStage, setFilterByStage] = useState<Record<DealStage, Set<string>>>({
+  const [filterByStage, setFilterByStage] = useState<Record<KanbanColumn, Set<string>>>({
     prospect: new Set(),
+    cold: new Set(),
     lead: new Set(),
-    offering: new Set(),
-    client: new Set(),
-    lost: new Set(),
+    top: new Set(),
+    hot: new Set(),
   });
 
-  const setSortFor = (stage: DealStage, s: SortKey) =>
+  const setSortFor = (stage: KanbanColumn, s: SortKey) =>
     setSortByStage((prev) => ({ ...prev, [stage]: s }));
-  const toggleFilterFor = (stage: DealStage, key: string) =>
+  const toggleFilterFor = (stage: KanbanColumn, key: string) =>
     setFilterByStage((prev) => {
       const next = new Set(prev[stage]);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return { ...prev, [stage]: next };
     });
-  const clearFilterFor = (stage: DealStage) =>
+  const clearFilterFor = (stage: KanbanColumn) =>
     setFilterByStage((prev) => ({ ...prev, [stage]: new Set() }));
 
   const stalledMap = useMemo(() => {
@@ -629,22 +627,33 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   }, [contacts, search, myOverdueOnly, currentDirector?.id, taskInfoMap]);
 
   const grouped = useMemo(() => {
-    const map: Record<DealStage, DealTeamContact[]> = {
+    const map: Record<KanbanColumn, DealTeamContact[]> = {
       prospect: [],
+      cold: [],
       lead: [],
-      offering: [],
-      client: [],
-      lost: [],
+      top: [],
+      hot: [],
     };
     for (const c of visible) {
-      const s = deriveStage(c);
-      if (map[s]) map[s].push(c);
+      const k = deriveKanbanColumn(c);
+      if (k) map[k].push(c);
     }
     return map;
   }, [visible]);
 
   const visibleColumns = useMemo(
-    () => (filter ? COLUMNS.filter((c) => c.stage === filter) : COLUMNS),
+    () => {
+      if (!filter) return COLUMNS;
+      // Map legacy 4-stage filter prop → 5-column subset.
+      const map: Record<NonNullable<UnifiedKanbanProps['filter']>, KanbanColumn[]> = {
+        prospect: ['prospect'],
+        lead: ['cold', 'lead'],
+        offering: ['top', 'hot'],
+        client: [],
+      };
+      const allowed = new Set<KanbanColumn>(map[filter] ?? []);
+      return COLUMNS.filter((c) => allowed.has(c.column));
+    },
     [filter],
   );
 
