@@ -953,6 +953,36 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         open={!!sheetContact}
         onOpenChange={(open) => !open && setSheetContact(null)}
       />
+
+      {scheduleMeetingContact && (
+        <ScheduleMeetingDialog
+          open
+          onOpenChange={(o) => !o && setScheduleMeetingContact(null)}
+          dealTeamContactId={scheduleMeetingContact.id}
+          teamId={teamId}
+          contactName={scheduleMeetingContact.contact?.full_name ?? 'kontakt'}
+        />
+      )}
+
+      {meetingDecisionContact && (
+        <MeetingDecisionDialog
+          open
+          onOpenChange={(o) => !o && setMeetingDecisionContact(null)}
+          contactId={meetingDecisionContact.id}
+          contactDisplayName={meetingDecisionContact.contact?.full_name ?? 'kontakt'}
+        />
+      )}
+
+      {signPoaContact && (
+        <SignPoaDialog
+          open
+          onOpenChange={(o) => !o && setSignPoaContact(null)}
+          dealTeamContactId={signPoaContact.id}
+          teamId={teamId}
+          contactName={signPoaContact.contact?.full_name ?? 'kontakt'}
+          alreadyHandshaken={!!signPoaContact.handshake_at}
+        />
+      )}
     </>
   );
 }
