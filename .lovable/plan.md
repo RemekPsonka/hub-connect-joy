@@ -1,67 +1,89 @@
 ## Pre-flight wyniki
 
-**A. Kolumny w `tasks`:** ✓ wszystkie 3 istnieją
-- `assigned_to` (uuid) → directors.id
-- `assigned_to_user_id` (uuid) → auth.users.id
-- `owner_id` (uuid) → directors.id
+**A. Użycia `park`/`pivot` w src/:**
+- `src/components/sgu/odprawa/OdprawaExceptionsBar.tsx` — wysyła `decision: 'park'` (przycisk "Odłóż")
+- `src/hooks/useLogDecision.ts` — typ `DecisionVerdict` zawiera `'park' | 'pivot'`, branch zapisujący `postponed_until` gdy `decision==='park'`
+- `src/hooks/odprawa/useContactTimelineState.ts` — typ `DecisionKey` zawiera `'park' | 'pivot'`
+- `src/hooks/odprawa/useAIProposalExecutor.ts` — AI może proponować `park`/`pivot` (OOS — nie ruszamy)
 
-**B. Funkcja `auto_assign_deal_team_task`:** ✓ istnieje, ale w **starej wersji** (kopiuje tylko `assigned_to` z DTC, NIE robi lookup `directors.user_id`).
+**B. Realny stan `OdprawaExceptionsBar` (sprzed refaktoru):**
+- Komponent ma **2 przyciski**, nie 4: "Odłóż" (`park` + DatePicker default +7d) oraz "Utracony" (`kill` + inline AlertDialog z textarea na powód, NIE `LostReasonDialog`).
+- Spec zakłada cięcie 4→2 — w rzeczywistości jest 2→2 z **podmianą semantyki**: `park`→`push` + zamiana inline kill-dialogu na zewnętrzny `LostReasonDialog`.
 
-**C. Triggery na `tasks`:** ❌ **ZERO triggerów**. Funkcja `auto_assign_deal_team_task` istnieje, ale nigdy nie była podpięta jako trigger. To wyjaśnia bug — żaden auto-assignment nie działał na poziomie DB.
+**C. `apply_meeting_decision` w DB:**
+- Pisana w stylu `IF/ELSIF`, nie `CASE`. Obsługuje `go`, `postponed`, `dead`.
+- **Brak gałęzi `push`**, **brak aliasu `kill`** (S3 z aliasem dead/kill nie został wdrożony — pre-flight obala założenie spec).
+- `dead` już ustawia `is_lost=true`, `lost_reason`, `lost_at`, `category='lost'`, `status='disqualified'`.
+- `LostReasonDialog` po stronie UI sam aktualizuje `deal_team_contacts` (pomija ścieżkę przez `meeting_decisions`) — zachowujemy.
 
-**Stan danych:** 4 zadania DTC mają `assigned_to` ale brak `assigned_to_user_id` (na 10 wszystkich DTC tasks).
-
-**Schemat zgodny z założeniami sprintu — kontynuujemy bez odchyleń.**
+**Decyzja spec vs rzeczywistość:** stosuję cel sprintu (2 przyciski: "Przesuń"=push + "Utracony"=kill→LostReasonDialog, aktywna gałąź `push` w triggerze) na realnym stanie kodu. Dostawiam też alias `kill` w triggerze zgodnie z wymaganiem ("zachowaj gałąź dead/kill z S3") — zrobi się to teraz, bo S3 faktycznie tego nie zrobił.
 
 ---
 
 ## Plan implementacji
 
-### Krok 1 — Migracja DB (`supabase/migrations/<timestamp>_s1_task_assignee_user_id.sql`)
+### Krok 1 — Migracja DB
 
-Jedna migracja, wszystko w transakcji, z `-- ROLLBACK:` na końcu:
+Plik: `supabase/migrations/<ts>_s2_mini_apply_meeting_decision_push.sql`
 
-1. `CREATE OR REPLACE FUNCTION auto_assign_deal_team_task()` — rozszerzona wersja (kopia `assigned_to` z DTC + lookup `directors.user_id` → `assigned_to_user_id`).
-2. `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER auto_assign_deal_team_task_trigger BEFORE INSERT ON tasks` (podpinamy — wcześniej go nie było).
-3. `CREATE OR REPLACE FUNCTION require_director_on_dtc_task()` — guard rzucający `RAISE EXCEPTION` gdy DTC bez `assigned_to`.
-4. `CREATE TRIGGER require_director_on_dtc_task_trigger BEFORE INSERT ON tasks`.
-5. **Backfill** historyczny: `UPDATE tasks ... FROM directors` dla 4 wierszy.
-6. Komentarz weryfikacyjny z queries (oczekiwany wynik: 0).
+`CREATE OR REPLACE FUNCTION apply_meeting_decision()` — kopia 1:1 obecnego ciała + 2 zmiany:
 
-`SECURITY DEFINER SET search_path = public` na obu funkcjach (zgodnie z linter rules).
+1. Dodaj **alias `kill`** obok `dead` (`ELSIF NEW.decision_type IN ('dead','kill')`).
+2. Dodaj **aktywną gałąź `push`**:
+   - `next_action_date` = `COALESCE((NEW.decision_data->>'postponed_until')::date, (now() + interval '7 days')::date)`
+   - `snoozed_until` = analogicznie jako `timestamptz`
+   - `last_status_update = now()`
+   - **NIE** zamykamy `follow_up_task_id` w `push` (zachowanie zgodne z istniejącym FIX #23 — push tworzy/przesuwa task, nie kończy go)
+3. `park`/`pivot` — bez branchy (no-op, jak dziś — UI już nie wysyła; legacy AI proposal też przejdzie bez efektu, akceptowalne w S2-mini).
 
-### Krok 2 — Nowy hook `src/hooks/useRequireDirector.ts`
+`SECURITY DEFINER SET search_path = public`. Komentarz `-- ROLLBACK:` z poprzednią wersją funkcji.
 
-Dokładnie wg spec — React Query, `enabled: !!dtcId`, zwraca `{ hasDirector, dtcId }`. Nic więcej.
+**Uwaga schematu:** `meeting_decisions` ma kolumnę `postponed_until` (już używana dla `postponed`). Spec mówi o `decision_data->>'postponed_until'`, ale w obecnym pipeline (`useLogDecision`) push będzie wysyłany z wartością w kolumnie `postponed_until`, nie w `decision_data`. **Ujednolicenie:** trigger preferuje `NEW.postponed_until`, fallback na `decision_data->>'postponed_until'`, fallback na `now()+7d`. To pokrywa oba kontrakty.
 
-### Krok 3 — Wpięcie guard'u w 5 entry-pointów
+### Krok 2 — `src/hooks/useLogDecision.ts`
 
-Dla każdego pliku: zlokalizować handler tworzący task na DTC, dodać `useRequireDirector(dtcId)` na górze, na początku handlera sprawdzić `if (!hasDirector) { toast.error(...); return; }`. Action button w toast otwiera istniejący `OwnerInlinePicker` (lokalizuję wzorzec użycia w bazie kodu — jeśli w danym kontekście nie ma łatwego mount-pointu, akcja toast-u zostanie pominięta, sam komunikat wystarczy).
+- Rozszerzyć branch zapisu `postponed_until`: zapisuj również gdy `decision==='push'` (nie tylko `park`):
+  `postponed_until: (input.decision === 'park' || input.decision === 'push') ? input.postponedUntil ?? null : null`
+- Typ `DecisionVerdict` zostaje bez zmian (nadal zawiera park/pivot — legacy + AI).
 
-Pliki:
-1. `src/components/sgu/odprawa/MilestoneActionStrip.tsx` — guard w `stamp()` i `stampSubStage()`.
-2. `src/components/sgu/odprawa/NextStepDialog.tsx` — guard w handlerze submit.
-3. `src/components/deals-team/ContactActionButtons.tsx` — guard w handlerach tworzących task.
-4. `src/components/sgu/clients/AddClientTaskDialog.tsx` — guard w `createTask.mutationFn`.
-5. `src/components/deals-team/MyTeamTasksView.tsx` — guard w handlerze ghost-task → real-task.
+### Krok 3 — `src/components/sgu/odprawa/OdprawaExceptionsBar.tsx`
 
-Bez zmian w props, bez nowych plików (poza hookiem).
+Refaktor jednego pliku, zachowując kolory/ikony/hover:
+
+1. **Przycisk "Odłóż" → "Przesuń"**:
+   - Zmień label na `Przesuń`
+   - Zmień `decision: 'park'` na `decision: 'push'` w `submitPark` (przemianować na `submitPush`)
+   - DatePicker: bez zmian (default +7d, label "Przesuń decyzję na")
+   - Po sukcesie: `toast.success('Przesunięto')`
+   - **Nie** zapisujemy już ręcznie `snoozed_until` w `deal_team_contacts` z UI — robi to trigger DB (usuwam ten `supabase.from(...).update(...)` z `submitPush`, żeby nie dublować)
+
+2. **Przycisk "Utracony"**:
+   - Usuń lokalny `AlertDialog` + state `killOpen`/`killReason` + funkcję `submitKill`.
+   - Importuj `LostReasonDialog` z `@/components/sgu/sales/LostReasonDialog`.
+   - Otwieranie LostReasonDialog na klik "Utracony" (state `lostOpen`).
+   - Props: `contactId`, `contactName` (musi przyjść w props — sprawdzę, czy `state` ma; jeśli nie, dodam prop `contactName`), `teamId`, `onSuccess` → invalidate odprawa-agenda + log decyzji `kill` przez `useLogDecision` dla audit trailu.
+   - Decyzja: log `kill` przez `useLogDecision` przed/po sukcesie LostReasonDialog (dla zachowania historii w `meeting_decisions`).
+
+3. Pozostawić kolejność: Przesuń (outline) → Utracony (destructive). Bez animacji.
 
 ### Krok 4 — Weryfikacja
 
-- Po migracji: `SELECT count(*) FROM tasks WHERE deal_team_contact_id IS NOT NULL AND assigned_to IS NOT NULL AND assigned_to_user_id IS NULL AND status NOT IN ('completed','cancelled')` → oczekiwane 0.
-- `npm run lint` po zmianach w 5 plikach + nowym hooku.
-- Smoke w preview: utworzenie taska na kontakcie z dyrektorem → `assigned_to_user_id` wypełnione; na kontakcie bez dyrektora → toast + brak INSERT-u.
+- `npm run lint`
+- Smoke preview: kontakt → "Przesuń" +14d → DB sprawdzenie `next_action_date` i `snoozed_until` = today+14d, kontakt znika z dzisiejszej agendy.
+- Smoke: "Utracony" → LostReasonDialog → powód → `is_lost=true`, `category='lost'`, `lost_reason` ustawione, wpis w `meeting_decisions` z `decision_type='kill'`.
 
 ---
 
-## Hard constraints (potwierdzenie)
+## Hard constraints
 
-- Tylko 1 nowy plik: `src/hooks/useRequireDirector.ts`.
-- Modyfikacje wyłącznie w 5 wymienionych komponentach + 1 migracja.
-- Bez nowych testów, bez refactoru, bez zmian UI/styling.
-- Bez dotykania innych triggerów/funkcji DB.
+- Tylko 1 nowy plik migracji + edycja 2 plików (`OdprawaExceptionsBar.tsx`, `useLogDecision.ts`).
+- Bez zmian w `LostReasonDialog`.
+- Bez ruszania `useAIProposalExecutor`, `useContactTimelineState`, enum `decision_type`.
+- Bez animacji, bez refactoru poza wymienionym scope.
+- Trigger nie pisze do `deal_stage` (GENERATED).
 
 ## Out of scope
 
-Pozostałe sprinty z audytu (S2–S14). Aktualnie tylko S1.
+- Czyszczenie typów `DecisionVerdict`/`DecisionKey` z `park`/`pivot` (zostają — legacy + AI proposal).
+- Mapowanie AI park/pivot na push (osobny sprint).
+- Pozostałe sprinty audytu.
