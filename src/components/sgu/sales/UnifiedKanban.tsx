@@ -309,21 +309,11 @@ function DroppableColumn({
 
   const sorted = useMemo(() => sortContacts(filtered, sort), [filtered, sort]);
 
-  // Klient: suma oczekiwanych składek z 4 obszarów (potential_*_gr).
-  // Pozostałe stage'y: suma expected_annual_premium_gr (jak było).
-  const sumPLN =
-    col.column === 'client'
-      ? sorted.reduce(
-          (acc, c) =>
-            acc +
-            (((c.potential_property_gr ?? 0) +
-              (c.potential_financial_gr ?? 0) +
-              (c.potential_communication_gr ?? 0) +
-              (c.potential_life_group_gr ?? 0)) /
-              100),
-          0,
-        )
-      : sorted.reduce((acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100), 0);
+  // S6.5: Klient nie pojawia się w Kanbanie — suma wyłącznie z expected_annual_premium_gr.
+  const sumPLN = sorted.reduce(
+    (acc, c) => acc + ((c.expected_annual_premium_gr ?? 0) / 100),
+    0,
+  );
   const plnFormatter = new Intl.NumberFormat('pl-PL', {
     style: 'currency',
     currency: 'PLN',
@@ -334,7 +324,7 @@ function DroppableColumn({
     <DraggableCard
       key={c.id}
       contact={c}
-      stage={col.column}
+      stage={kanbanColumnToCardStage(col.column)}
       teamId={teamId}
       onLostClick={() => onLostClick(c)}
       onOfferingStageChange={(next) => onOfferingStageChange(c, next)}
