@@ -34,7 +34,8 @@ export function useConvertToClient() {
     mutationFn: async (input: ConvertToClientInput) => {
       const { error } = await supabase.rpc('convert_to_client', {
         p_dtc_id: input.dealTeamContactId,
-        p_areas: input.areas as unknown as Record<string, unknown>,
+        // RPC oczekuje jsonb — wąsko rzutowane do typu generowanego przez Supabase types.
+        p_areas: input.areas as never,
       });
       if (error) throw error;
     },
