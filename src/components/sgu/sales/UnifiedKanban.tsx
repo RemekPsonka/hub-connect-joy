@@ -47,6 +47,8 @@ import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
+import { SignPoaDialog } from './SignPoaDialog';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
