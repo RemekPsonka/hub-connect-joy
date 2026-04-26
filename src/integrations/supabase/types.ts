@@ -4010,11 +4010,6 @@ export type Database = {
           id: string
           is_lost: boolean | null
           k1_meeting_done_at: string | null
-          k1_meeting_scheduled_at: string | null
-          k2_handshake_at: string | null
-          k3_poa_signed_at: string | null
-          k4_offer_accepted_at: string | null
-          k4_policy_signed_at: string | null
           last_status_update: string | null
           lost_at: string | null
           lost_reason: string | null
@@ -4066,11 +4061,6 @@ export type Database = {
           id?: string
           is_lost?: boolean | null
           k1_meeting_done_at?: string | null
-          k1_meeting_scheduled_at?: string | null
-          k2_handshake_at?: string | null
-          k3_poa_signed_at?: string | null
-          k4_offer_accepted_at?: string | null
-          k4_policy_signed_at?: string | null
           last_status_update?: string | null
           lost_at?: string | null
           lost_reason?: string | null
@@ -4122,11 +4112,6 @@ export type Database = {
           id?: string
           is_lost?: boolean | null
           k1_meeting_done_at?: string | null
-          k1_meeting_scheduled_at?: string | null
-          k2_handshake_at?: string | null
-          k3_poa_signed_at?: string | null
-          k4_offer_accepted_at?: string | null
-          k4_policy_signed_at?: string | null
           last_status_update?: string | null
           lost_at?: string | null
           lost_reason?: string | null
