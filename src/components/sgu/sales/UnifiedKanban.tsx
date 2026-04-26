@@ -707,60 +707,15 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   };
 
-  // Sprint S7 — DnD transition matrix (3-column Kanban: prospect | lead | offering).
-  // Cancel of any dialog = no DB write → @dnd-kit naturally leaves card in source.
-  const COLUMN_ORDER: DealStage[] = ['prospect', 'lead', 'offering', 'client'];
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
-
-    const contact = visible.find((c) => c.id === active.id);
-    if (!contact) return;
-
-    const fromStage = deriveStage(contact);
-    const toStage = over.id as DealStage;
-    if (fromStage === toStage) return;
-
-    const fromIdx = COLUMN_ORDER.indexOf(fromStage);
-    const toIdx = COLUMN_ORDER.indexOf(toStage);
-
-    // Block backwards
-    if (toIdx !== -1 && fromIdx !== -1 && toIdx < fromIdx) {
-      toast.error('Nie można cofnąć kontaktu w Kanbanie. Użyj akcji na karcie kontaktu.');
-      return;
-    }
-    // Block skip > 1
-    if (toIdx !== -1 && fromIdx !== -1 && toIdx > fromIdx + 1) {
-      toast.error("Wymaga wykonania pośrednich milestone'ów.");
-      return;
-    }
-
-    // prospect → lead: no dialog, inline category bump (existing behavior)
-    if (fromStage === 'prospect' && toStage === 'lead') {
-      updateContact.mutate({ id: contact.id, teamId, category: 'lead' });
-      return;
-    }
-    // lead → offering: open ScheduleMeetingDialog (NEW); no DB write until save
-    if (fromStage === 'lead' && toStage === 'offering') {
-      setScheduleMeetingContact(contact);
-      return;
-    }
-    // offering → client: canonical conversion via WonPremiumBreakdownDialog
-    if (fromStage === 'offering' && toStage === 'client') {
-      setConvertContact(contact);
-      return;
-    }
-
-    toast.info('Przejście niedostępne — użyj akcji na karcie');
+  // Sprint S6.5 — DnD świadomie wyłączony (rollback S7). Wraca w S7-v2
+  // z 5-kolumnowym matrix opartym o KanbanColumn.
+  function handleDragEnd(_event: DragEndEvent) {
+    /* no-op: DnD przywróci się w S7-v2 */
   }
 
   function handleOfferingStageChange(c: DealTeamContact, next: string) {
-    // S7: power_of_attorney requires confirmation (POA date) → SignPoaDialog
-    if (next === 'power_of_attorney') {
-      setSignPoaContact(c);
-      return;
-    }
+    // S6.5: SignPoaDialog tymczasowo odpięty — sub-chip aktualizuje pole
+    // bezpośrednio. Dialog handshake→POA wraca w S7-v2 jako badge-click w Hot.
     updateContact.mutate({
       id: c.id,
       teamId,
