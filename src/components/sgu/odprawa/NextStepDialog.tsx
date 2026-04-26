@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLogDecision, type MilestoneVariant } from '@/hooks/useLogDecision';
 import { useTeamDirectors } from '@/hooks/odprawa/useTeamDirectors';
+import { useRequireDirector } from '@/hooks/useRequireDirector';
 import type { ContactTimelineState } from '@/hooks/odprawa/useContactTimelineState';
 
 type DueOption = '7d' | 'next_odprawa' | 'custom' | 'none';
@@ -121,6 +122,7 @@ export function NextStepDialog({
   const qc = useQueryClient();
   const logMut = useLogDecision();
   const directorsQ = useTeamDirectors(teamId);
+  const { hasDirector } = useRequireDirector(dealTeamContactId);
 
   const [open, setOpen] = useState(false);
   const [activeTpl, setActiveTpl] = useState<Template | null>(null);
@@ -163,6 +165,12 @@ export function NextStepDialog({
     }
     if (!assignee) {
       toast.error('Wybierz wykonawcę');
+      return;
+    }
+    if (!hasDirector) {
+      toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+        description: 'Przypisz dyrektora przed dodaniem zadania.',
+      });
       return;
     }
     let dueDate: string | null = null;
