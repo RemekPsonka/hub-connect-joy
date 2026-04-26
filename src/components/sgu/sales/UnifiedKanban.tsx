@@ -103,18 +103,28 @@ interface SubgroupConfig {
   order: string[];
 }
 
-const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
+const SUBGROUP_CONFIG: Record<KanbanColumn, SubgroupConfig> = {
   prospect: {
     getter: (c) => c.prospect_source,
     labels: PROSPECT_SOURCE_LABELS as Record<string, string>,
     order: ['crm_push', 'cc_meeting', 'ai_krs', 'ai_web', 'csv', 'manual'],
+  },
+  cold: {
+    getter: (c) => c.temperature,
+    labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
   },
   lead: {
     getter: (c) => c.temperature,
     labels: TEMPERATURE_LABELS as Record<string, string>,
     order: ['hot', 'top', '10x', 'cold'],
   },
-  offering: {
+  top: {
+    getter: (c) => c.temperature,
+    labels: TEMPERATURE_LABELS as Record<string, string>,
+    order: ['hot', 'top', '10x', 'cold'],
+  },
+  hot: {
     getter: (c) => c.offering_stage,
     labels: OFFERING_STAGE_LABELS as Record<string, string>,
     order: [
@@ -127,16 +137,6 @@ const SUBGROUP_CONFIG: Record<DealStage, SubgroupConfig> = {
       'won',
       'lost',
     ],
-  },
-  client: {
-    getter: (c) => c.client_status,
-    labels: CLIENT_STATUS_LABELS as Record<string, string>,
-    order: ['ambassador', 'standard', 'lost'],
-  },
-  lost: {
-    getter: () => null,
-    labels: {},
-    order: [],
   },
 };
 
