@@ -1,110 +1,121 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { useCreateMeetingDecision } from './useMeetingDecisions';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 /**
  * Sprint S5 — UNIFY-MEETING-OUTCOME
  *
- * Cienki wrapper API GO/NO-GO nad istniejącym `useCreateMeetingDecision`,
- * który zapisuje rekord w `meeting_decisions` i wyzwala trigger
- * `apply_meeting_decision` (rozszerzony w migracji S5 o ścieżki
- * `pivot` i `nurture`).
+ * API GO/NO-GO mapowane na pełen zestaw `decision_type` w `meeting_decisions`,
+ * który wyzwala trigger `apply_meeting_decision` (rozszerzony w S5 o `pivot`/`nurture`).
  *
- * Mapowanie:
  *   go                       → decision_type = 'go'
- *   no_go + cold             → decision_type = 'pivot'   (reset do decision_meeting)
- *   no_go + postponed        → decision_type = 'push'    (snooze, taski NIE zamknięte)
- *   no_go + nurture          → decision_type = 'nurture' (10x; taski NIE zamknięte)
- *   no_go + lost             → decision_type = 'kill'    (alias 'dead')
+ *   no_go + cold             → decision_type = 'pivot'
+ *   no_go + postponed        → decision_type = 'push'
+ *   no_go + nurture          → decision_type = 'nurture'
+ *   no_go + lost             → decision_type = 'kill'
  */
 
 export type NoGoPath = 'cold' | 'postponed' | 'nurture' | 'lost';
 
 export type MarkMeetingDoneInput = {
   dealTeamContactId: string;
-  meetingDate?: string; // ISO yyyy-MM-dd; default: today
+  meetingDate?: string; // ISO yyyy-MM-dd; default today
   meetingNotes?: string;
   decision: 'go' | 'no_go';
   noGoPath?: NoGoPath;
   /** ISO yyyy-MM-dd. Wymagane dla noGoPath='postponed'. */
   postponedUntil?: string;
-  /** ISO yyyy-MM-dd. Opcjonalne dla 'go' (next action). */
+  /** ISO yyyy-MM-dd. Opcjonalne dla 'go'. */
   nextActionDate?: string;
   /** Wymagane dla noGoPath='lost'. */
   lostReason?: string;
+  /** Opcjonalny task do zamknięcia po decyzji (jeśli decision_type IN go/dead/kill/pivot). */
+  followUpTaskId?: string | null;
 };
 
+type DecisionType = 'go' | 'push' | 'pivot' | 'nurture' | 'kill';
+
+function mapToDecisionType(input: MarkMeetingDoneInput): DecisionType {
+  if (input.decision === 'go') return 'go';
+  if (!input.noGoPath) throw new Error('useMarkMeetingDone: brak noGoPath dla decision=no_go');
+  switch (input.noGoPath) {
+    case 'cold': return 'pivot';
+    case 'postponed': return 'push';
+    case 'nurture': return 'nurture';
+    case 'lost': return 'kill';
+  }
+}
+
 export function useMarkMeetingDone() {
-  const createDecision = useCreateMeetingDecision();
+  const qc = useQueryClient();
+  const { user, director, assistant } = useAuth();
+  const authUserId = user?.id;
+  const tenantHint = director?.tenant_id || assistant?.tenant_id;
 
-  const mutateAsync = async (input: MarkMeetingDoneInput) => {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const meetingDate = input.meetingDate ?? today;
-    const notes = input.meetingNotes?.trim() || null;
+  return useMutation({
+    mutationFn: async (input: MarkMeetingDoneInput) => {
+      if (!authUserId) throw new Error('Brak zalogowanego użytkownika');
 
-    if (input.decision === 'go') {
-      return createDecision.mutateAsync({
-        contactId: input.dealTeamContactId,
-        decisionType: 'go',
-        meetingDate,
+      const decisionType = mapToDecisionType(input);
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const meetingDate = input.meetingDate ?? today;
+      const notes = input.meetingNotes?.trim() || null;
+
+      // Walidacje per ścieżka (mirror trigger semantyki)
+      if (input.decision === 'no_go' && input.noGoPath === 'postponed' && !input.postponedUntil) {
+        throw new Error('Termin odroczenia wymagany');
+      }
+      if (input.decision === 'no_go' && input.noGoPath === 'lost' && !input.lostReason?.trim()) {
+        throw new Error('Powód utraty wymagany');
+      }
+
+      // Pobierz tenant/team/prev state z dtc (zgodnie z patternem useCreateMeetingDecision).
+      const { data: dtc, error: fetchErr } = await supabase
+        .from('deal_team_contacts')
+        .select('tenant_id, team_id, category, offering_stage, temperature')
+        .eq('id', input.dealTeamContactId)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!dtc) throw new Error('Kontakt nie znaleziony');
+
+      const insertPayload = {
+        tenant_id: dtc.tenant_id ?? tenantHint!,
+        team_id: dtc.team_id,
+        deal_team_contact_id: input.dealTeamContactId,
+        decision_type: decisionType,
+        meeting_date: meetingDate,
         notes,
-        nextActionDate: input.nextActionDate ?? today,
-      });
-    }
+        next_action_date:
+          decisionType === 'go' ? (input.nextActionDate ?? today) : null,
+        postponed_until:
+          decisionType === 'push' ? (input.postponedUntil ?? null) : null,
+        dead_reason: decisionType === 'kill' ? (input.lostReason!.trim()) : null,
+        prev_category: dtc.category,
+        prev_offering_stage: dtc.offering_stage ?? null,
+        prev_temperature: dtc.temperature ?? null,
+        follow_up_task_id: input.followUpTaskId ?? null,
+        created_by: authUserId,
+      };
 
-    if (input.decision !== 'no_go' || !input.noGoPath) {
-      throw new Error('useMarkMeetingDone: brak noGoPath dla decision=no_go');
-    }
+      const { error: insErr } = await supabase
+        .from('meeting_decisions')
+        .insert(insertPayload);
+      if (insErr) throw insErr;
 
-    switch (input.noGoPath) {
-      case 'postponed': {
-        if (!input.postponedUntil) {
-          throw new Error('useMarkMeetingDone: postponedUntil wymagane dla noGoPath=postponed');
-        }
-        // 'postponed' w hooku useCreateMeetingDecision zapisuje decision_type='postponed';
-        // S5 chce 'push' (snooze + taski NIE zamknięte). Wywołujemy bezpośrednio jako 'go'-bypass —
-        // ALE useCreateMeetingDecision waliduje typy. Dla S5 używamy 'postponed' (trigger:
-        // stempluje K1 i ustawia next_action). Jeśli chcemy snooze bez K1, można rozszerzyć hook.
-        return createDecision.mutateAsync({
-          contactId: input.dealTeamContactId,
-          decisionType: 'postponed',
-          meetingDate,
-          notes,
-          postponedUntil: input.postponedUntil,
-        });
-      }
-      case 'lost': {
-        const reason = input.lostReason?.trim();
-        if (!reason) throw new Error('useMarkMeetingDone: lostReason wymagany dla noGoPath=lost');
-        return createDecision.mutateAsync({
-          contactId: input.dealTeamContactId,
-          decisionType: 'dead',
-          meetingDate,
-          notes,
-          deadReason: reason,
-        });
-      }
-      case 'cold':
-      case 'nurture':
-        // Hook useCreateMeetingDecision dziś waliduje tylko 'go|postponed|dead'.
-        // Te dwie ścieżki na razie traktujemy jako 'postponed' do czasu rozszerzenia
-        // hooka useCreateMeetingDecision o pełen zestaw decision_type. Trigger
-        // apply_meeting_decision już obsługuje 'pivot'/'nurture' (S5 migracja).
-        // TODO(S5+): rozszerzyć useCreateMeetingDecision i wpiąć 'pivot'/'nurture' bezpośrednio.
-        return createDecision.mutateAsync({
-          contactId: input.dealTeamContactId,
-          decisionType: 'postponed',
-          meetingDate,
-          notes,
-          postponedUntil: input.postponedUntil ?? format(
-            new Date(Date.now() + (input.noGoPath === 'nurture' ? 30 : 7) * 24 * 60 * 60 * 1000),
-            'yyyy-MM-dd',
-          ),
-        });
-    }
-  };
-
-  return {
-    mutateAsync,
-    isPending: createDecision.isPending,
-  };
+      return { dealTeamContactId: input.dealTeamContactId, decisionType };
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['deal-team-contacts'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['odprawa-agenda'] });
+      qc.invalidateQueries({ queryKey: ['meeting-decisions', res.dealTeamContactId] });
+      qc.invalidateQueries({ queryKey: ['unified-kanban-data'] });
+      toast.success('Decyzja zapisana');
+    },
+    onError: (err: Error) => {
+      toast.error(`Błąd: ${err.message}`);
+    },
+  });
 }
