@@ -255,6 +255,12 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           const stage = asSguStage(task.contact_offering_stage);
           const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
           if (stage && tc) {
+            if (!tc.assigned_to) {
+              toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+                description: 'Przypisz dyrektora przed dodaniem zadania.',
+              });
+              return;
+            }
             const ctx: PremiumDialogContext = {
               contactName: tc.contact?.full_name || task.contact_name || '',
               contactCompany: tc.contact?.company ?? task.contact_company ?? null,
@@ -296,6 +302,12 @@ export function MyTeamTasksView({ teamId }: MyTeamTasksViewProps) {
           return () => {
             const tc = teamContacts.find((c) => c.id === task.deal_team_contact_id);
             if (!tc) return;
+            if (!tc.assigned_to) {
+              toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+                description: 'Przypisz dyrektora przed dodaniem zadania.',
+              });
+              return;
+            }
             const ctx: PremiumDialogContext = {
               contactName: tc.contact?.full_name || task.contact_name || '',
               contactCompany: tc.contact?.company ?? task.contact_company ?? null,
