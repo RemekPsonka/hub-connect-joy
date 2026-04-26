@@ -1,107 +1,67 @@
-## Cel
-Audyt read-only WSZYSTKICH akcji użytkownika w 5 modułach SGU (Odprawa / Kanban / Zadania / Klienci / Karta kontaktu). Zero zmian w kodzie. Output: jeden plik raportu `analiza/audyt-consistency-2026-04-25.md` z 5 tabelami + listą sprintów.
+## Pre-flight wyniki
 
-## Zakres — pliki do analizy (po inwentaryzacji repo)
+**A. Kolumny w `tasks`:** ✓ wszystkie 3 istnieją
+- `assigned_to` (uuid) → directors.id
+- `assigned_to_user_id` (uuid) → auth.users.id
+- `owner_id` (uuid) → directors.id
 
-### A.1 Odprawa (`/sgu/odprawa`) — 16 plików
-`SGUOdprawa.tsx`, `MilestoneActionStrip.tsx`, `NextStepDialog.tsx`, `OdprawaExceptionsBar.tsx`, `OperationalActions.tsx`, `AICopilotSidepanel.tsx`, `AIProposalDialog.tsx`, `AgendaAIRefreshButton.tsx`, `EstimatedPremiumDialog.tsx`, `WonPremiumBreakdownDialog.tsx`, `OwnerInlinePicker.tsx`, `ContactTasksInline.tsx`, `OfferingStageStrip.tsx`, `ContactTimeline.tsx`, `ContactHistoryPanel.tsx`, `AgendaList.tsx`
-+ hooki: `useOdprawaSession.ts`, `useOdprawaAgenda.ts`, `useGenerateAgendaProposal.ts`, `useAIProposalExecutor.ts`, `useOdprawaSessionDecisions.ts`, `useContactTimelineState.ts`, `useContactHistory.ts`, `useLogDecision.ts`
+**B. Funkcja `auto_assign_deal_team_task`:** ✓ istnieje, ale w **starej wersji** (kopiuje tylko `assigned_to` z DTC, NIE robi lookup `directors.user_id`).
 
-### A.2 Kanban (`/sgu/sprzedaz`) — ~25 plików
-`UnifiedKanban.tsx`, `UnifiedKanbanCard.tsx`, `StageBadge.tsx`, `StageRollbackDialog.tsx`, `LostReasonDialog.tsx`, `ConvertWonToClientDialog.tsx`, `SaveMeetingDialog.tsx`, `PremiumQuickEdit.tsx`, `StalledBadge.tsx`, `ClientStatusBadge.tsx`, `MilestoneBadge.tsx`, `MeetingProgressBar.tsx`, `EditableSubcategoryBadge.tsx`
-+ deals-team: `ContactActionButtons.tsx`, `ContactTasksSheet.tsx`, `KanbanBoard.tsx`, `KanbanColumn.tsx`, `ConvertToClientDialog.tsx`, `MeetingDecisionDialog.tsx`, `MeetingOutcomeDialog.tsx`, `MeetingScheduledDialog.tsx`, `NextActionDialog.tsx`, `PromoteDialog.tsx`, `SnoozeDialog.tsx`, `SnoozedContactsBar.tsx`, `SnoozedTeamView.tsx`, `ProspectingConvertDialog.tsx`
-+ stage-dialogs: `AuditDoneDialog.tsx`, `AuditScheduleDialog.tsx`, `EstimatedPremiumDialog.tsx`, `PoaSignedDialog.tsx`, `SendOfferDialog.tsx`
-+ hooki: `useSguStageTransition.ts`, `useDealsTeamContacts.ts`, `useDealsTeamAssignments.ts`, `useWeeklyStatuses.ts`
+**C. Triggery na `tasks`:** ❌ **ZERO triggerów**. Funkcja `auto_assign_deal_team_task` istnieje, ale nigdy nie była podpięta jako trigger. To wyjaśnia bug — żaden auto-assignment nie działał na poziomie DB.
 
-### A.3 Zadania (`/sgu/zadania`) — ~6 plików
-`SGUTasks.tsx`, `MyTeamTasksView.tsx`, `TasksHeader.tsx`, `TaskRow.tsx`, `TaskStatusPill.tsx`, `TaskDetailSheet.tsx`
-+ hooki: `useSGUTasks.ts`, `useTasks.ts`, `useActiveTaskContacts.ts`
+**Stan danych:** 4 zadania DTC mają `assigned_to` ale brak `assigned_to_user_id` (na 10 wszystkich DTC tasks).
 
-### A.4 Klienci (`/sgu/klienci`) — 12 plików
-`SGUClients.tsx`, `ClientDetailsDialog.tsx`, `ClientComplexityPanel.tsx`, `ClientRenewalsTab.tsx`, `ClientObszaryTab.tsx`, `ClientPaymentsTab.tsx`, `ClientPortfolioTab.tsx`, `ClientReferralsTab.tsx`, `AddClientTaskDialog.tsx`, `AddExpectedPremiumDialog.tsx`, `AddReferralDialog.tsx`, `ConvertReferralDialog.tsx`, `ClientCommissionsTab.tsx`
-+ hooki: `useTeamClients.ts`, `useSGUClientsPortfolio.ts`, `useClientReferrals.ts`, `usePremiumProgress.ts`
+**Schemat zgodny z założeniami sprintu — kontynuujemy bez odchyleń.**
 
-### A.5 Karta kontaktu — przekrojowo (występuje w 1 + 2 + 4)
-Brak osobnych komponentów — to ten sam `ContactCRMCard` / agenda-card / `ClientDetailsDialog`. W tabeli zaznaczę gdzie te same akcje są re-użyte.
+---
 
-## Plan realizacji (sekwencyjny, ~3-4h Lovable)
+## Plan implementacji
 
-### Krok 1 — schema DB (10 min)
-- Pobrać kolumny: `tasks`, `deal_team_contacts`, `deal_team_decisions`, `deal_team_activity_log`, `meeting_decisions`, `task_contacts`, `deal_team_client_products`, `deal_team_lost_reasons`.
-- Zidentyfikować wszystkie kolumny `*_at` (milestone stamps), `category`, `status`, `is_lost`, `is_closed_won`, `offering_stage`, `won_at`, `snoozed_until`, `assigned_to`, `assigned_to_user_id`, `owner_id`, `due_date`.
-- Pobrać listę triggerów na `deal_team_contacts` i `tasks` (`information_schema.triggers`) — żeby wiedzieć jakie efekty uboczne ma UPDATE.
+### Krok 1 — Migracja DB (`supabase/migrations/<timestamp>_s1_task_assignee_user_id.sql`)
 
-### Krok 2 — A.1 Odprawa (45 min)
-Przeczytać każdy plik z A.1, dla każdego przycisku/dialogu wypełnić wiersz tabeli A:
-`# | Moduł | Plik | UI Label | DB writes | Tworzy task? (typ a/b/c/d) | Audit?`
+Jedna migracja, wszystko w transakcji, z `-- ROLLBACK:` na końcu:
 
-### Krok 3 — A.2 Kanban (60 min)
-To samo dla A.2. Szczególna uwaga na:
-- DnD między kolumnami → który hook? czy wywołuje `useSguStageTransition`?
-- 5 dialogów `stage-dialogs/*` vs odpowiedniki w deals-team (`MeetingOutcomeDialog`, `NextActionDialog`) — czy duplikacja?
-- `ContactActionButtons` 11 akcji — porównanie z `MilestoneActionStrip` w odprawie.
+1. `CREATE OR REPLACE FUNCTION auto_assign_deal_team_task()` — rozszerzona wersja (kopia `assigned_to` z DTC + lookup `directors.user_id` → `assigned_to_user_id`).
+2. `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER auto_assign_deal_team_task_trigger BEFORE INSERT ON tasks` (podpinamy — wcześniej go nie było).
+3. `CREATE OR REPLACE FUNCTION require_director_on_dtc_task()` — guard rzucający `RAISE EXCEPTION` gdy DTC bez `assigned_to`.
+4. `CREATE TRIGGER require_director_on_dtc_task_trigger BEFORE INSERT ON tasks`.
+5. **Backfill** historyczny: `UPDATE tasks ... FROM directors` dla 4 wierszy.
+6. Komentarz weryfikacyjny z queries (oczekiwany wynik: 0).
 
-### Krok 4 — A.3 Zadania (20 min)
-Szybko — tylko quick actions na `TaskRow` (complete/snooze/edit) + filtrowanie (`useSGUTasks`).
+`SECURITY DEFINER SET search_path = public` na obu funkcjach (zgodnie z linter rules).
 
-### Krok 5 — A.4 Klienci (30 min)
-Akcje konwersji + renewal + complexity + premium edit.
+### Krok 2 — Nowy hook `src/hooks/useRequireDirector.ts`
 
-### Krok 6 — Tabela B (DB writes per akcja, 20 min)
-Pivot tabeli A: dla każdej kolumny (np. `offering_stage`) wypisać które akcje ją modyfikują. Pokazuje hot-spots.
+Dokładnie wg spec — React Query, `enabled: !!dtcId`, zwraca `{ hasDirector, dtcId }`. Nic więcej.
 
-### Krok 7 — Tabela C: rozjazdy (30 min)
-- 🔴 KRYTYCZNE: ta sama akcja UI, różny efekt w bazie (np. „Klient" w odprawie K4 vs Kanban Convert).
-- 🟡 ŚREDNIE: ta sama akcja, różne ścieżki kodu (np. dwa różne dialogi „Spotkanie odbyte").
-- 🟢 LEKKIE: duplikacja UX (label w 2 miejscach, baza OK).
-- Pole spójności: `category` vs `status` vs `is_lost` vs `offering_stage='lost'` vs `is_closed_won` vs `won_at`.
+### Krok 3 — Wpięcie guard'u w 5 entry-pointów
 
-### Krok 8 — Tabela D: klasyfikacja tasks (20 min)
-Dla każdego miejsca z `tasks.insert(...)`:
-- `due_date` required/optional/zawsze NULL
-- `assigned_to` / `assigned_to_user_id` — kto, jak ustawiane
-- Czy linkuje się z `meeting_decisions.follow_up_task_id`
-- Klasyfikacja: pełne / TODO / auto / imported
+Dla każdego pliku: zlokalizować handler tworzący task na DTC, dodać `useRequireDirector(dtcId)` na górze, na początku handlera sprawdzić `if (!hasDirector) { toast.error(...); return; }`. Action button w toast otwiera istniejący `OwnerInlinePicker` (lokalizuję wzorzec użycia w bazie kodu — jeśli w danym kontekście nie ma łatwego mount-pointu, akcja toast-u zostanie pominięta, sam komunikat wystarczy).
 
-Już teraz znanych miejsc INSERT do `tasks`: `useTasks.ts`, `WeeklyStatusForm.tsx`, `useSovraDebrief.ts`, `useProjectTemplates.ts`, `AddClientTaskDialog.tsx`, `ClientRenewalsTab.tsx`, `useSguStageTransition.ts` (przez nasz dzisiejszy fix).
+Pliki:
+1. `src/components/sgu/odprawa/MilestoneActionStrip.tsx` — guard w `stamp()` i `stampSubStage()`.
+2. `src/components/sgu/odprawa/NextStepDialog.tsx` — guard w handlerze submit.
+3. `src/components/deals-team/ContactActionButtons.tsx` — guard w handlerach tworzących task.
+4. `src/components/sgu/clients/AddClientTaskDialog.tsx` — guard w `createTask.mutationFn`.
+5. `src/components/deals-team/MyTeamTasksView.tsx` — guard w handlerze ghost-task → real-task.
 
-### Krok 9 — Lista E: sprinty (15 min)
-Posortowane po severity → konkretne sprinty z estymatami (np. „Sprint K-Convert: zunifikuj ConvertToClient — 6h").
+Bez zmian w props, bez nowych plików (poza hookiem).
 
-### Krok 10 — Zapis raportu (5 min)
-Plik `analiza/audyt-consistency-2026-04-25.md` z 5 tabelami + listą sprintów. ZERO zmian w innych plikach.
+### Krok 4 — Weryfikacja
 
-## Format raportu
+- Po migracji: `SELECT count(*) FROM tasks WHERE deal_team_contact_id IS NOT NULL AND assigned_to IS NOT NULL AND assigned_to_user_id IS NULL AND status NOT IN ('completed','cancelled')` → oczekiwane 0.
+- `npm run lint` po zmianach w 5 plikach + nowym hooku.
+- Smoke w preview: utworzenie taska na kontakcie z dyrektorem → `assigned_to_user_id` wypełnione; na kontakcie bez dyrektora → toast + brak INSERT-u.
 
-```markdown
-# AUDIT-CONSISTENCY-01 — SGU 2026-04-25
+---
 
-## TL;DR
-- N akcji zinwentaryzowanych w M modułach
-- X rozjazdów krytycznych, Y średnich, Z lekkich
-- Top-3 sprinty: ...
+## Hard constraints (potwierdzenie)
 
-## Tabela A — Inwentarz akcji (~80-120 wierszy)
-| # | Moduł | Plik | UI Label | DB writes | Tworzy task? | Audit? |
+- Tylko 1 nowy plik: `src/hooks/useRequireDirector.ts`.
+- Modyfikacje wyłącznie w 5 wymienionych komponentach + 1 migracja.
+- Bez nowych testów, bez refactoru, bez zmian UI/styling.
+- Bez dotykania innych triggerów/funkcji DB.
 
-## Tabela B — DB writes per kolumna
-| Kolumna | Liczba miejsc piszących | Akcje |
+## Out of scope
 
-## Tabela C — Rozjazdy (severity-sorted)
-| Severity | Akcja | Miejsca | Różnica | Sugestia |
-
-## Tabela D — Klasyfikacja tasks
-| Miejsce INSERT | due_date | assigned_to | linkuje meeting_decision? | Typ |
-
-## Lista E — Sprinty post-audit
-| # | Sprint | Severity | Estymat h | Pliki |
-```
-
-## Czego NIE zrobię
-- Żadnych zmian w kodzie ani bazie.
-- Żadnych nowych migracji.
-- Żadnych edycji istniejących komponentów.
-Wyłącznie nowy plik `analiza/audyt-consistency-2026-04-25.md`.
-
-## Pytania doprecyzowujące (1)
-Czy raport ma być po **polsku** (jak project knowledge sugeruje) czy po **angielsku** (komentarze techniczne)? Domyślnie zrobię **po polsku** dla konsystencji z resztą `analiza/*`.
+Pozostałe sprinty z audytu (S2–S14). Aktualnie tylko S1.
