@@ -1,76 +1,77 @@
-# Sprint S7-v2 — DnD Kanban 5-kolumnowy
+# Plan: FIX-DnD-BUG + rollback Mariana Durlaka
 
-## Pre-flight (zgłoszone)
+## Potwierdzony stan
 
-- **A.** `handleDragEnd(_event)` w `UnifiedKanban.tsx` linie 710-714 — pusty stub po S6.5 ✓
-- **B.** `ScheduleMeetingDialog.tsx` + `SignPoaDialog.tsx` istnieją w `src/components/sgu/sales/` ✓
-- **C.** Oba dialogi mają props: `dealTeamContactId, teamId, contactName` ✓
-- **D.** ⚠️ **`MeetingDecisionDialog` (S5) ma węższe API niż brief**:
-  ```ts
-  { contactId, contactDisplayName, open, onOpenChange, onSuccess?: (decisionType) => void }
-  ```
-  Brak `teamId` w props (dialog sam aktualizuje DB przez `useCreateMeetingDecision`). Adaptujemy mount do realnego API.
-- **E.** `KANBAN_COLUMN_ORDER = ['prospect','cold','lead','top','hot']` ✓
+- `Marian Durlak` ma obecnie w `deal_team_contacts`: `category='lead'`, `offering_stage='meeting_scheduled'`, brak `next_meeting_date`, brak milestone timestampów.
+- Bug jest zgodny z opisem: po ustawieniu `category='lead'`, helper `deriveKanbanColumn` nadal może wyprowadzić kontakt do `lead`, jeśli istnieje marker `offering_stage='meeting_scheduled'`.
 
-## Transition matrix
+## Zakres zmian
 
-| From → To | Akcja |
-|---|---|
-| prospect → cold | inline `updateContact({ category: 'lead' })` |
-| cold → lead | otwórz `ScheduleMeetingDialog` |
-| lead → top | otwórz `MeetingDecisionDialog` (S5) |
-| top → hot | otwórz `SignPoaDialog` |
-| same | no-op |
-| toIdx < fromIdx | toast: "Nie można cofnąć kontaktu w Kanbanie. Użyj akcji na karcie kontaktu." |
-| toIdx > fromIdx + 1 | toast: "Wymaga wykonania pośrednich milestone'ów." |
+### 1. Rollback danych Mariana Durlaka
 
-Hot → klient pozostaje przez K4 button na karcie (poza DnD).
+Wykonam wskazany rollback danych:
 
-## Zmiany w `UnifiedKanban.tsx`
+```sql
+UPDATE deal_team_contacts
+SET category = 'prospect', updated_at = now()
+WHERE contact_id = (
+  SELECT id
+  FROM contacts
+  WHERE first_name = 'Marian'
+    AND last_name = 'Durlak'
+  LIMIT 1
+)
+AND category = 'lead';
+```
 
-1. **Importy**: `KANBAN_COLUMN_ORDER, deriveKanbanColumn, type KanbanColumn` z `@/lib/sgu/deriveKanbanColumn`; `MeetingDecisionDialog` z `@/components/deals-team/MeetingDecisionDialog`; `ScheduleMeetingDialog`, `SignPoaDialog` z lokalnego folderu.
-2. **State** (3 nowe): `scheduleMeetingContact`, `meetingDecisionContact`, `signPoaContact` — każdy `DealTeamContact | null`.
-3. **`handleDragEnd`** — pełna implementacja matrixu wg tabeli; `fromCol` z `deriveKanbanColumn(contact)`, `toCol` z `over.id as KanbanColumn`. Cancel dialogu = drop wraca naturalnie (zero DB write).
-4. **`handleOfferingStageChange`** — przywróć intercept dla `power_of_attorney`:
-   ```ts
-   if (next === 'power_of_attorney') { setSignPoaContact(c); return; }
-   ```
-5. **JSX** — dodaj 3 conditional mounty po `<ContactSheet>` (tuż przed końcem return). Dla `MeetingDecisionDialog`: `contactId={meetingDecisionContact.id}`, `contactDisplayName={...full_name ?? 'kontakt'}`, **bez `teamId`**.
+Po update sprawdzę SELECT-em, że rekord wrócił do `category='prospect'`.
 
-## Hard constraints respected
+### 2. Helper `TRANSITION_PATCH`
 
-- Nie modyfikuję `deriveKanbanColumn`, `useSguStageTransition`, ani API żadnego z 3 dialogów
-- Nie dodaję kolumny Klient
-- Nie piszę do `deal_stage` (GENERATED)
-- Nie usuwam REQUIRE-DIRECTOR guardów
-- Brak migracji SQL, brak nowych zależności
+W `src/lib/sgu/deriveKanbanColumn.ts` dodam export:
 
-## Pliki
+```ts
+export const TRANSITION_PATCH: Record<KanbanColumn, Partial<Record<KanbanColumn, Partial<DealTeamContact>>>> = {
+  prospect: { cold: { category: 'lead' } },
+  cold: { lead: { offering_stage: 'meeting_scheduled' } },
+  lead: { top: { offering_stage: 'meeting_done', k1_meeting_done_at: new Date().toISOString() } },
+  top: { hot: { offering_stage: 'power_of_attorney', poa_signed_at: new Date().toISOString() } },
+  hot: {},
+};
+```
 
-- **edit**: `src/components/sgu/sales/UnifiedKanban.tsx` (handleDragEnd, handleOfferingStageChange, 3 dialog mounts, importy, state)
-- **edit**: `.lovable/plan.md` (entry S7-v2)
+### 3. Pre-update simulator w `handleDragEnd`
 
-## Smoke test plan (po implementacji)
+W `src/components/sgu/sales/UnifiedKanban.tsx`:
 
-- Drop Prospekt→Cold (no dialog, inline category update)
-- Drop Cold→Lead → ScheduleMeetingDialog
-- Drop Lead→Top → MeetingDecisionDialog (S5 GO/POSTPONED/DEAD)
-- Drop Top→Hot → SignPoaDialog
-- Drop Hot→Top → toast "nie można cofnąć"
-- Drop Cold→Top → toast "skip>1"
-- Drop dialog cancel → kontakt wraca
-- Sub-chip handshake→power_of_attorney w Hot → SignPoaDialog
-- tsc + eslint clean
+- zaimportuję `TRANSITION_PATCH`,
+- po walidacji kierunku ruchu (`same`, `backward`, `skip>1`) dodam wspólną walidację symulacji dla dozwolonych ruchów o 1 kolumnę,
+- przed `updateContact.mutate(...)` i przed każdym `setScheduleMeetingContact`, `setMeetingDecisionContact`, `setSignPoaContact` wykonam:
 
+```ts
+const patch = TRANSITION_PATCH[fromCol]?.[toCol] ?? {};
+const simulated = { ...contact, ...patch };
+const wouldBeCol = deriveKanbanColumn(simulated);
 
-## S7-v2 (DONE)
+if (wouldBeCol !== toCol) {
+  toast.error(
+    'Stan kontaktu uniemożliwia tę zmianę. Sprawdź na karcie — kontakt może mieć już zaplanowane spotkanie lub inne markery.',
+  );
+  return;
+}
+```
 
-5-kolumnowy DnD transition matrix przywrócony:
-- prospect→cold: inline category=lead
-- cold→lead: ScheduleMeetingDialog
-- lead→top: MeetingDecisionDialog (S5)
-- top→hot: SignPoaDialog
-- wstecz / skip>1: toast blokady
+Efekt: Prospekt→Cold dla kontaktu z istniejącym `offering_stage='meeting_scheduled'` zostanie zablokowany toastem i nie wykona żadnego zapisu do DB.
 
-Sub-chip handshake→power_of_attorney intercept przywrócony (otwiera SignPoaDialog).
-Dialogi z S7-v1 + S5 reused bez modyfikacji API.
+### 4. Dokumentacja sprintu i QA
+
+- Zaktualizuję `.lovable/plan.md` krótkim wpisem o fixie S7-v2.
+- Uruchomię `tsc`.
+- Jeśli czas/środowisko pozwoli, uruchomię też lint zgodnie ze standardem projektu.
+
+## Done when
+
+- Marian Durlak ma `category='prospect'` po SELECT.
+- `TRANSITION_PATCH` istnieje w `deriveKanbanColumn.ts`.
+- `handleDragEnd` ma pre-update simulator przed wszystkimi 4 transition actions.
+- `tsc` przechodzi clean.

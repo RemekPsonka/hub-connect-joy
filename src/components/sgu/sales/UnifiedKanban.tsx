@@ -64,6 +64,7 @@ import {
   KANBAN_COLUMN_LABELS,
   KANBAN_COLUMN_ICONS,
   KANBAN_COLUMN_BORDER,
+  TRANSITION_PATCH,
   type KanbanColumn,
 } from '@/lib/sgu/deriveKanbanColumn';
 
@@ -735,6 +736,20 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
     if (toIdx > fromIdx + 1) {
       toast.error("Wymaga wykonania pośrednich milestone'ów.");
+      return;
+    }
+
+    // S7-v2 fix — pre-update simulator. Sprawdź, czy patch transition rzeczywiście
+    // przeniesie kontakt do toCol w `deriveKanbanColumn`. Jeśli nie (np. kontakt
+    // ma już offering_stage='meeting_scheduled' i drop Prospekt→Cold by go
+    // wypchnął do Lead) — zablokuj zanim cokolwiek poleci do DB.
+    const patch = TRANSITION_PATCH[fromCol]?.[toCol] ?? {};
+    const simulated = { ...contact, ...patch } as typeof contact;
+    const wouldBeCol = deriveKanbanColumn(simulated);
+    if (wouldBeCol !== toCol) {
+      toast.error(
+        'Stan kontaktu uniemożliwia tę zmianę. Sprawdź na karcie — kontakt może mieć już zaplanowane spotkanie lub inne markery.',
+      );
       return;
     }
 
