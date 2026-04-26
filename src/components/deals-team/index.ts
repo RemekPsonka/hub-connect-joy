@@ -31,7 +31,6 @@ export { CommissionsTab } from './CommissionsTab';
 export { SnoozeDialog } from './SnoozeDialog';
 export { SnoozedContactsBar } from './SnoozedContactsBar';
 export { MyTeamTasksView } from './MyTeamTasksView';
-export { ConvertToClientDialog } from './ConvertToClientDialog';
 export { SnoozedTeamView } from './SnoozedTeamView';
 export { OfferingTab } from './OfferingTab';
 export { FunnelConversionChart } from './FunnelConversionChart';
