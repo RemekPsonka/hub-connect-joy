@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useRequireDirector } from '@/hooks/useRequireDirector';
 
 interface Props {
   open: boolean;
@@ -40,6 +41,7 @@ export function AddClientTaskDialog({
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState(defaultDueDate());
   const [notes, setNotes] = useState('');
+  const { hasDirector } = useRequireDirector(clientId ?? undefined);
 
   useEffect(() => {
     if (open) {
@@ -53,6 +55,11 @@ export function AddClientTaskDialog({
     mutationFn: async () => {
       if (!clientId) throw new Error('Brak klienta');
       if (!title.trim()) throw new Error('Tytuł jest wymagany');
+      if (!hasDirector) {
+        throw new Error(
+          'Ten kontakt nie ma przypisanego dyrektora. Przypisz dyrektora przed dodaniem zadania.',
+        );
+      }
 
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;

@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { useSguStageTransition } from '@/hooks/useSguStageTransition';
+import { useRequireDirector } from '@/hooks/useRequireDirector';
 import { asSguStage, buildTaskTitle, type SguStage } from '@/lib/sgu/stageActionMap';
 
 const LABEL: Record<MilestoneKey, string> = {
@@ -67,6 +68,7 @@ export function MilestoneActionStrip({
   const logMut = useLogDecision();
   const transitionMut = useSguStageTransition();
   const qc = useQueryClient();
+  const { hasDirector } = useRequireDirector(contactId);
   // Świeżo kliknięty sub-stage — podświetlamy przez ~1.5s żeby user zobaczył efekt zapisu.
   const [justSavedStage, setJustSavedStage] = useState<OfferingStage | null>(null);
   useEffect(() => {
@@ -116,6 +118,12 @@ export function MilestoneActionStrip({
   const stamp = async (key: MilestoneKey) => {
     const stage = OFFERING_STAGE_MAP[key];
     if (!stage) return;
+    if (!hasDirector) {
+      toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+        description: 'Przypisz dyrektora przed dodaniem zadania.',
+      });
+      return;
+    }
     const sguNext = asSguStage(stage);
     try {
       const patch: Record<string, unknown> = { offering_stage: stage };
@@ -163,6 +171,12 @@ export function MilestoneActionStrip({
   };
 
   const stampSubStage = async (stage: OfferingStage) => {
+    if (!hasDirector) {
+      toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+        description: 'Przypisz dyrektora przed dodaniem zadania.',
+      });
+      return;
+    }
     const sguNext = asSguStage(stage);
     try {
       // Zamknij stary task + utwórz nowy task pod nowy etap + zaktualizuj offering_stage.

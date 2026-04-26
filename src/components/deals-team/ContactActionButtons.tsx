@@ -19,6 +19,7 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useRequireDirector } from '@/hooks/useRequireDirector';
 import type { DealTeamContact, DealCategory, OfferingStage, Temperature } from '@/types/dealTeam';
 
 type ActionType =
@@ -87,6 +88,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const updateContact = useUpdateTeamContact();
+  const { hasDirector } = useRequireDirector(contact.id);
 
   // Inline date/assignee dialog state
   const [pendingAction, setPendingAction] = useState<ActionDef | null>(null);
@@ -98,6 +100,18 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
   if (!c) return null;
 
   const handleClick = (action: ActionDef) => {
+    // Sprint S1 guard: tasks must have an assigned director on the DTC.
+    // 'snooze' / 'lost' / 'ten_x' don't create tasks, so skip the check there.
+    const ACTIONS_THAT_CREATE_TASKS: ActionType[] = [
+      'schedule_meeting', 'meeting_scheduled', 'meeting_done',
+      'audit', 'send_offer', 'call', 'send_email', 'client',
+    ];
+    if (ACTIONS_THAT_CREATE_TASKS.includes(action.value) && !hasDirector) {
+      toast.error('Ten kontakt nie ma przypisanego dyrektora.', {
+        description: 'Przypisz dyrektora przed dodaniem zadania.',
+      });
+      return;
+    }
     if (action.value === 'snooze') { onSnooze(); return; }
     if (action.value === 'client') { onConvertToClient(); return; }
     if (action.value === 'meeting_done') { onMeetingDone(); return; }
