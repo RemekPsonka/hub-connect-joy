@@ -1,79 +1,119 @@
-# UNIFY-CONVERT-CLIENT (Sprint S2)
+# Sprint S5 — UNIFY-MEETING-OUTCOME
 
-## Pre-flight raport
+## Pre-flight raport (KRYTYCZNE — odstępstwa od briefu)
 
-**A. Schemat `deal_team_contacts`** — wszystkie wymagane kolumny istnieją:
-- `client_complexity jsonb`, `expected_annual_premium_gr bigint`
-- `potential_property_gr`, `potential_financial_gr`, `potential_communication_gr`, `potential_life_group_gr` — wszystkie `bigint`
-- `won_at timestamptz`, `offering_stage text`, `category text`, `assigned_to uuid`
-- `deal_stage text` — istnieje (sprawdzę czy GENERATED przed RPC; jeśli tak, nie piszemy do niego)
+### A. Wystąpienia `meeting_done` / "spotkanie odbyte"
+Stage `meeting_done` jest szeroko użyty w kanbanie/timeline/milestone strip (>30 miejsc) — to **etap pipeline'u**, nie tylko event. Zmiany RPC nie mogą zmieniać semantyki tego stage'u (kolumna `k1_meeting_done_at` nadal stempelowana przez trigger `set_milestone_timestamps` z Etap 1).
 
-**B. Realne wartości u istniejących klientów** (10 sample): JSON `client_complexity` i 4 bigint są w użyciu, ale niespójne — np. wszystkie `*_active=false` przy `potential_*_gr > 0`, oraz brak/zerowe `expected_annual_premium_gr` przy wypełnionych potencjałach. Backfill w S2 pomoże, ale **istniejące dane nie zostaną zmodyfikowane poza `client_complexity` JSON sync** (bigint pola zostają jak są).
+### B. Entry-points dialogu — REALNOŚĆ ≠ brief
+W repo są **DWA** różne dialogi, nie jeden:
 
-**C. `deal_team_client_products` ISTNIEJE** — out of scope dla S2; nie dotykamy. `ConvertToClientDialog` (deals-team/) pisze do niej przez `useAddClientProduct`. **Dialog ten zostaje w repo** (S2b go usunie), ale wszystkie entry-pointy zostają przepięte na `WonPremiumBreakdownDialog`.
+1. **`MeetingDecisionDialog`** (`src/components/deals-team/`) — KANONICZNY, model GO/POSTPONED/DEAD już istnieje, używa `useCreateMeetingDecision` → trigger `apply_meeting_decision`. Używany w:
+   - `src/components/sgu/sales/UnifiedKanban.tsx` (DnD do meeting_done)
+   - `src/components/deals-team/ContactTasksSheet.tsx` (przycisk "Odbyte")
+   - `src/components/tasks/TaskDetailSheet.tsx` (HOTFIX-OS2 — stage transition do meeting_done)
 
-**Stan dialogów dziś (3 ścieżki)**:
-1. `WonPremiumBreakdownDialog` (sgu/odprawa/) — używany w `SGUOdprawa.tsx` po K4.
-2. `ConvertWonToClientDialog` (sgu/sales/) — używany w `UnifiedKanban` (DnD offering→client) i `OfferingKanbanBoard`. Robi tylko `category='client'` + `client_status='standard'`, BEZ obszarów.
-3. `ConvertToClientDialog` (deals-team/) — używany w `ContactTasksSheet`, `MyTeamTasksView`, `TaskDetailSheet`. N produktów dynamicznie + wpisuje do `deal_team_client_products`.
+2. **`MeetingOutcomeDialog`** (`src/components/deals-team/`) — STARY, 6-OutcomeOption (offer/next_meeting/10x/snooze/client/lost), używa `useUpdateTeamContact`+`useCreateTask`. Używany TYLKO w:
+   - `src/components/deals-team/MyTeamTasksView.tsx`
 
-## Implementacja
+To są **dwie różne ścieżki UX** dla "spotkanie odbyte", konkurencyjne — klasyczny przypadek do konsolidacji.
 
-### 1. Migracja DB `<ts>_etap2_s2_convert_to_client.sql`
+### C. Props `MeetingOutcomeDialog`
+Zgodnie z briefem (`open, onOpenChange, contactName, contactId, teamContactId, teamId, currentCategory, onConfirm?, onSnooze?, onConvertToClient?`).
 
-- `archive.deprecated_client_complexity_backup_2026_04_25` — pełen snapshot (id, category, client_complexity, expected_annual_premium_gr, 4× potential_*_gr, backed_up_at).
-- `CREATE OR REPLACE FUNCTION convert_to_client(p_dtc_id uuid, p_areas jsonb)` — `SECURITY DEFINER`, `search_path=public`:
-  - Parsuje 4 obszary `{property, financial, communication, life_group}` z `{active: bool, annualPremiumPln: number}`.
-  - `RAISE EXCEPTION 'Konwersja na klienta wymaga zaznaczenia minimum jednego obszaru.'` jeśli wszystkie inactive.
-  - UPDATE: `category='client'`, `won_at=COALESCE(won_at, now())`, `offering_stage='won'` (sprawdzę czy `deal_stage` jest GENERATED — jeśli tak, pomijam), `client_complexity` jsonb_build_object z 4 booleanami + zachowaniem `referrals_count`/`references_count`, 4 bigint potencjały (PLN×100 jeśli active else 0), `expected_annual_premium_gr` = suma aktywnych, `updated_at=now()`.
-- Backfill: `UPDATE deal_team_contacts SET client_complexity = jsonb_build_object(...)` dla `category='client'` — sync booleanów z bigintami (fallback gdy JSON pusty).
-- ROLLBACK comment: DROP FUNCTION + restore z backupa.
+### D. Stan DB
+- Funkcja `mark_meeting_done` — **NIE ISTNIEJE** (czysty start).
+- Funkcja `apply_meeting_decision` — **TRIGGER** (nie RPC) na `meeting_decisions` AFTER INSERT, obsługuje `go|postponed|dead|kill|push|pivot|park|nurture` (ostatnie 3 to no-op). Brief zakłada że to RPC — **brief się myli**, to trigger.
+- `meeting_decisions.decision_type` — **`text`**, brak CHECK constraint, `'nurture'` można zapisywać bez migracji typu.
+- Brak kolumn `decision_data`, `snoozed_until`, `is_lost`, `lost_reason` w niektórych założeniach briefu. Sprawdzone — `snoozed_until/is_lost/lost_reason/category` istnieją na `deal_team_contacts`.
 
-### 2. Hook `src/hooks/useConvertToClient.ts` (nowy)
+### Konflikt do rozstrzygnięcia
+Brief proponuje **trzecią ścieżkę** (RPC `mark_meeting_done` z własną logiką no_go cold/postponed/nurture/lost), która duplikuje istniejący `apply_meeting_decision` trigger. To narusza zasadę z project-knowledge: *"Brak dwóch konkurencyjnych implementacji tej samej funkcji — przy duplikacie konsoliduj zamiast dodawać trzecią."*
 
-- `ConvertAreaInput = { active: boolean; annualPremiumPln?: number }`
-- `ConvertToClientInput = { dealTeamContactId; areas: { property?, financial?, communication?, life_group? } }`
-- `useMutation` → `supabase.rpc('convert_to_client', { p_dtc_id, p_areas })`
-- `onSuccess`: invalidate `['deal-team-contacts']`, `['clients']`, `['odprawa-agenda']`, `['sgu-clients-portfolio']`, `['unified-kanban-data']`.
+## Rekomendowany plan (zgodny z architekturą projektu)
 
-### 3. Refactor `WonPremiumBreakdownDialog.tsx` (sgu/odprawa/)
+Zamiast budować trzeci tor (`mark_meeting_done` RPC), **rozszerzamy istniejący** `apply_meeting_decision` trigger i **unifikujemy oba dialogi** wokół `MeetingDecisionDialog` (kanoniczny). `MeetingOutcomeDialog` staje się cienkim wrapperem zachowującym props/callbacki dla wstecznej kompatybilności `MyTeamTasksView`.
 
-Zachowuje kontrakt props `{ open, onOpenChange, contactId, teamId, current?, clientName? }`. Wewnątrz:
-- 4 sekcje stałe (Majątek/Finanse/Komunikacja/Grupowe na życie), każda: `Checkbox` "Klient ma ten obszar" + `Input type="number"` "Roczna składka (PLN)".
-- Pre-fill z `current` (`potential_*_gr / 100` → PLN, `*_active` → checkbox).
-- Walidacja: min. 1 checkbox aktywny; submit disabled + helper text gdy 0.
-- Suma roczna składek wyświetlana na dole.
-- Submit: `useConvertToClient().mutateAsync({ dealTeamContactId: contactId, areas })` → `toast.success('Klient zarejestrowany')` → `onOpenChange(false)`.
-- USUWAM: stary `useUpdateTeamContact` (zastąpiony RPC).
+### 1. DB migracja `<ts>_etap4_s5_unify_meeting_outcome.sql`
 
-### 4. Wpięcie 4 entry-pointów (wszystkie → `WonPremiumBreakdownDialog`)
+Rozszerzenie `apply_meeting_decision` o brakujące gałęzie:
 
-| Entry-point | Plik | Zmiana |
+- **`pivot`** (= "Wraca do Cold") — reset stage do `decision_meeting`, NIE stempluj `k1_meeting_done_at`, taski zamknięte.
+- **`nurture`** (= "10x / długoterminowa") — `category='10x'`, stage zostaje `meeting_done`, taski **NIE** zamknięte.
+- **`push`** (już istnieje) — bez zmian (postponed, taski **NIE** zamknięte).
+- **`go`/`dead`/`kill`** — bez zmian.
+
+Warunkowe zamykanie tasków (rozszerzenie istniejącej logiki):
+- Zamykaj `follow_up_task_id` gdy `decision_type IN ('go','dead','kill','pivot')`.
+- NIE zamykaj dla `push`, `nurture`.
+
+Wszystko z `-- ROLLBACK:` blokiem (zgodnie z project-knowledge).
+
+### 2. Hook `useMarkMeetingDone` (`src/hooks/useMarkMeetingDone.ts`)
+
+Cienki wrapper nad istniejącym `useCreateMeetingDecision` z mapowaniem nowego API GO/NO-GO → `decision_type`:
+
+```ts
+type NoGoPath = 'cold' | 'postponed' | 'nurture' | 'lost';
+type Input = {
+  dealTeamContactId: string;
+  meetingNotes?: string;
+  decision: 'go' | 'no_go';
+  noGoPath?: NoGoPath;
+  postponedUntil?: string;
+  lostReason?: string;
+};
+// mapping: go→'go', no_go+cold→'pivot', no_go+postponed→'push',
+//          no_go+nurture→'nurture', no_go+lost→'kill'
+```
+
+Hook woła `useCreateMeetingDecision` (który już invaliduje deal-team-contacts + meeting-decisions); dokładamy invalidate dla `tasks`, `odprawa-agenda`, `unified-kanban-data`.
+
+### 3. Refactor `MeetingOutcomeDialog` → wrapper na `MeetingDecisionDialog`
+
+Zachowujemy kontrakt props (`open, onOpenChange, contactName, contactId, teamContactId, teamId, currentCategory, onConfirm?, onSnooze?, onConvertToClient?`).
+
+Wewnątrz: renderujemy `MeetingDecisionDialog` z `contactId={teamContactId}`, `contactDisplayName={contactName}`. Mapowanie zwrotne callbacków:
+- `onSuccess('go')` → `onConfirm?.()`
+- `onSuccess('postponed')` → `onSnooze?.()`
+- `onSuccess('dead'|'kill')` → `onConfirm?.()` (lost path)
+- Rodzic decyduje czy po `go` otwierać `WonPremiumBreakdownDialog` (przez `onConvertToClient` — operator wybiera w osobnym kroku, jak dziś w K4).
+
+To zachowuje 100% wstecznej kompatybilności `MyTeamTasksView` bez zmiany jego kodu.
+
+### 4. Wpięcie w 4 entry-pointy (REQUIRE-DIRECTOR guard z S1 zachowany)
+
+| Entry-point | Stan | Akcja |
 |---|---|---|
-| Odprawa K4 | `pages/sgu/SGUOdprawa.tsx` | bez zmian — już używa canonical |
-| Kanban DnD offering→client | `components/sgu/sales/UnifiedKanban.tsx` | zamień `ConvertWonToClientDialog` → `WonPremiumBreakdownDialog` (+ przekaż `current` z istniejącego contact) |
-| Kanban "Offering → Won" button | `components/deals-team/offering/OfferingKanbanBoard.tsx` | zamień `ConvertWonToClientDialog` → `WonPremiumBreakdownDialog` |
-| ContactTasksSheet "Klient" | `components/deals-team/ContactTasksSheet.tsx` | zamień `ConvertToClientDialog` → `WonPremiumBreakdownDialog` |
-| MyTeamTasksView quick-action | `components/deals-team/MyTeamTasksView.tsx` | zamień `ConvertToClientDialog` → `WonPremiumBreakdownDialog` (zachować inline `tc.assigned_to` guard z S1) |
-| TaskDetailSheet quick-action | `components/tasks/TaskDetailSheet.tsx` | zamień `ConvertToClientDialog` → `WonPremiumBreakdownDialog` |
+| `MyTeamTasksView` | używa `MeetingOutcomeDialog` (stary 6-option) | Wrapper załatwi — zero zmian w pliku |
+| `UnifiedKanban` (DnD) | już używa `MeetingDecisionDialog` | Bez zmian |
+| `ContactTasksSheet` | już używa `MeetingDecisionDialog` | Bez zmian |
+| `TaskDetailSheet` (HOTFIX-OS2) | już używa `MeetingDecisionDialog` | Bez zmian |
 
-`ContactActionButtons` nie zmienia się — emituje `onConvertToClient()`, rodzice powyżej decydują który dialog otworzyć (wszyscy teraz canonical).
+5 entry-pointów → **jeden dialog** (`MeetingDecisionDialog`), z czego 1 pośrednio przez wrapper.
 
-### 5. Constraints
+### 5. Co świadomie NIE robimy (vs. brief)
 
-- `ConvertToClientDialog` (deals-team/) i `ConvertWonToClientDialog` (sgu/sales/) **zostają w repo** — usunięcie w S2b.
-- `deal_team_client_products` **nie ruszone**.
-- `deal_stage` GENERATED — nie piszemy bezpośrednio (`offering_stage='won'` wystarczy).
-- Brak nowych pól dat start/end, brak nazw "życie/zdrowie/firma" — używamy realnych `property/financial/communication/life_group`.
+- **Nie tworzymy RPC `mark_meeting_done`** — `apply_meeting_decision` trigger pokrywa logikę. Trzecia ścieżka byłaby duplikatem.
+- **Nie zmieniamy nowego UI w `MeetingDecisionDialog`** — ma już model `go/postponed/dead` + persistent questions. Nie przerzucamy go na `RadioGroup` GO/NO-GO bo psułoby UX dla 3 entry-pointów które już go używają. Mapowanie `no_go.cold→pivot`, `no_go.nurture→nurture` realizujemy pod spodem (DB) — UI 3-button wystarcza (cold = "Idziemy dalej z innym podejściem" można dorzucić jako 4. opcję jeśli operator tego potrzebuje, ale to można dograć po S5 jeśli zajdzie potrzeba).
+- **Nie usuwamy** `MeetingOutcomeDialog` pliku — zostaje jako wrapper (kontrakt props).
+- **Bez testów / audit log** (zgodnie z briefem).
 
-## Done when
+## Zmiany w plikach
 
-- Pre-flight raport powyżej (✓ już zrobiony).
-- Backup `archive.deprecated_client_complexity_backup_2026_04_25` istnieje (count > 0).
-- RPC `convert_to_client` z walidacją "min. 1 obszar".
-- Backfill JSON sync booleanów z bigintami dla `category='client'`.
-- `useConvertToClient` utworzony.
-- `WonPremiumBreakdownDialog` refactor: 4 sekcje (checkbox + składka), brak dat.
-- 6 entry-pointów (Odprawa K4 + 5 zamian) używa tego samego dialogu.
-- `tsc` + `eslint` clean.
-- Smoke: konwersja z odprawy K4, z karty (ContactTasksSheet), z DnD (UnifiedKanban), oraz blokada "0 obszarów" → toast.
+- **NEW**: `supabase/migrations/<ts>_etap4_s5_unify_meeting_outcome.sql` — rozszerza `apply_meeting_decision` o `pivot`/`nurture` + warunkowe zamykanie tasków, z rollback.
+- **NEW**: `src/hooks/useMarkMeetingDone.ts` — wrapper API GO/NO-GO nad `useCreateMeetingDecision`.
+- **REFACTOR**: `src/components/deals-team/MeetingOutcomeDialog.tsx` — staje się wrapperem na `MeetingDecisionDialog` zachowującym props.
+- **NO CHANGE**: `MyTeamTasksView.tsx`, `UnifiedKanban.tsx`, `ContactTasksSheet.tsx`, `TaskDetailSheet.tsx`.
+
+## Smoke (po zatwierdzeniu)
+
+- GO z dowolnego entry-pointu → `k1_meeting_done_at` stamped, `next_action_date` set, follow_up task closed.
+- NO-GO/cold (pivot) → stage reset do `decision_meeting`, taski zamknięte.
+- NO-GO/postponed (push) → `snoozed_until`+`next_action_date` set, taski **nie** zamknięte.
+- NO-GO/nurture → `category='10x'`, stage zostaje `meeting_done`, taski **nie** zamknięte.
+- NO-GO/lost (kill) → `is_lost=true`, `lost_reason` set, taski zamknięte.
+
+## Pytanie do akceptacji
+
+Czy akceptujesz **odejście od briefu** (rozszerzenie istniejącego trigera zamiast dodawania trzeciej RPC + cienki wrapper na `MeetingOutcomeDialog` zamiast pełnego refactoru UI)? To zachowuje zasadę "brak konkurencyjnych implementacji" z project-knowledge i znacząco zmniejsza ryzyko regresji dla 3 entry-pointów które już używają `MeetingDecisionDialog`.
