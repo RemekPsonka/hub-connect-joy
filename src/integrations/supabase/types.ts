@@ -10609,6 +10609,10 @@ export type Database = {
         Args: { p_wanted_id: string }
         Returns: boolean
       }
+      convert_to_client: {
+        Args: { p_areas: Json; p_dtc_id: string }
+        Returns: undefined
+      }
       create_team_meeting: {
         Args: { p_notes?: string; p_snapshot?: Json; p_team_id: string }
         Returns: string
