@@ -47,6 +47,8 @@ import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
+import { SignPoaDialog } from './SignPoaDialog';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
@@ -545,6 +547,9 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
+  const [meetingDecisionContact, setMeetingDecisionContact] = useState<DealTeamContact | null>(null);
+  const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
@@ -707,15 +712,58 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   };
 
-  // Sprint S6.5 — DnD świadomie wyłączony (rollback S7). Wraca w S7-v2
-  // z 5-kolumnowym matrix opartym o KanbanColumn.
-  function handleDragEnd(_event: DragEndEvent) {
-    /* no-op: DnD przywróci się w S7-v2 */
+  // Sprint S7-v2 — 5-kolumnowy DnD transition matrix (KanbanColumn keys).
+  // Cancel dialogu = drop wraca naturalnie (zero DB write — @dnd-kit nie commit'uje).
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const contact = visible.find((c) => c.id === active.id);
+    if (!contact) return;
+
+    const fromCol = deriveKanbanColumn(contact);
+    const toCol = over.id as KanbanColumn;
+    if (!fromCol || !toCol || fromCol === toCol) return;
+    if (!KANBAN_COLUMN_ORDER.includes(toCol)) return;
+
+    const fromIdx = KANBAN_COLUMN_ORDER.indexOf(fromCol);
+    const toIdx = KANBAN_COLUMN_ORDER.indexOf(toCol);
+
+    if (toIdx < fromIdx) {
+      toast.error('Nie można cofnąć kontaktu w Kanbanie. Użyj akcji na karcie kontaktu.');
+      return;
+    }
+    if (toIdx > fromIdx + 1) {
+      toast.error("Wymaga wykonania pośrednich milestone'ów.");
+      return;
+    }
+
+    if (fromCol === 'prospect' && toCol === 'cold') {
+      updateContact.mutate({ id: contact.id, teamId, category: 'lead' });
+      return;
+    }
+    if (fromCol === 'cold' && toCol === 'lead') {
+      setScheduleMeetingContact(contact);
+      return;
+    }
+    if (fromCol === 'lead' && toCol === 'top') {
+      setMeetingDecisionContact(contact);
+      return;
+    }
+    if (fromCol === 'top' && toCol === 'hot') {
+      setSignPoaContact(contact);
+      return;
+    }
+
+    toast.info('Przejście niedostępne — użyj akcji na karcie');
   }
 
   function handleOfferingStageChange(c: DealTeamContact, next: string) {
-    // S6.5: SignPoaDialog tymczasowo odpięty — sub-chip aktualizuje pole
-    // bezpośrednio. Dialog handshake→POA wraca w S7-v2 jako badge-click w Hot.
+    // S7-v2: power_of_attorney wymaga potwierdzenia daty → SignPoaDialog
+    if (next === 'power_of_attorney') {
+      setSignPoaContact(c);
+      return;
+    }
     updateContact.mutate({
       id: c.id,
       teamId,
@@ -905,6 +953,36 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
         open={!!sheetContact}
         onOpenChange={(open) => !open && setSheetContact(null)}
       />
+
+      {scheduleMeetingContact && (
+        <ScheduleMeetingDialog
+          open
+          onOpenChange={(o) => !o && setScheduleMeetingContact(null)}
+          dealTeamContactId={scheduleMeetingContact.id}
+          teamId={teamId}
+          contactName={scheduleMeetingContact.contact?.full_name ?? 'kontakt'}
+        />
+      )}
+
+      {meetingDecisionContact && (
+        <MeetingDecisionDialog
+          open
+          onOpenChange={(o) => !o && setMeetingDecisionContact(null)}
+          contactId={meetingDecisionContact.id}
+          contactDisplayName={meetingDecisionContact.contact?.full_name ?? 'kontakt'}
+        />
+      )}
+
+      {signPoaContact && (
+        <SignPoaDialog
+          open
+          onOpenChange={(o) => !o && setSignPoaContact(null)}
+          dealTeamContactId={signPoaContact.id}
+          teamId={teamId}
+          contactName={signPoaContact.contact?.full_name ?? 'kontakt'}
+          alreadyHandshaken={!!signPoaContact.handshake_at}
+        />
+      )}
     </>
   );
 }
