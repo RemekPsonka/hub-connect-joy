@@ -92,3 +92,17 @@ Both new dialogs go through `useSguStageTransition` (no inline `supabase.from().
 ## Open question for approval
 
 **Approve Option A** (map brief's intent onto real 3-column Kanban + wire `SignPoaDialog` into the offering sub-chip change), **or** push back and request Option B (restructure to 6 columns)? Option A keeps Etap 2 decisions intact and is ~1/4 the scope.
+---
+
+## S7 — Implementation done
+
+- Created `src/components/sgu/sales/ScheduleMeetingDialog.tsx` (DatePicker + TimePicker, default +3 dni 10:00, REQUIRE-DIRECTOR guard).
+- Created `src/components/sgu/sales/SignPoaDialog.tsx` (DatePicker today, COALESCE handshake_at when null, REQUIRE-DIRECTOR guard).
+- Refactored `UnifiedKanban.handleDragEnd`:
+  - prospect → lead: inline `category='lead'` (no dialog)
+  - lead → offering: opens `ScheduleMeetingDialog`
+  - offering → client: opens `WonPremiumBreakdownDialog` (unchanged)
+  - backwards: toast "Nie można cofnąć..."
+  - skip > 1: toast "Wymaga pośrednich milestone'ów."
+- `handleOfferingStageChange` intercepts `next === 'power_of_attorney'` → opens `SignPoaDialog`.
+- tsc clean. No DB migration needed (uses existing `next_meeting_date`, `poa_signed_at`, `handshake_at` columns).
