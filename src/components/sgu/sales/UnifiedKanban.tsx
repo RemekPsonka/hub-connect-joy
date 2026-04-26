@@ -44,6 +44,8 @@ import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { LostReasonDialog } from './LostReasonDialog';
+import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
+import { SignPoaDialog } from './SignPoaDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
@@ -546,6 +548,8 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [groupBySubcategory, setGroupBySubcategory] = useState(false);
   const [meetingDoneContact, setMeetingDoneContact] = useState<DealTeamContact | null>(null);
   const [sheetContact, setSheetContact] = useState<DealTeamContact | null>(null);
+  const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
+  const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState('');
   const [sortByStage, setSortByStage] = useState<Record<DealStage, SortKey>>({
     prospect: 'recent',
@@ -697,6 +701,10 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     }
   };
 
+  // Sprint S7 — DnD transition matrix (3-column Kanban: prospect | lead | offering).
+  // Cancel of any dialog = no DB write → @dnd-kit naturally leaves card in source.
+  const COLUMN_ORDER: DealStage[] = ['prospect', 'lead', 'offering', 'client'];
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -708,19 +716,31 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
     const toStage = over.id as DealStage;
     if (fromStage === toStage) return;
 
+    const fromIdx = COLUMN_ORDER.indexOf(fromStage);
+    const toIdx = COLUMN_ORDER.indexOf(toStage);
+
+    // Block backwards
+    if (toIdx !== -1 && fromIdx !== -1 && toIdx < fromIdx) {
+      toast.error('Nie można cofnąć kontaktu w Kanbanie. Użyj akcji na karcie kontaktu.');
+      return;
+    }
+    // Block skip > 1
+    if (toIdx !== -1 && fromIdx !== -1 && toIdx > fromIdx + 1) {
+      toast.error("Wymaga wykonania pośrednich milestone'ów.");
+      return;
+    }
+
+    // prospect → lead: no dialog, inline category bump (existing behavior)
     if (fromStage === 'prospect' && toStage === 'lead') {
       updateContact.mutate({ id: contact.id, teamId, category: 'lead' });
       return;
     }
+    // lead → offering: open ScheduleMeetingDialog (NEW); no DB write until save
     if (fromStage === 'lead' && toStage === 'offering') {
-      updateContact.mutate({
-        id: contact.id,
-        teamId,
-        category: 'offering',
-        offeringStage: 'decision_meeting',
-      });
+      setScheduleMeetingContact(contact);
       return;
     }
+    // offering → client: canonical conversion via WonPremiumBreakdownDialog
     if (fromStage === 'offering' && toStage === 'client') {
       setConvertContact(contact);
       return;
@@ -730,6 +750,11 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   }
 
   function handleOfferingStageChange(c: DealTeamContact, next: string) {
+    // S7: power_of_attorney requires confirmation (POA date) → SignPoaDialog
+    if (next === 'power_of_attorney') {
+      setSignPoaContact(c);
+      return;
+    }
     updateContact.mutate({
       id: c.id,
       teamId,
