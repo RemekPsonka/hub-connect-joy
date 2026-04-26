@@ -44,8 +44,6 @@ import { SaveMeetingDialog } from './SaveMeetingDialog';
 import { UnifiedKanbanCard } from './UnifiedKanbanCard';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { LostReasonDialog } from './LostReasonDialog';
-import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
-import { SignPoaDialog } from './SignPoaDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
@@ -57,6 +55,15 @@ import {
   type DealTeamContact,
   type DealStage,
 } from '@/types/dealTeam';
+import {
+  deriveKanbanColumn,
+  kanbanColumnToCardStage,
+  KANBAN_COLUMN_ORDER,
+  KANBAN_COLUMN_LABELS,
+  KANBAN_COLUMN_ICONS,
+  KANBAN_COLUMN_BORDER,
+  type KanbanColumn,
+} from '@/lib/sgu/deriveKanbanColumn';
 
 interface UnifiedKanbanProps {
   teamId: string;
@@ -65,19 +72,20 @@ interface UnifiedKanbanProps {
 }
 
 interface ColumnDef {
-  stage: DealStage;
+  column: KanbanColumn;
   title: string;
   icon: string;
   borderClass: string;
 }
 
-const COLUMNS: ColumnDef[] = [
-  { stage: 'prospect', title: 'Prospekt', icon: '🔍', borderClass: 'border-t-slate-400' },
-  { stage: 'lead', title: 'Lead', icon: '🔥', borderClass: 'border-t-amber-500' },
-  { stage: 'offering', title: 'Ofertowanie', icon: '💼', borderClass: 'border-t-blue-500' },
-  // CLEANUP-BUGS-01 #24: kolumna 'client' usunięta — klienci żyją w /sgu/klienci
-  // (po AUDIT-FIX-01 useTeamContacts filtruje category='client'). Konwersja
-  // offering→client działa przez dialog wywoływany z karty (K4), nie przez DnD.
+// Sprint S6.5 — 5 kolumn (Prospekt / Cold / Lead / Top / Hot).
+// Klient: w /sgu/klienci (NIE w Kanbanie). Lost: ukryty (po Etap 5 osobna zakładka).
+const COLUMNS: ColumnDef[] = KANBAN_COLUMN_ORDER.map((c) => ({
+  column: c,
+  title: KANBAN_COLUMN_LABELS[c],
+  icon: KANBAN_COLUMN_ICONS[c],
+  borderClass: KANBAN_COLUMN_BORDER[c],
+}));
 ];
 
 export function deriveStage(c: DealTeamContact): DealStage {
