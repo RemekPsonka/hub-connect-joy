@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { OfferingKanbanCard } from './OfferingKanbanCard';
-import { ConvertWonToClientDialog } from '@/components/sgu/sales/ConvertWonToClientDialog';
+import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { LostReasonDialog } from '@/components/sgu/sales/LostReasonDialog';
 import { StageRollbackDialog } from '@/components/sgu/sales/StageRollbackDialog';
 import {
@@ -217,12 +217,18 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
       </ScrollArea>
 
       {wonDialog && (
-        <ConvertWonToClientDialog
+        <WonPremiumBreakdownDialog
           open={!!wonDialog}
           onOpenChange={(o) => !o && setWonDialog(null)}
           contactId={wonDialog.id}
-          contactName={wonDialog.contact?.full_name ?? '—'}
           teamId={teamId}
+          clientName={wonDialog.contact?.full_name ?? '—'}
+          current={{
+            property: wonDialog.potential_property_gr,
+            financial: wonDialog.potential_financial_gr,
+            communication: wonDialog.potential_communication_gr,
+            life_group: wonDialog.potential_life_group_gr,
+          }}
           onSuccess={() => {
             updateContact.mutate({ id: wonDialog.id, teamId, offeringStage: 'won' });
           }}
