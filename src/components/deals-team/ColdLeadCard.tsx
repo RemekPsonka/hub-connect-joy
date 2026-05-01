@@ -31,12 +31,12 @@ export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragg
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
+      <div className="px-2 py-1.5 flex items-center gap-2 min-w-0">
         {taskStatus && (
           <span title={taskStatus.status === 'overdue' ? 'Zadanie przeterminowane' : 'Ma aktywne zadanie'}>
             <CheckCircle2
               className={cn(
-                "w-3 h-3 shrink-0",
+                "w-3 h-3 shrink-0 mr-0.5",
                 taskStatus.status === 'overdue' ? 'text-destructive' : 'text-green-500'
               )}
             />
