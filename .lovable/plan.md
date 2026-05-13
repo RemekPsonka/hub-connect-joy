@@ -1,77 +1,53 @@
-# Plan: FIX-DnD-BUG + rollback Mariana Durlaka
+# Fix: zaległe zadania po konwersji na klienta
 
-## Potwierdzony stan
+## Problem
+Robert Karczewski został przekonwertowany na klienta (`category='client'`, `offering_stage='won'`, `won_at=2026-04-25`), ale w widoku `/sgu/zadania` nadal wiszą 2 zadania jako zaległe:
 
-- `Marian Durlak` ma obecnie w `deal_team_contacts`: `category='lead'`, `offering_stage='meeting_scheduled'`, brak `next_meeting_date`, brak milestone timestampów.
-- Bug jest zgodny z opisem: po ustawieniu `category='lead'`, helper `deriveKanbanColumn` nadal może wyprowadzić kontakt do `lead`, jeśli istnieje marker `offering_stage='meeting_scheduled'`.
+- "Wyślij ofertę mailem" (due 2026-04-26, status `todo`)
+- "Spotkanie — podpisanie polisy" (due 2026-04-30, status `todo`)
 
-## Zakres zmian
+## Przyczyna
+RPC `convert_to_client(p_dtc_id, p_areas)` ustawia tylko pola na `deal_team_contacts` (category, won_at, offering_stage, potencjały). **Nie zamyka otwartych zadań** powiązanych z tym deal_team_contact. Hook `useConvertToClient` też nic z taskami nie robi.
 
-### 1. Rollback danych Mariana Durlaka
+W efekcie po konwersji wszystkie nieukończone taski tego kontaktu pozostają z `status='todo'` i — jeśli minęła data — pokazują się w filtrze "Zaległe".
 
-Wykonam wskazany rollback danych:
+## Naprawa
+
+### 1. Migracja — rozszerz `convert_to_client`
+Po `UPDATE deal_team_contacts` dodać:
 
 ```sql
-UPDATE deal_team_contacts
-SET category = 'prospect', updated_at = now()
-WHERE contact_id = (
-  SELECT id
-  FROM contacts
-  WHERE first_name = 'Marian'
-    AND last_name = 'Durlak'
-  LIMIT 1
-)
-AND category = 'lead';
+UPDATE public.tasks
+SET status = 'completed',
+    updated_at = now()
+WHERE deal_team_contact_id = p_dtc_id
+  AND status IN ('todo', 'in_progress');
 ```
 
-Po update sprawdzę SELECT-em, że rekord wrócił do `category='prospect'`.
+To gwarantuje atomowość: konwersja na klienta = lejek zamknięty = brak otwartych tasków lejkowych.
 
-### 2. Helper `TRANSITION_PATCH`
+### 2. Backfill — domknięcie historycznych przypadków
+W tej samej migracji jednorazowo:
 
-W `src/lib/sgu/deriveKanbanColumn.ts` dodam export:
-
-```ts
-export const TRANSITION_PATCH: Record<KanbanColumn, Partial<Record<KanbanColumn, Partial<DealTeamContact>>>> = {
-  prospect: { cold: { category: 'lead' } },
-  cold: { lead: { offering_stage: 'meeting_scheduled' } },
-  lead: { top: { offering_stage: 'meeting_done', k1_meeting_done_at: new Date().toISOString() } },
-  top: { hot: { offering_stage: 'power_of_attorney', poa_signed_at: new Date().toISOString() } },
-  hot: {},
-};
+```sql
+UPDATE public.tasks t
+SET status = 'completed', updated_at = now()
+FROM public.deal_team_contacts dtc
+WHERE t.deal_team_contact_id = dtc.id
+  AND dtc.category = 'client'
+  AND t.status IN ('todo', 'in_progress');
 ```
 
-### 3. Pre-update simulator w `handleDragEnd`
+Posprząta Roberta i wszystkich innych klientów, którzy mogli mieć ten sam problem.
 
-W `src/components/sgu/sales/UnifiedKanban.tsx`:
+### 3. Invalidacje React Query
+W `useConvertToClient.onSuccess` dodać `qc.invalidateQueries({ queryKey: ['sgu-tasks'] })` żeby lista "Zaległe" odświeżyła się od razu po konwersji bez F5.
 
-- zaimportuję `TRANSITION_PATCH`,
-- po walidacji kierunku ruchu (`same`, `backward`, `skip>1`) dodam wspólną walidację symulacji dla dozwolonych ruchów o 1 kolumnę,
-- przed `updateContact.mutate(...)` i przed każdym `setScheduleMeetingContact`, `setMeetingDecisionContact`, `setSignPoaContact` wykonam:
+## Co NIE wchodzi w zakres
+- Nie ruszamy filtra "Zaległe" w `useSGUTasks` — root cause jest w RPC.
+- Nie zmieniamy logiki `useSguStageTransition` (tranzycje etapów lejka działają poprawnie).
+- Nie tworzymy żadnych nowych tabel ani triggerów.
 
-```ts
-const patch = TRANSITION_PATCH[fromCol]?.[toCol] ?? {};
-const simulated = { ...contact, ...patch };
-const wouldBeCol = deriveKanbanColumn(simulated);
-
-if (wouldBeCol !== toCol) {
-  toast.error(
-    'Stan kontaktu uniemożliwia tę zmianę. Sprawdź na karcie — kontakt może mieć już zaplanowane spotkanie lub inne markery.',
-  );
-  return;
-}
-```
-
-Efekt: Prospekt→Cold dla kontaktu z istniejącym `offering_stage='meeting_scheduled'` zostanie zablokowany toastem i nie wykona żadnego zapisu do DB.
-
-### 4. Dokumentacja sprintu i QA
-
-- Zaktualizuję `.lovable/plan.md` krótkim wpisem o fixie S7-v2.
-- Uruchomię `tsc`.
-- Jeśli czas/środowisko pozwoli, uruchomię też lint zgodnie ze standardem projektu.
-
-## Done when
-
-- Marian Durlak ma `category='prospect'` po SELECT.
-- `TRANSITION_PATCH` istnieje w `deriveKanbanColumn.ts`.
-- `handleDragEnd` ma pre-update simulator przed wszystkimi 4 transition actions.
-- `tsc` przechodzi clean.
+## Test akceptacyjny
+1. Wejść na `/sgu/zadania?member=all` z filtrem "Zaległe" → 2 taski Roberta znikają.
+2. Skonwertować nowego prospekta na klienta z otwartymi taskami → wszystkie jego otwarte taski lejkowe automatycznie `completed`, nie pojawiają się w "Zaległe".
