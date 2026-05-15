@@ -46,6 +46,8 @@ export function useConvertToClient() {
       qc.invalidateQueries({ queryKey: ['sgu-clients-portfolio'] });
       qc.invalidateQueries({ queryKey: ['unified-kanban-data'] });
       qc.invalidateQueries({ queryKey: ['active-task-contacts'] });
+      qc.invalidateQueries({ queryKey: ['sgu-tasks'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 }
