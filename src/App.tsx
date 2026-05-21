@@ -72,6 +72,8 @@ const SGUClients = lazy(() => import("./pages/sgu/SGUClients"));
 const SGURedirect = lazy(() => import("./pages/sgu/SGURedirect"));
 const SGUOdprawa = lazy(() => import("./pages/sgu/SGUOdprawa"));
 const SGUOdprawaHistoria = lazy(() => import("./pages/sgu/SGUOdprawaHistoria"));
+const RozliczeniaPolisy = lazy(() => import("./pages/sgu/rozliczenia/PolisyList"));
+const RozliczeniaKlient = lazy(() => import("./pages/sgu/rozliczenia/KlientWidok"));
 
 const NetworkFallback = () => (
   <div className="flex h-full">
@@ -182,6 +184,11 @@ const App = () => (
                   <Route path="/sgu/admin/commissions/case-d" element={<SGUCaseD />} />
                   <Route path="/sgu/admin/:section" element={<SGUAdmin />} />
                   <Route path="/sgu/settings" element={<SGUSettings />} />
+
+                  {/* Rozliczenia (ROZLICZENIA-02) */}
+                  <Route path="/sgu/rozliczenia" element={<Navigate to="/sgu/rozliczenia/polisy" replace />} />
+                  <Route path="/sgu/rozliczenia/polisy" element={<RozliczeniaPolisy />} />
+                  <Route path="/sgu/rozliczenia/klienci/:companyId" element={<RozliczeniaKlient />} />
 
                   {/* Legacy redirects (rename) */}
                   <Route path="/sgu/dashboard" element={<SGURedirect to="/sgu" message="Dashboard SGU ma nowy adres" />} />
