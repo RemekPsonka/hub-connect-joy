@@ -32,11 +32,11 @@ export const useGetPoliciesList = (filters: PoliciesListFilters) =>
     queryKey: ['rozliczenia', 'policies', 'list', filters],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_policies_list', {
-        p_search: filters.p_search ?? null,
-        p_insurer: filters.p_insurer ?? null,
-        p_client_id: filters.p_client_id ?? null,
-        p_date_from: filters.p_date_from ?? null,
-        p_date_to: filters.p_date_to ?? null,
+        p_search: filters.p_search ?? undefined,
+        p_insurer: filters.p_insurer ?? undefined,
+        p_client_id: filters.p_client_id ?? undefined,
+        p_date_from: filters.p_date_from ?? undefined,
+        p_date_to: filters.p_date_to ?? undefined,
         p_limit: filters.p_limit ?? 50,
         p_offset: filters.p_offset ?? 0,
       });
@@ -95,7 +95,7 @@ export const useMatchImportClient = () => {
       const { data: mapData, error: mapErr } = await supabase.rpc('match_import_client', {
         p_external_code: args.external_code,
         p_company_id: args.company_id,
-        p_external_name_snapshot: args.external_name_snapshot ?? null,
+        p_external_name_snapshot: args.external_name_snapshot ?? undefined,
       });
       if (mapErr) throw mapErr;
 
