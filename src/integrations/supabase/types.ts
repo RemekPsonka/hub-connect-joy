@@ -11026,6 +11026,19 @@ export type Database = {
       }
       get_assistant_group_ids: { Args: { _user_id: string }; Returns: string[] }
       get_assistant_tenant_id: { Args: { _user_id: string }; Returns: string }
+      get_company_holding_tree: {
+        Args: { p_root_company_id: string }
+        Returns: {
+          company_id: string
+          depth: number
+          name: string
+          nip: string
+          parent_company_id: string
+          total_commission_ytd: number
+          total_policies: number
+          total_premium_ytd: number
+        }[]
+      }
       get_current_director_id: { Args: never; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
       get_dashboard_stats:
@@ -11079,12 +11092,48 @@ export type Database = {
           temperature: string
         }[]
       }
+      get_policies_list: {
+        Args: {
+          p_client_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_insurer?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+        }
+        Returns: {
+          client_company_id: string
+          client_name: string
+          earliest_issue_date: string
+          entries_count: number
+          insurer_name: string
+          latest_issue_date: string
+          latest_status: string
+          master_policy_number: string
+          policy_id: string
+          product_name: string
+          total_commission: number
+          total_premium: number
+        }[]
+      }
       get_sales_representative_id: {
         Args: { _user_id: string }
         Returns: string
       }
       get_sgu_team_id: { Args: never; Returns: string }
       get_team_meeting_streak: { Args: { p_team_id: string }; Returns: number }
+      get_unmatched_import_clients: {
+        Args: never
+        Returns: {
+          earliest_seen_at: string
+          external_code: string
+          external_name: string
+          latest_batch_created_at: string
+          latest_batch_id: string
+          rows_count: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -11149,6 +11198,14 @@ export type Database = {
           position: string
           similarity: number
         }[]
+      }
+      match_import_client: {
+        Args: {
+          p_company_id: string
+          p_external_code: string
+          p_external_name_snapshot?: string
+        }
+        Returns: Json
       }
       refresh_deal_pipeline_stats: { Args: never; Returns: undefined }
       representative_can_access_contact: {
