@@ -9,6 +9,7 @@ import {
   ArrowRightLeft,
   PlayCircle,
   History,
+  Receipt,
 } from 'lucide-react';
 import { useOwnerPanel } from '@/hooks/useOwnerPanel';
 import { useSuperadmin } from '@/hooks/useSuperadmin';
@@ -84,6 +85,7 @@ export function SGUSidebar() {
       { title: 'Sprzedaż', url: '/sgu/sprzedaz', icon: LayoutGrid, show: true },
       { title: 'Klienci', url: '/sgu/klienci', icon: UserCheck, show: true },
       { title: 'Zadania', url: '/sgu/zadania', icon: ClipboardList, show: true },
+      { title: 'Rozliczenia', url: '/sgu/rozliczenia', icon: Receipt, show: true },
       { title: 'Odprawa', url: '/sgu/odprawa', icon: PlayCircle, show: true, exact: true },
       { title: 'Historia odpraw', url: '/sgu/odprawa/historia', icon: History, show: true },
       { title: 'Raporty', url: '/sgu/raporty', icon: BarChart3, show: showReports },
