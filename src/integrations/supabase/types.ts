@@ -5594,6 +5594,64 @@ export type Database = {
         }
         Relationships: []
       }
+      import_client_mappings: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          external_code: string
+          external_name_snapshot: string | null
+          external_source: string
+          id: string
+          matched_by: string
+          matched_by_user_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          external_code: string
+          external_name_snapshot?: string | null
+          external_source: string
+          id?: string
+          matched_by?: string
+          matched_by_user_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          external_code?: string
+          external_name_snapshot?: string | null
+          external_source?: string
+          id?: string
+          matched_by?: string
+          matched_by_user_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_client_mappings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_client_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "import_client_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insurance_policies: {
         Row: {
           actual_commission: number | null
@@ -5607,12 +5665,17 @@ export type Database = {
           deal_team_contact_id: string | null
           deal_team_id: string | null
           end_date: string
+          external_client_code: string | null
+          external_source: string | null
+          first_imported_at: string | null
           forecasted_commission: number | null
           forecasted_premium: number | null
           has_handling: boolean
           id: string
           insurer_name: string | null
           is_our_policy: boolean | null
+          last_imported_at: string | null
+          master_policy_number: string | null
           moved_to_finalization_at: string | null
           notes: string | null
           policy_name: string
@@ -5640,12 +5703,17 @@ export type Database = {
           deal_team_contact_id?: string | null
           deal_team_id?: string | null
           end_date: string
+          external_client_code?: string | null
+          external_source?: string | null
+          first_imported_at?: string | null
           forecasted_commission?: number | null
           forecasted_premium?: number | null
           has_handling?: boolean
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
+          last_imported_at?: string | null
+          master_policy_number?: string | null
           moved_to_finalization_at?: string | null
           notes?: string | null
           policy_name: string
@@ -5673,12 +5741,17 @@ export type Database = {
           deal_team_contact_id?: string | null
           deal_team_id?: string | null
           end_date?: string
+          external_client_code?: string | null
+          external_source?: string | null
+          first_imported_at?: string | null
           forecasted_commission?: number | null
           forecasted_premium?: number | null
           has_handling?: boolean
           id?: string
           insurer_name?: string | null
           is_our_policy?: boolean | null
+          last_imported_at?: string | null
+          master_policy_number?: string | null
           moved_to_finalization_at?: string | null
           notes?: string | null
           policy_name?: string
@@ -7015,6 +7088,286 @@ export type Database = {
           sector?: string | null
         }
         Relationships: []
+      }
+      policy_entries: {
+        Row: {
+          cancelled_at: string | null
+          client_group: string | null
+          client_type: string | null
+          commission_gross: number
+          commission_net: number
+          commission_pct: number | null
+          created_at: string | null
+          dedup_hash: string
+          discount: number | null
+          end_date: string
+          first_installment_date: string | null
+          first_installment_raw: string | null
+          first_installment_status: string | null
+          from_offer: string | null
+          id: string
+          import_row_id: string | null
+          insurance_policy_id: string
+          insurer_name: string | null
+          issue_date: string
+          issuer_raw: string | null
+          payment_due: number
+          premium_assigned: number
+          product_name: string | null
+          sale_type: string | null
+          seller_raw: string | null
+          start_date: string
+          subject_text: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          cancelled_at?: string | null
+          client_group?: string | null
+          client_type?: string | null
+          commission_gross?: number
+          commission_net?: number
+          commission_pct?: number | null
+          created_at?: string | null
+          dedup_hash: string
+          discount?: number | null
+          end_date: string
+          first_installment_date?: string | null
+          first_installment_raw?: string | null
+          first_installment_status?: string | null
+          from_offer?: string | null
+          id?: string
+          import_row_id?: string | null
+          insurance_policy_id: string
+          insurer_name?: string | null
+          issue_date: string
+          issuer_raw?: string | null
+          payment_due?: number
+          premium_assigned?: number
+          product_name?: string | null
+          sale_type?: string | null
+          seller_raw?: string | null
+          start_date: string
+          subject_text?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          cancelled_at?: string | null
+          client_group?: string | null
+          client_type?: string | null
+          commission_gross?: number
+          commission_net?: number
+          commission_pct?: number | null
+          created_at?: string | null
+          dedup_hash?: string
+          discount?: number | null
+          end_date?: string
+          first_installment_date?: string | null
+          first_installment_raw?: string | null
+          first_installment_status?: string | null
+          from_offer?: string | null
+          id?: string
+          import_row_id?: string | null
+          insurance_policy_id?: string
+          insurer_name?: string | null
+          issue_date?: string
+          issuer_raw?: string | null
+          payment_due?: number
+          premium_assigned?: number
+          product_name?: string | null
+          sale_type?: string | null
+          seller_raw?: string | null
+          start_date?: string
+          subject_text?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_entries_import_row_id_fkey"
+            columns: ["import_row_id"]
+            isOneToOne: false
+            referencedRelation: "policy_import_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_entries_insurance_policy_id_fkey"
+            columns: ["insurance_policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "policy_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_import_batches: {
+        Row: {
+          created_at: string | null
+          created_by_user_id: string | null
+          error_message: string | null
+          file_hash: string | null
+          file_name: string | null
+          file_size_bytes: number | null
+          finished_at: string | null
+          id: string
+          rows_duplicate: number | null
+          rows_new: number | null
+          rows_parse_error: number | null
+          rows_unmatched_client: number | null
+          source: string
+          started_at: string | null
+          status: string
+          tenant_id: string
+          total_rows_in_file: number | null
+          total_rows_processed: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_user_id?: string | null
+          error_message?: string | null
+          file_hash?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          finished_at?: string | null
+          id?: string
+          rows_duplicate?: number | null
+          rows_new?: number | null
+          rows_parse_error?: number | null
+          rows_unmatched_client?: number | null
+          source: string
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          total_rows_in_file?: number | null
+          total_rows_processed?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by_user_id?: string | null
+          error_message?: string | null
+          file_hash?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          finished_at?: string | null
+          id?: string
+          rows_duplicate?: number | null
+          rows_new?: number | null
+          rows_parse_error?: number | null
+          rows_unmatched_client?: number | null
+          source?: string
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          total_rows_in_file?: number | null
+          total_rows_processed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_import_batches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "policy_import_batches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_import_rows: {
+        Row: {
+          batch_id: string
+          created_at: string | null
+          dedup_hash: string
+          external_client_name: string | null
+          external_client_nip: string | null
+          id: string
+          insurance_policy_id: string | null
+          match_status: string
+          notes: string | null
+          policy_entry_id: string | null
+          raw_data: Json
+          row_number_in_file: number
+          tenant_id: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string | null
+          dedup_hash: string
+          external_client_name?: string | null
+          external_client_nip?: string | null
+          id?: string
+          insurance_policy_id?: string | null
+          match_status: string
+          notes?: string | null
+          policy_entry_id?: string | null
+          raw_data: Json
+          row_number_in_file: number
+          tenant_id: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string | null
+          dedup_hash?: string
+          external_client_name?: string | null
+          external_client_nip?: string | null
+          id?: string
+          insurance_policy_id?: string | null
+          match_status?: string
+          notes?: string | null
+          policy_entry_id?: string | null
+          raw_data?: Json
+          row_number_in_file?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "policy_import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_import_rows_insurance_policy_id_fkey"
+            columns: ["insurance_policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_import_rows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "policy_import_rows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       policy_production_records: {
         Row: {
