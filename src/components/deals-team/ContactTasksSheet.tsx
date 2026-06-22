@@ -642,7 +642,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                     <p className="text-xs text-muted-foreground py-8 text-center">Brak zadań dla tego kontaktu</p>
                   ) : (
                     <div className="border rounded-md overflow-hidden">
-                      {openTasks.map((task: any) => (
+                      {openTasks.map((task: TaskWithDetails) => (
                         <UnifiedTaskRow
                           key={task.id}
                           task={task}
@@ -660,7 +660,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                             </button>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
-                            {completedTasks.map((task: any) => (
+                            {completedTasks.map((task: TaskWithDetails) => (
                               <UnifiedTaskRow
                                 key={task.id}
                                 task={task}
