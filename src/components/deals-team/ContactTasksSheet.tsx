@@ -123,6 +123,9 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const [showSnooze, setShowSnooze] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
   const [showMeetingDecision, setShowMeetingDecision] = useState(false);
+  // Następny krok + termin (lokalna edycja przed zapisem on-blur)
+  const [nextActionDraft, setNextActionDraft] = useState<string | null>(null);
+  const [nextActionDatePopoverOpen, setNextActionDatePopoverOpen] = useState(false);
   // Reset assignTo when director changes
   useEffect(() => {
     if (director?.id && !assignTo) setAssignTo(director.id);
@@ -152,6 +155,38 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   if (!contact || !contact.contact) return null;
 
   const c = contact.contact;
+  const headerDisplay = getSguDisplayName({
+    companyName: c.company,
+    fullName: c.full_name,
+  });
+  const currentNextAction = nextActionDraft ?? contact.next_action ?? '';
+  const currentNextActionDate = contact.next_action_date ?? null;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const nextActionOverdue =
+    !!currentNextActionDate && currentNextActionDate < todayIso;
+  const formatPlDate = (iso: string): string => {
+    const [y, m, d] = iso.split('-');
+    return d && m && y ? `${d}.${m}.${y}` : iso;
+  };
+  const saveNextAction = () => {
+    if (nextActionDraft === null) return;
+    const next = nextActionDraft.trim();
+    if (next === (contact.next_action ?? '')) return;
+    updateContact.mutate({
+      id: contact.id,
+      teamId,
+      nextAction: next.length > 0 ? next : null,
+    });
+  };
+  const setNextActionDate = (date: Date | undefined) => {
+    const iso = date ? format(date, 'yyyy-MM-dd') : null;
+    if (iso === currentNextActionDate) return;
+    updateContact.mutate({
+      id: contact.id,
+      teamId,
+      nextActionDate: iso,
+    });
+  };
 
   const handleNotesBlur = () => {
     const newVal = notesValue ?? '';
