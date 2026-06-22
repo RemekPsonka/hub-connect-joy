@@ -831,7 +831,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
               await updateContact.mutateAsync({
                 id: contact.id,
                 teamId,
-                category: '10x' as any,
+                category: '10x',
                 snoozedUntil: until,
                 snoozeReason: reason || null,
                 snoozedFromCategory: contact.category,
