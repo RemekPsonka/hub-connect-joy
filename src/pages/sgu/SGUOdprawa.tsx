@@ -28,6 +28,7 @@ import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions'
 import { ContactHistoryPanel } from '@/components/sgu/odprawa/ContactHistoryPanel';
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
 import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { OwnerInlinePicker } from '@/components/sgu/odprawa/OwnerInlinePicker';
 import { AICopilotSidepanel } from '@/components/sgu/odprawa/AICopilotSidepanel';
