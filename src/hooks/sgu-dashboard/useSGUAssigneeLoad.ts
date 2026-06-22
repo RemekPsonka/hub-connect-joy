@@ -47,11 +47,11 @@ export function useSGUAssigneeLoad() {
       if (ids.length > 0) {
         const { data: dirs, error: dirErr } = await supabase
           .from('directors')
-          .select('user_id, full_name, email')
-          .in('user_id', ids);
+          .select('id, full_name, email')
+          .in('id', ids);
         if (dirErr) throw dirErr;
         names = new Map(
-          (dirs ?? []).map((d) => [d.user_id as string, { full_name: d.full_name, email: d.email }])
+          (dirs ?? []).map((d) => [d.id as string, { full_name: d.full_name, email: d.email }])
         );
       }
 
