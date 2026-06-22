@@ -131,8 +131,14 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
     if (director?.id && !assignTo) setAssignTo(director.id);
   }, [director?.id]);
 
-  const openTasks = useMemo(() => tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled'), [tasks]);
-  const completedTasks = useMemo(() => tasks.filter((t: any) => t.status === 'completed' || t.status === 'cancelled'), [tasks]);
+  const openTasks = useMemo(
+    () => tasks.filter((t: TaskWithDetails) => t.status !== 'completed' && t.status !== 'cancelled'),
+    [tasks],
+  );
+  const completedTasks = useMemo(
+    () => tasks.filter((t: TaskWithDetails) => t.status === 'completed' || t.status === 'cancelled'),
+    [tasks],
+  );
 
   // Reset notes when contact changes
   const currentNotes = notesValue ?? contact?.notes ?? '';
@@ -140,7 +146,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   // Every task completion in the pipeline opens NextActionDialog (continuous loop)
   const handleTaskStatusChange = useCallback((taskId: string, newStatus: string) => {
     if (newStatus === 'completed' && contact) {
-      const task = tasks.find((t: any) => t.id === taskId);
+      const task = tasks.find((t: TaskWithDetails) => t.id === taskId);
       if (task) {
         // Don't actually mark as completed yet — NextActionDialog will recycle it
         setPendingCompleteTaskId(taskId);
@@ -196,7 +202,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   };
 
   const handleTaskClick = (taskId: string) => {
-    const t = tasks.find((x: any) => x.id === taskId);
+    const t = tasks.find((x: TaskWithDetails) => x.id === taskId);
     if (t && onTaskOpen) {
       onOpenChange(false);
       setTimeout(() => onTaskOpen(t), 150);
