@@ -102,7 +102,12 @@ export const STAGE_ACTIONS: Record<SguStage, StageAction> = {
   },
 };
 
-/** Format tytułu zadania: "Umówić spotkanie — Adam Papiernik (Acme sp. z o.o.)". */
+/**
+ * Format tytułu zadania — firma-first.
+ *   "Umówić spotkanie — Acme sp. z o.o. (Adam Papiernik)"
+ *   "Umówić spotkanie — Acme sp. z o.o."   (brak osoby)
+ *   "Umówić spotkanie — Adam Papiernik"    (brak firmy)
+ */
 export function buildTaskTitle(
   stage: SguStage,
   contactName: string | null | undefined,
@@ -110,9 +115,12 @@ export function buildTaskTitle(
 ): string {
   const action = STAGE_ACTIONS[stage];
   const base = action?.taskTitleBase ?? 'Działanie';
-  const name = (contactName || '').trim() || 'Kontakt';
+  const name = (contactName || '').trim();
   const co = (company || '').trim();
-  return co ? `${base} — ${name} (${co})` : `${base} — ${name}`;
+  if (co) {
+    return name ? `${base} — ${co} (${name})` : `${base} — ${co}`;
+  }
+  return `${base} — ${name || 'Kontakt'}`;
 }
 
 /** Zwraca etap dla danego task.contact_offering_stage albo null jeśli nie obsługiwany. */

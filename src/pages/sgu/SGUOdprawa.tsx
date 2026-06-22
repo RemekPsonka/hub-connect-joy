@@ -28,6 +28,7 @@ import { OperationalActions } from '@/components/sgu/odprawa/OperationalActions'
 import { ContactHistoryPanel } from '@/components/sgu/odprawa/ContactHistoryPanel';
 import { ContactTasksInline } from '@/components/sgu/odprawa/ContactTasksInline';
 import { EstimatedPremiumDialog } from '@/components/sgu/odprawa/EstimatedPremiumDialog';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 import { WonPremiumBreakdownDialog } from '@/components/sgu/odprawa/WonPremiumBreakdownDialog';
 import { OwnerInlinePicker } from '@/components/sgu/odprawa/OwnerInlinePicker';
 import { AICopilotSidepanel } from '@/components/sgu/odprawa/AICopilotSidepanel';
@@ -277,27 +278,39 @@ export default function SGUOdprawa() {
           ) : (
             <Card>
               <CardHeader className="pb-3 space-y-1">
-                <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-xl">{contactName || 'Kontakt'}</CardTitle>
-                  {active && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleManualAdvance}
-                      disabled={advanceMut.isPending}
-                    >
-                      Następny kontakt
-                      <ArrowRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  )}
-                </div>
+                {(() => {
+                  const d = getSguDisplayName({
+                    companyName,
+                    fullName: contactName,
+                  });
+                  return (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <CardTitle className="text-xl truncate" title={d.heading}>
+                          {d.heading}
+                        </CardTitle>
+                        {active && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleManualAdvance}
+                            disabled={advanceMut.isPending}
+                          >
+                            Następny kontakt
+                            <ArrowRight className="h-4 w-4 ml-1" />
+                          </Button>
+                        )}
+                      </div>
+                      {d.subtext && (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Building2 className="h-3 w-3" />
+                          <span>Osoba kontaktowa: {d.subtext}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  {companyName && (
-                    <span className="inline-flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      {companyName}
-                    </span>
-                  )}
                   <OwnerInlinePicker
                     dealTeamContactId={dtc.id}
                     teamId={teamId}
