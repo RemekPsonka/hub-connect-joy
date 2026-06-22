@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { DealTeamContact } from '@/types/dealTeam';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 import {
   TEMPERATURE_LABELS,
   PROSPECT_SOURCE_LABELS,
