@@ -12,6 +12,7 @@ import { TaskStatusPill } from './TaskStatusPill';
 import { AssigneeAvatars } from './AssigneeAvatars';
 import { MilestoneBadge } from './MilestoneBadge';
 import { StalledBadge } from './StalledBadge';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 import type { DealTeamContact, DealStage, OfferingStage } from '@/types/dealTeam';
 import type { TaskContactInfo, TaskStatus } from '@/hooks/useActiveTaskContacts';
 import type { DraggableAttributes } from '@dnd-kit/core';
@@ -68,9 +69,21 @@ export function UnifiedKanbanCard({
 }: UnifiedKanbanCardProps) {
   const status: TaskStatus = taskInfo?.status ?? 'none';
 
-  const fullName = contact.contact?.full_name ?? 'Bez nazwy';
-  const company = contact.contact?.company;
+  const display = getSguDisplayName({
+    companyName: contact.contact?.company,
+    fullName: contact.contact?.full_name,
+  });
   const position = contact.contact?.position;
+
+  // Następny krok + termin (raport doradcy)
+  const nextAction = contact.next_action?.trim() || null;
+  const nextActionDate = contact.next_action_date ?? null;
+  const nextActionOverdue =
+    !!nextActionDate && nextActionDate < new Date().toISOString().slice(0, 10);
+  const formatPlDate = (iso: string): string => {
+    const [y, m, d] = iso.split('-');
+    return d && m && y ? `${d}.${m}.${y}` : iso;
+  };
 
   // Suma oczekiwanych składek z 4 obszarów (stage 'client' badge)
   const potentialSumGr =
@@ -104,16 +117,18 @@ export function UnifiedKanbanCard({
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      {/* Row 1: title + assignees */}
+      {/* Row 1: title (firma-first) + assignees */}
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate" title={fullName}>{fullName}</div>
-          {(company || position) && (
+          <div className="text-sm font-semibold truncate" title={display.heading}>
+            {display.heading}
+          </div>
+          {(display.subtext || position) && (
             <div
               className="text-xs text-muted-foreground truncate"
-              title={[company, position].filter(Boolean).join(' · ')}
+              title={[display.subtext, position].filter(Boolean).join(' · ')}
             >
-              {[company, position].filter(Boolean).join(' · ')}
+              {[display.subtext, position].filter(Boolean).join(' · ')}
             </div>
           )}
         </div>
@@ -197,6 +212,36 @@ export function UnifiedKanbanCard({
 
       {/* Row 3: complexity chips on their own row */}
       <ComplexityChips complexity={contact.client_complexity} />
+
+      {/* Następny krok + termin — raport doradcy. Edycja w panelu (More). */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onMoreClick(); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className={cn(
+          'w-full min-w-0 block text-left text-[10px] px-2 py-1 rounded-sm border transition overflow-hidden',
+          nextAction || nextActionDate
+            ? nextActionOverdue
+              ? 'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/15'
+              : 'bg-muted/50 border-border hover:bg-muted'
+            : 'border-dashed border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50',
+        )}
+        title={nextAction ?? 'Dodaj następny krok'}
+      >
+        {nextAction || nextActionDate ? (
+          <span className="block truncate">
+            <span className="font-medium">Następny krok:</span>{' '}
+            {nextAction ?? '—'}
+            {nextActionDate && (
+              <span className={cn('ml-1', nextActionOverdue && 'font-semibold')}>
+                · termin {formatPlDate(nextActionDate)}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="block truncate">+ Dodaj następny krok</span>
+        )}
+      </button>
 
       {/* Milestones K1-K4 — auto-hides if all null */}
       <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
