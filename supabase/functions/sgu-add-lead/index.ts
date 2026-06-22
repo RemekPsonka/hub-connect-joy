@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
       return json({ error: 'contact_insert_failed', details: contactErr?.message }, 500);
     }
 
-    // INSERT deal_team_contacts
+    // INSERT deal_team_contacts — always start at the top of the funnel (Prospekt).
     const { data: dtc, error: dtcErr } = await supabase
       .from('deal_team_contacts')
       .insert({
@@ -149,13 +149,15 @@ Deno.serve(async (req) => {
         team_id: sguTeamId,
         contact_id: newContact.id,
         source_contact_id: null,
-        category: 'lead',
+        category: 'prospect',
+        prospect_source: 'manual',
         status: 'active',
         expected_annual_premium_gr: Math.round(premiumPln * 100),
         notes,
       })
       .select('id')
       .single();
+
 
     if (dtcErr || !dtc) {
       return json({ error: 'dtc_insert_failed', details: dtcErr?.message }, 500);
