@@ -126,6 +126,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   // Następny krok + termin (lokalna edycja przed zapisem on-blur)
   const [nextActionDraft, setNextActionDraft] = useState<string | null>(null);
   const [nextActionDatePopoverOpen, setNextActionDatePopoverOpen] = useState(false);
+  const [nextActionDateDraft, setNextActionDateDraft] = useState<string | null>(null);
   // Reset assignTo when director changes
   useEffect(() => {
     if (director?.id && !assignTo) setAssignTo(director.id);
@@ -166,7 +167,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
     fullName: c.full_name,
   });
   const currentNextAction = nextActionDraft ?? contact.next_action ?? '';
-  const currentNextActionDate = contact.next_action_date ?? null;
+  const currentNextActionDate = nextActionDateDraft ?? contact.next_action_date ?? null;
   const todayIso = new Date().toISOString().slice(0, 10);
   const nextActionOverdue =
     !!currentNextActionDate && currentNextActionDate < todayIso;
@@ -187,6 +188,7 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
   const setNextActionDate = (date: Date | undefined) => {
     const iso = date ? format(date, 'yyyy-MM-dd') : null;
     if (iso === currentNextActionDate) return;
+    setNextActionDateDraft(iso);
     updateContact.mutate({
       id: contact.id,
       teamId,
