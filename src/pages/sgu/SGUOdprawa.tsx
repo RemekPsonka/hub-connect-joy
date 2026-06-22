@@ -85,6 +85,30 @@ export default function SGUOdprawa() {
     }
   }, [sheetContactQ.error]);
 
+  // F5-resilience: gdy sesja ma current_contact_id (PK z deal_team_contacts),
+  // odwzoruj na contacts.id i wybierz wiersz z agendy.
+  useEffect(() => {
+    const currentContactId = activeQ.data?.current_contact_id;
+    const agendaRows = agendaQ.data ?? [];
+    if (!currentContactId || agendaRows.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('deal_team_contacts')
+        .select('contact_id')
+        .eq('id', currentContactId)
+        .maybeSingle();
+      if (cancelled || !data?.contact_id) return;
+      if (selectedAgendaRow?.contact_id === data.contact_id) return;
+      const row = agendaRows.find((r) => r.contact_id === data.contact_id);
+      if (row) setSelectedAgendaRow(row);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQ.data?.current_contact_id, agendaQ.data?.length]);
+
   if (loadingTeam) return null;
 
   if (!teamId) {
@@ -99,28 +123,6 @@ export default function SGUOdprawa() {
 
   const agenda = agendaQ.data ?? [];
   const active = activeQ.data;
-
-  // F5-resilience: gdy sesja ma current_contact_id (PK z deal_team_contacts),
-  // odwzoruj na contacts.id i wybierz wiersz z agendy.
-  useEffect(() => {
-    if (!active?.current_contact_id || agenda.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from('deal_team_contacts')
-        .select('contact_id')
-        .eq('id', active.current_contact_id as string)
-        .maybeSingle();
-      if (cancelled || !data?.contact_id) return;
-      if (selectedAgendaRow?.contact_id === data.contact_id) return;
-      const row = agenda.find((r) => r.contact_id === data.contact_id);
-      if (row) setSelectedAgendaRow(row);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.current_contact_id, agenda.length]);
 
   const handleManualAdvance = async () => {
     if (!selectedAgendaRow || !active || !teamId) return;
