@@ -3,37 +3,27 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, LabelList } from 'rec
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface FunnelConversionChartProps {
-  stats: {
-    top_count: number;
-    audit_count?: number;
-    hot_count: number;
-    offering_count: number;
-    client_count: number;
-  };
+export interface FunnelBucket {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
 }
 
-const STAGES = [
-  { key: 'top_count', label: 'TOP', color: '#f59e0b' },
-  { key: 'audit_count', label: 'AUDYT', color: '#8b5cf6' },
-  { key: 'hot_count', label: 'HOT', color: '#ef4444' },
-  { key: 'offering_count', label: 'OFERTOWANIE', color: '#10b981' },
-  { key: 'client_count', label: 'KLIENT', color: '#059669' },
-] as const;
+interface FunnelConversionChartProps {
+  buckets: FunnelBucket[];
+  title?: string;
+}
 
-const chartConfig: ChartConfig = Object.fromEntries(
-  STAGES.map((s) => [s.key, { label: s.label, color: s.color }])
-);
+export function FunnelConversionChart({ buckets, title = 'Lejek konwersji' }: FunnelConversionChartProps) {
+  const chartConfig: ChartConfig = useMemo(
+    () => Object.fromEntries(buckets.map((b) => [b.key, { label: b.label, color: b.color }])),
+    [buckets]
+  );
 
-export function FunnelConversionChart({ stats }: FunnelConversionChartProps) {
   const data = useMemo(
-    () =>
-      STAGES.map((s) => ({
-        name: s.label,
-        value: stats[s.key as keyof typeof stats] || 0,
-        color: s.color,
-      })),
-    [stats]
+    () => buckets.map((b) => ({ name: b.label, value: b.value, color: b.color })),
+    [buckets]
   );
 
   const hasData = data.some((d) => d.value > 0);
@@ -42,14 +32,14 @@ export function FunnelConversionChart({ stats }: FunnelConversionChartProps) {
   return (
     <Card className="col-span-full">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Lejek konwersji</CardTitle>
+        <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[180px] w-full aspect-auto">
-          <BarChart data={data} layout="vertical" margin={{ left: 0, right: 40, top: 5, bottom: 5 }}>
+        <ChartContainer config={chartConfig} className="h-[260px] w-full aspect-auto">
+          <BarChart data={data} layout="vertical" margin={{ left: 0, right: 48, top: 5, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 12 }} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={28}>
               {data.map((entry, idx) => (

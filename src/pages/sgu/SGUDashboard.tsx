@@ -11,6 +11,8 @@ import { EmptyStateCTA } from '@/components/sgu/dashboard/EmptyStateCTA';
 import { useDashboardEmptyState } from '@/hooks/sgu-dashboard/useDashboardEmptyState';
 import { useFunnelStats } from '@/hooks/sgu-dashboard/useFunnelStats';
 import { FunnelConversionChart } from '@/components/deals-team/FunnelConversionChart';
+import { ClientPortfolioCard } from '@/components/sgu/dashboard/ClientPortfolioCard';
+import { AssigneeLoadCard } from '@/components/sgu/dashboard/AssigneeLoadCard';
 
 const weekRangeLabel = () => {
   const now = new Date();
@@ -27,7 +29,7 @@ const weekRangeLabel = () => {
 export default function SGUDashboard() {
   const { isPartner } = useSGUAccess();
   const { data: emptyState, isLoading: emptyLoading } = useDashboardEmptyState();
-  const { data: funnelStats } = useFunnelStats();
+  const { data: funnelBuckets } = useFunnelStats();
 
   const showEmpty = !emptyLoading && emptyState?.isEmpty === true;
 
@@ -54,6 +56,10 @@ export default function SGUDashboard() {
         <EmptyStateCTA />
       ) : (
         <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <ClientPortfolioCard />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <PriorityTodayCard />
             <AlertsCard />
@@ -61,7 +67,14 @@ export default function SGUDashboard() {
 
           {isPartner && <TeamPerformanceCard />}
 
-          {funnelStats && <FunnelConversionChart stats={funnelStats} />}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {funnelBuckets && (
+              <div className="lg:col-span-2">
+                <FunnelConversionChart buckets={funnelBuckets} title="Lejek SGU (firmy)" />
+              </div>
+            )}
+            <AssigneeLoadCard />
+          </div>
         </>
       )}
 
