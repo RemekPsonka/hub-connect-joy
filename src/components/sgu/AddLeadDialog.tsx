@@ -28,7 +28,19 @@ import {
 } from '@/components/ui/select';
 
 const schema = z.object({
-  full_name: z.string().trim().min(2, 'Min. 2 znaki').max(120),
+  company_name: z.string().trim().min(2, 'Min. 2 znaki').max(200),
+  nip: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{10}$/, 'NIP = 10 cyfr')
+    .optional()
+    .or(z.literal('')),
+  full_name: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .or(z.literal('')),
   phone: z
     .string()
     .trim()
@@ -36,13 +48,6 @@ const schema = z.object({
     .optional()
     .or(z.literal('')),
   email: z.string().trim().email('Niepoprawny email').optional().or(z.literal('')),
-  company_name: z.string().trim().max(200).optional().or(z.literal('')),
-  nip: z
-    .string()
-    .trim()
-    .regex(/^[0-9]{10}$/, 'NIP = 10 cyfr')
-    .optional()
-    .or(z.literal('')),
   expected_annual_premium_pln: z.coerce.number().min(0).max(100_000_000).optional(),
   notes: z.string().max(500).optional().or(z.literal('')),
   source: z.string().default('Ręczne'),
@@ -72,11 +77,11 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
+      company_name: '',
+      nip: '',
       full_name: '',
       phone: '',
       email: '',
-      company_name: '',
-      nip: '',
       expected_annual_premium_pln: 0,
       notes: '',
       source: 'Ręczne',
@@ -88,11 +93,11 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
     try {
       const { data, error } = await supabase.functions.invoke('sgu-add-lead', {
         body: {
-          full_name: values.full_name,
+          company_name: values.company_name,
+          nip: values.nip || null,
+          full_name: values.full_name || null,
           phone: values.phone || null,
           email: values.email || null,
-          company_name: values.company_name || null,
-          nip: values.nip || null,
           expected_annual_premium_pln: values.expected_annual_premium_pln ?? 0,
           notes: values.notes || null,
           source: values.source,
@@ -107,12 +112,12 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
         return;
       }
 
-      toast.success('Dodano leada');
+      toast.success('Dodano firmę');
       qc.invalidateQueries({ queryKey: ['sgu-prospects'] });
       qc.invalidateQueries({ queryKey: ['deal-team-contacts'] });
       handleClose(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Nie udało się dodać leada');
+      toast.error(e instanceof Error ? e.message : 'Nie udało się dodać firmy');
     } finally {
       setSubmitting(false);
     }
@@ -136,14 +141,14 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Dodaj leada</DialogTitle>
-          <DialogDescription>Nowy kontakt w lejku SGU (SGU-native).</DialogDescription>
+          <DialogTitle>Dodaj firmę</DialogTitle>
+          <DialogDescription>Nowa firma w lejku SGU (SGU-native).</DialogDescription>
         </DialogHeader>
 
         {duplicateId ? (
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Lead z tym telefonem lub emailem już istnieje w zespole SGU.
+              Firma lub osoba z tym telefonem/emailem już istnieje w zespole SGU.
             </p>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => handleClose(false)}>
@@ -156,8 +161,25 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
           </div>
         ) : (
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="company_name">Firma *</Label>
+                <Input id="company_name" {...form.register('company_name')} disabled={submitting} />
+                {form.formState.errors.company_name && (
+                  <p className="text-xs text-destructive">{form.formState.errors.company_name.message}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="nip">NIP</Label>
+                <Input id="nip" {...form.register('nip')} disabled={submitting} />
+                {form.formState.errors.nip && (
+                  <p className="text-xs text-destructive">{form.formState.errors.nip.message}</p>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="full_name">Imię i nazwisko *</Label>
+              <Label htmlFor="full_name">Osoba kontaktowa</Label>
               <Input id="full_name" {...form.register('full_name')} disabled={submitting} />
               {form.formState.errors.full_name && (
                 <p className="text-xs text-destructive">{form.formState.errors.full_name.message}</p>
@@ -177,20 +199,6 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
                 <Input id="email" type="email" {...form.register('email')} disabled={submitting} />
                 {form.formState.errors.email && (
                   <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="company_name">Firma</Label>
-                <Input id="company_name" {...form.register('company_name')} disabled={submitting} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nip">NIP</Label>
-                <Input id="nip" {...form.register('nip')} disabled={submitting} />
-                {form.formState.errors.nip && (
-                  <p className="text-xs text-destructive">{form.formState.errors.nip.message}</p>
                 )}
               </div>
             </div>
@@ -243,7 +251,7 @@ export function AddLeadDialog({ open, onOpenChange }: Props) {
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Dodaj leada
+                Dodaj firmę
               </Button>
             </DialogFooter>
           </form>

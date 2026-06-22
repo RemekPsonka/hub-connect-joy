@@ -8,11 +8,11 @@ const corsHeaders = {
 };
 
 interface AddLeadBody {
-  full_name: string;
+  company_name: string;
+  nip?: string | null;
+  full_name?: string | null;
   phone?: string | null;
   email?: string | null;
-  company_name?: string | null;
-  nip?: string | null;
   expected_annual_premium_pln?: number;
   notes?: string | null;
   source?: string;
@@ -60,8 +60,22 @@ Deno.serve(async (req) => {
     const body = (await req.json().catch(() => null)) as AddLeadBody | null;
     if (!body) return json({ error: 'invalid_body' }, 400);
 
-    const fullName = (body.full_name || '').trim();
-    if (fullName.length < 2) return json({ error: 'full_name_too_short' }, 400);
+    const companyName = (body.company_name || '').trim();
+    if (companyName.length < 2) return json({ error: 'company_name_too_short' }, 400);
+    if (companyName.length > 200) return json({ error: 'company_name_too_long' }, 400);
+
+    const nipRaw = (body.nip || '').trim();
+    if (nipRaw && !/^[0-9]{10}$/.test(nipRaw)) {
+      return json({ error: 'invalid_nip' }, 400);
+    }
+    const nip = nipRaw || null;
+
+    const personName = (body.full_name || '').trim();
+    if (personName && personName.length > 120) {
+      return json({ error: 'full_name_too_long' }, 400);
+    }
+    // contacts.full_name is NOT NULL — fallback to company name when person not provided.
+    const fullName = personName || companyName;
 
     const phone = cleanPhone(body.phone);
     if (phone && !/^(\+48)?[0-9]{9,13}$/.test(phone)) {
@@ -94,12 +108,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // INSERT contacts (minimal)
+    // Optional: link to existing company by NIP (soft match, nie blokuje deduplikacji).
+    let companyId: string | null = null;
+    if (nip) {
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('nip', nip)
+        .maybeSingle();
+      if (existingCompany?.id) {
+        companyId = existingCompany.id;
+      }
+    }
+
+    // INSERT contacts (firma-first; full_name = osoba lub fallback do nazwy firmy)
     const { data: newContact, error: contactErr } = await supabase
       .from('contacts')
       .insert({
         tenant_id: auth.tenantId,
         full_name: fullName,
+        company: companyName,
+        company_id: companyId,
         phone,
         email,
         source: `sgu_${source}`,
