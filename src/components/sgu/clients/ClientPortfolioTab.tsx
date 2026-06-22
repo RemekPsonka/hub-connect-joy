@@ -17,6 +17,7 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { formatCompactCurrency } from '@/lib/formatCurrency';
 import { cn } from '@/lib/utils';
 import type { SGUClientRow } from '@/hooks/useSGUClientsPortfolio';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 import { ClientDetailsDialog } from './ClientDetailsDialog';
 import { AddClientTaskDialog } from './AddClientTaskDialog';
 
@@ -105,8 +106,20 @@ export function ClientPortfolioTab({ rows, isLoading, teamId, onSelectClient, fi
                   onClick={onSelectClient ? () => onSelectClient(r.id) : undefined}
                 >
                   <TableCell>
-                    <div className="font-medium">{r.full_name}</div>
-                    {r.company && <div className="text-xs text-muted-foreground">{r.company}</div>}
+                    {(() => {
+                      const d = getSguDisplayName({
+                        companyName: r.company,
+                        fullName: r.full_name,
+                      });
+                      return (
+                        <>
+                          <div className="font-medium" title={d.heading}>{d.heading}</div>
+                          {d.subtext && (
+                            <div className="text-xs text-muted-foreground">{d.subtext}</div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <StageBadge
