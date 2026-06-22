@@ -389,20 +389,65 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                     />
                   </section>
 
-                  {/* Następna akcja */}
-                  {(contact.next_action || contact.next_action_date) && (
-                    <section>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
-                        <Target className="h-3.5 w-3.5" /> Następna akcja
-                      </h4>
-                      {contact.next_action && <p className="text-sm">{contact.next_action}</p>}
-                      {contact.next_action_date && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Termin: {(() => { try { return format(new Date(contact.next_action_date), 'd MMM yyyy', { locale: pl }); } catch { return contact.next_action_date; } })()}
-                        </p>
+                  {/* Następny krok + termin — edytowalny raport doradcy */}
+                  <section>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <Target className="h-3.5 w-3.5" /> Następny krok
+                    </h4>
+                    <Textarea
+                      className="text-sm min-h-[64px] resize-none"
+                      placeholder="Np. czekamy na pełnomocnictwo / polisy we wrześniu"
+                      value={currentNextAction}
+                      onChange={(e) => setNextActionDraft(e.target.value)}
+                      onBlur={saveNextAction}
+                    />
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Termin:</span>
+                      <Popover open={nextActionDatePopoverOpen} onOpenChange={setNextActionDatePopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              'h-7 px-2 text-xs font-normal',
+                              !currentNextActionDate && 'text-muted-foreground',
+                              nextActionOverdue && 'text-destructive border-destructive/40',
+                            )}
+                          >
+                            <CalendarIcon className="h-3 w-3 mr-1" />
+                            {currentNextActionDate ? formatPlDate(currentNextActionDate) : 'Wybierz datę'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={currentNextActionDate ? new Date(currentNextActionDate) : undefined}
+                            onSelect={(d) => {
+                              setNextActionDate(d);
+                              setNextActionDatePopoverOpen(false);
+                            }}
+                            initialFocus
+                            className={cn('p-3 pointer-events-auto')}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {currentNextActionDate && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => setNextActionDate(undefined)}
+                        >
+                          Wyczyść
+                        </Button>
                       )}
-                    </section>
-                  )}
+                      {nextActionOverdue && (
+                        <span className="text-xs text-destructive font-medium">Termin minął</span>
+                      )}
+                    </div>
+                  </section>
 
                   {/* Następne spotkanie */}
                   {contact.next_meeting_date && (
