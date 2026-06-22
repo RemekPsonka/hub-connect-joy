@@ -210,10 +210,16 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
           <SheetHeader className="px-6 pt-6 pb-3 border-b">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <SheetTitle className="text-lg truncate">{c.full_name}</SheetTitle>
+                <SheetTitle className="text-lg truncate" title={headerDisplay.heading}>
+                  {headerDisplay.heading}
+                </SheetTitle>
                 <SheetDescription asChild>
                   <div>
-                    {c.company && <span className="block text-sm truncate">{c.company}</span>}
+                    {headerDisplay.subtext && (
+                      <span className="block text-sm truncate">
+                        Osoba kontaktowa: {headerDisplay.subtext}
+                      </span>
+                    )}
                     {c.position && <span className="block text-xs text-muted-foreground truncate">{c.position}</span>}
                     <Link
                       to={`/contacts/${contact.contact_id}`}
