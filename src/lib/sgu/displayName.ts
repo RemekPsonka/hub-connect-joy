@@ -23,17 +23,31 @@ export interface FirmFirstDisplay {
   hasCompany: boolean;
 }
 
+function normalizeName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isPlaceholderPersonName(value: string): boolean {
+  return /^bez nazwy$/i.test(value.trim());
+}
+
 export function getSguDisplayName(input: FirmFirstInput): FirmFirstDisplay {
   const company = (input.companyName?.trim() || input.companyTextLegacy?.trim()) ?? '';
   const person = input.fullName?.trim() ?? '';
 
   if (company) {
+    const personIsReal =
+      person.length > 0 &&
+      !isPlaceholderPersonName(person) &&
+      normalizeName(person) !== normalizeName(company);
+
     return {
       heading: company,
-      subtext: person || null,
+      subtext: personIsReal ? person : null,
       hasCompany: true,
     };
   }
+
   return {
     heading: person || 'Bez nazwy',
     subtext: null,
