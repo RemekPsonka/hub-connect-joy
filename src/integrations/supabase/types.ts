@@ -2757,6 +2757,44 @@ export type Database = {
           },
         ]
       }
+      contact_activity_log: {
+        Row: {
+          activity_type: string
+          contact_id: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          activity_type: string
+          contact_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          activity_type?: string
+          contact_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_activity_log_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_agent_memory: {
         Row: {
           agent_persona: string | null
@@ -3578,6 +3616,53 @@ export type Database = {
           },
           {
             foreignKeyName: "deal_activities_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          deal_id: string
+          field_name: string
+          id: string
+          new_stage_id: string | null
+          new_value: string | null
+          old_stage_id: string | null
+          old_value: string | null
+          tenant_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          deal_id: string
+          field_name: string
+          id?: string
+          new_stage_id?: string | null
+          new_value?: string | null
+          old_stage_id?: string | null
+          old_value?: string | null
+          tenant_id: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          deal_id?: string
+          field_name?: string
+          id?: string
+          new_stage_id?: string | null
+          new_value?: string | null
+          old_stage_id?: string | null
+          old_value?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_history_deal_id_fkey"
             columns: ["deal_id"]
             isOneToOne: false
             referencedRelation: "deals"
