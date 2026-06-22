@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PriorityBadge } from './PriorityBadge';
 import { ListChecks } from 'lucide-react';
 import type { OdprawaAgendaRow } from '@/hooks/useOdprawaAgenda';
+import { getSguDisplayName } from '@/lib/sgu/displayName';
 
 const SECTION_ORDER = ['urgent', '10x', 'stalled', 'followup', 'new_prospects', '_other'] as const;
 const SECTION_DEFAULTS: Record<string, { label: string; icon: string }> = {
@@ -92,6 +93,10 @@ export function AgendaList({
           const isCurrent = currentContactId === row.contact_id;
           const isDiscussed =
             !isCurrent && !!discussedContactIds?.has(row.contact_id);
+          const display = getSguDisplayName({
+            companyName: row.company_name,
+            fullName: row.contact_name,
+          });
           const containerCls = [
             'w-full flex items-center gap-3 p-3 rounded-md border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             isCurrent
@@ -119,15 +124,13 @@ export function AgendaList({
                 {isCurrent ? '▶' : isDiscussed ? '✓' : '·'}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">
-                  {row.contact_name || row.company_name || '(bez nazwy)'}
+                <div className="text-sm font-semibold truncate" title={display.heading}>
+                  {display.heading}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {row.company_name && row.company_name !== row.contact_name
-                    ? `${row.company_name} · `
-                    : ''}
+                  {display.subtext ? `${display.subtext} · ` : ''}
                   {row.last_status_update
-                    ? `Akt. ${formatDate(row.last_status_update)}`
+                    ? `akt. ${formatDate(row.last_status_update)}`
                     : 'brak akt.'}
                 </div>
                 {row.ai_reason ? (
