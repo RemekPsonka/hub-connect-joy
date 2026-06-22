@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
         phone,
         email,
         source: `sgu_${source}`,
-        created_by_user_id: auth.user.id,
+        director_id: directorId,
       })
       .select('id')
       .single();
@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
         contact_id: newContact.id,
         source_contact_id: null,
         category: 'lead',
-        status: 'new',
+        status: 'active',
         expected_annual_premium_gr: Math.round(premiumPln * 100),
         notes,
       })
