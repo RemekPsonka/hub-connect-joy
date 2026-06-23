@@ -47,6 +47,7 @@ import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { AssignOwnerDialog } from './AssignOwnerDialog';
 import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
 import { SignPoaDialog } from './SignPoaDialog';
 import {
@@ -204,6 +205,7 @@ function DraggableCard({
   onSubcategoryChange,
   onMoreClick,
   onMeetingDoneClick,
+  onAssignOwnerClick,
   taskInfo,
   isStalled,
   stalledDaysSinceUpdate,
@@ -219,6 +221,7 @@ function DraggableCard({
   onSubcategoryChange: (field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: () => void;
   onMeetingDoneClick?: () => void;
+  onAssignOwnerClick?: () => void;
   taskInfo?: TaskContactInfo;
   isStalled?: boolean;
   stalledDaysSinceUpdate?: number;
@@ -250,6 +253,7 @@ function DraggableCard({
         onSubcategoryChange={onSubcategoryChange}
         onMoreClick={onMoreClick}
         onMeetingDoneClick={onMeetingDoneClick}
+        onAssignOwnerClick={onAssignOwnerClick}
         isDragging={isDragging}
         taskInfo={taskInfo}
         isStalled={isStalled}
@@ -279,6 +283,7 @@ function DroppableColumn({
   onSubcategoryChange,
   onMoreClick,
   onMeetingDoneClick,
+  onAssignOwnerClick,
   taskInfoMap,
   columnProgress,
   stalledMap,
@@ -299,6 +304,7 @@ function DroppableColumn({
   onSubcategoryChange: (c: DealTeamContact, field: 'temperature' | 'prospect_source' | 'client_status', value: string) => void;
   onMoreClick: (c: DealTeamContact) => void;
   onMeetingDoneClick?: (c: DealTeamContact) => void;
+  onAssignOwnerClick?: (c: DealTeamContact) => void;
   taskInfoMap?: Map<string, TaskContactInfo>;
   columnProgress?: { total: number; done: number };
   stalledMap?: Map<string, { daysSinceUpdate: number; stageLabel: string }>;
@@ -341,6 +347,7 @@ function DroppableColumn({
       onSubcategoryChange={(field, value) => onSubcategoryChange(c, field, value)}
       onMoreClick={() => onMoreClick(c)}
       onMeetingDoneClick={onMeetingDoneClick ? () => onMeetingDoneClick(c) : undefined}
+      onAssignOwnerClick={onAssignOwnerClick ? () => onAssignOwnerClick(c) : undefined}
       taskInfo={taskInfoMap?.get(c.id)}
       isStalled={stalledMap?.has(c.id)}
       stalledDaysSinceUpdate={stalledMap?.get(c.id)?.daysSinceUpdate}
@@ -557,6 +564,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
   const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
   const [meetingDecisionContact, setMeetingDecisionContact] = useState<DealTeamContact | null>(null);
   const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
+  const [assignOwnerContact, setAssignOwnerContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState(initialSearch ?? '');
   const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
@@ -916,6 +924,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
               onMeetingDoneClick={
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
+              onAssignOwnerClick={(c: DealTeamContact) => setAssignOwnerContact(c)}
               taskInfoMap={taskInfoMap}
               columnProgress={meetingProgress?.by_column[col.column]}
               stalledMap={stalledMap}
@@ -1004,6 +1013,13 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
           alreadyHandshaken={!!signPoaContact.handshake_at}
         />
       )}
+
+      <AssignOwnerDialog
+        contact={assignOwnerContact}
+        teamId={teamId}
+        open={!!assignOwnerContact}
+        onOpenChange={(o: boolean) => !o && setAssignOwnerContact(null)}
+      />
     </>
   );
 }
