@@ -31,6 +31,7 @@ interface UnifiedKanbanCardProps {
   onSubcategoryChange: (field: SubcategoryField, value: string) => void;
   onMoreClick: () => void;
   onMeetingDoneClick?: () => void;
+  onAssignOwnerClick?: () => void;
   isDragging?: boolean;
   taskInfo?: TaskContactInfo;
   isStalled?: boolean;
@@ -59,6 +60,7 @@ export function UnifiedKanbanCard({
   onSubcategoryChange,
   onMoreClick,
   onMeetingDoneClick,
+  onAssignOwnerClick,
   isDragging,
   taskInfo,
   isStalled,
@@ -133,7 +135,7 @@ export function UnifiedKanbanCard({
           <AssigneeAvatars
             owner={contact.assigned_director ?? null}
             assignees={taskInfo?.assignees ?? []}
-            onAddClick={onMoreClick}
+            onAddClick={onAssignOwnerClick ?? onMoreClick}
           />
         </div>
       </div>
