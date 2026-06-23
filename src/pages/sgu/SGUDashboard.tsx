@@ -13,6 +13,7 @@ import { useFunnelStats } from '@/hooks/sgu-dashboard/useFunnelStats';
 import { FunnelConversionChart } from '@/components/deals-team/FunnelConversionChart';
 import { ClientPortfolioCard } from '@/components/sgu/dashboard/ClientPortfolioCard';
 import { AssigneeLoadCard } from '@/components/sgu/dashboard/AssigneeLoadCard';
+import { NextStepsCard } from '@/components/sgu/dashboard/NextStepsCard';
 
 const weekRangeLabel = () => {
   const now = new Date();
@@ -59,6 +60,8 @@ export default function SGUDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <ClientPortfolioCard />
           </div>
+
+          <NextStepsCard />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <PriorityTodayCard />
