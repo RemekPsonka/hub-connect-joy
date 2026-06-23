@@ -151,6 +151,25 @@ Deno.serve(async (req) => {
     const offering_stage = stage === 'offering' ? substage : null;
     const client_status = stage === 'client' ? substage : null;
 
+    // Sprint S6.7 — markery czasowe dla stage='offering', żeby kontakt nie wpadł
+    // w „martwą strefę" deriveKanbanColumn (kolumna == null).
+    const nowIso = new Date().toISOString();
+    let poa_signed_at: string | null = null;
+    let k1_meeting_done_at: string | null = null;
+    let next_meeting_date: string | null = null;
+    if (stage === 'offering') {
+      if (
+        substage === 'power_of_attorney' ||
+        substage === 'audit' ||
+        substage === 'offer_sent' ||
+        substage === 'negotiation'
+      ) {
+        poa_signed_at = nowIso;
+      } else if (substage === 'handshake' || substage === 'decision_meeting') {
+        k1_meeting_done_at = nowIso;
+      }
+    }
+
     const { data: inserted, error: insertErr } = await supabase
       .from('deal_team_contacts')
       .insert({
@@ -164,6 +183,9 @@ Deno.serve(async (req) => {
         temperature,
         offering_stage,
         client_status,
+        poa_signed_at,
+        k1_meeting_done_at,
+        next_meeting_date,
         expected_annual_premium_gr,
         notes,
       })

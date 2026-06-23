@@ -1,53 +1,52 @@
-# Fix: zaległe zadania po konwersji na klienta
+## Diagnoza
 
-## Problem
-Robert Karczewski został przekonwertowany na klienta (`category='client'`, `offering_stage='won'`, `won_at=2026-04-25`), ale w widoku `/sgu/zadania` nadal wiszą 2 zadania jako zaległe:
+Cognor został dodany przez **„Dodaj do lejka SGU" w karcie kontaktu → `PushToSGUDialog`** (nie przez „Dodaj firmę" w SGU). Dialog pozwala wybrać dowolny etap, w tym `stage='offering'` + substage `offering_stage='power_of_attorney'`, ale **nie ustawia markera czasowego** `poa_signed_at` ani `k1_meeting_done_at`.
 
-- "Wyślij ofertę mailem" (due 2026-04-26, status `todo`)
-- "Spotkanie — podpisanie polisy" (due 2026-04-30, status `todo`)
+`deriveKanbanColumn` (w `src/lib/sgu/deriveKanbanColumn.ts`) wymaga markerów czasowych, żeby zakwalifikować rekord do kolumn `hot/top/lead`. Dla kombinacji (category=`offering`, offering_stage=`power_of_attorney`, poa_signed_at=NULL, k1_meeting_done_at=NULL, next_meeting_date=NULL) **zwraca `null`** → kontakt znika z Kanbanu. W „Klientach" też go nie ma (category≠`client`). To „martwa strefa".
 
-## Przyczyna
-RPC `convert_to_client(p_dtc_id, p_areas)` ustawia tylko pola na `deal_team_contacts` (category, won_at, offering_stage, potencjały). **Nie zamyka otwartych zadań** powiązanych z tym deal_team_contact. Hook `useConvertToClient` też nic z taskami nie robi.
+DB potwierdza: 1 rekord Cognor (`8c90a277-…`), team SGU, is_lost=false, dokładnie ta kombinacja.
 
-W efekcie po konwersji wszystkie nieukończone taski tego kontaktu pozostają z `status='todo'` i — jeśli minęła data — pokazują się w filtrze "Zaległe".
+## Plan naprawy (3 kroki)
 
-## Naprawa
-
-### 1. Migracja — rozszerz `convert_to_client`
-Po `UPDATE deal_team_contacts` dodać:
+### 1) Natychmiastowe odzyskanie Cognora (migracja SQL)
+Backfill markera POA na podstawie obecnego `offering_stage` — żeby rekord trafił do kolumny **Hot**:
 
 ```sql
-UPDATE public.tasks
-SET status = 'completed',
-    updated_at = now()
-WHERE deal_team_contact_id = p_dtc_id
-  AND status IN ('todo', 'in_progress');
+UPDATE public.deal_team_contacts
+SET poa_signed_at = COALESCE(poa_signed_at, updated_at, created_at)
+WHERE team_id = (SELECT id FROM deal_teams WHERE is_sgu = true LIMIT 1)
+  AND is_lost = false
+  AND category = 'offering'
+  AND offering_stage = 'power_of_attorney'
+  AND poa_signed_at IS NULL;
 ```
+Analogiczny backfill dla `offering_stage IN ('meeting_done','handshake')` → `k1_meeting_done_at`, oraz `meeting_scheduled` → `next_meeting_date := updated_at`. Z `-- ROLLBACK:` resetującym te pola dla wstawionych rekordów (lista id w komentarzu).
 
-To gwarantuje atomowość: konwersja na klienta = lejek zamknięty = brak otwartych tasków lejkowych.
+### 2) Bezpiecznik w `deriveKanbanColumn` — żaden aktywny rekord nie znika
+W `src/lib/sgu/deriveKanbanColumn.ts` dodać fallback po pętli ifów, żeby zwracać kolumnę po samym `offering_stage` (gdy markery puste) oraz dla `category='offering'`:
 
-### 2. Backfill — domknięcie historycznych przypadków
-W tej samej migracji jednorazowo:
+- `offering_stage IN ('power_of_attorney','negotiation','closing')` → `'hot'`
+- `offering_stage IN ('meeting_done','handshake','proposal','decision_meeting')` → `'top'`
+- `offering_stage = 'meeting_scheduled'` → `'lead'`
+- `category = 'offering'` (bez wyższego dopasowania) → `'hot'`
+- `category IN ('hot','top','10x','audit')` → mapa 1:1 na kolumnę (`top` dla `audit`)
+- Ostatecznie pozostały `null` tylko dla `lost/client/won` (jak dziś).
 
-```sql
-UPDATE public.tasks t
-SET status = 'completed', updated_at = now()
-FROM public.deal_team_contacts dtc
-WHERE t.deal_team_contact_id = dtc.id
-  AND dtc.category = 'client'
-  AND t.status IN ('todo', 'in_progress');
-```
+Dodać unit test w `src/lib/__tests__/` z 6–8 przypadkami brzegowymi (w tym Cognor‑case).
 
-Posprząta Roberta i wszystkich innych klientów, którzy mogli mieć ten sam problem.
+### 3) `PushToSGUDialog` — nie zostawiaj rekordów bez markera
+Plik: `src/components/sgu/PushToSGUDialog.tsx`. Przy `stage='offering'` dialog powinien dorzucić właściwy timestamp do payloadu wysyłanego do `sgu-push-contact`:
+- substage `power_of_attorney` → `poa_signed_at = now()`
+- substage `meeting_done | handshake | proposal | decision_meeting` → `k1_meeting_done_at = now()`
+- substage `meeting_scheduled` → `next_meeting_date = today`
 
-### 3. Invalidacje React Query
-W `useConvertToClient.onSuccess` dodać `qc.invalidateQueries({ queryKey: ['sgu-tasks'] })` żeby lista "Zaległe" odświeżyła się od razu po konwersji bez F5.
+Analogicznie po stronie edge `supabase/functions/sgu-push-contact/index.ts` — uzupełnić insert/update o te pola, gdy stage=`offering` (nawet jeśli klient nie wyśle markera). To gwarantuje, że żaden nowy rekord nie wpadnie w martwą strefę.
 
-## Co NIE wchodzi w zakres
-- Nie ruszamy filtra "Zaległe" w `useSGUTasks` — root cause jest w RPC.
-- Nie zmieniamy logiki `useSguStageTransition` (tranzycje etapów lejka działają poprawnie).
-- Nie tworzymy żadnych nowych tabel ani triggerów.
+## Weryfikacja
+1. Po migracji: `SELECT id, category, offering_stage, poa_signed_at FROM deal_team_contacts WHERE id='8c90a277-…'` → `poa_signed_at` ustawione.
+2. `npx tsc --noEmit` + `npm run test` (`deriveKanbanColumn` testy).
+3. Manualny check: `/sgu/sprzedaz` — Cognor widoczny w kolumnie **Hot**.
+4. Redeploy `sgu-push-contact`.
 
-## Test akceptacyjny
-1. Wejść na `/sgu/zadania?member=all` z filtrem "Zaległe" → 2 taski Roberta znikają.
-2. Skonwertować nowego prospekta na klienta z otwartymi taskami → wszystkie jego otwarte taski lejkowe automatycznie `completed`, nie pojawiają się w "Zaległe".
+## Notatka
+Nie zmieniamy reguł biznesowych Kanbanu (5 kolumn, mapowania `KANBAN_COLUMN_*`), tylko fallbacki. Stage→substage→marker pozostaje single source of truth; bezpiecznik chroni przed kolejnymi sytuacjami typu „dodałem przez X, zniknął".
