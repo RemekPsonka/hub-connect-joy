@@ -49,7 +49,7 @@ export function useStalledContacts(teamId?: string) {
           next_action,
           contact:contacts!deal_team_contacts_contact_id_fkey(full_name)
         `)
-        .eq('deal_stage', 'offering')
+        .in('category', ['offering', 'audit'])
         .eq('is_lost', false)
         .not('offering_stage', 'in', '("won","lost")');
 

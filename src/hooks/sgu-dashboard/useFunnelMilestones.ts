@@ -43,7 +43,7 @@ export function useFunnelMilestones() {
             .from('deal_team_contacts')
             .select('id', { count: 'exact', head: true })
             .not(column, 'is', null)
-            .neq('deal_stage', 'lost'),
+            .eq('is_lost', false),
         ),
       );
       const counts: FunnelMilestoneCounts = { k1: 0, k2a: 0, k2b: 0, k3: 0, k4: 0 };
