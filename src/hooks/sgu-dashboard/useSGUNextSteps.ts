@@ -78,7 +78,7 @@ export function useSGUNextSteps(scope: NextStepsScope) {
              company_rel:companies(name)
            )`
         )
-        .eq('deal_team_id', sguTeamId as string)
+        .eq('team_id', sguTeamId as string)
         .eq('is_lost', false)
         .neq('category', 'client')
         .not('next_action_date', 'is', null)
@@ -130,7 +130,7 @@ export function useSGUNextSteps(scope: NextStepsScope) {
       let countQ = supabase
         .from('deal_team_contacts')
         .select('id', { count: 'exact', head: true })
-        .eq('deal_team_id', sguTeamId as string)
+        .eq('team_id', sguTeamId as string)
         .eq('is_lost', false)
         .neq('category', 'client')
         .is('next_action_date', null);
