@@ -1018,7 +1018,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
         contact={assignOwnerContact}
         teamId={teamId}
         open={!!assignOwnerContact}
-        onOpenChange={(o) => !o && setAssignOwnerContact(null)}
+        onOpenChange={(o: boolean) => !o && setAssignOwnerContact(null)}
       />
     </>
   );
