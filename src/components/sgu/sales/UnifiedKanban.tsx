@@ -1012,6 +1012,13 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
           alreadyHandshaken={!!signPoaContact.handshake_at}
         />
       )}
+
+      <AssignOwnerDialog
+        contact={assignOwnerContact}
+        teamId={teamId}
+        open={!!assignOwnerContact}
+        onOpenChange={(o) => !o && setAssignOwnerContact(null)}
+      />
     </>
   );
 }
