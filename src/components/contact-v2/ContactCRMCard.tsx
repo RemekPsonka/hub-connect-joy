@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { PushToSGUDialog } from '@/components/sgu/PushToSGUDialog';
-import { STAGE_LABELS, type DealStage } from '@/types/dealTeam';
+import { STAGE_LABELS, type DealStage, type DealCategory } from '@/types/dealTeam';
 
 interface ContactCRMCardProps {
   contactId: string;
@@ -32,7 +32,7 @@ function fmtPLN(gr: number | null | undefined) {
 
 interface SGUDealBadgeProps {
   deal: {
-    deal_stage?: string | null;
+    category?: string | null;
     status?: string | null;
     is_lost?: boolean | null;
     snoozed_until?: string | null;
@@ -46,11 +46,12 @@ function SGUDealBadge({ deal }: SGUDealBadgeProps) {
     (deal.snoozed_until && new Date(deal.snoozed_until).getTime() > Date.now());
   const isLost = deal.is_lost || deal.status === 'lost';
 
+  const stage = categoryToStage(deal.category);
   const stageLabel = isLost
     ? 'Przegrane'
     : isOnHold
       ? 'Odłożone'
-      : (deal.deal_stage && STAGE_LABELS[deal.deal_stage as DealStage]) || '—';
+      : (stage && STAGE_LABELS[stage]) || '—';
 
   const stageTone = isLost
     ? 'bg-destructive/10 text-destructive border-destructive/30'
@@ -75,6 +76,16 @@ function SGUDealBadge({ deal }: SGUDealBadgeProps) {
   );
 }
 
+function categoryToStage(cat: string | null | undefined): DealStage | null {
+  if (!cat) return null;
+  const c = cat as DealCategory;
+  if (c === 'client') return 'client';
+  if (c === 'offering' || c === 'audit') return 'offering';
+  if (c === 'lead' || c === 'hot' || c === 'top' || c === 'cold' || c === '10x') return 'lead';
+  if (c === 'lost') return 'lost';
+  return 'prospect';
+}
+
 export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
   const { sguTeamId } = useSGUTeamId();
   const [sguOpen, setSguOpen] = useState(false);
@@ -90,7 +101,7 @@ export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
           .maybeSingle(),
         supabase
           .from('deal_team_contacts')
-          .select('id, team_id, category, deal_stage, status, is_lost, snoozed_until, expected_annual_premium_gr, updated_at')
+          .select('id, team_id, category, status, is_lost, snoozed_until, expected_annual_premium_gr, updated_at')
           .eq('contact_id', contactId),
         supabase
           .from('tasks')
