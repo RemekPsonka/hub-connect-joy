@@ -563,6 +563,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
   const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
   const [meetingDecisionContact, setMeetingDecisionContact] = useState<DealTeamContact | null>(null);
   const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
+  const [assignOwnerContact, setAssignOwnerContact] = useState<DealTeamContact | null>(null);
   const [search, setSearch] = useState(initialSearch ?? '');
   const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
@@ -922,6 +923,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
               onMeetingDoneClick={
                 currentDirector ? (c: DealTeamContact) => setMeetingDoneContact(c) : undefined
               }
+              onAssignOwnerClick={(c: DealTeamContact) => setAssignOwnerContact(c)}
               taskInfoMap={taskInfoMap}
               columnProgress={meetingProgress?.by_column[col.column]}
               stalledMap={stalledMap}
