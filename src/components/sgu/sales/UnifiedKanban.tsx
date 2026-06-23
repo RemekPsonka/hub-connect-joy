@@ -72,6 +72,7 @@ interface UnifiedKanbanProps {
   teamId: string;
   filter?: 'prospect' | 'lead' | 'offering' | 'client' | null;
   openSnoozedSignal?: number;
+  initialSearch?: string;
 }
 
 interface ColumnDef {
@@ -524,7 +525,7 @@ function DroppableColumn({
   );
 }
 
-export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanbanProps) {
+export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch }: UnifiedKanbanProps) {
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
   const snoozedRef = useRef<HTMLDivElement>(null);
@@ -557,7 +558,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanb
   const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
   const [meetingDecisionContact, setMeetingDecisionContact] = useState<DealTeamContact | null>(null);
   const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
     cold: 'recent',

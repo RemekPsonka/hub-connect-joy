@@ -14,6 +14,7 @@ export default function SGUPipelineRoute() {
   const [addOpen, setAddOpen] = useState(false);
   const [snoozedOpenTick, setSnoozedOpenTick] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialSearch = searchParams.get('q') ?? undefined;
 
   useEffect(() => {
     if (searchParams.get('action') === 'new-client') {
@@ -57,6 +58,7 @@ export default function SGUPipelineRoute() {
         teamId={sguTeamId}
         filter={kanbanFilter}
         openSnoozedSignal={snoozedOpenTick}
+        initialSearch={initialSearch}
       />
       <AddLeadDialog open={addOpen} onOpenChange={handleAddOpenChange} />
     </div>
