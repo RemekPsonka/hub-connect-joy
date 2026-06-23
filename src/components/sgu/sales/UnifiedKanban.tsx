@@ -72,6 +72,7 @@ interface UnifiedKanbanProps {
   teamId: string;
   filter?: 'prospect' | 'lead' | 'offering' | 'client' | null;
   openSnoozedSignal?: number;
+  initialSearch?: string;
 }
 
 interface ColumnDef {
@@ -524,7 +525,7 @@ function DroppableColumn({
   );
 }
 
-export function UnifiedKanban({ teamId, filter, openSnoozedSignal }: UnifiedKanbanProps) {
+export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch }: UnifiedKanbanProps) {
   const { data: contacts = [], isLoading } = useTeamContacts(teamId);
   const updateContact = useUpdateTeamContact();
   const snoozedRef = useRef<HTMLDivElement>(null);
