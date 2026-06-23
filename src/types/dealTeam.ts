@@ -137,7 +137,6 @@ export interface DealTeamContact {
   snoozed_from_category: string | null;
   offering_stage: OfferingStage;
   // SGU-REFACTOR-IA fields
-  deal_stage?: DealStage;
   temperature?: Temperature | null;
   prospect_source?: ProspectSource | null;
   client_status?: ClientStatus;

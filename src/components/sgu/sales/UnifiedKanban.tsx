@@ -92,7 +92,6 @@ const COLUMNS: ColumnDef[] = KANBAN_COLUMN_ORDER.map((c) => ({
 }));
 
 export function deriveStage(c: DealTeamContact): DealStage {
-  if (c.deal_stage) return c.deal_stage;
   const cat = c.category;
   if (cat === 'client') return 'client';
   if (cat === 'offering' || cat === 'audit') return 'offering';

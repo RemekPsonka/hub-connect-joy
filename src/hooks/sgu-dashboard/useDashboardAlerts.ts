@@ -38,7 +38,7 @@ export function useDashboardAlerts() {
         supabase
           .from('deal_team_contacts')
           .select('id', { count: 'exact', head: true })
-          .eq('deal_stage', 'client')
+          .eq('category', 'client')
           .lt('last_status_update', minus30d.toISOString()),
         supabase
           .from('deal_team_contacts')
