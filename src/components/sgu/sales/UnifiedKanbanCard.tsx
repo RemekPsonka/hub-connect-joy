@@ -99,24 +99,21 @@ export function UnifiedKanbanCard({
   return (
     <Card
       onClick={handleCardClick}
+      {...(dragAttributes ?? {})}
+      {...(dragListeners ?? {})}
       className={cn(
-        'relative p-2.5 cursor-pointer hover:shadow-md transition-all border-l-4 min-w-0 overflow-hidden flex flex-col gap-1.5',
+        'relative p-2.5 cursor-grab active:cursor-grabbing hover:shadow-md transition-all border-l-4 min-w-0 overflow-hidden flex flex-col gap-1.5 touch-none',
         borderClass[status],
         isDragging && 'opacity-50',
       )}
     >
-      {/* Drag handle — only this element initiates drag. Left side to avoid avatar overlap. */}
-      <button
-        type="button"
-        {...(dragAttributes ?? {})}
-        {...(dragListeners ?? {})}
-        onClick={(e) => e.stopPropagation()}
-        className="absolute top-1 left-0.5 z-10 p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
-        title="Przeciągnij, aby zmienić etap"
-        aria-label="Przeciągnij kartę"
+      {/* Wizualna wskazówka uchwytu — cała karta jest chwytalna (PointerSensor distance: 8). */}
+      <div
+        className="absolute top-1 left-0.5 z-10 p-0.5 text-muted-foreground/40 pointer-events-none"
+        aria-hidden="true"
       >
         <GripVertical className="h-4 w-4" />
-      </button>
+      </div>
       {/* Row 1: title (firma-first) + assignees */}
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
