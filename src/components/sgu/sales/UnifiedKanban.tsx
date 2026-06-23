@@ -558,7 +558,7 @@ export function UnifiedKanban({ teamId, filter, openSnoozedSignal, initialSearch
   const [scheduleMeetingContact, setScheduleMeetingContact] = useState<DealTeamContact | null>(null);
   const [meetingDecisionContact, setMeetingDecisionContact] = useState<DealTeamContact | null>(null);
   const [signPoaContact, setSignPoaContact] = useState<DealTeamContact | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [sortByStage, setSortByStage] = useState<Record<KanbanColumn, SortKey>>({
     prospect: 'recent',
     cold: 'recent',
