@@ -47,6 +47,7 @@ import { LostReasonDialog } from './LostReasonDialog';
 import { SnoozedContactsBar } from '@/components/deals-team/SnoozedContactsBar';
 import { MeetingDecisionDialog } from '@/components/deals-team/MeetingDecisionDialog';
 import { ContactTasksSheet } from '@/components/deals-team/ContactTasksSheet';
+import { AssignOwnerDialog } from './AssignOwnerDialog';
 import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
 import { SignPoaDialog } from './SignPoaDialog';
 import {
