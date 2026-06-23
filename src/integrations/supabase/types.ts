@@ -4088,7 +4088,8 @@ export type Database = {
           contact_id: string
           created_at: string | null
           deal_id: string | null
-          deal_stage: string | null
+          deprecated_deal_stage_20260623: string | null
+          deprecated_representative_user_id_20260623: string | null
           estimated_value: number | null
           expected_annual_premium_gr: number | null
           handshake_at: string | null
@@ -4112,7 +4113,6 @@ export type Database = {
           potential_property_gr: number | null
           priority: string | null
           prospect_source: string | null
-          representative_user_id: string | null
           review_frequency: string | null
           snooze_reason: string | null
           snoozed_from_category: string | null
@@ -4139,7 +4139,8 @@ export type Database = {
           contact_id: string
           created_at?: string | null
           deal_id?: string | null
-          deal_stage?: string | null
+          deprecated_deal_stage_20260623?: string | null
+          deprecated_representative_user_id_20260623?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
@@ -4163,7 +4164,6 @@ export type Database = {
           potential_property_gr?: number | null
           priority?: string | null
           prospect_source?: string | null
-          representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
@@ -4190,7 +4190,8 @@ export type Database = {
           contact_id?: string
           created_at?: string | null
           deal_id?: string | null
-          deal_stage?: string | null
+          deprecated_deal_stage_20260623?: string | null
+          deprecated_representative_user_id_20260623?: string | null
           estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
@@ -4214,7 +4215,6 @@ export type Database = {
           potential_property_gr?: number | null
           priority?: string | null
           prospect_source?: string | null
-          representative_user_id?: string | null
           review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
