@@ -3382,6 +3382,86 @@ export type Database = {
           },
         ]
       }
+      crm_outreach: {
+        Row: {
+          campaign: string | null
+          channel: string | null
+          contact_id: string
+          created_at: string
+          id: string
+          last_contact_at: string | null
+          last_note: string | null
+          next_action_at: string | null
+          owner_director_id: string | null
+          retries: number
+          sending_mailbox: string | null
+          sequence_status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          campaign?: string | null
+          channel?: string | null
+          contact_id: string
+          created_at?: string
+          id?: string
+          last_contact_at?: string | null
+          last_note?: string | null
+          next_action_at?: string | null
+          owner_director_id?: string | null
+          retries?: number
+          sending_mailbox?: string | null
+          sequence_status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          campaign?: string | null
+          channel?: string | null
+          contact_id?: string
+          created_at?: string
+          id?: string
+          last_contact_at?: string | null
+          last_note?: string | null
+          next_action_at?: string | null
+          owner_director_id?: string | null
+          retries?: number
+          sending_mailbox?: string | null
+          sequence_status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_outreach_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_outreach_owner_director_id_fkey"
+            columns: ["owner_director_id"]
+            isOneToOne: false
+            referencedRelation: "directors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_outreach_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_dashboard_stats"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "crm_outreach_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cross_tasks: {
         Row: {
           connection_reason: string | null
@@ -11254,6 +11334,10 @@ export type Database = {
         | { Args: never; Returns: boolean }
         | { Args: { check_user_id: string }; Returns: boolean }
       is_tenant_admin: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_tenant_owner: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
