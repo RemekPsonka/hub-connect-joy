@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { DealTeamContact, DealCategory, DealContactStatus, DealPriority } from '@/types/dealTeam';
+import type { DealTeamContact, LegacyDealCategory, DealContactStatus, DealPriority } from '@/types/dealTeam';
 
 interface TableViewProps {
   teamId: string;
@@ -39,14 +39,14 @@ type SortConfig = {
 };
 
 interface Filters {
-  category: DealCategory | '';
+  category: LegacyDealCategory | '';
   status: DealContactStatus | '';
   assignedTo: string;
   priority: DealPriority | '';
   overdueOnly: boolean;
 }
 
-const categoryConfig: Record<DealCategory, { label: string; color: string; icon: string }> = {
+const categoryConfig: Record<LegacyDealCategory, { label: string; color: string; icon: string }> = {
   hot: { label: 'HOT', color: 'bg-red-100 text-red-800 border-red-200', icon: '🔥' },
   audit: { label: 'AUDYT', color: 'bg-violet-100 text-violet-800 border-violet-200', icon: '📅' },
   top: { label: 'TOP', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: '⭐' },
@@ -161,8 +161,8 @@ export function TableView({ teamId }: TableViewProps) {
           bVal = b.next_meeting_date || '';
           break;
         case 'value':
-          aVal = a.estimated_value || 0;
-          bVal = b.estimated_value || 0;
+          aVal = (a.expected_annual_premium_gr ?? 0) / 100;
+          bVal = (b.expected_annual_premium_gr ?? 0) / 100;
           break;
         case 'lastStatus':
           aVal = a.last_status_update || '';
@@ -202,8 +202,7 @@ export function TableView({ teamId }: TableViewProps) {
       'Nast. spotkanie': c.next_meeting_date
         ? format(new Date(c.next_meeting_date), 'dd.MM.yyyy')
         : '',
-      Wartość: c.estimated_value || '',
-      Waluta: c.value_currency,
+      'Składka roczna (PLN)': c.expected_annual_premium_gr ? c.expected_annual_premium_gr / 100 : '',
       'Ostatni status': c.last_status_update
         ? format(new Date(c.last_status_update), 'dd.MM.yyyy')
         : 'Brak',
@@ -264,7 +263,7 @@ export function TableView({ teamId }: TableViewProps) {
         <Select
           value={filters.category || 'all'}
           onValueChange={(v) =>
-            setFilters((f) => ({ ...f, category: v === 'all' ? '' : v as DealCategory }))
+            setFilters((f) => ({ ...f, category: v === 'all' ? '' : v as LegacyDealCategory }))
           }
         >
           <SelectTrigger className="w-[130px] h-9">
@@ -471,10 +470,9 @@ export function TableView({ teamId }: TableViewProps) {
 
                   {/* Value */}
                   <TableCell>
-                    {contact.estimated_value ? (
+                    {contact.expected_annual_premium_gr ? (
                       <span className="font-medium">
-                        {contact.estimated_value.toLocaleString('pl-PL')}{' '}
-                        {contact.value_currency}
+                        {(contact.expected_annual_premium_gr / 100).toLocaleString('pl-PL')} PLN
                       </span>
                     ) : (
                       '—'

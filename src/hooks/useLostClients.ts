@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { DealCategory } from '@/types/dealTeam';
+import type { LegacyDealCategory } from '@/types/dealTeam';
 
 export interface LostClientRow {
   id: string;
@@ -9,7 +9,7 @@ export interface LostClientRow {
   company: string | null;
   lost_reason: string | null;
   lost_at: string | null;
-  category: DealCategory;
+  category: LegacyDealCategory;
   offering_stage: string | null;
 }
 
@@ -37,7 +37,7 @@ export function useLostClients(teamId: string | null) {
           company: contact?.company ?? null,
           lost_reason: (row.lost_reason as string | null) ?? null,
           lost_at: (row.lost_at as string | null) ?? null,
-          category: row.category as DealCategory,
+          category: row.category as LegacyDealCategory,
           offering_stage: (row.offering_stage as string | null) ?? null,
         };
       });
@@ -49,7 +49,7 @@ export function useLostClients(teamId: string | null) {
 export interface RestoreFromLostInput {
   id: string;
   teamId: string;
-  category: DealCategory;
+  category: LegacyDealCategory;
 }
 
 export function useRestoreFromLost() {

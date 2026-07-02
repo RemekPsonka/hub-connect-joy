@@ -1,5 +1,5 @@
 import { MeetingDecisionDialog, type DecisionType } from './MeetingDecisionDialog';
-import type { DealCategory } from '@/types/dealTeam';
+import type { LegacyDealCategory } from '@/types/dealTeam';
 
 /**
  * Sprint S5 — UNIFY-MEETING-OUTCOME
@@ -24,7 +24,7 @@ interface MeetingOutcomeDialogProps {
   contactId: string;
   teamContactId: string;
   teamId: string;
-  currentCategory: DealCategory;
+  currentCategory: LegacyDealCategory;
   onConfirm?: () => void;
   /** Wywoływany po zapisaniu decyzji 'postponed' (snooze). */
   onSnooze?: () => void;

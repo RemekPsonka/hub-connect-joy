@@ -23,13 +23,13 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ContactModal } from '@/components/contacts/ContactModal';
-import type { DealCategory, DealPriority } from '@/types/dealTeam';
+import type { LegacyDealCategory, DealPriority } from '@/types/dealTeam';
 
 interface AddContactDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teamId: string;
-  defaultCategory: DealCategory;
+  defaultCategory: LegacyDealCategory;
 }
 
 interface Contact {
@@ -52,7 +52,7 @@ export function AddContactDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedContactName, setSelectedContactName] = useState<string | null>(null);
-  const [category, setCategory] = useState<DealCategory>(defaultCategory);
+  const [category, setCategory] = useState<LegacyDealCategory>(defaultCategory);
   const [priority, setPriority] = useState<DealPriority>('medium');
   const [showCreateContact, setShowCreateContact] = useState(false);
 
@@ -229,7 +229,7 @@ export function AddContactDialog({
           {/* Category select */}
           <div className="space-y-2">
             <Label>Kategoria</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as DealCategory)}>
+            <Select value={category} onValueChange={(v) => setCategory(v as LegacyDealCategory)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

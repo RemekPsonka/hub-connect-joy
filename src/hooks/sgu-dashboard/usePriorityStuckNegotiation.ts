@@ -14,7 +14,7 @@ export function usePriorityStuckNegotiation() {
         .select(
           'id, contact_id, updated_at, contact:contacts!deal_team_contacts_contact_id_fkey(full_name)'
         )
-        .in('category', ['prospect', 'lead', 'offering', 'audit'])
+        .in('category', ['prospect', 'lead'])
         .eq('offering_stage', 'negotiation')
         .lt('updated_at', cutoff.toISOString())
         .order('updated_at', { ascending: true })

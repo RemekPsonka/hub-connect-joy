@@ -175,15 +175,16 @@ export function useTeamContactStats(teamId: string | undefined): DealTeamContact
   const { data: contacts = [] } = useTeamContacts(teamId, undefined, false);
 
   return useMemo(() => ({
-    hot_count: contacts.filter(c => c.category === 'hot').length,
-    top_count: contacts.filter(c => c.category === 'top').length,
+    // KANON 2026-07-02: hot/top/cold/10x = temperature; lost = is_lost; total_value w PLN.
+    hot_count: contacts.filter(c => c.temperature === 'hot').length,
+    top_count: contacts.filter(c => c.temperature === 'top').length,
     lead_count: contacts.filter(c => c.category === 'lead').length,
-    tenx_count: contacts.filter(c => c.category === '10x').length,
-    cold_count: contacts.filter(c => c.category === 'cold').length,
-    lost_count: contacts.filter(c => c.category === 'lost').length,
+    tenx_count: contacts.filter(c => c.temperature === '10x').length,
+    cold_count: contacts.filter(c => c.temperature === 'cold').length,
+    lost_count: contacts.filter(c => c.is_lost === true).length,
     prospect_count: contacts.filter(c => c.category === 'prospect').length,
     overdue_count: contacts.filter(c => c.status_overdue).length,
-    total_value: contacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
+    total_value: contacts.reduce((sum, c) => sum + (c.expected_annual_premium_gr ?? 0) / 100, 0),
     upcoming_meetings: contacts.filter(c =>
       c.next_meeting_date && new Date(c.next_meeting_date) > new Date()
     ).length,
@@ -208,8 +209,6 @@ export function useAddContactToTeam() {
       assignedTo,
       priority = 'medium',
       notes,
-      estimatedValue,
-      valueCurrency = 'PLN',
     }: AddContactToTeamInput) => {
       if (!tenantId) throw new Error('Brak tenant_id');
 
@@ -235,8 +234,6 @@ export function useAddContactToTeam() {
           assigned_to: assignedTo || null,
           priority,
           notes: notes || null,
-          estimated_value: estimatedValue || null,
-          value_currency: valueCurrency,
           status: 'active',
         });
 
@@ -276,8 +273,6 @@ export function useUpdateTeamContact() {
       nextActionDate,
       nextActionOwner,
       dealId,
-      estimatedValue,
-      valueCurrency,
       notes,
       reviewFrequency,
       offeringStage,
@@ -305,9 +300,8 @@ export function useUpdateTeamContact() {
         // power_of_attorney, audit, offer_sent, negotiation, won, lost.
         // Dla audit/hot/top wartość zostaje bez zmian — UI musi przekazać offeringStage jawnie.
         // Dla offering ustawiamy domyślny start (handshake), o ile UI nie podał własnej wartości.
-        if (category === 'offering' && offeringStage === undefined) {
-          updates.offering_stage = 'handshake';
-        }
+        // KANON 2026-07-02: category ∈ {prospect, lead, client}. Legacy 'offering'/'audit'
+        // nie występują — offering_stage ustawia dialog stage-transition, nie ten hook.
       }
       if (status !== undefined) {
         updates.status = status;
@@ -321,8 +315,6 @@ export function useUpdateTeamContact() {
       if (nextActionDate !== undefined) updates.next_action_date = nextActionDate;
       if (nextActionOwner !== undefined) updates.next_action_owner = nextActionOwner;
       if (dealId !== undefined) updates.deal_id = dealId;
-      if (estimatedValue !== undefined) updates.estimated_value = estimatedValue;
-      if (valueCurrency !== undefined) updates.value_currency = valueCurrency;
       if (notes !== undefined) updates.notes = notes;
       if (reviewFrequency !== undefined) updates.review_frequency = reviewFrequency;
       if (offeringStage !== undefined) updates.offering_stage = offeringStage;
@@ -426,30 +418,25 @@ export function usePromoteContact() {
       if (fetchError) throw fetchError;
       if (!contact) throw new Error('Kontakt nie został znaleziony');
 
-      // Walidacja wymaganych pól w zależności od kategorii docelowej
-      // COLD → LEAD: brak dodatkowych wymagań
-      if (newCategory === 'top') {
-        if (!contact.assigned_to) {
-          throw new Error('Promocja do TOP wymaga przypisania osoby odpowiedzialnej');
-        }
-        if (!contact.next_action) {
-          throw new Error('Promocja do TOP wymaga zdefiniowania następnej akcji');
-        }
+      // KANON 2026-07-02: „hot/top/cold/10x" to `temperature`, nie category.
+      // Legacy promocja przepięta na aktualizację temperature; category zostaje 'lead'.
+      const legacy = newCategory as string;
+      const isTemperature = legacy === 'hot' || legacy === 'top' || legacy === 'cold' || legacy === '10x';
+      if (isTemperature && legacy === 'top') {
+        if (!contact.assigned_to) throw new Error('Promocja do TOP wymaga przypisania osoby odpowiedzialnej');
+        if (!contact.next_action) throw new Error('Promocja do TOP wymaga zdefiniowania następnej akcji');
+      }
+      if (isTemperature && legacy === 'hot') {
+        if (!contact.next_meeting_date) throw new Error('Promocja do HOT wymaga zaplanowanego spotkania');
+        if (!contact.assigned_to) throw new Error('Promocja do HOT wymaga przypisania osoby odpowiedzialnej');
       }
 
-      if (newCategory === 'hot') {
-        if (!contact.next_meeting_date) {
-          throw new Error('Promocja do HOT wymaga zaplanowanego spotkania');
-        }
-        if (!contact.assigned_to) {
-          throw new Error('Promocja do HOT wymaga przypisania osoby odpowiedzialnej');
-        }
-      }
-
-      // Aktualizacja kategorii (trigger automatycznie zapisze log i zaktualizuje category_changed_at)
+      const updatePatch: Record<string, unknown> = isTemperature
+        ? { temperature: legacy, category: 'lead' }
+        : { category: newCategory };
       const { error: updateError } = await supabase
         .from('deal_team_contacts')
-        .update({ category: newCategory })
+        .update(updatePatch)
         .eq('id', id);
 
       if (updateError) throw updateError;

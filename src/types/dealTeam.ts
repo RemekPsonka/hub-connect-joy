@@ -1,7 +1,30 @@
 // ===== ENUMS / UNION TYPES =====
 
 export type DealTeamRole = 'leader' | 'member' | 'viewer';
-export type DealCategory = 'prospect' | 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
+/**
+ * KANON TAKSONOMII (decyzja Remka 2026-07-02):
+ * Kolumna `category` w DB przyjmuje wyłącznie 3 wartości. CHECK constraint
+ * blokuje resztę. „hot/top/cold/10x" żyje w `temperature`, „lost" w `is_lost`,
+ * „offering/audit" w `offering_stage` + milestones.
+ */
+export type DealCategory = 'prospect' | 'lead' | 'client';
+
+/**
+ * Alias dla legacy modułów (KanbanBoard, PromoteDialog, TableView,
+ * SalesFunnelDashboard, NextActionDialog, ContactActionButtons, RestoreToFunnelDialog,
+ * OfferingKanbanBoard). Historycznie te komponenty operują na starych stringach.
+ * DB CHECK constraint blokuje ich zapisy; typ zostawiamy szeroki, żeby nie palić
+ * całego /deals-team przy migracji taksonomii. Nowy kod używa `DealCategory`.
+ */
+export type LegacyDealCategory =
+  | DealCategory
+  | 'hot'
+  | 'top'
+  | 'cold'
+  | '10x'
+  | 'offering'
+  | 'audit'
+  | 'lost';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -108,7 +131,8 @@ export interface DealTeamContact {
   source_contact_id: string | null;
   expected_annual_premium_gr: number | null;
   tenant_id: string;
-  category: DealCategory;
+  /** Read-side może zawierać legacy wartości; nowe zapisy używają DealCategory (CHECK). */
+  category: LegacyDealCategory;
   status: DealContactStatus;
   assigned_to: string | null;
   priority: DealPriority;
@@ -299,18 +323,17 @@ export interface UpdateMemberRoleInput {
 export interface AddContactToTeamInput {
   teamId: string;
   contactId: string;
-  category: DealCategory;
+  /** Legacy path (KanbanBoard/PromoteDialog) używa starych stringów; DB CHECK blokuje. */
+  category: LegacyDealCategory;
   assignedTo?: string;
   priority?: DealPriority;
   notes?: string;
-  estimatedValue?: number;
-  valueCurrency?: string;
 }
 
 export interface UpdateTeamContactInput {
   id: string;
   teamId: string;
-  category?: DealCategory;
+  category?: LegacyDealCategory;
   status?: DealContactStatus;
   assignedTo?: string | null;
   priority?: DealPriority;
@@ -320,8 +343,6 @@ export interface UpdateTeamContactInput {
   nextActionDate?: string | null;
   nextActionOwner?: string | null;
   dealId?: string | null;
-  estimatedValue?: number | null;
-  valueCurrency?: string;
   notes?: string | null;
   reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   offeringStage?: OfferingStage;
@@ -346,7 +367,7 @@ export interface UpdateTeamContactInput {
 export interface PromoteContactInput {
   id: string;
   teamId: string;
-  newCategory: DealCategory;
+  newCategory: LegacyDealCategory;
 }
 
 // ===== SGU-REFACTOR-IA — labels for UI =====
