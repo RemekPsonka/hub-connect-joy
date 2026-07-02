@@ -161,8 +161,8 @@ export function TableView({ teamId }: TableViewProps) {
           bVal = b.next_meeting_date || '';
           break;
         case 'value':
-          aVal = a.estimated_value || 0;
-          bVal = b.estimated_value || 0;
+          aVal = (a.expected_annual_premium_gr ?? 0) / 100;
+          bVal = (b.expected_annual_premium_gr ?? 0) / 100;
           break;
         case 'lastStatus':
           aVal = a.last_status_update || '';
@@ -202,8 +202,7 @@ export function TableView({ teamId }: TableViewProps) {
       'Nast. spotkanie': c.next_meeting_date
         ? format(new Date(c.next_meeting_date), 'dd.MM.yyyy')
         : '',
-      Wartość: c.estimated_value || '',
-      Waluta: c.value_currency,
+      'Składka roczna (PLN)': c.expected_annual_premium_gr ? c.expected_annual_premium_gr / 100 : '',
       'Ostatni status': c.last_status_update
         ? format(new Date(c.last_status_update), 'dd.MM.yyyy')
         : 'Brak',
@@ -471,10 +470,9 @@ export function TableView({ teamId }: TableViewProps) {
 
                   {/* Value */}
                   <TableCell>
-                    {contact.estimated_value ? (
+                    {contact.expected_annual_premium_gr ? (
                       <span className="font-medium">
-                        {contact.estimated_value.toLocaleString('pl-PL')}{' '}
-                        {contact.value_currency}
+                        {(contact.expected_annual_premium_gr / 100).toLocaleString('pl-PL')} PLN
                       </span>
                     ) : (
                       '—'
