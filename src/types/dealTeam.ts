@@ -1,7 +1,7 @@
 // ===== ENUMS / UNION TYPES =====
 
 export type DealTeamRole = 'leader' | 'member' | 'viewer';
-export type DealCategory = 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
+export type DealCategory = 'prospect' | 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -25,10 +25,8 @@ export interface ClientComplexity {
 }
 
 /**
- * OFFERING_STAGE — extended after SGU-REFACTOR-IA migration (8 values).
- * Legacy values 'preparation' and 'accepted' have been migrated in DB
- * to 'offer_sent' / 'won' but are kept in the type for backward-compat
- * with any in-flight code paths. UI must use the 8 new values only.
+ * OFFERING_STAGE — 8 values allowed by DB CHECK constraint, plus meeting/audit
+ * planning aliases still used by task workflow columns.
  */
 export type OfferingStage =
   | 'decision_meeting'
@@ -39,9 +37,6 @@ export type OfferingStage =
   | 'negotiation'
   | 'won'
   | 'lost'
-  // legacy aliases (deprecated — do not use in new UI)
-  | 'preparation'
-  | 'accepted'
   | 'audit_plan'
   | 'audit_scheduled'
   | 'audit_done'
@@ -181,6 +176,7 @@ export interface DealTeamContactStats {
   tenx_count: number;
   cold_count: number;
   lost_count: number;
+  prospect_count: number;
   overdue_count: number;
   total_value: number;
   upcoming_meetings: number;
