@@ -4599,7 +4599,6 @@ export type Database = {
           client_status: string | null
           contact_id: string
           created_at: string | null
-          deal_id: string | null
           expected_annual_premium_gr: number | null
           handshake_at: string | null
           id: string
@@ -4620,15 +4619,12 @@ export type Database = {
           potential_financial_gr: number | null
           potential_life_group_gr: number | null
           potential_property_gr: number | null
-          priority: string | null
           prospect_source: string | null
-          review_frequency: string | null
           snooze_reason: string | null
           snoozed_from_category: string | null
           snoozed_until: string | null
           source_contact_id: string | null
           status: string
-          status_overdue: boolean | null
           team_id: string
           temperature: string | null
           tenant_id: string
@@ -4646,7 +4642,6 @@ export type Database = {
           client_status?: string | null
           contact_id: string
           created_at?: string | null
-          deal_id?: string | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
           id?: string
@@ -4667,15 +4662,12 @@ export type Database = {
           potential_financial_gr?: number | null
           potential_life_group_gr?: number | null
           potential_property_gr?: number | null
-          priority?: string | null
           prospect_source?: string | null
-          review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
           snoozed_until?: string | null
           source_contact_id?: string | null
           status?: string
-          status_overdue?: boolean | null
           team_id: string
           temperature?: string | null
           tenant_id: string
@@ -4693,7 +4685,6 @@ export type Database = {
           client_status?: string | null
           contact_id?: string
           created_at?: string | null
-          deal_id?: string | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
           id?: string
@@ -4714,15 +4705,12 @@ export type Database = {
           potential_financial_gr?: number | null
           potential_life_group_gr?: number | null
           potential_property_gr?: number | null
-          priority?: string | null
           prospect_source?: string | null
-          review_frequency?: string | null
           snooze_reason?: string | null
           snoozed_from_category?: string | null
           snoozed_until?: string | null
           source_contact_id?: string | null
           status?: string
-          status_overdue?: boolean | null
           team_id?: string
           temperature?: string | null
           tenant_id?: string
