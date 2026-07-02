@@ -72,10 +72,10 @@ export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
   // Fallback po offering_stage (gdy markery czasowe nie zostały ustawione przez
   // dialogi typu PushToSGUDialog/ScheduleMeetingDialog).
   const stage = dtc.offering_stage as string | null;
-  if (stage === 'power_of_attorney' || stage === 'audit' || stage === 'offer_sent' || stage === 'negotiation' || stage === 'closing') {
+  if (stage === 'power_of_attorney' || stage === 'audit' || stage === 'offer_sent' || stage === 'negotiation') {
     return 'hot';
   }
-  if (stage === 'decision_meeting' || stage === 'proposal') {
+  if (stage === 'decision_meeting') {
     return 'top';
   }
   // Fallback po category — dla rekordów, które trafiły do lejka „pustym kanałem".

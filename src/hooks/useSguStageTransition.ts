@@ -31,8 +31,8 @@ interface TransitionInput {
  *   2) zaktualizuj deal_team_contacts.offering_stage (+ ewentualnie inne pola)
  *   3) utwórz nowy task dla nextStage (jeśli != null)
  *
- * Trigger DB `ensure_active_task_per_lead` zadba też niezależnie o ghost rows,
- * ten hook robi to samo synchronicznie żeby UI nie musiał czekać na realtime.
+ * Ten hook robi zamknięcie starego + utworzenie nowego taska synchronicznie,
+ * żeby UI nie musiał czekać na realtime.
  */
 export function useSguStageTransition() {
   const queryClient = useQueryClient();
@@ -48,7 +48,7 @@ export function useSguStageTransition() {
       if (sourceTaskId && !sourceTaskId.startsWith('ghost:')) {
         const { error } = await supabase
           .from('tasks')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed' })
           .eq('id', sourceTaskId);
         if (error) throw error;
       }

@@ -1535,6 +1535,438 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_log_2027_01: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_02: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_03: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_04: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_05: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_06: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_07: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_08: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_09: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_10: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_11: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      audit_log_2027_12: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       audit_log_pre_2026: {
         Row: {
           action: string

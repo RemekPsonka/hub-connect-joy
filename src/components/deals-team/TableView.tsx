@@ -56,6 +56,7 @@ const categoryConfig: Record<DealCategory, { label: string; color: string; icon:
   lost: { label: 'PRZEGRANE', color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '✖️' },
   client: { label: 'KLIENT', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: '✅' },
   offering: { label: 'OFERTOWANIE', color: 'bg-green-100 text-green-800 border-green-200', icon: '📝' },
+  prospect: { label: 'PROSPEKT', color: 'bg-slate-100 text-slate-800 border-slate-200', icon: '🔍' },
 };
 
 const priorityConfig: Record<DealPriority, { label: string; color: string }> = {

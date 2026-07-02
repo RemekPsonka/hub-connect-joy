@@ -75,9 +75,9 @@ export const SUB_KANBAN_CONFIGS: Record<string, SubKanbanConfig> = {
     stages: [
       { id: 'handshake', label: 'Handshake', icon: '🤝', color: 'border-t-slate-500' },
       { id: 'power_of_attorney', label: 'Pełnomocnictwo', icon: '📄', color: 'border-t-blue-500' },
-      { id: 'preparation', label: 'Przygotowanie', icon: '📋', color: 'border-t-amber-500' },
+      { id: 'offer_sent', label: 'Złożona oferta', icon: '📋', color: 'border-t-amber-500' },
       { id: 'negotiation', label: 'Negocjacje', icon: '💬', color: 'border-t-purple-500' },
-      { id: 'accepted', label: 'Zaakceptowano', icon: '✅', color: 'border-t-green-500' },
+      { id: 'won', label: 'Wygrana', icon: '✅', color: 'border-t-green-500' },
       { id: 'lost', label: 'Przegrano', icon: '✖️', color: 'border-t-gray-400' },
     ],
   },

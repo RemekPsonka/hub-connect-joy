@@ -21,7 +21,7 @@ export interface StalledContactsResult {
   stalledIds: Set<string>;
 }
 
-const ACTIVE_TASK_STATUSES = ['todo', 'pending', 'in_progress'];
+const ACTIVE_TASK_STATUSES = ['todo', 'in_progress'];
 
 function daysBetween(fromIso: string | null): number {
   if (!fromIso) return 0;
@@ -49,7 +49,7 @@ export function useStalledContacts(teamId?: string) {
           next_action,
           contact:contacts!deal_team_contacts_contact_id_fkey(full_name)
         `)
-        .in('category', ['offering', 'audit'])
+        .in('category', ['prospect', 'lead', 'offering', 'audit'])
         .eq('is_lost', false)
         .not('offering_stage', 'in', '("won","lost")');
 
