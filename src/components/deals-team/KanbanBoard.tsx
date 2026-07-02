@@ -31,7 +31,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCurrentDirector } from '@/hooks/useDirectors';
-import type { DealCategory, DealTeamContact } from '@/types/dealTeam';
+import type { LegacyDealCategory, DealTeamContact } from '@/types/dealTeam';
 
 interface KanbanBoardProps {
   teamId: string;
@@ -53,17 +53,17 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const watchedContactIds = useMemo(() => watchedContacts.map(w => w.contact_id), [watchedContacts]);
   const { data: wantedItems = [] } = useWantedForWatchedContacts(watchedContactIds);
 
-  const [addContactCategory, setAddContactCategory] = useState<DealCategory | null>(null);
+  const [addContactCategory, setAddContactCategory] = useState<LegacyDealCategory | null>(null);
   const [showAddProspect, setShowAddProspect] = useState(false);
   const [showWatchedConfig, setShowWatchedConfig] = useState(false);
   const [selectedContact, setSelectedContact] = useState<DealTeamContact | null>(null);
   const [draggingContactId, setDraggingContactId] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<DealCategory | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<LegacyDealCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [taskForDetail, setTaskForDetail] = useState<TaskWithDetails | null>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [taskEditOpen, setTaskEditOpen] = useState(false);
-  const [drillDownCategory, setDrillDownCategory] = useState<DealCategory | null>(null);
+  const [drillDownCategory, setDrillDownCategory] = useState<LegacyDealCategory | null>(null);
   const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
 
   // Separate snoozed contacts
@@ -170,7 +170,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent, category: DealCategory) => {
+  const handleDragEnter = useCallback((e: React.DragEvent, category: LegacyDealCategory) => {
     e.preventDefault();
     setDragOverColumn(category);
   }, []);
@@ -186,7 +186,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   const { data: pipelineStages = [] } = usePipelineStages(teamId, 'main');
   const { data: pipelineTransitions = [] } = usePipelineTransitions(teamId, 'main');
 
-  const handleDrop = useCallback((e: React.DragEvent, newCategory: DealCategory) => {
+  const handleDrop = useCallback((e: React.DragEvent, newCategory: LegacyDealCategory) => {
     e.preventDefault();
     const contactId = e.dataTransfer.getData('contactId');
     const contact = contacts.find(c => c.id === contactId);
@@ -205,7 +205,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
   }, [contacts, teamId, updateContact, pipelineStages, pipelineTransitions]);
 
   // Categories that support drill-down sub-kanbans
-  const DRILLDOWN_CATEGORIES = new Set<DealCategory>(['audit', 'hot', 'top']);
+  const DRILLDOWN_CATEGORIES = new Set<LegacyDealCategory>(['audit', 'hot', 'top']);
 
   // Get contacts for drill-down category
   const drillDownContacts = useMemo(() => {
@@ -608,18 +608,18 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             icon="🔄"
             color="cyan"
             count={tenxContacts.length}
-            onAdd={() => setAddContactCategory('10x' as DealCategory)}
+            onAdd={() => setAddContactCategory('10x' as LegacyDealCategory)}
             emptyMessage="Brak kontaktów 10x. Buduj relacje →"
             onDragOver={handleDragOver}
-            onDragEnter={(e) => handleDragEnter(e, '10x' as DealCategory)}
+            onDragEnter={(e) => handleDragEnter(e, '10x' as LegacyDealCategory)}
             onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, '10x' as DealCategory)}
-            isDropTarget={dragOverColumn === ('10x' as DealCategory)}
+            onDrop={(e) => handleDrop(e, '10x' as LegacyDealCategory)}
+            isDropTarget={dragOverColumn === ('10x' as LegacyDealCategory)}
             isHovered={hoveredColumn === '10x'}
             isShrunk={!!hoveredColumn && hoveredColumn !== '10x'}
             onMouseEnter={() => setHoveredColumn('10x')}
             onMouseLeave={() => {}}
-            onHeaderClick={() => setDrillDownCategory('10x' as DealCategory)}
+            onHeaderClick={() => setDrillDownCategory('10x' as LegacyDealCategory)}
           >
             {tenxContacts.map((contact) => (
               <ColdLeadCard
@@ -654,7 +654,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             isShrunk={!!hoveredColumn && hoveredColumn !== 'cold'}
             onMouseEnter={() => setHoveredColumn('cold')}
             onMouseLeave={() => {}}
-            onHeaderClick={() => setDrillDownCategory('cold' as DealCategory)}
+            onHeaderClick={() => setDrillDownCategory('cold' as LegacyDealCategory)}
           >
             {coldContacts.map((contact) => (
               <ColdLeadCard
@@ -678,18 +678,18 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
             icon="✖️"
             color="gray"
             count={lostContacts.length}
-            onAdd={() => setAddContactCategory('lost' as DealCategory)}
+            onAdd={() => setAddContactCategory('lost' as LegacyDealCategory)}
             emptyMessage="Brak przegranych kontaktów"
             onDragOver={handleDragOver}
-            onDragEnter={(e) => handleDragEnter(e, 'lost' as DealCategory)}
+            onDragEnter={(e) => handleDragEnter(e, 'lost' as LegacyDealCategory)}
             onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, 'lost' as DealCategory)}
-            isDropTarget={dragOverColumn === ('lost' as DealCategory)}
+            onDrop={(e) => handleDrop(e, 'lost' as LegacyDealCategory)}
+            isDropTarget={dragOverColumn === ('lost' as LegacyDealCategory)}
             isHovered={hoveredColumn === 'lost'}
             isShrunk={!!hoveredColumn && hoveredColumn !== 'lost'}
             onMouseEnter={() => setHoveredColumn('lost')}
             onMouseLeave={() => {}}
-            onHeaderClick={() => setDrillDownCategory('lost' as DealCategory)}
+            onHeaderClick={() => setDrillDownCategory('lost' as LegacyDealCategory)}
           >
             {lostContacts.map((contact) => (
               <ColdLeadCard

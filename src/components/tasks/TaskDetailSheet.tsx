@@ -154,7 +154,7 @@ function MilestoneMetaRow({ milestoneId, projectId, navigate }: { milestoneId: s
 
 import { SUB_KANBAN_CONFIGS, CATEGORY_OPTIONS, WORKFLOW_COLUMNS } from '@/config/pipelineStages';
 import { ChevronDown } from 'lucide-react';
-import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import type { LegacyDealCategory, OfferingStage } from '@/types/dealTeam';
 import { MeetingDecisionDialog, type DecisionType } from '@/components/deals-team/MeetingDecisionDialog';
 
 function InteractivePipelineStageRow({
@@ -191,7 +191,7 @@ function InteractivePipelineStageRow({
   const updateTask = useUpdateTask();
   const [meetingDecisionOpen, setMeetingDecisionOpen] = useState(false);
 
-  const currentCategory = (data?.category || 'lead') as DealCategory;
+  const currentCategory = (data?.category || 'lead') as LegacyDealCategory;
   const currentStage = data?.offering_stage as OfferingStage | null;
   const catOption = CATEGORY_OPTIONS.find(c => c.value === currentCategory) || CATEGORY_OPTIONS[4];
   const subConfig = SUB_KANBAN_CONFIGS[currentCategory];
@@ -199,7 +199,7 @@ function InteractivePipelineStageRow({
   // Find current workflow column
   const currentWorkflowCol = WORKFLOW_COLUMNS.find(col => col.match(currentCategory, currentStage));
 
-  const handleCategoryChange = (newCat: DealCategory) => {
+  const handleCategoryChange = (newCat: LegacyDealCategory) => {
     if (newCat === currentCategory) return;
     updateContact.mutate({ id: teamContactId, teamId, category: newCat });
   };
@@ -215,7 +215,7 @@ function InteractivePipelineStageRow({
     if (col.id === currentWorkflowCol?.id) return;
     // Reverse-map: determine category and stage from the workflow column
     // Check which category this column belongs to by testing match
-    const testMappings: { cat: DealCategory; stage?: OfferingStage }[] = [
+    const testMappings: { cat: LegacyDealCategory; stage?: OfferingStage }[] = [
       { cat: 'hot', stage: 'meeting_plan' as OfferingStage },
       { cat: 'hot', stage: 'meeting_scheduled' as OfferingStage },
       { cat: 'hot', stage: 'meeting_done' as OfferingStage },
@@ -235,7 +235,7 @@ function InteractivePipelineStageRow({
       { cat: 'lost' },
       { cat: 'lead' },
       { cat: 'cold' },
-      { cat: '10x' as DealCategory },
+      { cat: '10x' as LegacyDealCategory },
     ];
 
     // Preferuj mapowanie z aktualna kategoria (aby TOP nie przeskoczyl do HOT)
@@ -251,7 +251,7 @@ function InteractivePipelineStageRow({
       return;
     }
 
-    const updates: { id: string; teamId: string; category?: DealCategory; offeringStage?: OfferingStage } = {
+    const updates: { id: string; teamId: string; category?: LegacyDealCategory; offeringStage?: OfferingStage } = {
       id: teamContactId,
       teamId,
     };

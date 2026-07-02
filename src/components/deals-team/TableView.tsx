@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { DealTeamContact, DealCategory, DealContactStatus, DealPriority } from '@/types/dealTeam';
+import type { DealTeamContact, LegacyDealCategory, DealContactStatus, DealPriority } from '@/types/dealTeam';
 
 interface TableViewProps {
   teamId: string;
@@ -39,14 +39,14 @@ type SortConfig = {
 };
 
 interface Filters {
-  category: DealCategory | '';
+  category: LegacyDealCategory | '';
   status: DealContactStatus | '';
   assignedTo: string;
   priority: DealPriority | '';
   overdueOnly: boolean;
 }
 
-const categoryConfig: Record<DealCategory, { label: string; color: string; icon: string }> = {
+const categoryConfig: Record<LegacyDealCategory, { label: string; color: string; icon: string }> = {
   hot: { label: 'HOT', color: 'bg-red-100 text-red-800 border-red-200', icon: '🔥' },
   audit: { label: 'AUDYT', color: 'bg-violet-100 text-violet-800 border-violet-200', icon: '📅' },
   top: { label: 'TOP', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: '⭐' },
@@ -264,7 +264,7 @@ export function TableView({ teamId }: TableViewProps) {
         <Select
           value={filters.category || 'all'}
           onValueChange={(v) =>
-            setFilters((f) => ({ ...f, category: v === 'all' ? '' : v as DealCategory }))
+            setFilters((f) => ({ ...f, category: v === 'all' ? '' : v as LegacyDealCategory }))
           }
         >
           <SelectTrigger className="w-[130px] h-9">

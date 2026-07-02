@@ -20,7 +20,7 @@ import { useUpdateTeamContact } from '@/hooks/useDealsTeamContacts';
 import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import type { LegacyDealCategory, OfferingStage } from '@/types/dealTeam';
 import { SovraOpenButton } from '@/components/sovra/SovraOpenButton';
 
 type ActionType =
@@ -127,7 +127,7 @@ export function NextActionDialog({
       // Build new task title and kanban updates based on action
       let newTitle = '';
       let newOfferingStage: OfferingStage | undefined;
-      let newCategory: DealCategory | undefined;
+      let newCategory: LegacyDealCategory | undefined;
       let closeTask = false;
 
       switch (selected) {

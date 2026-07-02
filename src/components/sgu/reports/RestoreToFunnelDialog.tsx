@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import {
   STAGE_LABELS,
-  type DealCategory,
+  type LegacyDealCategory,
   type DealStage,
 } from '@/types/dealTeam';
 import { useRestoreFromLost } from '@/hooks/useLostClients';
@@ -34,7 +34,7 @@ interface Props {
 
 const ACTIVE_STAGES: DealStage[] = ['prospect', 'lead', 'offering', 'client'];
 
-const STAGE_TO_CATEGORIES: Record<DealStage, DealCategory[]> = {
+const STAGE_TO_CATEGORIES: Record<DealStage, LegacyDealCategory[]> = {
   prospect: ['cold'],
   lead: ['hot', 'top', '10x', 'cold'],
   offering: ['offering'],
@@ -42,7 +42,7 @@ const STAGE_TO_CATEGORIES: Record<DealStage, DealCategory[]> = {
   lost: [],
 };
 
-const CATEGORY_LABELS: Record<DealCategory, string> = {
+const CATEGORY_LABELS: Record<LegacyDealCategory, string> = {
   hot: '🔥 HOT',
   top: '⭐ TOP',
   '10x': '🔄 10x',
@@ -63,7 +63,7 @@ export function RestoreToFunnelDialog({
   teamId,
 }: Props) {
   const [stage, setStage] = useState<DealStage>('lead');
-  const [category, setCategory] = useState<DealCategory>('hot');
+  const [category, setCategory] = useState<LegacyDealCategory>('hot');
   const restore = useRestoreFromLost();
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export function RestoreToFunnelDialog({
           {STAGE_TO_CATEGORIES[stage].length > 1 && (
             <div className="space-y-2">
               <Label>Kategoria</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as DealCategory)}>
+              <Select value={category} onValueChange={(v) => setCategory(v as LegacyDealCategory)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

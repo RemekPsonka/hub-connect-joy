@@ -20,7 +20,7 @@ import { useTeamMembers } from '@/hooks/useDealsTeamMembers';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useRequireDirector } from '@/hooks/useRequireDirector';
-import type { DealTeamContact, DealCategory, OfferingStage, Temperature } from '@/types/dealTeam';
+import type { DealTeamContact, LegacyDealCategory, OfferingStage, Temperature } from '@/types/dealTeam';
 
 type ActionType =
   | 'schedule_meeting'
@@ -117,7 +117,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
     if (action.value === 'meeting_done') { onMeetingDone(); return; }
     if (action.value === 'ten_x') {
       updateContact.mutate(
-        { id: contact.id, teamId, category: '10x' as DealCategory, temperature: '10x' as Temperature },
+        { id: contact.id, teamId, category: '10x' as LegacyDealCategory, temperature: '10x' as Temperature },
         { onSuccess: () => toast.success('Przeniesiono do 10x') }
       );
       return;
@@ -125,7 +125,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
     if (action.value === 'lost') {
       // Direct update — no extra data needed
       updateContact.mutate(
-        { id: contact.id, teamId, category: 'lost' as DealCategory, status: 'lost' },
+        { id: contact.id, teamId, category: 'lost' as LegacyDealCategory, status: 'lost' },
         { onSuccess: () => toast.success('Oznaczono jako utracony') }
       );
       return;
@@ -147,7 +147,7 @@ export function ContactActionButtons({ contact, teamId, onSnooze, onConvertToCli
       const dateStr = date ? date.toISOString().split('T')[0] : undefined;
       let title = '';
       let newOfferingStage: OfferingStage | undefined;
-      let newCategory: DealCategory | undefined;
+      let newCategory: LegacyDealCategory | undefined;
 
       switch (pendingAction.value) {
         case 'schedule_meeting':
