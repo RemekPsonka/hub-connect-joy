@@ -358,7 +358,6 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                           <Badge variant="outline">{stageLabels[stage] || contact.category}</Badge>
                           {subStageBadge && <Badge variant="secondary">{subStageBadge}</Badge>}
                           <Badge variant="secondary">{statusLabels[contact.status] || contact.status}</Badge>
-                          <Badge variant="secondary">{priorityLabels[contact.priority] || contact.priority}</Badge>
                         </div>
                       );
                     })()}
@@ -706,30 +705,6 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                       Dodaj status
                     </Button>
                   </div>
-
-                  {/* Overdue indicator */}
-                  {contact.status_overdue && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border bg-destructive/5 border-destructive/20">
-                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">Wymaga statusu</p>
-                        <p className="text-xs text-muted-foreground">
-                          {contact.last_status_update
-                            ? `${Math.floor((Date.now() - new Date(contact.last_status_update).getTime()) / (1000 * 60 * 60 * 24))} dni bez statusu`
-                            : 'Brak statusów'}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0 text-xs"
-                        onClick={() => setShowStatusForm(true)}
-                      >
-                        Dodaj status
-                        <ChevronRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    </div>
-                  )}
 
                   {/* Submitted statuses */}
                   {statusesLoading ? (

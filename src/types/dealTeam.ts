@@ -135,22 +135,16 @@ export interface DealTeamContact {
   category: LegacyDealCategory;
   status: DealContactStatus;
   assigned_to: string | null;
-  priority: DealPriority;
   next_meeting_date: string | null;
   next_meeting_with: string | null;
   next_action: string | null;
   next_action_date: string | null;
   next_action_owner: string | null;
-  deal_id: string | null;
-  estimated_value: number | null;
-  value_currency: string;
   notes: string | null;
   last_status_update: string | null;
-  status_overdue: boolean;
   category_changed_at: string;
   ai_brief: string | null;
   ai_brief_generated_at: string | null;
-  review_frequency: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   snoozed_until: string | null;
   snooze_reason: string | null;
   snoozed_from_category: string | null;
@@ -201,7 +195,6 @@ export interface DealTeamContactStats {
   cold_count: number;
   lost_count: number;
   prospect_count: number;
-  overdue_count: number;
   total_value: number;
   upcoming_meetings: number;
 }
@@ -326,7 +319,6 @@ export interface AddContactToTeamInput {
   /** Legacy path (KanbanBoard/PromoteDialog) używa starych stringów; DB CHECK blokuje. */
   category: LegacyDealCategory;
   assignedTo?: string;
-  priority?: DealPriority;
   notes?: string;
 }
 
@@ -336,15 +328,12 @@ export interface UpdateTeamContactInput {
   category?: LegacyDealCategory;
   status?: DealContactStatus;
   assignedTo?: string | null;
-  priority?: DealPriority;
   nextMeetingDate?: string | null;
   nextMeetingWith?: string | null;
   nextAction?: string | null;
   nextActionDate?: string | null;
   nextActionOwner?: string | null;
-  dealId?: string | null;
   notes?: string | null;
-  reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   offeringStage?: OfferingStage;
   snoozedUntil?: string | null;
   snoozeReason?: string | null;

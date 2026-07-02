@@ -4600,9 +4600,6 @@ export type Database = {
           contact_id: string
           created_at: string | null
           deal_id: string | null
-          deprecated_deal_stage_20260623: string | null
-          deprecated_representative_user_id_20260623: string | null
-          estimated_value: number | null
           expected_annual_premium_gr: number | null
           handshake_at: string | null
           id: string
@@ -4636,7 +4633,6 @@ export type Database = {
           temperature: string | null
           tenant_id: string
           updated_at: string | null
-          value_currency: string | null
           won_at: string | null
         }
         Insert: {
@@ -4651,9 +4647,6 @@ export type Database = {
           contact_id: string
           created_at?: string | null
           deal_id?: string | null
-          deprecated_deal_stage_20260623?: string | null
-          deprecated_representative_user_id_20260623?: string | null
-          estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
           id?: string
@@ -4687,7 +4680,6 @@ export type Database = {
           temperature?: string | null
           tenant_id: string
           updated_at?: string | null
-          value_currency?: string | null
           won_at?: string | null
         }
         Update: {
@@ -4702,9 +4694,6 @@ export type Database = {
           contact_id?: string
           created_at?: string | null
           deal_id?: string | null
-          deprecated_deal_stage_20260623?: string | null
-          deprecated_representative_user_id_20260623?: string | null
-          estimated_value?: number | null
           expected_annual_premium_gr?: number | null
           handshake_at?: string | null
           id?: string
@@ -4738,7 +4727,6 @@ export type Database = {
           temperature?: string | null
           tenant_id?: string
           updated_at?: string | null
-          value_currency?: string | null
           won_at?: string | null
         }
         Relationships: [
@@ -8667,41 +8655,6 @@ export type Database = {
           },
         ]
       }
-      relationship_health: {
-        Row: {
-          calculated_at: string | null
-          contact_id: string | null
-          days_since_contact: number | null
-          decay_alert_sent: boolean | null
-          health_score: number | null
-          id: string
-        }
-        Insert: {
-          calculated_at?: string | null
-          contact_id?: string | null
-          days_since_contact?: number | null
-          decay_alert_sent?: boolean | null
-          health_score?: number | null
-          id?: string
-        }
-        Update: {
-          calculated_at?: string | null
-          contact_id?: string | null
-          days_since_contact?: number | null
-          decay_alert_sent?: boolean | null
-          health_score?: number | null
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "relationship_health_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: true
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       representative_contacts: {
         Row: {
           assigned_at: string | null
@@ -11469,8 +11422,6 @@ export type Database = {
           active_needs: number | null
           active_offers: number | null
           contacts_prev_30d: number | null
-          critical_contacts: number | null
-          healthy_contacts: number | null
           new_contacts_30d: number | null
           pending_matches: number | null
           pending_tasks: number | null
@@ -11479,7 +11430,6 @@ export type Database = {
           today_consultations: number | null
           total_contacts: number | null
           upcoming_meetings: number | null
-          warning_contacts: number | null
         }
         Relationships: []
       }
@@ -11549,10 +11499,6 @@ export type Database = {
       assistant_can_access_contact: {
         Args: { p_assistant_id: string; p_contact_id: string }
         Returns: boolean
-      }
-      calculate_relationship_health: {
-        Args: { p_contact_id: string }
-        Returns: number
       }
       can_access_contact: { Args: { _contact_id: string }; Returns: boolean }
       can_access_wanted_contact: {
@@ -11638,37 +11584,21 @@ export type Database = {
       }
       get_current_director_id: { Args: never; Returns: string }
       get_current_tenant_id: { Args: never; Returns: string }
-      get_dashboard_stats:
-        | {
-            Args: never
-            Returns: {
-              active_needs: number
-              active_offers: number
-              contacts_prev_30d: number
-              critical_contacts: number
-              healthy_contacts: number
-              new_contacts_30d: number
-              pending_matches: number
-              pending_tasks: number
-              refreshed_at: string
-              today_consultations: number
-              total_contacts: number
-              upcoming_meetings: number
-              warning_contacts: number
-            }[]
-          }
-        | {
-            Args: { p_tenant_id: string }
-            Returns: {
-              active_contacts: number
-              active_needs: number
-              active_offers: number
-              completed_tasks: number
-              pending_tasks: number
-              total_companies: number
-              total_contacts: number
-            }[]
-          }
+      get_dashboard_stats: {
+        Args: never
+        Returns: {
+          active_needs: number
+          active_offers: number
+          contacts_prev_30d: number
+          new_contacts_30d: number
+          pending_matches: number
+          pending_tasks: number
+          refreshed_at: string
+          today_consultations: number
+          total_contacts: number
+          upcoming_meetings: number
+        }[]
+      }
       get_odprawa_agenda: {
         Args: { p_mode?: string; p_team_id: string }
         Returns: {
@@ -12069,31 +11999,18 @@ export type Database = {
         Args: { p_team_id: string; p_tenant_id: string }
         Returns: undefined
       }
-      sgu_next_prospecting_job:
-        | {
-            Args: never
-            Returns: {
-              actor_user_id: string
-              id: string
-              payload: Json
-              progress: number
-              result: Json
-              status: string
-              tenant_id: string
-            }[]
-          }
-        | {
-            Args: { p_job_type?: string }
-            Returns: {
-              actor_user_id: string
-              id: string
-              payload: Json
-              progress: number
-              result: Json
-              status: string
-              tenant_id: string
-            }[]
-          }
+      sgu_next_prospecting_job: {
+        Args: never
+        Returns: {
+          actor_user_id: string
+          id: string
+          payload: Json
+          progress: number
+          result: Json
+          status: string
+          tenant_id: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       text2ltree: { Args: { "": string }; Returns: unknown }

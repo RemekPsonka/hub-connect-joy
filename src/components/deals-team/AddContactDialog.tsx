@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ContactModal } from '@/components/contacts/ContactModal';
-import type { LegacyDealCategory, DealPriority } from '@/types/dealTeam';
+import type { LegacyDealCategory } from '@/types/dealTeam';
 
 interface AddContactDialogProps {
   open: boolean;
@@ -53,7 +53,6 @@ export function AddContactDialog({
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedContactName, setSelectedContactName] = useState<string | null>(null);
   const [category, setCategory] = useState<LegacyDealCategory>(defaultCategory);
-  const [priority, setPriority] = useState<DealPriority>('medium');
   const [showCreateContact, setShowCreateContact] = useState(false);
 
   // Search contacts
@@ -112,7 +111,6 @@ export function AddContactDialog({
       teamId,
       contactId: selectedContactId,
       category,
-      priority,
     });
 
     // Reset form and close dialog
@@ -120,7 +118,6 @@ export function AddContactDialog({
     setSelectedContactId(null);
     setSelectedContactName(null);
     setCategory(defaultCategory);
-    setPriority('medium');
     onOpenChange(false);
   };
 
@@ -130,7 +127,6 @@ export function AddContactDialog({
       setSelectedContactId(null);
       setSelectedContactName(null);
       setCategory(defaultCategory);
-      setPriority('medium');
     }
     onOpenChange(newOpen);
   };
@@ -245,21 +241,6 @@ export function AddContactDialog({
             </Select>
           </div>
 
-          {/* Priority select */}
-          <div className="space-y-2">
-            <Label>Priorytet</Label>
-            <Select value={priority} onValueChange={(v) => setPriority(v as DealPriority)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="urgent">Pilny</SelectItem>
-                <SelectItem value="high">Wysoki</SelectItem>
-                <SelectItem value="medium">Średni</SelectItem>
-                <SelectItem value="low">Niski</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
 
         <DialogFooter>

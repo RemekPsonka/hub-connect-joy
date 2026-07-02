@@ -56,13 +56,7 @@ export function ColdLeadCard({ contact, onClick, onDragStart, onDragEnd, isDragg
             </span>
           </>
         )}
-        <div
-          className={cn(
-            "w-1.5 h-1.5 rounded-full shrink-0 ml-auto",
-            contact.status_overdue ? 'bg-destructive' : 'bg-primary'
-          )}
-          title={contact.status_overdue ? 'Status nieaktualny' : 'Status aktualny'}
-        />
+        <div className="w-1.5 h-1.5 rounded-full shrink-0 ml-auto bg-primary" />
       </div>
     </Card>
   );

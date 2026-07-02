@@ -240,7 +240,7 @@ export function SalesFunnelDashboard({ teamId, onNavigate }: SalesFunnelDashboar
 
       {/* Section 1: KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPICard icon={Flame} label="HOT Leads" count={contactStats.hot_count} value={categoryValues.hot.value} commission={categoryValues.hot.commission} color="text-red-500" borderColor="border-l-red-500" overdue={contactStats.overdue_count} onClick={() => onNavigate?.('kanban')} />
+        <KPICard icon={Flame} label="HOT Leads" count={contactStats.hot_count} value={categoryValues.hot.value} commission={categoryValues.hot.commission} color="text-red-500" borderColor="border-l-red-500" onClick={() => onNavigate?.('kanban')} />
         <KPICard icon={Star} label="TOP Leads" count={contactStats.top_count} value={categoryValues.top.value} commission={categoryValues.top.commission} color="text-amber-500" borderColor="border-l-amber-500" onClick={() => onNavigate?.('kanban')} />
         <KPICard icon={ClipboardList} label="Leads" count={contactStats.lead_count} value={categoryValues.lead.value} commission={categoryValues.lead.commission} color="text-blue-500" borderColor="border-l-blue-500" onClick={() => onNavigate?.('kanban')} />
         <KPICard icon={RefreshCw} label="10x" count={contactStats.tenx_count} value={categoryValues['10x'].value} color="text-cyan-500" borderColor="border-l-cyan-500" onClick={() => onNavigate?.('kanban')} />

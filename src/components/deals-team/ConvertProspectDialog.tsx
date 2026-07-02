@@ -87,7 +87,6 @@ export function ConvertProspectDialog({
         teamId,
         contactId,
         category: 'lead',
-        priority: prospect.priority || 'medium',
         notes: prospect.prospect_notes || undefined,
       });
 

@@ -12,9 +12,6 @@ export interface DashboardStats {
   active_offers: number;
   pending_matches: number;
   upcoming_meetings: number;
-  healthy_contacts: number;
-  warning_contacts: number;
-  critical_contacts: number;
   refreshed_at: string;
 }
 

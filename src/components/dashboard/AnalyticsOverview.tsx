@@ -65,7 +65,7 @@ export function AnalyticsOverview() {
     );
   }
 
-  const { metrics, networkHealth } = data;
+  const { metrics } = data;
 
   return (
     <Card>
@@ -138,45 +138,6 @@ export function AnalyticsOverview() {
                 {metrics.matchSuccessRate}% sukcesu
               </span>
             </div>
-          </div>
-        </div>
-
-        {/* Network Health - Compact */}
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Zdrowie sieci</p>
-          <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-muted">
-            {networkHealth.healthyPercent > 0 && (
-              <div 
-                className="bg-green-500 transition-all duration-500" 
-                style={{ width: `${networkHealth.healthyPercent}%` }} 
-              />
-            )}
-            {networkHealth.warningPercent > 0 && (
-              <div 
-                className="bg-yellow-500 transition-all duration-500" 
-                style={{ width: `${networkHealth.warningPercent}%` }} 
-              />
-            )}
-            {networkHealth.criticalPercent > 0 && (
-              <div 
-                className="bg-red-500 transition-all duration-500" 
-                style={{ width: `${networkHealth.criticalPercent}%` }} 
-              />
-            )}
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-              Zdrowe ({networkHealth.healthy})
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-              Ostrzeżenie ({networkHealth.warning})
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              Krytyczne ({networkHealth.critical})
-            </span>
           </div>
         </div>
 

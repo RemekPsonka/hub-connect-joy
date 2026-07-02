@@ -38,15 +38,6 @@ export interface CategoryDataPoint {
   matches: number;
 }
 
-export interface NetworkHealth {
-  healthy: number;
-  healthyPercent: number;
-  warning: number;
-  warningPercent: number;
-  critical: number;
-  criticalPercent: number;
-}
-
 export interface AIInsight {
   title: string;
   description: string;
@@ -59,7 +50,6 @@ export interface AnalyticsData {
   contactsByIndustry: IndustryDataPoint[];
   meetingOutcomes: MeetingOutcomeDataPoint[];
   topCategories: CategoryDataPoint[];
-  networkHealth: NetworkHealth;
 }
 
 type DateRangeValue = '7d' | '30d' | '90d' | '1y' | 'all';
@@ -212,21 +202,6 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
         // Top categories from needs
         const topCategories = getTopCategories(needs);
 
-        // Network health from MV (no need for additional queries)
-        const healthyCount = Number(dashboardStats?.healthy_contacts) || 0;
-        const warningCount = Number(dashboardStats?.warning_contacts) || 0;
-        const criticalCount = Number(dashboardStats?.critical_contacts) || 0;
-        const healthTotal = healthyCount + warningCount + criticalCount || 1;
-        
-        const networkHealth: NetworkHealth = {
-          healthy: healthyCount,
-          healthyPercent: Math.round((healthyCount / healthTotal) * 100),
-          warning: warningCount,
-          warningPercent: Math.round((warningCount / healthTotal) * 100),
-          critical: criticalCount,
-          criticalPercent: Math.round((criticalCount / healthTotal) * 100),
-        };
-
         const analyticsData: AnalyticsData = {
           metrics: {
             totalContacts,
@@ -243,7 +218,6 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
           contactsByIndustry,
           meetingOutcomes,
           topCategories,
-          networkHealth,
         };
 
         setData(analyticsData);
@@ -268,14 +242,6 @@ export function useAnalytics(dateRange: DateRangeValue = '30d') {
           contactsByIndustry: [],
           meetingOutcomes: [],
           topCategories: [],
-          networkHealth: {
-            healthy: 0,
-            healthyPercent: 0,
-            warning: 0,
-            warningPercent: 0,
-            critical: 0,
-            criticalPercent: 0,
-          },
         });
       } finally {
         setIsLoading(false);
@@ -426,78 +392,3 @@ function getTopCategories(needs: any[]): CategoryDataPoint[] {
     .slice(0, 5);
 }
 
-interface GroupPolicy {
-  id: string;
-  refresh_days: number | null;
-  include_in_health_stats: boolean | null;
-}
-
-interface ContactWithGroup {
-  id: string;
-  last_contact_date: string | null;
-  primary_group_id: string | null;
-}
-
-function calculateNetworkHealthWithGroups(
-  contacts: ContactWithGroup[], 
-  groups: GroupPolicy[]
-): NetworkHealth {
-  // Create a map of group_id -> refresh_days
-  const groupRefreshMap = new Map<string, number>();
-  const groupIncludeMap = new Map<string, boolean>();
-  
-  groups.forEach(g => {
-    groupRefreshMap.set(g.id, g.refresh_days ?? 90);
-    groupIncludeMap.set(g.id, g.include_in_health_stats ?? true);
-  });
-
-  // Default refresh days for contacts without group
-  const defaultRefreshDays = 90;
-  
-  // Filter contacts that should be included in health stats
-  const includedContacts = contacts.filter(c => {
-    if (!c.primary_group_id) return true; // Include ungrouped by default
-    return groupIncludeMap.get(c.primary_group_id) !== false;
-  });
-
-  const total = includedContacts.length || 1;
-  const now = new Date();
-  
-  let healthy = 0;
-  let warning = 0;
-  let critical = 0;
-
-  includedContacts.forEach(contact => {
-    const refreshDays = contact.primary_group_id 
-      ? (groupRefreshMap.get(contact.primary_group_id) ?? defaultRefreshDays)
-      : defaultRefreshDays;
-    
-    const lastContact = contact.last_contact_date 
-      ? new Date(contact.last_contact_date) 
-      : null;
-    
-    const daysSinceContact = lastContact 
-      ? Math.floor((now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24))
-      : 999;
-    
-    // Healthy: less than refresh_days
-    // Warning: refresh_days to 1.5x refresh_days
-    // Critical: more than 1.5x refresh_days
-    if (daysSinceContact < refreshDays) {
-      healthy++;
-    } else if (daysSinceContact < refreshDays * 1.5) {
-      warning++;
-    } else {
-      critical++;
-    }
-  });
-
-  return {
-    healthy,
-    healthyPercent: Math.round((healthy / total) * 100),
-    warning,
-    warningPercent: Math.round((warning / total) * 100),
-    critical,
-    criticalPercent: Math.round((critical / total) * 100),
-  };
-}

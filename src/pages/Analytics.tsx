@@ -85,7 +85,7 @@ export default function Analytics() {
     );
   }
 
-  const { metrics, activityTimeline, contactsByIndustry, meetingOutcomes, topCategories, networkHealth } = data;
+  const { metrics, activityTimeline, contactsByIndustry, meetingOutcomes, topCategories } = data;
 
   return (
     <div className="p-6 space-y-6">
@@ -309,55 +309,6 @@ export default function Analytics() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Network Health */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Zdrowie sieci kontaktów</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Relacje zdrowe (&lt;30 dni)</span>
-                <span className="text-sm font-medium">{networkHealth.healthy} ({networkHealth.healthyPercent}%)</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${networkHealth.healthyPercent}%` }} 
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Relacje ostrzeżenie (30-90 dni)</span>
-                <span className="text-sm font-medium">{networkHealth.warning} ({networkHealth.warningPercent}%)</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div 
-                  className="bg-yellow-500 h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${networkHealth.warningPercent}%` }} 
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Relacje krytyczne (&gt;90 dni)</span>
-                <span className="text-sm font-medium">{networkHealth.critical} ({networkHealth.criticalPercent}%)</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div 
-                  className="bg-red-500 h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${networkHealth.criticalPercent}%` }} 
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* AI Insights */}
       <Card className="bg-gradient-to-br from-primary/5 to-primary/10">

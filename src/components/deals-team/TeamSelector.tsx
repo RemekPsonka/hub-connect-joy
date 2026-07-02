@@ -60,11 +60,6 @@ export function TeamSelector({
               {contactStats.hot_count} 🔥
             </Badge>
           )}
-          {contactStats.overdue_count > 0 && (
-            <Badge variant="destructive" className="text-xs">
-              {contactStats.overdue_count}
-            </Badge>
-          )}
         </div>
       )}
 
