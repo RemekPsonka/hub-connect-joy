@@ -1,9 +1,9 @@
-import type { DealCategory, OfferingStage } from '@/types/dealTeam';
+import type { LegacyDealCategory, OfferingStage } from '@/types/dealTeam';
 
 // ─── Category (main pipeline column) configuration ──────────
 
 export interface CategoryConfig {
-  value: DealCategory;
+  value: LegacyDealCategory;
   label: string;
   icon: string;
   color: string;
@@ -15,7 +15,7 @@ export const CATEGORY_OPTIONS: CategoryConfig[] = [
   { value: 'offering', label: 'OFERTOWANIE', icon: '📝', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
   { value: 'audit', label: 'AUDYT', icon: '📋', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300' },
   { value: 'lead', label: 'LEAD', icon: '📋', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/40 dark:text-gray-300' },
-  { value: '10x' as DealCategory, label: '10X', icon: '🚀', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+  { value: '10x' as LegacyDealCategory, label: '10X', icon: '🚀', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
   { value: 'cold', label: 'COLD LEAD', icon: '❄️', color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-300' },
   { value: 'client', label: 'KLIENT', icon: '✅', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
   { value: 'lost', label: 'PRZEGRANE', icon: '✖️', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
