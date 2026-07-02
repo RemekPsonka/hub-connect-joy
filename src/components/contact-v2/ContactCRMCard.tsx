@@ -78,12 +78,12 @@ function SGUDealBadge({ deal }: SGUDealBadgeProps) {
 
 function categoryToStage(cat: string | null | undefined): DealStage | null {
   if (!cat) return null;
-  const c = cat as DealCategory;
-  if (c === 'client') return 'client';
-  if (c === 'offering' || c === 'audit') return 'offering';
-  if (c === 'lead' || c === 'hot' || c === 'top' || c === 'cold' || c === '10x') return 'lead';
-  if (c === 'lost') return 'lost';
-  return 'prospect';
+  // KANON 2026-07-02: category ∈ {prospect, lead, client}; legacy wartości nie mogą
+  // się już pojawić w danych, ale zachowujemy defensywne mapowanie.
+  if (cat === 'client') return 'client';
+  if (cat === 'prospect') return 'prospect';
+  if (cat === 'lead') return 'lead';
+  return 'lead';
 }
 
 export function ContactCRMCard({ contactId }: ContactCRMCardProps) {
