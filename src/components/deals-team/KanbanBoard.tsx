@@ -138,7 +138,7 @@ export function KanbanBoard({ teamId }: KanbanBoardProps) {
 
   // Calculate total value for HOT
   const hotTotalValue = useMemo(
-    () => hotContacts.reduce((sum, c) => sum + (c.estimated_value || 0), 0),
+    () => hotContacts.reduce((sum, c) => sum + (c.expected_annual_premium_gr ?? 0) / 100, 0),
     [hotContacts]
   );
 
