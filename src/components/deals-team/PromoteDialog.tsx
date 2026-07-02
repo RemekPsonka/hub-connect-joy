@@ -247,29 +247,8 @@ export function PromoteDialog({
                 </Select>
               </div>
 
-              {/* Estimated value */}
-              <div className="space-y-2">
-                <Label>Szacowana wartość deal</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    placeholder="50000"
-                    value={estimatedValue}
-                    onChange={(e) => setEstimatedValue(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Select value={valueCurrency} onValueChange={setValueCurrency}>
-                    <SelectTrigger className="w-[100px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PLN">PLN</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {/* KANON 2026-07-02: pole „szacowana wartość deal" usunięte —
+                  jedyne źródło = expected_annual_premium_gr (dialog K2). */}
             </>
           )}
 
