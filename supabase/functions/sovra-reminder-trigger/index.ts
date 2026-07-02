@@ -66,9 +66,8 @@ async function checkDeadlineTomorrow(
     .from("tasks")
     .select("id, title, due_date, project_id")
     .eq("assigned_to", directorId)
-    .gte("due_date", `${tomorrowStr}T00:00:00`)
-    .lt("due_date", `${tomorrowStr}T23:59:59`)
-    .not("status", "in", '("done","cancelled")');
+    .eq("due_date", tomorrowStr)
+    .not("status", "in", '("completed","cancelled")');
 
   if (!tasks?.length) return [];
 
@@ -112,8 +111,8 @@ async function checkOverdue(
     .from("tasks")
     .select("id, title, due_date")
     .eq("assigned_to", directorId)
-    .lt("due_date", `${todayStr}T00:00:00`)
-    .not("status", "in", '("done","cancelled")');
+    .lt("due_date", todayStr)
+    .not("status", "in", '("completed","cancelled")');
 
   if (!tasks?.length) return [];
 
