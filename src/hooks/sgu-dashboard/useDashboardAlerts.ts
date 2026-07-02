@@ -39,7 +39,7 @@ export function useDashboardAlerts() {
           .from('deal_team_contacts')
           .select('id', { count: 'exact', head: true })
           .eq('category', 'client')
-          .lt('last_status_update', minus30d.toISOString()),
+          .lt('updated_at', minus30d.toISOString()),
         supabase
           .from('deal_team_contacts')
           .select('id', { count: 'exact', head: true })
@@ -52,6 +52,7 @@ export function useDashboardAlerts() {
           .select(
             'potential_property_gr, potential_life_group_gr, potential_communication_gr, potential_financial_gr'
           )
+          .eq('category', 'client')
           .eq('client_status', 'standard'),
       ]);
 
