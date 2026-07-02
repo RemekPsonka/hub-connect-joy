@@ -208,7 +208,9 @@ async function checkContactFollowUp(
     .eq("tenant_id", tenantId)
     .lt("last_contact_date", thirtyDaysAgo)
     .not("last_contact_date", "is", null)
-    .order("relationship_strength", { ascending: false, nullsFirst: false })
+    // KANON 2026-07-02: relationship_strength=5 dla wszystkich 2524 kontaktów → szum.
+    // Sortowanie po last_contact_date (rosnąco): najdawniej kontaktowani pierwsi.
+    .order("last_contact_date", { ascending: true })
     .limit(5);
 
   if (!contacts?.length) return [];
