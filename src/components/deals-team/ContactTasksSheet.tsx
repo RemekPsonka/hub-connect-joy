@@ -371,11 +371,8 @@ export function ContactTasksSheet({ contact, teamId, open, onOpenChange, onTaskO
                         }).format(contact.expected_annual_premium_gr / 100)} / rok
                       </p>
                     )}
-                    {contact.estimated_value != null && contact.estimated_value > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        Wartość: {contact.estimated_value.toLocaleString('pl-PL')} {contact.value_currency}
-                      </p>
-                    )}
+                    {/* KANON 2026-07-02: pole estimated_value/value_currency wygaszone —
+                        jedyne źródło wartości = expected_annual_premium_gr (wyżej). */}
                     {contact.assigned_director && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Opiekun: {contact.assigned_director.full_name}
