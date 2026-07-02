@@ -1,7 +1,13 @@
 // ===== ENUMS / UNION TYPES =====
 
 export type DealTeamRole = 'leader' | 'member' | 'viewer';
-export type DealCategory = 'prospect' | 'hot' | 'top' | 'lead' | '10x' | 'cold' | 'offering' | 'client' | 'lost' | 'audit';
+/**
+ * KANON TAKSONOMII (decyzja Remka 2026-07-02):
+ * Kolumna `category` w DB przyjmuje wyłącznie 3 wartości. CHECK constraint
+ * blokuje resztę. „hot/top/cold/10x" żyje w `temperature`, „lost" w `is_lost`,
+ * „offering/audit" w `offering_stage` + milestones.
+ */
+export type DealCategory = 'prospect' | 'lead' | 'client';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -303,8 +309,6 @@ export interface AddContactToTeamInput {
   assignedTo?: string;
   priority?: DealPriority;
   notes?: string;
-  estimatedValue?: number;
-  valueCurrency?: string;
 }
 
 export interface UpdateTeamContactInput {
@@ -320,8 +324,6 @@ export interface UpdateTeamContactInput {
   nextActionDate?: string | null;
   nextActionOwner?: string | null;
   dealId?: string | null;
-  estimatedValue?: number | null;
-  valueCurrency?: string;
   notes?: string | null;
   reviewFrequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
   offeringStage?: OfferingStage;
