@@ -8,6 +8,23 @@ export type DealTeamRole = 'leader' | 'member' | 'viewer';
  * „offering/audit" w `offering_stage` + milestones.
  */
 export type DealCategory = 'prospect' | 'lead' | 'client';
+
+/**
+ * Alias dla legacy modułów (KanbanBoard, PromoteDialog, TableView,
+ * SalesFunnelDashboard, NextActionDialog, ContactActionButtons, RestoreToFunnelDialog,
+ * OfferingKanbanBoard). Historycznie te komponenty operują na starych stringach.
+ * DB CHECK constraint blokuje ich zapisy; typ zostawiamy szeroki, żeby nie palić
+ * całego /deals-team przy migracji taksonomii. Nowy kod używa `DealCategory`.
+ */
+export type LegacyDealCategory =
+  | DealCategory
+  | 'hot'
+  | 'top'
+  | 'cold'
+  | '10x'
+  | 'offering'
+  | 'audit'
+  | 'lost';
 export type DealContactStatus = 'active' | 'on_hold' | 'won' | 'lost' | 'disqualified';
 export type DealPriority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -114,7 +131,8 @@ export interface DealTeamContact {
   source_contact_id: string | null;
   expected_annual_premium_gr: number | null;
   tenant_id: string;
-  category: DealCategory;
+  /** Read-side może zawierać legacy wartości; nowe zapisy używają DealCategory (CHECK). */
+  category: LegacyDealCategory;
   status: DealContactStatus;
   assigned_to: string | null;
   priority: DealPriority;
