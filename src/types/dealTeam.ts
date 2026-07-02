@@ -323,7 +323,8 @@ export interface UpdateMemberRoleInput {
 export interface AddContactToTeamInput {
   teamId: string;
   contactId: string;
-  category: DealCategory;
+  /** Legacy path (KanbanBoard/PromoteDialog) używa starych stringów; DB CHECK blokuje. */
+  category: LegacyDealCategory;
   assignedTo?: string;
   priority?: DealPriority;
   notes?: string;
@@ -332,7 +333,7 @@ export interface AddContactToTeamInput {
 export interface UpdateTeamContactInput {
   id: string;
   teamId: string;
-  category?: DealCategory;
+  category?: LegacyDealCategory;
   status?: DealContactStatus;
   assignedTo?: string | null;
   priority?: DealPriority;
@@ -366,7 +367,7 @@ export interface UpdateTeamContactInput {
 export interface PromoteContactInput {
   id: string;
   teamId: string;
-  newCategory: DealCategory;
+  newCategory: LegacyDealCategory;
 }
 
 // ===== SGU-REFACTOR-IA — labels for UI =====
