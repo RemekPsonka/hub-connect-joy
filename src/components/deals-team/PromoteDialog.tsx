@@ -63,13 +63,6 @@ export function PromoteDialog({
   const [nextMeetingWith, setNextMeetingWith] = useState<string>(
     contact.next_meeting_with || ''
   );
-  const [estimatedValue, setEstimatedValue] = useState<string>(
-    contact.estimated_value?.toString() || ''
-  );
-  const [valueCurrency, setValueCurrency] = useState<string>(
-    contact.value_currency || 'PLN'
-  );
-
   const isToLead = targetCategory === 'lead';
   const isToTop = targetCategory === 'top';
   const isToHot = targetCategory === 'hot';
@@ -100,10 +93,6 @@ export function PromoteDialog({
     if (isToHot || isToAudit) {
       updates.nextMeetingDate = nextMeetingDate?.toISOString() || null;
       updates.nextMeetingWith = nextMeetingWith || null;
-      if (isToHot) {
-        updates.estimatedValue = estimatedValue ? parseFloat(estimatedValue) : null;
-        updates.valueCurrency = valueCurrency;
-      }
     }
 
     await updateContact.mutateAsync(updates);
