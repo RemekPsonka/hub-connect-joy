@@ -71,6 +71,8 @@ export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
   // Bezpiecznik (Sprint S6.7) — żaden aktywny rekord nie znika z Kanbanu.
   // Fallback po offering_stage (gdy markery czasowe nie zostały ustawione przez
   // dialogi typu PushToSGUDialog/ScheduleMeetingDialog).
+  // KANON 2026-07-02: fallbacki po legacy `category` (offering/hot/top/audit/10x)
+  // usunięte — te wartości nie istnieją w DB (CHECK constraint).
   const stage = dtc.offering_stage as string | null;
   if (stage === 'power_of_attorney' || stage === 'audit' || stage === 'offer_sent' || stage === 'negotiation') {
     return 'hot';
@@ -78,11 +80,6 @@ export function deriveKanbanColumn(dtc: DealTeamContact): KanbanColumn | null {
   if (stage === 'decision_meeting') {
     return 'top';
   }
-  // Fallback po category — dla rekordów, które trafiły do lejka „pustym kanałem".
-  if (cat === 'offering') return 'hot';
-  if (cat === 'hot') return 'hot';
-  if (cat === 'top' || cat === 'audit') return 'top';
-  if (cat === '10x') return 'top';
   return null;
 }
 
