@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { DealCategory } from '@/types/dealTeam';
+import type { LegacyDealCategory } from '@/types/dealTeam';
 
 interface Props {
   open: boolean;
@@ -21,7 +21,7 @@ interface Props {
   contactName: string;
   teamId: string;
   fromStage: string;
-  toCategory: DealCategory;
+  toCategory: LegacyDealCategory;
   onSuccess?: () => void;
 }
 
