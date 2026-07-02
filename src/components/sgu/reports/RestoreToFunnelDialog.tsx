@@ -52,6 +52,7 @@ const CATEGORY_LABELS: Record<DealCategory, string> = {
   client: 'Klient',
   lost: 'Utracony',
   audit: 'Audyt',
+  prospect: 'Prospekt',
 };
 
 export function RestoreToFunnelDialog({
