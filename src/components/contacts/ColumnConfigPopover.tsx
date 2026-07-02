@@ -11,7 +11,6 @@ const COLUMN_LABELS: Record<keyof ContactsTableColumns, string> = {
   email: 'Email',
   group: 'Grupa',
   aiProfile: 'Profil AI',
-  relationshipStrength: 'Siła relacji',
 };
 
 interface ColumnConfigPopoverProps {

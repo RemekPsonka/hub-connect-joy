@@ -66,22 +66,6 @@ export const exportToPDF = (data: AnalyticsData, dateRangeLabel: string) => {
     });
   }
 
-  // Network health
-  doc.setFontSize(14);
-  doc.text('Zdrowie sieci kontaktów', 14, doc.lastAutoTable.finalY + 15);
-
-  autoTable(doc, {
-    startY: doc.lastAutoTable.finalY + 20,
-    head: [['Status', 'Liczba', 'Procent']],
-    body: [
-      ['Zdrowe (<30 dni)', String(data.networkHealth.healthy), `${data.networkHealth.healthyPercent}%`],
-      ['Ostrzeżenie (30-90 dni)', String(data.networkHealth.warning), `${data.networkHealth.warningPercent}%`],
-      ['Krytyczne (>90 dni)', String(data.networkHealth.critical), `${data.networkHealth.criticalPercent}%`],
-    ],
-    theme: 'striped',
-    headStyles: { fillColor: [245, 158, 11] },
-  });
-
   // Footer
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -143,17 +127,6 @@ export const exportToExcel = (data: AnalyticsData, dateRangeLabel: string) => {
   const ws3 = XLSX.utils.aoa_to_sheet(meetingData);
   ws3['!cols'] = [{ wch: 20 }, { wch: 15 }];
   XLSX.utils.book_append_sheet(wb, ws3, 'Spotkania');
-
-  // Sheet 4: Network Health
-  const healthData = [
-    ['Status', 'Liczba', 'Procent'],
-    ['Zdrowe (<30 dni)', data.networkHealth.healthy, `${data.networkHealth.healthyPercent}%`],
-    ['Ostrzeżenie (30-90 dni)', data.networkHealth.warning, `${data.networkHealth.warningPercent}%`],
-    ['Krytyczne (>90 dni)', data.networkHealth.critical, `${data.networkHealth.criticalPercent}%`],
-  ];
-  const ws4 = XLSX.utils.aoa_to_sheet(healthData);
-  ws4['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }];
-  XLSX.utils.book_append_sheet(wb, ws4, 'Zdrowie sieci');
 
   // Sheet 5: Activity Timeline
   const timelineData = [

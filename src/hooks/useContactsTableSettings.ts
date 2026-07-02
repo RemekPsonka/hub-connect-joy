@@ -9,7 +9,6 @@ export interface ContactsTableColumns {
   email: boolean;
   group: boolean;
   aiProfile: boolean;
-  relationshipStrength: boolean;
 }
 
 export interface ContactsTableFilters {
@@ -36,7 +35,6 @@ const DEFAULT_SETTINGS: ContactsTableSettings = {
     email: true,
     group: true,
     aiProfile: true,
-    relationshipStrength: true,
   },
   filters: {
     groupId: '',

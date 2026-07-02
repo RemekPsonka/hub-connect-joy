@@ -47,7 +47,6 @@ export function useTeamContacts(
       }
 
       query = query
-        .order('priority', { ascending: false })
         .order('next_action_date', { ascending: true, nullsFirst: false });
 
       const { data: dealContacts, error } = await query;
@@ -183,7 +182,6 @@ export function useTeamContactStats(teamId: string | undefined): DealTeamContact
     cold_count: contacts.filter(c => c.temperature === 'cold').length,
     lost_count: contacts.filter(c => c.is_lost === true).length,
     prospect_count: contacts.filter(c => c.category === 'prospect').length,
-    overdue_count: contacts.filter(c => c.status_overdue).length,
     total_value: contacts.reduce((sum, c) => sum + (c.expected_annual_premium_gr ?? 0) / 100, 0),
     upcoming_meetings: contacts.filter(c =>
       c.next_meeting_date && new Date(c.next_meeting_date) > new Date()
@@ -207,7 +205,6 @@ export function useAddContactToTeam() {
       contactId,
       category,
       assignedTo,
-      priority = 'medium',
       notes,
     }: AddContactToTeamInput) => {
       if (!tenantId) throw new Error('Brak tenant_id');
@@ -232,7 +229,6 @@ export function useAddContactToTeam() {
           tenant_id: tenantId,
           category,
           assigned_to: assignedTo || null,
-          priority,
           notes: notes || null,
           status: 'active',
         });
@@ -266,15 +262,12 @@ export function useUpdateTeamContact() {
       category,
       status,
       assignedTo,
-      priority,
       nextMeetingDate,
       nextMeetingWith,
       nextAction,
       nextActionDate,
       nextActionOwner,
-      dealId,
       notes,
-      reviewFrequency,
       offeringStage,
       snoozedUntil,
       snoozeReason,
@@ -308,15 +301,12 @@ export function useUpdateTeamContact() {
         updates.last_status_update = new Date().toISOString();
       }
       if (assignedTo !== undefined) updates.assigned_to = assignedTo;
-      if (priority !== undefined) updates.priority = priority;
       if (nextMeetingDate !== undefined) updates.next_meeting_date = nextMeetingDate;
       if (nextMeetingWith !== undefined) updates.next_meeting_with = nextMeetingWith;
       if (nextAction !== undefined) updates.next_action = nextAction;
       if (nextActionDate !== undefined) updates.next_action_date = nextActionDate;
       if (nextActionOwner !== undefined) updates.next_action_owner = nextActionOwner;
-      if (dealId !== undefined) updates.deal_id = dealId;
       if (notes !== undefined) updates.notes = notes;
-      if (reviewFrequency !== undefined) updates.review_frequency = reviewFrequency;
       if (offeringStage !== undefined) updates.offering_stage = offeringStage;
       if (snoozedUntil !== undefined) updates.snoozed_until = snoozedUntil;
       if (snoozeReason !== undefined) updates.snooze_reason = snoozeReason;

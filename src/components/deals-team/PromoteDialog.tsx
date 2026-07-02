@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import type { DealTeamContact, DealCategory, DealPriority } from '@/types/dealTeam';
+import type { DealTeamContact, DealCategory } from '@/types/dealTeam';
 
 interface PromoteDialogProps {
   contact: DealTeamContact;
@@ -54,7 +54,6 @@ export function PromoteDialog({
   const [nextActionDate, setNextActionDate] = useState<Date | undefined>(
     contact.next_action_date ? new Date(contact.next_action_date) : undefined
   );
-  const [priority, setPriority] = useState<DealPriority>(contact.priority || 'medium');
 
   // Form state for TOP → HOT
   const [nextMeetingDate, setNextMeetingDate] = useState<Date | undefined>(
@@ -87,7 +86,6 @@ export function PromoteDialog({
       updates.assignedTo = assignedTo;
       updates.nextAction = nextAction;
       updates.nextActionDate = nextActionDate?.toISOString() || null;
-      updates.priority = priority;
     }
 
     if (isToHot || isToAudit) {
@@ -179,21 +177,6 @@ export function PromoteDialog({
                 </Popover>
               </div>
 
-              {/* Priority */}
-              <div className="space-y-2">
-                <Label>Priorytet</Label>
-                <Select value={priority} onValueChange={(v) => setPriority(v as DealPriority)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="urgent">Pilny</SelectItem>
-                    <SelectItem value="high">Wysoki</SelectItem>
-                    <SelectItem value="medium">Średni</SelectItem>
-                    <SelectItem value="low">Niski</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </>
           )}
 

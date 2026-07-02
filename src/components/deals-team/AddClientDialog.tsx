@@ -62,7 +62,6 @@ export function AddClientDialog({ open, onOpenChange, teamId }: AddClientDialogP
       teamId,
       contactId: selectedContactId,
       category: 'client' as any,
-      priority: 'medium',
     });
     handleClose();
   };

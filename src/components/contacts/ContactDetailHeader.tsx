@@ -15,7 +15,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { GroupBadge } from './GroupBadge';
 import { useDeleteContact, type ContactWithDetails } from '@/hooks/useContacts';
 import { useToggleOwnerStatus } from '@/hooks/useOwnership';
@@ -95,15 +94,6 @@ export function ContactDetailHeader({ contact, onEdit, viewMode = 'person' }: Co
               )}
             </div>
 
-            {/* Relationship strength - directly under name */}
-            {viewMode === 'person' && (
-              <RelationshipStrengthBar 
-                value={contact.relationship_strength || 5} 
-                className="w-28" 
-                showLabel 
-              />
-            )}
-            
             {/* Position */}
             {contact.position && (
               <p className="text-muted-foreground text-sm">{contact.position}</p>

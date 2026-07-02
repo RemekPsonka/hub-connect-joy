@@ -34,7 +34,6 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { GroupBadge } from './GroupBadge';
-import { RelationshipStrengthBar } from './RelationshipStrengthBar';
 import { BulkMergeContactModal } from './BulkMergeContactModal';
 import { DealFunnelBadges } from './DealFunnelBadges';
 import { useContactGroups, useBulkUpdateContacts, useBulkDeleteContacts, useGenerateContactProfile, type ContactWithGroup } from '@/hooks/useContacts';
@@ -68,7 +67,6 @@ const COL_WIDTHS = {
   email: 180,
   group: 100,
   aiProfile: 140,
-  relationshipStrength: 130,
 };
 
 export function ContactsTable({
@@ -111,8 +109,7 @@ export function ContactsTable({
     + (columns.phone ? COL_WIDTHS.phone : 0)
     + (columns.email ? COL_WIDTHS.email : 0)
     + (columns.group ? COL_WIDTHS.group : 0)
-    + (columns.aiProfile ? COL_WIDTHS.aiProfile : 0)
-    + (columns.relationshipStrength ? COL_WIDTHS.relationshipStrength : 0);
+    + (columns.aiProfile ? COL_WIDTHS.aiProfile : 0);
 
   const getInitials = (name: string) => {
     return name
@@ -308,9 +305,6 @@ export function ContactsTable({
               {columns.aiProfile && (
                 <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.aiProfile }}>Profil AI</div>
               )}
-              {columns.relationshipStrength && (
-                <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.relationshipStrength }}>Siła relacji</div>
-              )}
             </div>
 
             {/* Virtualized Body */}
@@ -414,11 +408,6 @@ export function ContactsTable({
                               Generuj AI
                             </Button>
                           )}
-                        </div>
-                      )}
-                      {columns.relationshipStrength && (
-                        <div className="px-4 flex-shrink-0" style={{ width: COL_WIDTHS.relationshipStrength }}>
-                          <RelationshipStrengthBar value={contact.relationship_strength || 5} />
                         </div>
                       )}
                     </div>

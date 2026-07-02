@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { utils, writeFile } from 'xlsx';
-import { ArrowUp, ArrowDown, Download, Filter, AlertTriangle } from 'lucide-react';
+import { ArrowUp, ArrowDown, Download, Filter } from 'lucide-react';
 import { offeringStageLabel } from '@/utils/offeringStageLabels';
 import { toast } from 'sonner';
 import { useTeamContacts } from '@/hooks/useDealsTeamContacts';
@@ -25,9 +25,8 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { DealTeamContact, LegacyDealCategory, DealContactStatus, DealPriority } from '@/types/dealTeam';
+import type { LegacyDealCategory, DealContactStatus } from '@/types/dealTeam';
 
 interface TableViewProps {
   teamId: string;
@@ -42,8 +41,6 @@ interface Filters {
   category: LegacyDealCategory | '';
   status: DealContactStatus | '';
   assignedTo: string;
-  priority: DealPriority | '';
-  overdueOnly: boolean;
 }
 
 const categoryConfig: Record<LegacyDealCategory, { label: string; color: string; icon: string }> = {
@@ -57,13 +54,6 @@ const categoryConfig: Record<LegacyDealCategory, { label: string; color: string;
   client: { label: 'KLIENT', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: '✅' },
   offering: { label: 'OFERTOWANIE', color: 'bg-green-100 text-green-800 border-green-200', icon: '📝' },
   prospect: { label: 'PROSPEKT', color: 'bg-slate-100 text-slate-800 border-slate-200', icon: '🔍' },
-};
-
-const priorityConfig: Record<DealPriority, { label: string; color: string }> = {
-  urgent: { label: 'Pilny', color: 'bg-red-100 text-red-800 border-red-200' },
-  high: { label: 'Wysoki', color: 'bg-orange-100 text-orange-800 border-orange-200' },
-  medium: { label: 'Średni', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  low: { label: 'Niski', color: 'bg-gray-100 text-gray-800 border-gray-200' },
 };
 
 const statusConfig: Record<DealContactStatus, string> = {
@@ -89,14 +79,12 @@ export function TableView({ teamId }: TableViewProps) {
     category: '',
     status: '',
     assignedTo: '',
-    priority: '',
-    overdueOnly: false,
   });
 
   // Sort
   const [sortConfig, setSortConfig] = useState<SortConfig>({
-    column: 'priority',
-    direction: 'desc',
+    column: 'name',
+    direction: 'asc',
   });
 
   // Handle sort click
@@ -115,8 +103,6 @@ export function TableView({ teamId }: TableViewProps) {
       if (filters.category && c.category !== filters.category) return false;
       if (filters.status && c.status !== filters.status) return false;
       if (filters.assignedTo && c.assigned_to !== filters.assignedTo) return false;
-      if (filters.priority && c.priority !== filters.priority) return false;
-      if (filters.overdueOnly && !c.status_overdue) return false;
       return true;
     });
   }, [contacts, filters]);
@@ -138,19 +124,15 @@ export function TableView({ teamId }: TableViewProps) {
           aVal = a.contact?.company || '';
           bVal = b.contact?.company || '';
           break;
-        case 'category':
+        case 'category': {
           const categoryOrder: Record<string, number> = { offering: 8, hot: 7, audit: 6, top: 5, lead: 4, '10x': 3, cold: 2, lost: 1 };
           aVal = categoryOrder[a.category] ?? 0;
           bVal = categoryOrder[b.category] ?? 0;
           break;
+        }
         case 'status':
           aVal = a.status;
           bVal = b.status;
-          break;
-        case 'priority':
-          const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
-          aVal = priorityOrder[a.priority];
-          bVal = priorityOrder[b.priority];
           break;
         case 'assignedTo':
           aVal = a.assigned_to ? memberMap.get(a.assigned_to) || '' : '';
@@ -183,12 +165,6 @@ export function TableView({ teamId }: TableViewProps) {
     return sorted;
   }, [filteredContacts, sortConfig, memberMap]);
 
-  // Calculate overdue count
-  const overdueCount = useMemo(
-    () => contacts.filter((c) => c.status_overdue).length,
-    [contacts]
-  );
-
   // Export to XLSX
   const exportToXlsx = () => {
     const data = sortedContacts.map((c) => ({
@@ -196,7 +172,6 @@ export function TableView({ teamId }: TableViewProps) {
       Firma: c.contact?.company || '',
       Kategoria: c.category.toUpperCase(),
       Status: statusConfig[c.status] || c.status,
-      Priorytet: priorityConfig[c.priority]?.label || c.priority,
       Odpowiedzialny: c.assigned_to ? memberMap.get(c.assigned_to) || '' : '',
       'Nast. akcja': c.next_action || '',
       'Nast. spotkanie': c.next_meeting_date
@@ -318,43 +293,6 @@ export function TableView({ teamId }: TableViewProps) {
           </SelectContent>
         </Select>
 
-        {/* Priority filter */}
-        <Select
-          value={filters.priority || 'all'}
-          onValueChange={(v) =>
-            setFilters((f) => ({ ...f, priority: v === 'all' ? '' : v as DealPriority }))
-          }
-        >
-          <SelectTrigger className="w-[130px] h-9">
-            <SelectValue placeholder="Priorytet" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Wszystkie</SelectItem>
-            <SelectItem value="urgent">Pilny</SelectItem>
-            <SelectItem value="high">Wysoki</SelectItem>
-            <SelectItem value="medium">Średni</SelectItem>
-            <SelectItem value="low">Niski</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Overdue toggle */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="overdue-only"
-            checked={filters.overdueOnly}
-            onCheckedChange={(checked) =>
-              setFilters((f) => ({ ...f, overdueOnly: !!checked }))
-            }
-          />
-          <label
-            htmlFor="overdue-only"
-            className="text-sm cursor-pointer flex items-center gap-1"
-          >
-            <AlertTriangle className="h-3 w-3 text-destructive" />
-            Przeterminowane ({overdueCount})
-          </label>
-        </div>
-
         <div className="flex-1" />
 
         {/* Export button */}
@@ -378,7 +316,6 @@ export function TableView({ teamId }: TableViewProps) {
               <SortableHeader column="company">Firma</SortableHeader>
               <SortableHeader column="category">Kategoria</SortableHeader>
               <TableHead>Etap</TableHead>
-              <SortableHeader column="priority">Priorytet</SortableHeader>
               <SortableHeader column="assignedTo">Odpowiedzialny</SortableHeader>
               <TableHead>Nast. akcja</TableHead>
               <SortableHeader column="nextMeeting">Nast. spotkanie</SortableHeader>
@@ -390,11 +327,9 @@ export function TableView({ teamId }: TableViewProps) {
             {sortedContacts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
-                  {filters.overdueOnly ||
-                  filters.category ||
+                  {filters.category ||
                   filters.status ||
-                  filters.assignedTo ||
-                  filters.priority
+                  filters.assignedTo
                     ? 'Brak kontaktów spełniających kryteria filtrów'
                     : 'Brak kontaktów w zespole'}
                 </TableCell>
@@ -444,13 +379,6 @@ export function TableView({ teamId }: TableViewProps) {
                     </Badge>
                   </TableCell>
 
-                  {/* Priority */}
-                  <TableCell>
-                    <Badge className={`text-xs ${priorityConfig[contact.priority].color}`}>
-                      {priorityConfig[contact.priority].label}
-                    </Badge>
-                  </TableCell>
-
                   {/* Assigned to */}
                   <TableCell className="text-muted-foreground">
                     {contact.assigned_to ? memberMap.get(contact.assigned_to) || '—' : '—'}
@@ -482,22 +410,12 @@ export function TableView({ teamId }: TableViewProps) {
                   {/* Last status */}
                   <TableCell>
                     {contact.last_status_update ? (
-                      contact.status_overdue ? (
-                        <span className="text-destructive font-medium flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          {formatDistanceToNow(new Date(contact.last_status_update), {
-                            locale: pl,
-                            addSuffix: true,
-                          })}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {formatDistanceToNow(new Date(contact.last_status_update), {
-                            locale: pl,
-                            addSuffix: true,
-                          })}
-                        </span>
-                      )
+                      <span className="text-muted-foreground">
+                        {formatDistanceToNow(new Date(contact.last_status_update), {
+                          locale: pl,
+                          addSuffix: true,
+                        })}
+                      </span>
                     ) : (
                       <span className="text-muted-foreground">Brak</span>
                     )}
