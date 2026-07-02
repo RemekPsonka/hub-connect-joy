@@ -40,9 +40,6 @@ const STAGE_META: Record<OfferingStage, StageMeta> = {
   negotiation: { id: 'negotiation', icon: '💬', color: 'border-t-orange-500' },
   won: { id: 'won', icon: '✅', color: 'border-t-green-500' },
   lost: { id: 'lost', icon: '❌', color: 'border-t-red-500' },
-  // legacy fallbacks (not shown but typed)
-  preparation: { id: 'preparation', icon: '⚙️', color: 'border-t-amber-500' },
-  accepted: { id: 'accepted', icon: '✅', color: 'border-t-green-500' },
   audit_plan: { id: 'audit_plan', icon: '🔍', color: 'border-t-violet-500' },
   audit_scheduled: { id: 'audit_scheduled', icon: '🔍', color: 'border-t-violet-500' },
   audit_done: { id: 'audit_done', icon: '🔍', color: 'border-t-violet-500' },
@@ -79,9 +76,9 @@ export function OfferingKanbanBoard({ contacts, payments, teamId, onContactClick
     for (const stage of OFFERING_STAGE_ORDER) map.set(stage, []);
     for (const c of contacts) {
       let stage = (c.offering_stage || 'handshake') as OfferingStage;
-      // Legacy → new mapping fallback
-      if (stage === 'preparation') stage = 'offer_sent';
-      if (stage === 'accepted') stage = 'won';
+      // Legacy → new mapping fallback (string compare, unions removed from type)
+      if ((stage as string) === 'preparation') stage = 'offer_sent';
+      if ((stage as string) === 'accepted') stage = 'won';
       if (stage === 'audit_plan' || stage === 'audit_scheduled' || stage === 'audit_done') stage = 'audit';
       if (stage === 'meeting_plan' || stage === 'meeting_scheduled' || stage === 'meeting_done') stage = 'decision_meeting';
       const arr = map.get(stage) || map.get('handshake')!;
